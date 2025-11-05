@@ -358,8 +358,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type Lookup = Rep3FieldLookupTable<F>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        Rep3PrimeFieldShare<C::BaseField>;
 
     type AcvmType = Rep3AcvmType<F>;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        Rep3AcvmType<C::BaseField>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
 
     type BrilligDriver = Rep3BrilligDriver<'a, F, N>;

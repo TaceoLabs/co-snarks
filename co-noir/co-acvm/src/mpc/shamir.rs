@@ -161,8 +161,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     type Lookup = Rep3FieldLookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        ShamirPrimeFieldShare<C::BaseField>;
 
     type AcvmType = ShamirAcvmType<F>;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        ShamirAcvmType<C::BaseField>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
 
     type BrilligDriver = ShamirBrilligDriver<'a, F, N>;

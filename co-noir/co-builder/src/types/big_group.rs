@@ -1,32 +1,29 @@
 use core::num;
-use std::array;
 use std::cmp::max;
+use std::{array, clone};
 
-use crate::prelude::{derive_generators, offset_generator};
+use crate::prelude::offset_generator;
 use crate::types::big_field::BigField;
 use crate::types::field_ct::WitnessCT;
 use crate::types::rom_ram::TwinRomTable;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use ark_ec::CurveGroup;
-use ark_ff::AdditiveGroup;
-use ark_ff::Field;
-use ark_ff::{One, PrimeField};
+use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use eyre::Chain;
 use num_bigint::BigUint;
 
 use super::field_ct::BoolCT;
 
-pub struct BigGroup<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
-    pub x: BigField<P::ScalarField>,
-    pub y: BigField<P::ScalarField>,
-    pub is_infinity: BoolCT<P, T>,
+pub struct BigGroup<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> {
+    pub(crate) x: BigField<F>,
+    pub(crate) y: BigField<F>,
+    pub(crate) is_infinity: BoolCT<F, T>,
 }
 
-impl<P, T> Clone for BigGroup<P, T>
+impl<F, T> Clone for BigGroup<F, T>
 where
-    P: CurveGroup,
-    T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    F: PrimeField,
+    T: NoirWitnessExtensionProtocol<F>,
 {
     fn clone(&self) -> Self {
         BigGroup {
@@ -43,29 +40,29 @@ where
     }
 }
 
-impl<P, T> Default for BigGroup<P, T>
+impl<F, T> Default for BigGroup<F, T>
 where
-    P: CurveGroup,
-    T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    F: PrimeField,
+    T: NoirWitnessExtensionProtocol<F>,
 {
     fn default() -> Self {
         todo!();
     }
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P, T> {
-    pub fn new(x: BigField<P::ScalarField>, y: BigField<P::ScalarField>) -> Self {
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
+    pub(crate) fn new(x: BigField<F>, y: BigField<F>) -> Self {
         BigGroup {
             x,
             y,
-            is_infinity: BoolCT::<P, T>::from(false),
+            is_infinity: BoolCT::from(false),
         }
     }
 
     /// Set the witness indices for the x and y coordinates to public
     ///
     /// Returns the index at which the representation is stored in the public inputs.
-    pub(crate) fn set_public(
+    pub(crate) fn set_public<P: CurveGroup<ScalarField = F>>(
         &self,
         driver: &mut T,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -76,17 +73,17 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
         start_idx
     }
 
-    pub fn set_is_infinity(&mut self, is_infinity: BoolCT<P, T>) {
+    pub fn set_is_infinity(&mut self, is_infinity: BoolCT<F, T>) {
         self.is_infinity = is_infinity;
     }
 
-    pub fn one(
+    pub fn one<P: CurveGroup<ScalarField = F>>(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
         Ok(BigGroup {
-            x: BigField::from_witness(&P::ScalarField::ONE.into(), driver, builder)?,
-            y: BigField::from_witness(&P::ScalarField::from(2).into(), driver, builder)?,
+            x: BigField::from_witness(&F::ONE.into(), driver, builder)?,
+            y: BigField::from_witness(&F::from(2).into(), driver, builder)?,
             is_infinity: BoolCT::from(false),
         })
     }
@@ -107,12 +104,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
      * @param with_edgecases Use when points are linearly dependent. Randomises them.
      * @return element<C, Fq, Fr, G>
      */
-    pub fn batch_mul(
-        points: &[BigGroup<P, T>],
-        scalars: &[FieldCT<P::ScalarField>],
+    pub fn batch_mul<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        points: &[Self],
+        scalars: &[FieldCT<F>],
+        max_num_bits: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<BigGroup<P, T>> {
+    ) -> eyre::Result<Self> {
         let (points, scalars) =
             BigGroup::handle_points_at_infinity(points, scalars, builder, driver)?;
 
@@ -122,7 +120,84 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
         // with_edgecases == true
         let (points, scalars) = BigGroup::mask_points(&points, &scalars, builder, driver)?;
 
-        let batch_lookup_table = BatchLookUpTable::new(&points, builder, driver);
+        assert_eq!(points.len(), scalars.len());
+        let mut point_table = BatchLookupTablePlookup::new(&points, builder, driver)?;
+
+        let mut naf_entries = Vec::with_capacity(points.len());
+        for i in 0..points.len() {
+            naf_entries.push(Self::compute_naf(
+                &scalars[i],
+                max_num_bits,
+                builder,
+                driver,
+            )?);
+        }
+
+        let offset_generators = Self::compute_offset_generators::<P>(max_num_bits)?;
+
+        let mut accumulator = Self::chain_add_end(
+            Self::chain_add(
+                &offset_generators.0,
+                &point_table.get_chain_initial_entry(builder, driver)?,
+                builder,
+                driver,
+            )?,
+            builder,
+            driver,
+        )?;
+
+        let num_rounds = if max_num_bits == 0 {
+            (P::ScalarField::MODULUS_BIT_SIZE + 1) as usize
+        } else {
+            max_num_bits
+        };
+        let num_rounds_per_iteration = 4;
+        let mut num_iterations = num_rounds / num_rounds_per_iteration;
+        num_iterations += if num_rounds % num_rounds_per_iteration != 0 {
+            1
+        } else {
+            0
+        };
+        let num_rounds_per_final_iteration =
+            (num_rounds - 1) - ((num_iterations - 1) * num_rounds_per_iteration);
+
+        for i in 0..num_iterations {
+            let mut nafs = Vec::with_capacity(points.len());
+            let mut to_add = Vec::with_capacity(points.len());
+            let inner_num_rounds = if i != num_iterations - 1 {
+                num_rounds_per_iteration
+            } else {
+                num_rounds_per_final_iteration
+            };
+            for j in 0..inner_num_rounds {
+                for k in 0..points.len() {
+                    nafs.push(naf_entries[k][i * num_rounds_per_iteration + j + 1].clone());
+                }
+                to_add.push(point_table.get_chain_add_accumulator(&nafs, builder, driver)?);
+            }
+            accumulator = accumulator.multiple_montgomery_ladder(&to_add, builder, driver)?;
+        }
+
+        for i in 0..points.len() {
+            let skew = accumulator.sub(&points[i], builder, driver)?;
+            let out_x = BigField::conditional_select(
+                &naf_entries[i][0],
+                &accumulator.x,
+                &skew.x,
+                builder,
+                driver,
+            )?;
+
+            let out_y = BigField::conditional_select(
+                &naf_entries[i][0],
+                &accumulator.y,
+                &skew.y,
+                builder,
+                driver,
+            )?;
+            accumulator = BigGroup::new(out_x, out_y);
+        }
+        accumulator.sub(&offset_generators.1, builder, driver)
     }
 
     /**
@@ -144,12 +219,12 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
      * @param add
      * @return element<C, Fq, Fr, G>
      */
-    fn multiple_montgomery_ladder(
+    fn multiple_montgomery_ladder<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
-        add: &[ChainAddAccumulator<P::ScalarField>],
+        add: &[ChainAddAccumulator<F>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<BigGroup<P, T>> {
+    ) -> eyre::Result<Self> {
         struct CompositeY<F: PrimeField> {
             mul_left: Vec<BigField<F>>,
             mul_right: Vec<BigField<F>>,
@@ -166,7 +241,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
         };
 
         for i in 0..add.len() {
-            previous_x.assert_is_not_equal(&add[i].x3_prev, builder, driver);
+            previous_x.assert_is_not_equal(&add[i].x3_prev, builder, driver)?;
 
             // composite y add_y
             let negate_add_y = (i > 0) && previous_y.is_negative;
@@ -335,6 +410,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
             previous_y.mul_left.as_slice(),
             previous_y.mul_right.as_slice(),
             previous_y.add.as_slice(),
+            // TODO CESAR: What should this boolean flag be?
+            false,
             builder,
             driver,
         )?;
@@ -342,19 +419,21 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
         Ok(BigGroup::new(x_out, y_out))
     }
 
-    pub fn compute_offset_generators(num_rounds: usize) -> eyre::Result<(Self, Self)> {
+    pub fn compute_offset_generators<P: CurveGroup<ScalarField = F>>(
+        num_rounds: usize,
+    ) -> eyre::Result<(Self, Self)> {
         let offset_generator = offset_generator::<P>("biggroup batch mul offset generator");
-        let offset_multiplier = P::ScalarField::from(2u64).pow([(num_rounds - 1) as u64]);
+        let offset_multiplier = F::from(2u64).pow([(num_rounds - 1) as u64]);
         let offset_generator_end = (offset_generator * offset_multiplier).into();
         todo!("convert to BigGroup")
     }
 
-    pub fn compute_naf(
-        scalar: &FieldCT<P::ScalarField>,
+    pub fn compute_naf<P: CurveGroup<ScalarField = F>>(
+        scalar: &FieldCT<F>,
         max_num_bits: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<Vec<BoolCT<P, T>>> {
+    ) -> eyre::Result<Vec<BoolCT<F, T>>> {
         // We are not handling the case of odd bit lengths here.
         assert!(max_num_bits % 2 == 0);
 
@@ -392,12 +471,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
         // Validate correctness of NAF
         // TODO CESAR: Fr is composite?
         let mut accumulators = Vec::with_capacity(num_rounds + 1);
-        let minus_two = FieldCT::from_witness(P::ScalarField::from(2u64).into(), builder);
-        let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let minus_two = FieldCT::from_witness(F::from(2u64).into(), builder);
+        let one = FieldCT::from_witness(F::ONE.into(), builder);
         for i in 0..num_rounds {
             // bit = 1 - 2 * naf
-            let shift =
-                FieldCT::from_witness(P::ScalarField::from(1u64 << (2 * i as u32)).into(), builder);
+            let shift = FieldCT::from_witness(F::from(1u64 << (2 * i as u32)).into(), builder);
 
             let entry = naf_entries[naf_entries.len() - 2 - i]
                 .to_field_ct(driver)
@@ -408,7 +486,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
             accumulators.push(entry);
         }
 
-        let minus_one = FieldCT::from_witness((-P::ScalarField::from(1)).into(), builder);
+        let minus_one = FieldCT::from_witness((-F::from(1)).into(), builder);
         accumulators.push(
             naf_entries[num_rounds]
                 .to_field_ct(driver)
@@ -416,7 +494,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
         );
 
         // TODO CESAR: FieldCT::accumulate
-        let mut total = FieldCT::from_witness(P::ScalarField::ZERO.into(), builder);
+        let mut total = FieldCT::from_witness(F::ZERO.into(), builder);
         for acc in accumulators.iter() {
             total = total.add(acc, builder, driver);
         }
@@ -441,29 +519,98 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
      * @return std::array<element<C, Fq, Fr, G>, 2>
      */
     // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/657): This function is untested
-    pub fn checked_unconditional_add_sub(
+    pub fn checked_unconditional_add_sub<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
-        other: &BigGroup<P, T>,
+        other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<(BigGroup<P, T>, BigGroup<P, T>)> {
+    ) -> eyre::Result<(Self, Self)> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/971): This will fail when the two elements are the
         // same even in the case of a valid circuit
-        todo!();
+        other.x.assert_is_not_equal(&self.x, builder, driver)?;
+
+        let denominator = other.x.sub(&self.x, builder, driver)?;
+        let x2x1 = other
+            .x
+            .add(&self.x, builder, driver)?
+            .neg(builder, driver)?;
+
+        let lambda1 = BigField::div_without_denominator_check(
+            &[other.y.clone(), self.y.neg(builder, driver)?],
+            &denominator,
+            builder,
+            driver,
+        )?;
+        let x_3 = lambda1.sqradd(&[x2x1.clone()], builder, driver)?;
+        let y_3 = lambda1.madd(
+            &self.x.sub(&x_3, builder, driver)?,
+            &[self.y.neg(builder, driver)?],
+            builder,
+            driver,
+        )?;
+
+        let lambda2 = BigField::div_without_denominator_check(
+            &[other.y.neg(builder, driver)?, self.y.neg(builder, driver)?],
+            &denominator,
+            builder,
+            driver,
+        )?;
+        let x_4 = lambda2.sqradd(&[x2x1], builder, driver)?;
+        let y_4 = lambda2.madd(
+            &other.x.sub(&x_4, builder, driver)?,
+            &[other.y.neg(builder, driver)?],
+            builder,
+            driver,
+        )?;
+
+        Ok((BigGroup::new(x_3, y_3), BigGroup::new(x_4, y_4)))
     }
-    pub fn neg(
+
+    fn add<P: CurveGroup<ScalarField = F>>(
         &self,
+        other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<BigGroup<P, T>> {
+    ) -> eyre::Result<Self> {
+        // Adding in `x_coordinates_match` ensures that lambda will always be well-formed
+        // Our curve has the form y^2 = x^3 + b.
+        // If (x_1, y_1), (x_2, y_2) have x_1 == x_2, and the generic formula for lambda has a division by 0.
+        // Then y_1 == y_2 (i.e. we are doubling) or y_2 == y_1 (the sum is infinity).
+        // The cases have a special addition formula. The following booleans allow us to handle these cases uniformly.
         todo!();
     }
 
-    pub fn normalize_in_place(
+    fn sub<P: CurveGroup<ScalarField = F>>(
+        &self,
+        other: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        todo!();
+    }
+
+    fn neg<P: CurveGroup<ScalarField = F>>(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        todo!();
+    }
+
+    fn normalize_in_place<P: CurveGroup<ScalarField = F>>(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
+        todo!();
+    }
+
+    fn conditional_negate<P: CurveGroup<ScalarField = F>>(
+        &self,
+        cond: &BoolCT<F, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
         todo!();
     }
 
@@ -474,26 +621,26 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
      * doubling the point every time, we ensure that no +-1 combination of 6 sequential elements run into edgecases, unless
      * the points are deliberately constructed to trigger it.
      */
-    fn mask_points(
-        points: &[BigGroup<P, T>],
-        scalars: &[FieldCT<P::ScalarField>],
+    fn mask_points<P: CurveGroup<ScalarField = F>>(
+        points: &[Self],
+        scalars: &[FieldCT<F>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<(Vec<BigGroup<P, T>>, Vec<FieldCT<P::ScalarField>>)> {
+    ) -> eyre::Result<(Vec<Self>, Vec<FieldCT<F>>)> {
         let mut masked_points = Vec::new();
         let mut masked_scalars = Vec::new();
 
         debug_assert!(points.len() == scalars.len());
-        let mut running_scalar = P::ScalarField::ONE;
+        let mut running_scalar = F::ONE;
 
         // Get the offset generator G_offset in native and in-circuit form
         let native_offset_generator = offset_generator::<P>("biggroup table offset generator");
-        let generator_coefficient = P::ScalarField::from(2u64).pow([points.len() as u64]);
+        let generator_coefficient = F::from(2u64).pow([points.len() as u64]);
         let generator_coefficient_inverse = generator_coefficient
             .inverse()
             .expect("Generator coefficient should have an inverse");
 
-        let mut last_scalar = FieldCT::from_witness(P::ScalarField::ZERO.into(), builder);
+        let mut last_scalar = FieldCT::from_witness(F::ZERO.into(), builder);
 
         // For each point and scalar
         for (point, scalar) in points.iter().zip(scalars.iter()) {
@@ -514,7 +661,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
             last_scalar.add_assign(&scalar.multiply(&tmp, builder, driver)?, builder, driver);
 
             // Double the running_scalar
-            running_scalar *= P::ScalarField::from(2u64);
+            running_scalar *= F::from(2u64);
         }
 
         // Add a scalar -(<(1,2,4,...,2ⁿ⁻¹ ),(scalar₀,...,scalarₙ₋₁)> / 2ⁿ)
@@ -529,12 +676,12 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
         Ok((masked_points, masked_scalars))
     }
 
-    fn add_native_point(
+    fn add_native_point<P: CurveGroup<ScalarField = F>>(
         &self,
         native_point_to_add: &P::Affine,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<BigGroup<P, T>> {
+    ) -> eyre::Result<Self> {
         todo!();
     }
 
@@ -543,22 +690,20 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
      * @details This is a step in enabling our our multiscalar multiplication algorithms to hande points at infinity.
      */
     // TODO CESAR: Batch FieldCT ops
-    fn handle_points_at_infinity(
-        points: &[BigGroup<P, T>],
-        scalars: &[FieldCT<P::ScalarField>],
+    fn handle_points_at_infinity<P: CurveGroup<ScalarField = F>>(
+        points: &[Self],
+        scalars: &[FieldCT<F>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<(Vec<BigGroup<P, T>>, Vec<FieldCT<P::ScalarField>>)> {
-        let one = BigGroup::one(builder, driver)?;
+    ) -> eyre::Result<(Vec<Self>, Vec<FieldCT<F>>)> {
+        let one = Self::one(builder, driver)?;
         let mut new_points = Vec::new();
         let mut new_scalars = Vec::new();
 
         for (point, scalar) in points.iter().zip(scalars.iter()) {
             let is_infinity = &point.is_infinity;
 
-            if is_infinity.is_constant()
-                && is_infinity.get_value(driver) == P::ScalarField::ONE.into()
-            {
+            if is_infinity.is_constant() && is_infinity.get_value(driver) == F::ONE.into() {
                 // if point is at infinity and a circuit constant we can just skip.
                 continue;
             }
@@ -571,13 +716,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
             }
 
             let updated_x =
-                BigField::conditional_assign(is_infinity, &one.x, &point.x, builder, driver)?;
+                BigField::conditional_select(is_infinity, &one.x, &point.x, builder, driver)?;
             let updated_y =
-                BigField::conditional_assign(is_infinity, &one.y, &point.y, builder, driver)?;
+                BigField::conditional_select(is_infinity, &one.y, &point.y, builder, driver)?;
 
             let updated_scalar = FieldCT::conditional_assign(
                 is_infinity,
-                &FieldCT::from_witness(P::ScalarField::ZERO.into(), builder),
+                &FieldCT::from_witness(F::ZERO.into(), builder),
                 &scalar,
                 builder,
                 driver,
@@ -592,24 +737,150 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P,
 
         return Ok((new_points, new_scalars));
     }
-}
-// TODO CESAR
 
-pub struct LookupTablePlookup<
-    const SIZE: usize,
-    P: CurveGroup,
-    T: NoirWitnessExtensionProtocol<P::ScalarField>,
-> {
-    element_table: [BigGroup<P, T>; SIZE],
-    coordinates: [TwinRomTable<P::ScalarField>; 5],
+    /**
+     * Evaluate a chain addition!
+     *
+     * When adding a set of points P_1 + ... + P_N, we do not need to compute the y-coordinate of intermediate addition
+     *terms.
+     *
+     * i.e. we substitute `acc.y` with `acc.y = acc.lambda_prev * (acc.x1_prev - acc.x) - acc.y1_prev`
+     *
+     * `lambda_prev, x1_prev, y1_prev` are the `lambda, x1, y1` terms from the previous addition operation.
+     *
+     * `chain_add` requires 1 less non-native field reduction than a regular add operation.
+     **/
+
+    /**
+     * begin a chain of additions
+     * input points p1 p2
+     * output accumulator = x3_prev (output x coordinate), x1_prev, y1_prev (p1), lambda_prev (y2 - y1) / (x2 - x1)
+     **/
+    pub(crate) fn chain_add_start<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        p1: &Self,
+        p2: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<ChainAddAccumulator<F>> {
+        p1.x.assert_is_not_equal(&p2.x, builder, driver);
+        let lambda = BigField::div_without_denominator_check(
+            &[p2.y.clone(), p1.y.neg(builder, driver)?],
+            &p2.x.sub(&p1.x, builder, driver)?,
+            builder,
+            driver,
+        )?;
+
+        let x3 = lambda.sqradd(
+            &[p2.x.neg(builder, driver)?, p1.x.neg(builder, driver)?],
+            builder,
+            driver,
+        )?;
+
+        Ok(ChainAddAccumulator {
+            x1_prev: p1.x.clone(),
+            y1_prev: p1.y.clone(),
+            lambda_prev: lambda,
+            x3_prev: x3,
+            y3_prev: Default::default(),
+            is_element: false,
+        })
+    }
+
+    pub(crate) fn chain_add<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        p1: &Self,
+        acc: &ChainAddAccumulator<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<ChainAddAccumulator<F>> {
+        // use `chain_add_start` to start an addition chain (i.e. if acc has a y-coordinate)
+        if acc.is_element {
+            return Self::chain_add_start(
+                p1,
+                &BigGroup {
+                    x: acc.x3_prev.clone(),
+                    y: acc.y3_prev.clone(),
+                    is_infinity: BoolCT::from(false),
+                },
+                builder,
+                driver,
+            );
+        } else {
+            // validate we can use incomplete addition formulae
+            p1.x.assert_is_not_equal(&acc.x3_prev, builder, driver)?;
+
+            // lambda = (y2 - y1) / (x2 - x1)
+            // but we don't have y2!
+            // however, we do know that y2 = lambda_prev * (x1_prev - x2) - y1_prev
+            // => lambda * (x2 - x1) = lambda_prev * (x1_prev - x2) - y1_prev - y1
+            // => lambda * (x2 - x1) + lambda_prev * (x2 - x1_prev) + y1 + y1_prev = 0
+            // => lambda = lambda_prev * (x1_prev - x2) - y1_prev - y1 / (x2 - x1)
+            // => lambda = - (lambda_prev * (x2 - x1_prev) + y1_prev + y1) / (x2 - x1)
+
+            let x2 = &acc.x3_prev;
+            let lambda = BigField::msub_div(
+                &[acc.lambda_prev.clone()],
+                &[x2.sub(&acc.x1_prev, builder, driver)?],
+                &x2.sub(&p1.x, builder, driver)?,
+                &[acc.y1_prev.clone(), p1.y.clone()],
+                false,
+                builder,
+                driver,
+            )?;
+
+            let x3 = lambda.sqradd(
+                &[x2.neg(builder, driver)?, p1.x.neg(builder, driver)?],
+                builder,
+                driver,
+            )?;
+
+            Ok(ChainAddAccumulator {
+                x1_prev: p1.x.clone(),
+                y1_prev: p1.y.clone(),
+                lambda_prev: lambda,
+                x3_prev: x3,
+                y3_prev: Default::default(),
+                is_element: false,
+            })
+        }
+    }
+
+    /**
+     * End an addition chain. Produces a full output group element with a y-coordinate
+     **/
+    fn chain_add_end<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        acc: ChainAddAccumulator<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigGroup<F, T>> {
+        if acc.is_element {
+            return Ok(BigGroup::new(acc.x3_prev, acc.y3_prev));
+        }
+        let x3 = acc.x3_prev;
+        let lambda = acc.lambda_prev;
+
+        let y3 = lambda.madd(
+            &acc.x1_prev.sub(&x3, builder, driver)?,
+            &[acc.y1_prev.neg(builder, driver)?],
+            builder,
+            driver,
+        )?;
+
+        Ok(BigGroup::new(x3, y3))
+    }
+}
+
+pub struct LookupTablePlookup<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
+{
+    element_table: [BigGroup<F, T>; SIZE],
+    coordinates: [TwinRomTable<F>; 5],
     limb_max: [BigUint; 8],
 }
 
-impl<const SIZE: usize, P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
-    LookupTablePlookup<SIZE, P, T>
+impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
+    LookupTablePlookup<SIZE, F, T>
 {
-    pub fn new<const LENGTH: usize>(
-        inputs: [BigGroup<P, T>; LENGTH],
+    pub fn new<const LENGTH: usize, P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        inputs: [BigGroup<F, T>; LENGTH],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -777,9 +1048,9 @@ impl<const SIZE: usize, P: CurveGroup, T: NoirWitnessExtensionProtocol<P::Scalar
      * @return std::array<twin_rom_table<C>, 5>
      **/
     fn create_group_element_rom_tables(
-        rom_data: &[BigGroup<P, T>],
+        rom_data: &[BigGroup<F, T>],
         limb_max: &[BigUint; 8],
-    ) -> eyre::Result<[TwinRomTable<P::ScalarField>; 5]> {
+    ) -> eyre::Result<[TwinRomTable<F>; 5]> {
         let num_elements = rom_data.len();
 
         let mut x_lo_limbs = Vec::with_capacity(num_elements);
@@ -834,9 +1105,76 @@ impl<const SIZE: usize, P: CurveGroup, T: NoirWitnessExtensionProtocol<P::Scalar
 
         Ok(output_tables)
     }
+
+    fn read_group_element_rom_tables<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        tables: &mut [TwinRomTable<F>; 5],
+        index: &FieldCT<F>,
+        limb_max: &[BigUint; 8],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigGroup<F, T>> {
+        let xlo = tables[0].get(index, builder, driver)?;
+        let xhi = tables[1].get(index, builder, driver)?;
+        let ylo = tables[2].get(index, builder, driver)?;
+        let yhi = tables[3].get(index, builder, driver)?;
+        let xyprime = tables[4].get(index, builder, driver)?;
+
+        // We assign maximum_value of each limb here, so we can use the unsafe API from element construction
+        let mut x_fq = BigField::unsafe_construct_from_limbs(
+            &xlo[0],
+            &xlo[1],
+            &xhi[0],
+            &xhi[1],
+            &xyprime[0],
+            false,
+        );
+        let mut y_fq = BigField::unsafe_construct_from_limbs(
+            &ylo[0],
+            &ylo[1],
+            &yhi[0],
+            &yhi[1],
+            &xyprime[1],
+            false,
+        );
+
+        for j in 0..4 {
+            x_fq.binary_basis_limbs[j].maximum_value = limb_max[j].clone();
+            y_fq.binary_basis_limbs[j].maximum_value = limb_max[j + 4].clone();
+        }
+
+        Ok(BigGroup::new(x_fq, y_fq))
+    }
+
+    pub(crate) fn get<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        bits: &[BoolCT<F, T>],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigGroup<F, T>> {
+        assert_eq!(bits.len(), SIZE.trailing_zeros() as usize);
+        let mut accumulators = Vec::new();
+        for (i, bit) in bits.iter().enumerate() {
+            accumulators.push(
+                FieldCT::from_witness(F::from(1u64 << i).into(), builder).multiply(
+                    &bit.to_field_ct(driver),
+                    builder,
+                    driver,
+                )?,
+            );
+        }
+
+        let index = FieldCT::accumulate(&accumulators, builder, driver)?;
+        Self::read_group_element_rom_tables(
+            &mut self.coordinates,
+            &index,
+            &self.limb_max,
+            builder,
+            driver,
+        )
+    }
 }
 
-pub struct BatchLookupTablePlookup<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct BatchLookupTablePlookup<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> {
     num_points: usize,
     num_sixes: usize,
     num_fives: usize,
@@ -845,17 +1183,17 @@ pub struct BatchLookupTablePlookup<P: CurveGroup, T: NoirWitnessExtensionProtoco
     has_twin: bool,
     has_singleton: bool,
 
-    six_tables: Vec<LookupTablePlookup<64, P, T>>,
-    five_tables: Vec<LookupTablePlookup<32, P, T>>,
-    quad_tables: Vec<LookupTablePlookup<16, P, T>>,
-    triple_tables: Vec<LookupTablePlookup<8, P, T>>,
-    twin_tables: Vec<LookupTablePlookup<4, P, T>>,
-    singletons: Vec<BigGroup<P, T>>,
+    six_tables: Vec<LookupTablePlookup<64, F, T>>,
+    five_tables: Vec<LookupTablePlookup<32, F, T>>,
+    quad_tables: Vec<LookupTablePlookup<16, F, T>>,
+    triple_tables: Vec<LookupTablePlookup<8, F, T>>,
+    twin_tables: Vec<LookupTablePlookup<4, F, T>>,
+    singletons: Vec<BigGroup<F, T>>,
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookupTablePlookup<P, T> {
-    pub fn new(
-        points: &[BigGroup<P, T>],
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<F, T> {
+    pub fn new<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        points: &[BigGroup<F, T>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -864,10 +1202,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
         let mut num_fives = num_points / 5;
 
         // size-6 table is expensive and only benefits us if creating them reduces the number of total tables
-        let mut has_quad = false;
-        let mut has_triple = false;
-        let mut has_twin = false;
-        let mut has_singleton = false;
 
         if num_points == 1 {
             num_fives = 0;
@@ -883,17 +1217,17 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
             num_sixes = 3;
         }
 
-        has_quad = ((num_fives * 5 + num_sixes * 6) < num_points - 3) && (num_points >= 4);
-        has_triple = ((num_fives * 5 + num_sixes * 6 + if has_quad { 4 } else { 0 })
+        let has_quad = ((num_fives * 5 + num_sixes * 6) < num_points - 3) && (num_points >= 4);
+        let has_triple = ((num_fives * 5 + num_sixes * 6 + if has_quad { 4 } else { 0 })
             < num_points - 2)
             && (num_points >= 3);
-        has_twin = ((num_fives * 5
+        let has_twin = ((num_fives * 5
             + num_sixes * 6
             + if has_quad { 4 } else { 0 }
             + if has_triple { 3 } else { 0 })
             < num_points - 1)
             && (num_points >= 2);
-        has_singleton = num_points
+        let has_singleton = num_points
             != ((num_fives * 5 + num_sixes * 6)
                 + if has_quad { 4 } else { 0 }
                 + if has_triple { 3 } else { 0 }
@@ -909,7 +1243,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
 
         for i in 0..num_sixes {
             let idx = offset + 6 * i;
-            six_tables.push(LookupTablePlookup::<64, P, T>::new(
+            six_tables.push(LookupTablePlookup::<64, F, T>::new(
                 [
                     points[idx].clone(),
                     points[idx + 1].clone(),
@@ -925,7 +1259,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
         offset += 6 * num_sixes;
         for i in 0..num_fives {
             let idx = offset + 5 * i;
-            five_tables.push(LookupTablePlookup::<32, P, T>::new(
+            five_tables.push(LookupTablePlookup::<32, F, T>::new(
                 [
                     points[idx].clone(),
                     points[idx + 1].clone(),
@@ -940,7 +1274,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
         offset += 5 * num_fives;
 
         if has_quad {
-            quad_tables.push(LookupTablePlookup::<16, P, T>::new(
+            quad_tables.push(LookupTablePlookup::<16, F, T>::new(
                 [
                     points[offset].clone(),
                     points[offset + 1].clone(),
@@ -952,7 +1286,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
             )?);
         }
         if has_triple {
-            triple_tables.push(LookupTablePlookup::<8, P, T>::new(
+            triple_tables.push(LookupTablePlookup::<8, F, T>::new(
                 [
                     points[offset].clone(),
                     points[offset + 1].clone(),
@@ -964,7 +1298,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
         }
 
         if has_twin {
-            twin_tables.push(LookupTablePlookup::<4, P, T>::new(
+            twin_tables.push(LookupTablePlookup::<4, F, T>::new(
                 [points[offset].clone(), points[offset + 1].clone()],
                 builder,
                 driver,
@@ -992,11 +1326,45 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
         })
     }
 
-    pub(crate) fn get_chain_initial_entry(
+    pub(crate) fn get_initial_entry<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<ChainAddAccumulator<P::ScalarField>> {
+    ) -> BigGroup<F, T> {
+        let mut add_accumulator = Vec::new();
+        for six_table in &self.six_tables {
+            add_accumulator.push(six_table.element_table[0].clone());
+        }
+        for five_table in &self.five_tables {
+            add_accumulator.push(five_table.element_table[0].clone());
+        }
+        if self.has_quad {
+            add_accumulator.push(self.quad_tables[0].element_table[0].clone());
+        }
+        if self.has_triple {
+            add_accumulator.push(self.triple_tables[0].element_table[0].clone());
+        }
+        if self.has_twin {
+            add_accumulator.push(self.twin_tables[0].element_table[0].clone());
+        }
+        if self.has_singleton {
+            add_accumulator.push(self.singletons[0].clone());
+        }
+
+        add_accumulator
+            .into_iter()
+            .reduce(|acc, item| {
+                acc.add(&item, builder, driver)
+                    .expect("Addition of elements in batch lookup table failed")
+            })
+            .expect("At least one element should be present in batch lookup table")
+    }
+
+    pub(crate) fn get_chain_initial_entry<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<ChainAddAccumulator<F>> {
         {
             let mut add_accumulator = Vec::new();
 
@@ -1014,14 +1382,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
             }
 
             if add_accumulator.len() >= 2 {
-                let mut output = ChainAddAccumulator::chain_add_start(
+                let mut output = BigGroup::chain_add_start(
                     &add_accumulator[0],
                     &add_accumulator[1],
                     builder,
                     driver,
                 )?;
                 for acc in add_accumulator.iter().skip(2) {
-                    output = output.chain_add(acc, builder, driver)?;
+                    output = BigGroup::chain_add(acc, &output, builder, driver)?;
                 }
                 return Ok(output);
             }
@@ -1035,6 +1403,112 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BatchLookup
             })
         }
     }
+
+    pub(crate) fn get_chain_add_accumulator<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        naf_entries: &Vec<BoolCT<F, T>>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<ChainAddAccumulator<F>> {
+        let mut round_accumulator = Vec::new();
+        for i in 0..self.num_sixes {
+            round_accumulator.push(self.six_tables[i].get(
+                &[
+                    naf_entries[6 * i].clone(),
+                    naf_entries[6 * i + 1].clone(),
+                    naf_entries[6 * i + 2].clone(),
+                    naf_entries[6 * i + 3].clone(),
+                    naf_entries[6 * i + 4].clone(),
+                    naf_entries[6 * i + 5].clone(),
+                ],
+                builder,
+                driver,
+            )?);
+        }
+        let mut offset = 6 * self.num_sixes;
+        for i in 0..self.num_fives {
+            round_accumulator.push(self.five_tables[i].get(
+                &[
+                    naf_entries[5 * i].clone(),
+                    naf_entries[5 * i + 1].clone(),
+                    naf_entries[5 * i + 2].clone(),
+                    naf_entries[5 * i + 3].clone(),
+                    naf_entries[5 * i + 4].clone(),
+                ],
+                builder,
+                driver,
+            )?);
+        }
+        offset += 5 * self.num_fives;
+        if self.has_quad {
+            round_accumulator.push(self.quad_tables[0].get(
+                &[
+                    naf_entries[offset].clone(),
+                    naf_entries[offset + 1].clone(),
+                    naf_entries[offset + 2].clone(),
+                    naf_entries[offset + 3].clone(),
+                ],
+                builder,
+                driver,
+            )?);
+        }
+        if self.has_triple {
+            round_accumulator.push(self.triple_tables[0].get(
+                &[
+                    naf_entries[offset].clone(),
+                    naf_entries[offset + 1].clone(),
+                    naf_entries[offset + 2].clone(),
+                ],
+                builder,
+                driver,
+            )?);
+        }
+        if self.has_twin {
+            round_accumulator.push(self.twin_tables[0].get(
+                &[naf_entries[offset].clone(), naf_entries[offset + 1].clone()],
+                builder,
+                driver,
+            )?);
+        }
+        if self.has_singleton {
+            round_accumulator.push(self.singletons[0].conditional_negate(
+                &naf_entries[self.num_points - 1],
+                builder,
+                driver,
+            )?);
+        }
+
+        if round_accumulator.len() == 1 {
+            return Ok(ChainAddAccumulator {
+                x3_prev: round_accumulator[0].x.clone(),
+                y3_prev: round_accumulator[0].y.clone(),
+                is_element: true,
+                x1_prev: Default::default(),
+                y1_prev: Default::default(),
+                lambda_prev: Default::default(),
+            });
+        } else if round_accumulator.len() == 2 {
+            return BigGroup::chain_add_start(
+                &round_accumulator[0],
+                &round_accumulator[1],
+                builder,
+                driver,
+            );
+        }
+        let mut output = BigGroup::chain_add_start(
+            &round_accumulator[0],
+            &round_accumulator[1],
+            builder,
+            driver,
+        )?;
+
+        for acc in round_accumulator.iter().skip(2) {
+            output = BigGroup::chain_add(acc, &output, builder, driver)?;
+        }
+        Ok(output)
+    }
 }
 
 pub(crate) struct ChainAddAccumulator<F: PrimeField> {
@@ -1046,113 +1520,9 @@ pub(crate) struct ChainAddAccumulator<F: PrimeField> {
     is_element: bool,
 }
 
-impl<F: PrimeField> ChainAddAccumulator<F> {
-    /**
-     * Evaluate a chain addition!
-     *
-     * When adding a set of points P_1 + ... + P_N, we do not need to compute the y-coordinate of intermediate addition
-     *terms.
-     *
-     * i.e. we substitute `acc.y` with `acc.y = acc.lambda_prev * (acc.x1_prev - acc.x) - acc.y1_prev`
-     *
-     * `lambda_prev, x1_prev, y1_prev` are the `lambda, x1, y1` terms from the previous addition operation.
-     *
-     * `chain_add` requires 1 less non-native field reduction than a regular add operation.
-     **/
+#[cfg(test)]
+mod test {
 
-    /**
-     * begin a chain of additions
-     * input points p1 p2
-     * output accumulator = x3_prev (output x coordinate), x1_prev, y1_prev (p1), lambda_prev (y2 - y1) / (x2 - x1)
-     **/
-    pub(crate) fn chain_add_start<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<F>,
-    >(
-        p1: &BigGroup<P, T>,
-        p2: &BigGroup<P, T>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<Self> {
-        p1.x.assert_is_not_equal(&p2.x, builder, driver);
-        let lambda = BigField::div_without_denominator_check(
-            &[p2.y.clone(), p1.y.neg(builder, driver)?],
-            &p2.x.sub(&p1.x, builder, driver)?,
-            builder,
-            driver,
-        )?;
-
-        let x3 = lambda.sqradd(
-            &[p2.x.neg(builder, driver)?, p1.x.neg(builder, driver)?],
-            builder,
-            driver,
-        )?;
-
-        Ok(ChainAddAccumulator {
-            x1_prev: p1.x.clone(),
-            y1_prev: p1.y.clone(),
-            lambda_prev: lambda,
-            x3_prev: x3,
-            y3_prev: Default::default(),
-            is_element: false,
-        })
-    }
-
-    pub(crate) fn chain_add<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
-        &mut self,
-        p1: &BigGroup<P, T>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<ChainAddAccumulator<F>> {
-        // use `chain_add_start` to start an addition chain (i.e. if acc has a y-coordinate)
-        if self.is_element {
-            return Self::chain_add_start(
-                p1,
-                &BigGroup {
-                    x: self.x3_prev.clone(),
-                    y: self.y3_prev.clone(),
-                    is_infinity: BoolCT::from(false),
-                },
-                builder,
-                driver,
-            );
-        } else {
-            // validate we can use incomplete addition formulae
-            p1.x.assert_is_not_equal(&self.x3_prev, builder, driver)?;
-
-            // lambda = (y2 - y1) / (x2 - x1)
-            // but we don't have y2!
-            // however, we do know that y2 = lambda_prev * (x1_prev - x2) - y1_prev
-            // => lambda * (x2 - x1) = lambda_prev * (x1_prev - x2) - y1_prev - y1
-            // => lambda * (x2 - x1) + lambda_prev * (x2 - x1_prev) + y1 + y1_prev = 0
-            // => lambda = lambda_prev * (x1_prev - x2) - y1_prev - y1 / (x2 - x1)
-            // => lambda = - (lambda_prev * (x2 - x1_prev) + y1_prev + y1) / (x2 - x1)
-
-            let x2 = &self.x3_prev;
-            let lambda = BigField::msub_div(
-                &[self.lambda_prev.clone()],
-                &[x2.sub(&self.x1_prev, builder, driver)?],
-                &x2.sub(&p1.x, builder, driver)?,
-                &[self.y1_prev.clone(), p1.y.clone()],
-                false,
-                builder,
-                driver,
-            )?;
-
-            let x3 = lambda.sqradd(
-                &[x2.neg(builder, driver)?, p1.x.neg(builder, driver)?],
-                builder,
-                driver,
-            )?;
-
-            Ok(ChainAddAccumulator {
-                x1_prev: p1.x.clone(),
-                y1_prev: p1.y.clone(),
-                lambda_prev: lambda,
-                x3_prev: x3,
-                y3_prev: Default::default(),
-                is_element: false,
-            })
-        }
-    }
+    #[test]
+    fn test_handle_points_at_infinity() {}
 }

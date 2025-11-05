@@ -472,4 +472,81 @@ impl<F: PrimeField> TwinRomTable<F> {
             initialized: false,
         }
     }
+
+    // initialize the table once we perform a read. This ensures we always have a valid
+    // pointer to a Builder.
+    // (if both the table entries and the index are constant, we don't need a builder as we
+    // can directly extract the desired value from `raw_entries`)
+    pub(crate) fn initialize_table<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        if self.initialized {
+            return;
+        }
+
+        // Populate table. Table entries must be normalized and cannot be constants
+        for entry in self.raw_entries.iter() {
+            let first = if entry[0].is_constant() {
+                FieldCT::from_witness_index(builder.put_constant_variable(
+                    T::get_public(&entry[0].get_value(builder, driver))
+                        .expect("Constant should be public"),
+                ))
+            } else {
+                entry[0].normalize(builder, driver)
+            };
+
+            let second = if entry[1].is_constant() {
+                FieldCT::from_witness_index(builder.put_constant_variable(
+                    T::get_public(&entry[1].get_value(builder, driver))
+                        .expect("Constant should be public"),
+                ))
+            } else {
+                entry[1].normalize(builder, driver)
+            };  
+            self.entries.push([first, second]);
+        }
+        self.rom_id = builder.create_rom_array(self.length * 2);
+
+        for i in 0..self.length {
+            builder.set_rom_element_pair(self.rom_id, i, [
+                self.entries[i][0].get_witness_index(),
+                self.entries[i][1].get_witness_index(),
+            ]);
+        }
+
+        self.initialized = true;
+    }
+
+    pub(crate) fn get<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        index: &FieldCT<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T
+    ) -> eyre::Result<[FieldCT<F>; 2]> {
+        if index.is_constant() {
+            let value = T::get_public(&index.get_value(builder, driver))
+                .expect("Constant should be public");
+            let val: BigUint = value.into();
+            let val: usize = val.try_into().expect("Invalid index");
+            return Ok(self.entries[val].to_owned());
+        }
+        self.initialize_table(builder, driver);
+
+        // TODO CESAR: Check bounds
+
+        let output_indices = builder
+            .read_rom_array_pair(self.rom_id, index.get_witness_index(), driver)?;
+
+        let pair = [
+            FieldCT::from_witness_index(output_indices[0]),
+            FieldCT::from_witness_index(output_indices[1]),
+        ];
+
+        Ok(pair)
+    }
 }

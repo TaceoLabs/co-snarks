@@ -64,7 +64,9 @@ impl<F: PrimeField> Default for PlainAcvmSolver<F> {
 impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     type Lookup = PlainLookupTableProvider<F>;
     type ArithmeticShare = F;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C::BaseField;
     type AcvmType = F;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> = C::BaseField;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = C;
 
     type BrilligDriver = PlainBrilligDriver<F>;

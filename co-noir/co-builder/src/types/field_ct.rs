@@ -123,14 +123,11 @@ impl<F: PrimeField> FieldCT<F> {
         self.witness_index == Self::IS_CONSTANT
     }
 
-    pub(crate) fn to_bool_ct<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
+    pub(crate) fn to_bool_ct<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> BoolCT<P, T> {
+    ) -> BoolCT<P::ScalarField, T> {
         // If `this` is a constant field_t element, the resulting bool is also constant.
         // In this case, `additive_constant` uniquely determines the value of `this`.
         // After ensuring that `additive_constant` \in {0, 1}, we set the `.witness_bool` field of `result` to match the
@@ -1033,7 +1030,7 @@ impl<F: PrimeField> FieldCT<F> {
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
-        predicate: &BoolCT<P, T>,
+        predicate: &BoolCT<P::ScalarField, T>,
         lhs: &Self,
         rhs: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1135,7 +1132,7 @@ impl<F: PrimeField> FieldCT<F> {
         );
     }
 
-    fn evaluate_polynomial_identity<
+    pub(crate) fn evaluate_polynomial_identity<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -1195,12 +1192,12 @@ impl<F: PrimeField> FieldCT<F> {
         });
     }
 
-    fn equals<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    fn equals<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<BoolCT<P, T>> {
+    ) -> eyre::Result<BoolCT<P::ScalarField, T>> {
         let sub = self.sub(other, builder, driver);
         sub.is_zero(builder, driver)
     }
@@ -1329,7 +1326,7 @@ impl<F: PrimeField> FieldCT<F> {
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<BoolCT<P, T>> {
+    ) -> eyre::Result<BoolCT<P::ScalarField, T>> {
         if self.is_constant() {
             let val = self.get_value(builder, driver);
             let is_zero = T::get_public(&val).expect("Constants are public").is_zero();
@@ -1584,10 +1581,8 @@ impl<F: PrimeField> From<F> for FieldCT<F> {
     }
 }
 
-impl<F: PrimeField, P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>
-    From<WitnessCT<P, T>> for FieldCT<F>
-{
-    fn from(value: WitnessCT<P, T>) -> Self {
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> From<WitnessCT<F, T>> for FieldCT<F> {
+    fn from(value: WitnessCT<F, T>) -> Self {
         Self {
             additive_constant: F::zero(),
             multiplicative_constant: F::one(),
@@ -1606,16 +1601,16 @@ impl<F: PrimeField> Default for FieldCT<F> {
     }
 }
 
-pub struct WitnessCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct WitnessCT<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> {
     pub(crate) witness: T::AcvmType,
     pub(crate) witness_index: u32,
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P, T> {
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> WitnessCT<F, T> {
     #[expect(dead_code)]
-    const IS_CONSTANT: u32 = FieldCT::<P::ScalarField>::IS_CONSTANT;
+    const IS_CONSTANT: u32 = FieldCT::<F>::IS_CONSTANT;
 
-    pub fn from_acvm_type(
+    pub fn from_acvm_type<P: CurveGroup<ScalarField = F>>(
         value: T::AcvmType,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> Self {
@@ -1627,13 +1622,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> WitnessCT<P
     }
 }
 
-pub struct BoolCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct BoolCT<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> {
     pub(crate) witness_bool: T::AcvmType,
     pub(crate) witness_inverted: bool,
     pub(crate) witness_index: u32,
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Debug for BoolCT<P, T> {
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> Debug for BoolCT<F, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BoolCT")
             .field("witness_bool", &self.witness_bool)
@@ -1643,17 +1638,17 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Debug for B
     }
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Default for BoolCT<P, T> {
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> Default for BoolCT<F, T> {
     fn default() -> Self {
         Self {
             witness_bool: T::public_zero(),
             witness_inverted: false,
-            witness_index: FieldCT::<P::ScalarField>::IS_CONSTANT,
+            witness_index: FieldCT::<F>::IS_CONSTANT,
         }
     }
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for BoolCT<P, T> {
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> Clone for BoolCT<F, T> {
     fn clone(&self) -> Self {
         Self {
             witness_bool: self.witness_bool.to_owned(),
@@ -1663,32 +1658,32 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for B
     }
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> From<bool> for BoolCT<P, T> {
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> From<bool> for BoolCT<F, T> {
     fn from(val: bool) -> Self {
         Self {
-            witness_bool: P::ScalarField::from(val as u64).into(),
+            witness_bool: F::from(val as u64).into(),
             witness_inverted: false,
-            witness_index: FieldCT::<P::ScalarField>::IS_CONSTANT,
+            witness_index: FieldCT::<F>::IS_CONSTANT,
         }
     }
 }
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
-    pub(crate) fn get_witness_index(
+impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
+
+     pub(crate) fn get_witness_index<P: CurveGroup<ScalarField = F>>(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> u32 {
         self.normalize(builder, driver).witness_index
     }
-
     pub(crate) fn is_constant(&self) -> bool {
-        self.witness_index == FieldCT::<P::ScalarField>::IS_CONSTANT
+        self.witness_index == FieldCT::<F>::IS_CONSTANT
     }
 
     // It is assumed here that the value of the WitnessCT is boolean (secret-shared)
-    pub fn from_witness_ct(
-        witness: WitnessCT<P, T>,
+    pub fn from_witness_ct<P: CurveGroup<ScalarField = F>>(
+        witness: WitnessCT<F, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> Self {
         builder.create_bool_gate(witness.witness_index);
@@ -1704,41 +1699,41 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
 
         if self.witness_inverted {
             driver.negate_inplace(&mut result);
-            driver.add_assign_with_public(P::ScalarField::one(), &mut result);
+            driver.add_assign_with_public(F::one(), &mut result);
         }
         result
     }
 
-    pub fn to_field_ct(&self, driver: &mut T) -> FieldCT<P::ScalarField> {
+    pub fn to_field_ct(&self, driver: &mut T) -> FieldCT<F> {
         if self.is_constant() {
             let value = T::get_public(&self.get_value(driver)).expect("Constants are public");
             let additive_constant = if self.witness_inverted {
-                P::ScalarField::one() - value
+                F::one() - value
             } else {
                 value
             };
-            let multiplicative_constant = P::ScalarField::one();
+            let multiplicative_constant = F::one();
             FieldCT {
                 additive_constant,
                 multiplicative_constant,
-                witness_index: FieldCT::<P::ScalarField>::IS_CONSTANT,
+                witness_index: FieldCT::<F>::IS_CONSTANT,
             }
         } else if self.witness_inverted {
             FieldCT {
-                additive_constant: P::ScalarField::one(),
-                multiplicative_constant: -P::ScalarField::one(),
+                additive_constant: F::one(),
+                multiplicative_constant: -F::one(),
                 witness_index: self.witness_index,
             }
         } else {
             FieldCT {
-                additive_constant: P::ScalarField::zero(),
-                multiplicative_constant: P::ScalarField::one(),
+                additive_constant: F::zero(),
+                multiplicative_constant: F::one(),
                 witness_index: self.witness_index,
             }
         }
     }
 
-    pub(crate) fn conditional_assign(
+    fn conditional_assign<P: CurveGroup<ScalarField = F>>(
         predicate: &Self,
         lhs: &Self,
         rhs: &Self,
@@ -1772,7 +1767,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         Ok((l.or(&r, builder, driver)?).normalize(builder, driver))
     }
 
-    pub(crate) fn assert_equal(
+    fn assert_equal<P: CurveGroup<ScalarField = F>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1810,7 +1805,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         }
     }
 
-    fn and(
+    fn and<P: CurveGroup<ScalarField = F>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1918,7 +1913,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         Ok(result)
     }
 
-    fn or(
+    fn or<P: CurveGroup<ScalarField = F>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -2002,7 +1997,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
     fn not(&self) -> Self {
         let mut result = self.to_owned();
         if result.is_constant() {
-            result.witness_bool = (P::ScalarField::one()
+            result.witness_bool = (F::one()
                 - T::get_public(&result.witness_bool).expect("Constants are public"))
             .into();
 
@@ -2012,7 +2007,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         result
     }
 
-    fn equals(
+    fn equals<P: CurveGroup<ScalarField = F>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -2080,7 +2075,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         }
     }
 
-    pub(crate) fn normalize(
+    pub(crate) fn normalize<P: CurveGroup<ScalarField = F>>(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -2129,7 +2124,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
 pub(crate) struct CycleGroupCT<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) x: FieldCT<P::ScalarField>,
     pub(crate) y: FieldCT<P::ScalarField>,
-    pub(crate) is_infinity: BoolCT<P, T>,
+    pub(crate) is_infinity: BoolCT<P::ScalarField, T>,
     pub(crate) is_standard: bool,
     pub(crate) is_constant: bool,
 }
@@ -2153,7 +2148,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
     pub(crate) fn new(
         x: FieldCT<P::ScalarField>,
         y: FieldCT<P::ScalarField>,
-        is_infinity: BoolCT<P, T>,
+        is_infinity: BoolCT<P::ScalarField, T>,
         driver: &mut T,
     ) -> Self {
         let is_standard = is_infinity.is_constant();
@@ -2234,14 +2229,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
         Ok(result)
     }
 
-    pub(crate) fn is_point_at_infinity(&self) -> &BoolCT<P, T> {
+    pub(crate) fn is_point_at_infinity(&self) -> &BoolCT<P::ScalarField, T> {
         &self.is_infinity
     }
 
     #[expect(dead_code)]
     pub(crate) fn set_point_at_infinity(
         &mut self,
-        is_infinity: BoolCT<P, T>,
+        is_infinity: BoolCT<P::ScalarField, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
@@ -3346,8 +3341,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(result)
     }
 
-    pub(crate) fn conditional_assign(
-        predicate: &BoolCT<P, T>,
+    fn conditional_assign(
+        predicate: &BoolCT<P::ScalarField, T>,
         lhs: &Self,
         rhs: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,

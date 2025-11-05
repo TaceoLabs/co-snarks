@@ -2,11 +2,14 @@ use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::prelude::PrecomputedEntities;
 use crate::types::aes128;
 use crate::types::big_field::BigField;
+use crate::types::big_group::BigGroup;
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
-use crate::types::types::{AES128Constraint, MemorySelectors, NnfSelectors};
+use crate::types::types::{
+    AES128Constraint, AddSimple, MemorySelectors, NnfSelectors, NonNativeFieldWitnesses,
+};
 use crate::types::types::{
     EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
 };
@@ -33,7 +36,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{Field, One, PrimeField, Zero};
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
@@ -202,6 +205,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
+    pub(crate) const DEFAULT_NON_NATIVE_FIELD_LIMB_BITS: usize = 68;
 
     pub(crate) fn assert_if_has_witness(&self, input: bool) {
         if self.has_dummy_witnesses {
@@ -3017,8 +3021,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // we skip this assert
         // ASSERT(uint256_t(this->get_variable_reference(limb_idx)) < (uint256_t(1) << num_limb_bits));
 
-        const DEFAULT_NON_NATIVE_FIELD_LIMB_BITS: usize = 68;
-        let limb_mask = (BigUint::one() << DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) - BigUint::one();
+        let limb_mask =
+            (BigUint::one() << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) - BigUint::one();
         let value = self.get_variable(limb_idx as usize);
         if T::is_shared(&value) {
             panic!("This function should not have been called on a shared value");
@@ -3027,17 +3031,17 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 .expect("Already checked it is public")
                 .into();
             let low = &value & &limb_mask;
-            let hi = &value >> DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+            let hi = &value >> Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
 
-            assert!(&low + (&hi << DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) == value);
+            assert!(&low + (&hi << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) == value);
 
             let low_idx = self.add_variable(P::ScalarField::from(low).into());
             let hi_idx = self.add_variable(P::ScalarField::from(hi).into());
 
-            assert!(num_limb_bits > DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+            assert!(num_limb_bits > Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
 
-            let lo_bits = DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
-            let hi_bits = num_limb_bits - DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+            let lo_bits = Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+            let hi_bits = num_limb_bits - Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
             self.range_constrain_two_limbs(low_idx, hi_idx, lo_bits, hi_bits)?;
             Ok([low_idx, hi_idx])
         }
@@ -3462,6 +3466,472 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         self.check_selector_length_consistency();
         self.num_gates += 1;
+    }
+
+    pub(crate) fn evaluate_non_native_field_addition(
+        &mut self,
+        limb0: AddSimple<P::ScalarField>,
+        limb1: AddSimple<P::ScalarField>,
+        limb2: AddSimple<P::ScalarField>,
+        limb3: AddSimple<P::ScalarField>,
+        limbp: (u32, u32, P::ScalarField),
+        driver: &mut T,
+    ) -> eyre::Result<[u32; 5]> {
+        let x_0 = limb0.0.0;
+        let x_1 = limb1.0.0;
+        let x_2 = limb2.0.0;
+        let x_3 = limb3.0.0;
+        let x_p = limbp.0;
+
+        let x_mulconst0 = limb0.0.1;
+        let x_mulconst1 = limb1.0.1;
+        let x_mulconst2 = limb2.0.1;
+        let x_mulconst3 = limb3.0.1;
+
+        let y_0 = limb0.1.0;
+        let y_1 = limb1.1.0;
+        let y_2 = limb2.1.0;
+        let y_3 = limb3.1.0;
+        let y_p = limbp.1;
+
+        let y_mulconst0 = limb0.1.1;
+        let y_mulconst1 = limb1.1.1;
+        let y_mulconst2 = limb2.1.1;
+        let y_mulconst3 = limb3.1.1;
+
+        // constant additive terms
+        let addconst0 = limb0.2;
+        let addconst1 = limb1.2;
+        let addconst2 = limb2.2;
+        let addconst3 = limb3.2;
+        let addconstp = limbp.2;
+
+        let x_var_0_scaled = driver.mul_with_public(x_mulconst0, self.get_variable(x_0 as usize));
+        let x_var_1_scaled = driver.mul_with_public(x_mulconst1, self.get_variable(x_1 as usize));
+        let x_var_2_scaled = driver.mul_with_public(x_mulconst2, self.get_variable(x_2 as usize));
+        let x_var_3_scaled = driver.mul_with_public(x_mulconst3, self.get_variable(x_3 as usize));
+
+        let y_var_0_scaled = driver.mul_with_public(y_mulconst0, self.get_variable(y_0 as usize));
+        let y_var_1_scaled = driver.mul_with_public(y_mulconst1, self.get_variable(y_1 as usize));
+        let y_var_2_scaled = driver.mul_with_public(y_mulconst2, self.get_variable(y_2 as usize));
+        let y_var_3_scaled = driver.mul_with_public(y_mulconst3, self.get_variable(y_3 as usize));
+
+        // get value of result limbs
+        let z_0value = driver.add(driver.add(x_var_0_scaled, addconst0.into()), y_var_0_scaled);
+        let z_1value = driver.add(driver.add(x_var_1_scaled, addconst1.into()), y_var_1_scaled);
+        let z_2value = driver.add(driver.add(x_var_2_scaled, addconst2.into()), y_var_2_scaled);
+        let z_3value = driver.add(driver.add(x_var_3_scaled, addconst3.into()), y_var_3_scaled);
+        let z_pvalue = driver.add(
+            driver.add(self.get_variable(x_p as usize), addconstp.into()),
+            self.get_variable(y_p as usize),
+        );
+
+        let z_0 = self.add_variable(z_0value);
+        let z_1 = self.add_variable(z_1value);
+        let z_2 = self.add_variable(z_2value);
+        let z_3 = self.add_variable(z_3value);
+        let z_p = self.add_variable(z_pvalue);
+
+        // GATE 1
+        // |  1  |  2  |  3  |  4  |
+        // |-----|-----|-----|-----|
+        // | y.p | x.0 | y.0 | z.p | (b.p + b.p - c.p = 0) AND (a.0 + b.0 - c.0 = 0)
+        // | x.p | x.1 | y.1 | z.0 | (a.1  + b.1 - c.1 = 0)
+        // | x.2 | y.2 | z.2 | z.1 | (a.2  + b.2 - c.2 = 0)
+        // | x.3 | y.3 | z.3 | --- | (a.3  + b.3 - c.3 = 0)
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/896): descrepency between above comment and the actual
+        // implementation below.
+        let block = &mut self.blocks.arithmetic;
+        block.populate_wires(y_p, x_0, y_0, z_p);
+        block.populate_wires(x_p, x_1, y_1, z_0);
+        block.populate_wires(x_2, y_2, z_2, z_1);
+        block.populate_wires(x_3, y_3, z_3, self.zero_idx);
+
+        block.q_m().push(addconstp);
+        block.q_1().push(P::ScalarField::zero());
+        block.q_2().push(-x_mulconst0 * P::ScalarField::from(2u64));
+        block.q_3().push(-y_mulconst0 * P::ScalarField::from(2u64)); // z_0 + (x_0 * -xmulconst0) + (y_0 * ymulconst0) = 0 => z_0 = x_0 - y_0
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst0 * P::ScalarField::from(2u64));
+        block.q_arith().push(P::ScalarField::from(3u64));
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(P::ScalarField::zero());
+        block.q_2().push(-x_mulconst1);
+        block.q_3().push(-y_mulconst1);
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst1);
+        block.q_arith().push(P::ScalarField::from(2u64));
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(-x_mulconst2);
+        block.q_2().push(-y_mulconst2);
+        block.q_3().push(P::ScalarField::one());
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst2);
+        block.q_arith().push(P::ScalarField::one());
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(-x_mulconst3);
+        block.q_2().push(-y_mulconst3);
+        block.q_3().push(P::ScalarField::one());
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst3);
+        block.q_arith().push(P::ScalarField::one());
+
+        for _ in 0..4 {
+            block.q_delta_range().push(P::ScalarField::zero());
+            block.q_lookup_type().push(P::ScalarField::zero());
+            block.q_elliptic().push(P::ScalarField::zero());
+            block.q_memory().push(P::ScalarField::zero());
+            block.q_nnf().push(P::ScalarField::zero());
+            block.q_poseidon2_external().push(P::ScalarField::zero());
+            block.q_poseidon2_internal().push(P::ScalarField::zero());
+        }
+        self.check_selector_length_consistency();
+
+        self.num_gates += 4;
+        Ok([z_0, z_1, z_2, z_3, z_p])
+    }
+
+    pub(crate) fn evaluate_non_native_field_subtraction(
+        &mut self,
+        limb0: AddSimple<P::ScalarField>,
+        limb1: AddSimple<P::ScalarField>,
+        limb2: AddSimple<P::ScalarField>,
+        limb3: AddSimple<P::ScalarField>,
+        limbp: (u32, u32, P::ScalarField),
+        driver: &mut T,
+    ) -> eyre::Result<[u32; 5]> {
+        let x_0 = limb0.0.0;
+        let x_1 = limb1.0.0;
+        let x_2 = limb2.0.0;
+        let x_3 = limb3.0.0;
+        let x_p = limbp.0;
+
+        let x_mulconst0 = limb0.0.1;
+        let x_mulconst1 = limb1.0.1;
+        let x_mulconst2 = limb2.0.1;
+        let x_mulconst3 = limb3.0.1;
+
+        let y_0 = limb0.1.0;
+        let y_1 = limb1.1.0;
+        let y_2 = limb2.1.0;
+        let y_3 = limb3.1.0;
+        let y_p = limbp.1;
+
+        let y_mulconst0 = limb0.1.1;
+        let y_mulconst1 = limb1.1.1;
+        let y_mulconst2 = limb2.1.1;
+        let y_mulconst3 = limb3.1.1;
+
+        // constant additive terms
+        let addconst0 = limb0.2;
+        let addconst1 = limb1.2;
+        let addconst2 = limb2.2;
+        let addconst3 = limb3.2;
+        let addconstp = limbp.2;
+
+        let x_var_0_scaled = driver.mul_with_public(x_mulconst0, self.get_variable(x_0 as usize));
+        let x_var_1_scaled = driver.mul_with_public(x_mulconst1, self.get_variable(x_1 as usize));
+        let x_var_2_scaled = driver.mul_with_public(x_mulconst2, self.get_variable(x_2 as usize));
+        let x_var_3_scaled = driver.mul_with_public(x_mulconst3, self.get_variable(x_3 as usize));
+
+        let y_var_0_scaled = driver.mul_with_public(y_mulconst0, self.get_variable(y_0 as usize));
+        let y_var_1_scaled = driver.mul_with_public(y_mulconst1, self.get_variable(y_1 as usize));
+        let y_var_2_scaled = driver.mul_with_public(y_mulconst2, self.get_variable(y_2 as usize));
+        let y_var_3_scaled = driver.mul_with_public(y_mulconst3, self.get_variable(y_3 as usize));
+
+        // get value of result limbs
+        let z_0value = driver.sub(driver.add(x_var_0_scaled, addconst0.into()), y_var_0_scaled);
+        let z_1value = driver.sub(driver.add(x_var_1_scaled, addconst1.into()), y_var_1_scaled);
+        let z_2value = driver.sub(driver.add(x_var_2_scaled, addconst2.into()), y_var_2_scaled);
+        let z_3value = driver.sub(driver.add(x_var_3_scaled, addconst3.into()), y_var_3_scaled);
+        let z_pvalue = driver.sub(
+            driver.add(self.get_variable(x_p as usize), addconstp.into()),
+            self.get_variable(y_p as usize),
+        );
+
+        let z_0 = self.add_variable(z_0value);
+        let z_1 = self.add_variable(z_1value);
+        let z_2 = self.add_variable(z_2value);
+        let z_3 = self.add_variable(z_3value);
+        let z_p = self.add_variable(z_pvalue);
+
+        // GATE 1
+        // |  1  |  2  |  3  |  4  |
+        // |-----|-----|-----|-----|
+        // | y.p | x.0 | y.0 | z.p | (b.p + c.p - a.p = 0) AND (a.0 - b.0 - c.0 = 0)
+        // | x.p | x.1 | y.1 | z.0 | (a.1 - b.1 - c.1 = 0)
+        // | x.2 | y.2 | z.2 | z.1 | (a.2 - b.2 - c.2 = 0)
+        // | x.3 | y.3 | z.3 | --- | (a.3 - b.3 - c.3 = 0)
+        let block = &mut self.blocks.arithmetic;
+        block.populate_wires(y_p, x_0, y_0, z_p);
+        block.populate_wires(x_p, x_1, y_1, z_0);
+        block.populate_wires(x_2, y_2, z_2, z_1);
+        block.populate_wires(x_3, y_3, z_3, self.zero_idx);
+
+        block.q_m().push(-addconstp);
+        block.q_1().push(P::ScalarField::zero());
+        block.q_2().push(-x_mulconst0 * P::ScalarField::from(2u64));
+        block.q_3().push(y_mulconst0 * P::ScalarField::from(2u64)); // z_0 + (x_0 * -xmulconst0) + (y_0 * ymulconst0) = 0 => z_0 = x_0 - y_0
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst0 * P::ScalarField::from(2u64));
+        block.q_arith().push(P::ScalarField::from(3u64));
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(P::ScalarField::zero());
+        block.q_2().push(-x_mulconst1);
+        block.q_3().push(y_mulconst1);
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst1);
+        block.q_arith().push(P::ScalarField::from(2u64));
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(-x_mulconst2);
+        block.q_2().push(y_mulconst2);
+        block.q_3().push(P::ScalarField::one());
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst2);
+        block.q_arith().push(P::ScalarField::one());
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(-x_mulconst3);
+        block.q_2().push(y_mulconst3);
+        block.q_3().push(P::ScalarField::one());
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst3);
+        block.q_arith().push(P::ScalarField::one());
+
+        for _ in 0..4 {
+            block.q_delta_range().push(P::ScalarField::zero());
+            block.q_lookup_type().push(P::ScalarField::zero());
+            block.q_elliptic().push(P::ScalarField::zero());
+            block.q_memory().push(P::ScalarField::zero());
+            block.q_nnf().push(P::ScalarField::zero());
+            block.q_poseidon2_external().push(P::ScalarField::zero());
+            block.q_poseidon2_internal().push(P::ScalarField::zero());
+            // If you have additional selectors, pad them here
+            // if HasAdditionalSelectors<ExecutionTrace> {
+            //     block.pad_additional();
+            // }
+        }
+        self.check_selector_length_consistency();
+
+        self.num_gates += 4;
+        Ok([z_0, z_1, z_2, z_3, z_p])
+    }
+
+    /**
+     * @brief Queue up non-native field multiplication data.
+     *
+     * @details The data queued represents a non-native field multiplication identity a * b = q * p + r,
+     * where a, b, q, r are all emulated non-native field elements that are each split across 4 distinct witness variables.
+     *
+     * Without this queue some functions, such as bb::stdlib::element::multiple_montgomery_ladder, would
+     * duplicate non-native field operations, which can be quite expensive. We queue up these operations, and remove
+     * duplicates in the circuit finishing stage of the proving key computation.
+     *
+     * The non-native field modulus, p, is a circuit constant
+     *
+     * The return value are the witness indices of the two remainder limbs `lo_1, hi_2`
+     *
+     * N.B.: This method does NOT evaluate the prime field component of non-native field multiplications.
+     **/
+    pub(crate) fn evaluate_non_native_field_multiplication(
+        &mut self,
+        input: &NonNativeFieldWitnesses<P::ScalarField>,
+        driver: &mut T,
+    ) -> eyre::Result<[u32; 2]> {
+        let a = input.a.map(|limb| self.get_variable(limb as usize));
+        let b = input.b.map(|limb| self.get_variable(limb as usize));
+        let q = input.q.map(|limb| self.get_variable(limb as usize));
+        let r = input.r.map(|limb| self.get_variable(limb as usize));
+        let neg_modulus = input.neg_modulus.clone();
+
+        let limb_shift = P::ScalarField::from(1u64 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+        let limb_rshift = limb_shift.inverse().unwrap();
+        let limb_rshift_2 = limb_rshift * limb_rshift;
+
+        let lhs = a
+            .into_iter()
+            .flat_map(|limb| vec![limb; 4])
+            .collect::<Vec<_>>();
+        let rhs = b.into_iter().cycle().take(16).collect::<Vec<_>>();
+
+        // TODO CESAR: Do not include unused values
+        let [
+            a0b0,
+            a0b1,
+            a0b2,
+            a0b3,
+            a1b0,
+            a1b1,
+            a1b2,
+            a1b3,
+            a2b0,
+            a2b1,
+            a2b2,
+            a2b3,
+            a3b0,
+            a3b1,
+            a3b2,
+            a3b3,
+        ]: [_; 16] = driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
+
+        // lo_0 = a[0] * b[0] - r[0] + (a[1] * b[0] + a[0] * b[1]) * limb_shift
+        let mut lo_0 = driver.sub(a0b0, r[0].clone());
+        let tmp = driver.add(a1b0, a0b1);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        lo_0 = driver.add(lo_0, tmp);
+
+        // lo_1 = (lo_0 + q[0] * neg_modulus[0] +
+        //         (q[1] * neg_modulus[0] + q[0] * neg_modulus[1] - r[1]) * limb_shift) * limb_rshift_2
+        let tmp = driver.mul(q[0].clone(), neg_modulus[0].into())?;
+        let mut lo_1 = driver.add(lo_0.clone(), tmp);
+        let lhs = driver.mul(q[1].clone(), neg_modulus[0].into())?;
+        let rhs = driver.mul(q[0].clone(), neg_modulus[1].into())?;
+        let tmp = driver.add(lhs, rhs);
+        let tmp = driver.sub(tmp, r[1].clone());
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        lo_1 = driver.add(lo_1, tmp);
+        lo_1 = driver.mul(lo_1, limb_rshift_2.into())?;
+
+        // hi_0 = a[2] * b[0] + a[0] * b[2] + (a[0] * b[3] + a[3] * b[0] - r[3]) * limb_shift
+        let hi_0 = driver.add(a2b0, a0b2);
+        let tmp = driver.add(a0b3, a3b0);
+        let tmp = driver.sub(tmp, r[3].clone());
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        let hi_0 = driver.add(hi_0, tmp);
+
+        // hi_1 = hi_0 + a[1] * b[1] - r[2] + (a[1] * b[2] + a[2] * b[1]) * limb_shift
+        let mut hi_1 = driver.add(hi_0.clone(), a1b1);
+        hi_1 = driver.sub(hi_1, r[2].clone());
+        let tmp = driver.add(a1b2, a2b1);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        hi_1 = driver.add(hi_1, tmp);
+
+        // hi_2 = (hi_1 + lo_1 + q[2] * neg_modulus[0] +
+        //         (q[3] * neg_modulus[0] + q[2] * neg_modulus[1]) * limb_shift)
+        let mut hi_2 = driver.add(hi_1.clone(), lo_1.clone());
+        let tmp = driver.mul(q[2].clone(), neg_modulus[0].into())?;
+        hi_2 = driver.add(hi_2, tmp);
+        let lhs = driver.mul(q[3].clone(), neg_modulus[0].into())?;
+        let rhs = driver.mul(q[2].clone(), neg_modulus[1].into())?;
+        let tmp = driver.add(lhs, rhs);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        hi_2 = driver.add(hi_2, tmp);
+
+        // hi_3 = (hi_2 + (q[0] * neg_modulus[3] + q[1] * neg_modulus[2]) * limb_shift +
+        //         (q[0] * neg_modulus[2] + q[1] * neg_modulus[1])) * limb_rshift_2
+        let mut hi_3 = hi_2.clone();
+        let lhs = driver.mul(q[0].clone(), neg_modulus[3].into())?;
+        let rhs = driver.mul(q[1].clone(), neg_modulus[2].into())?;
+        let tmp = driver.add(lhs, rhs);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        hi_3 = driver.add(hi_3, tmp);
+        let lhs = driver.mul(q[0].clone(), neg_modulus[2].into())?;
+        let rhs = driver.mul(q[1].clone(), neg_modulus[1].into())?;
+        let tmp = driver.add(lhs, rhs);
+        hi_3 = driver.add(hi_3, tmp);
+        hi_3 = driver.mul(hi_3, limb_rshift_2.into())?;
+
+        let lo_0_idx = self.add_variable(lo_0);
+        let lo_1_idx = self.add_variable(lo_1);
+        let hi_0_idx = self.add_variable(hi_0);
+        let hi_1_idx = self.add_variable(hi_1);
+        let hi_2_idx = self.add_variable(hi_2);
+        let hi_3_idx = self.add_variable(hi_3);
+
+        // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): Originally this was a single arithmetic gate.
+        // With trace sorting, we must add a dummy gate since the add gate would otherwise try to read into an aux gate that
+        // has been sorted out of sequence.
+        // product gate 1
+        // (lo_0 + q_0(p_0 + p_1*2^b) + q_1(p_0*2^b) - (r_1)2^b)2^-2b - lo_1 = 0
+        self.create_big_add_gate(
+            &AddQuad {
+                a: input.q[0],
+                b: input.q[1],
+                c: input.r[1],
+                d: lo_1_idx,
+                a_scaling: input.neg_modulus[0] + input.neg_modulus[1] * limb_shift,
+                b_scaling: input.neg_modulus[0] * limb_shift,
+                c_scaling: -limb_shift,
+                d_scaling: -limb_rshift_2,
+                const_scaling: P::ScalarField::zero(),
+            },
+            true,
+        );
+        create_dummy_gate!(
+            self,
+            &mut self.blocks.arithmetic,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            lo_0_idx
+        );
+
+        self.blocks
+            .nnf
+            .populate_wires(input.a[1], input.b[1], input.r[0], lo_0_idx);
+        self.apply_nnf_selectors(NnfSelectors::NonNativeField1);
+        self.num_gates += 1;
+
+        self.blocks
+            .nnf
+            .populate_wires(input.a[0], input.b[0], input.a[3], input.b[3]);
+        self.apply_nnf_selectors(NnfSelectors::NonNativeField2);
+        self.num_gates += 1;
+
+        self.blocks
+            .nnf
+            .populate_wires(input.a[2], input.b[2], input.r[3], hi_0_idx);
+        self.apply_nnf_selectors(NnfSelectors::NonNativeField3);
+        self.num_gates += 1;
+
+        self.blocks
+            .nnf
+            .populate_wires(input.a[1], input.b[1], input.r[2], hi_1_idx);
+        self.apply_nnf_selectors(NnfSelectors::NnfNone);
+        self.num_gates += 1;
+
+        // product gate 6
+        // hi_2 - hi_1 - lo_1 - q[2](p[1].2^b + p[0]) - q[3](p[0].2^b) = 0
+        self.create_big_add_gate(
+            &AddQuad {
+                a: input.q[2],
+                b: input.q[3],
+                c: lo_1_idx,
+                d: hi_1_idx,
+                a_scaling: -input.neg_modulus[1] * limb_shift - input.neg_modulus[0],
+                b_scaling: -input.neg_modulus[0] * limb_shift,
+                c_scaling: -P::ScalarField::one(),
+                d_scaling: -P::ScalarField::one(),
+                const_scaling: P::ScalarField::zero(),
+            },
+            true,
+        );
+
+        // product gate 7
+        // hi_3 - (hi_2 - q[0](p[3].2^b + p[2]) - q[1](p[2].2^b + p[1])).2^-2b
+        self.create_big_add_gate(
+            &AddQuad {
+                a: hi_3_idx,
+                b: input.q[0],
+                c: input.q[1],
+                d: hi_2_idx,
+                a_scaling: -P::ScalarField::one(),
+                b_scaling: input.neg_modulus[3] * limb_rshift
+                    + input.neg_modulus[2] * limb_rshift_2,
+                c_scaling: input.neg_modulus[2] * limb_rshift
+                    + input.neg_modulus[1] * limb_rshift_2,
+                d_scaling: limb_rshift_2,
+                const_scaling: P::ScalarField::zero(),
+            },
+            false,
+        );
+
+        return Ok([lo_1_idx, hi_3_idx]);
     }
 }
 

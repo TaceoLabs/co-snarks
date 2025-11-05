@@ -34,7 +34,6 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone
         + Default
-        + Copy
         + fmt::Debug
         + fmt::Display
         + From<Self::OtherArithmeticShare<C>>
@@ -198,11 +197,27 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Returns the value if the value is public
     fn get_public(a: &Self::AcvmType) -> Option<F>;
 
+    /// Returns the base field value if the type is public
+    fn get_public_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::BaseField> {
+        todo!()
+    }
+
     /// Returns the value if the point is public
     fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C>;
 
     /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> eyre::Result<Self::AcvmType>;
+
+    /// Checks if two shared basefield values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
+    fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &Self::OtherAcvmType<C>,
+        b: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::AcvmType> {
+        todo!()
+    }
 
     /// Checks if two slices of shared values are equal element-wise. The result is a Vec of shared values that have value 1 if the two corresponding shared values are equal and 0 otherwise.
     fn equal_many(
@@ -536,7 +551,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         limbs: &[Self::AcvmType; 4],
-    ) -> eyre::Result<Vec<Self::OtherAcvmType<C>>> {
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn other_acvm_type_to_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        input: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
         todo!()
     }
 
@@ -549,8 +571,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        lhs: Self::OtherAcvmType<C>,
-        rhs: Self::OtherAcvmType<C>,
+        lhs: &Self::OtherAcvmType<C>,
+        rhs: &Self::OtherAcvmType<C>,
     ) -> Self::OtherAcvmType<C> {
         todo!()
     }
@@ -580,15 +602,19 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     fn mul_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        lhs: Self::OtherAcvmType<C>,
-        rhs: Self::OtherAcvmType<C>,
+        lhs: &Self::OtherAcvmType<C>,
+        rhs: &Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
         todo!()
     }
 
-    fn div_mod_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn compute_quotient_remainder_values<
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        a: Self::OtherAcvmType<C>,
+        a: &Self::OtherAcvmType<C>,
+        b: &Self::OtherAcvmType<C>,
+        to_add: &[Self::OtherAcvmType<C>],
     ) -> eyre::Result<(Self::OtherAcvmType<C>, Self::OtherAcvmType<C>)> {
         todo!()
     }

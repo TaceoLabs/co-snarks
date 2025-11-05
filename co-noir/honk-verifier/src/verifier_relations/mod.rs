@@ -164,8 +164,8 @@ macro_rules! scale_and_batch_all {
         process_relation!(r_delta, &$challenges[5..9]);
         process_relation!(r_elliptic, &$challenges[9..11]);
         process_relation!(r_aux, &$challenges[11..17]);
-        process_relation!(r_pos_ext, &$challenges[17..31]);
-        process_relation!(r_pos_int, &$challenges[31..]);
+        process_relation!(r_pos_ext, &$challenges[17..21]);
+        process_relation!(r_pos_int, &$challenges[21..]);
 
         HonkProofResult::Ok(())
     }};

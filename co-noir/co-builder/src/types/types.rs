@@ -1,4 +1,4 @@
-use super::big_field::BigGroup;
+use super::big_group::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
 use crate::keys::proving_key::ProvingKey;
 use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, ProverWitnessEntities};
@@ -519,13 +519,13 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
 #[derive(Default)]
 #[expect(dead_code)]
 pub(crate) struct PairingPoints<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
-    p0: BigGroup<P, T>,
-    p1: BigGroup<P, T>,
+    p0: BigGroup<P::ScalarField, T>,
+    p1: BigGroup<P::ScalarField, T>,
     has_data: bool,
 }
 #[expect(dead_code)]
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
-    pub(crate) fn new(p0: BigGroup<P, T>, p1: BigGroup<P, T>) -> Self {
+    pub(crate) fn new(p0: BigGroup<P::ScalarField, T>, p1: BigGroup<P::ScalarField, T>) -> Self {
         Self {
             p0,
             p1,
@@ -552,14 +552,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoin
         start_idx
     }
 
-    pub fn aggregate(
-        &mut self,
-        other: &AggregationState<P, T>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<()> {
-        todo!()
-    }
+    // TODO FLORIN/ TODO CESAR: Do we need this or is it a leftover?
+    // pub fn aggregate<P: CurveGroup<ScalarField = F>>(
+    //     &mut self,
+    //     other: &AggregationState<F, T>,
+    //     builder: &mut GenericUltraCircuitBuilder<P, T>,
+    //     driver: &mut T,
+    // ) -> eyre::Result<()> {
+    //     todo!()
+    // }
 }
 
 pub const AGGREGATION_OBJECT_SIZE: usize = 16;
@@ -955,4 +956,19 @@ impl ActiveRegionData {
     pub fn num_ranges(&self) -> usize {
         self.ranges.len()
     }
+}
+
+pub(crate) type AddSimple<F: PrimeField> = (
+    (u32, F), // Scaled witness
+    (u32, F), // Scaled witness
+    F,
+);
+
+pub(crate) struct NonNativeFieldWitnesses<F: PrimeField> {
+    pub(crate) a: [u32; 4],
+    pub(crate) b: [u32; 4],
+    pub(crate) q: [u32; 4],
+    pub(crate) r: [u32; 4],
+    pub(crate) neg_modulus: [F; 4],
+    pub(crate) modulus: F,
 }

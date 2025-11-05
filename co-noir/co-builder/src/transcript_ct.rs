@@ -2,7 +2,7 @@
 
 #![expect(unused)]
 use crate::types::big_field::BigField;
-use crate::types::big_field::BigGroup;
+use crate::types::big_group::BigGroup;
 use crate::types::field_ct::CycleScalarCT;
 use crate::types::field_ct::FieldCT;
 use crate::types::poseidon2::FieldHashCT;
@@ -40,7 +40,7 @@ impl<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T> + Defau
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>> {
-        Ok(Self::hash_fixed_length::<1, WT>(&buffer, builder, driver)?[0].clone())
+        Ok(Self::hash_internal::<1, WT>(&buffer, builder, driver)?)
     }
 }
 
@@ -175,7 +175,7 @@ where
         label: String,
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
-    ) -> HonkProofResult<BigGroup<P, WT>> {
+    ) -> HonkProofResult<BigGroup<P::ScalarField, WT>> {
         let mut elements = self.receive_n_from_prover(label, P::NUM_BASEFIELD_ELEMENTS * 2)?;
         debug_assert!(elements.len() == P::NUM_BASEFIELD_ELEMENTS * 2);
 
