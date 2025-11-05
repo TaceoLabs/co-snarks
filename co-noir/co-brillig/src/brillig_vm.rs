@@ -103,10 +103,10 @@ where
                     rhs,
                 } => self.handle_binary_int_op(*destination, *op, *bit_size, *lhs, *rhs)?,
                 BrilligOpcode::Not {
-                    destination: _,
-                    source: _,
-                    bit_size: _,
-                } => todo!(),
+                    destination,
+                    source,
+                    bit_size,
+                } => self.handle_not(*destination, *source, *bit_size)?,
                 BrilligOpcode::Cast {
                     destination,
                     source,
