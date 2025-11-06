@@ -3,7 +3,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::{
     prelude::GenericUltraCircuitBuilder,
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
-    types::{big_field::BigGroup, types::AggregationState},
+    types::{big_group::BigGroup, types::PairingPoints},
 };
 use co_noir_common::{
     honk_curve::HonkCurve,
@@ -40,7 +40,7 @@ impl KZG {
         transcript: &mut TranscriptCT<C, H>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> HonkProofResult<AggregationState<C, T>> {
+    ) -> HonkProofResult<PairingPoints<C, T>> {
         let quotient_commitment =
             transcript.receive_point_from_prover("KZG:W".to_owned(), builder, driver)?;
 
@@ -59,12 +59,13 @@ impl KZG {
         let p0 = BigGroup::batch_mul(
             &batch_opening_claim.commitments,
             &batch_opening_claim.scalars,
+            42, //TODO FLORIN / TODO CESAR
             builder,
             driver,
         )?;
 
         let p1 = quotient_commitment.neg(builder, driver)?;
 
-        Ok(AggregationState::new(p0, p1))
+        Ok(PairingPoints::new(p0, p1))
     }
 }

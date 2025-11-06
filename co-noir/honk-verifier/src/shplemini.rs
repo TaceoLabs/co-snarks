@@ -3,7 +3,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::{
     prelude::{GenericUltraCircuitBuilder, PRECOMPUTED_ENTITIES_SIZE},
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
-    types::{big_field::BigGroup, field_ct::FieldCT},
+    types::{big_group::BigGroup, field_ct::FieldCT},
 };
 use itertools::{interleave, izip};
 use ultrahonk::{
@@ -21,7 +21,7 @@ pub struct BatchOpeningClaim<
     C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
-    pub(crate) commitments: Vec<BigGroup<C, T>>,
+    pub(crate) commitments: Vec<BigGroup<C::ScalarField, T>>,
     pub(crate) scalars: Vec<FieldCT<C::ScalarField>>,
     pub(crate) evaluation_point: FieldCT<C::ScalarField>,
 }
@@ -37,7 +37,7 @@ impl ShpleminiVerifier {
         padding_indicator_array: &[FieldCT<C::ScalarField>],
         claim_batcher: &mut ClaimBatcher<C, T>,
         multivariate_challenge: &[FieldCT<C::ScalarField>],
-        g1_identity: &BigGroup<C, T>,
+        g1_identity: &BigGroup<C::ScalarField, T>,
         transcript: &mut TranscriptCT<C, H>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
@@ -441,12 +441,12 @@ impl ShpleminiVerifier {
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         padding_indicator_array: &[FieldCT<C::ScalarField>],
-        fold_commitments: &[BigGroup<C, T>],
+        fold_commitments: &[BigGroup<C::ScalarField, T>],
         gemini_neg_evaluations: &[FieldCT<C::ScalarField>],
         gemini_pos_evaluations: &[FieldCT<C::ScalarField>],
         inverse_vanishing_evals: &[FieldCT<C::ScalarField>],
         shplonk_batching_challenge_powers: &[FieldCT<C::ScalarField>],
-        commitments: &mut Vec<BigGroup<C, T>>,
+        commitments: &mut Vec<BigGroup<C::ScalarField, T>>,
         scalars: &mut Vec<FieldCT<C::ScalarField>>,
         constant_term_accumulator: &mut FieldCT<C::ScalarField>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
@@ -533,7 +533,7 @@ impl ShpleminiVerifier {
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        commitments: &mut Vec<BigGroup<C, T>>,
+        commitments: &mut Vec<BigGroup<C::ScalarField, T>>,
         scalars: &mut Vec<FieldCT<C::ScalarField>>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,

@@ -2,9 +2,9 @@ use ark_ec::pairing::Pairing;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::GenericUltraCircuitBuilder;
 use co_builder::transcript_ct::{TranscriptCT, TranscriptHasherCT};
-use co_builder::types::big_field::BigGroup;
+use co_builder::types::big_group::BigGroup;
 use co_builder::types::field_ct::FieldCT;
-use co_builder::types::types::AggregationState;
+use co_builder::types::types::PairingPoints;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
 use co_noir_common::transcript::TranscriptHasher;
@@ -23,7 +23,7 @@ struct UltraRecursiveVerifierOutput<
     C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
-    points_accumulator: AggregationState<C, T>,
+    points_accumulator: PairingPoints<C, T>,
     ipa_proof: Vec<FieldCT<C::ScalarField>>,
 }
 
@@ -66,7 +66,7 @@ impl UltraRecursiveVerifier {
             driver,
         )?;
 
-        constrain_log_circuit_size(
+        constrain_log_circuit_size::<_, _, CONST_PROOF_SIZE_LOG_N>(
             &padding_indicator_array,
             &key.verification_key.circuit_size,
             builder,
@@ -79,7 +79,7 @@ impl UltraRecursiveVerifier {
             &mut transcript,
             &mut key.target_sum,
             &key.relation_parameters,
-            &key.relation_parameters.alphas,
+            todo!(), // &key.relation_parameters.alphas,
             &mut gate_challenges,
             &mut padding_indicator_array,
             builder,

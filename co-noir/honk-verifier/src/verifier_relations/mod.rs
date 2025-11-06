@@ -1,7 +1,9 @@
-pub(crate) mod auxiliary_relation;
+// pub(crate) mod auxiliary_relation;
 pub(crate) mod delta_range_constraint_relation;
 pub(crate) mod elliptic_relation;
 pub(crate) mod logderiv_lookup_relation;
+pub(crate) mod memory_relation;
+pub(crate) mod non_native_field_relation;
 pub(crate) mod permutation_relation;
 pub(crate) mod poseidon2_external_relation;
 pub(crate) mod poseidon2_internal_relation;
@@ -9,8 +11,11 @@ pub(crate) mod ultra_arithmetic_relation;
 
 use crate::accumulate_all_relations;
 use crate::scale_and_batch_all;
+use crate::verifier_relations::memory_relation::MemoryRelation;
+use crate::verifier_relations::memory_relation::MemoryRelationEvals;
+use crate::verifier_relations::non_native_field_relation::NonNativeFieldRelation;
+use crate::verifier_relations::non_native_field_relation::NonNativeFieldRelationEvals;
 use crate::verifier_relations::{
-    auxiliary_relation::{AuxiliaryRelation, AuxiliaryRelationEvals},
     delta_range_constraint_relation::{
         DeltaRangeConstraintRelation, DeltaRangeConstraintRelationEvals,
     },
@@ -39,7 +44,8 @@ pub struct AllRelationsEvals<F: PrimeField> {
     r_lookup: LogDerivLookupRelationEvals<F>,
     r_delta: DeltaRangeConstraintRelationEvals<F>,
     r_elliptic: EllipticRelationEvals<F>,
-    r_aux: AuxiliaryRelationEvals<F>,
+    r_memory: MemoryRelationEvals<F>,
+    r_nnf: NonNativeFieldRelationEvals<F>,
     r_pos_ext: Poseidon2ExternalRelationEvals<F>,
     r_pos_int: Poseidon2InternalRelationEvals<F>,
 }
@@ -95,8 +101,8 @@ pub(crate) fn compute_full_relation_purported_value<
         driver
     )?;
 
-    let mut output = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
-    let first_scalar = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+    let mut output = FieldCT::from(C::ScalarField::ZERO);
+    let first_scalar = FieldCT::from(C::ScalarField::ONE);
     scale_and_batch_all!(
         &mut output,
         &univariate_accumulators,
@@ -132,7 +138,8 @@ macro_rules! accumulate_all_relations {
         process_relation!(LogDerivLookupRelation, r_lookup);
         process_relation!(DeltaRangeConstraintRelation, r_delta);
         process_relation!(EllipticRelation, r_elliptic);
-        process_relation!(AuxiliaryRelation, r_aux);
+        process_relation!(MemoryRelation, r_memory);
+        process_relation!(NonNativeFieldRelation, r_nnf);
         process_relation!(Poseidon2ExternalRelation, r_pos_ext);
         process_relation!(Poseidon2InternalRelation, r_pos_int);
 
@@ -160,12 +167,13 @@ macro_rules! scale_and_batch_all {
         // Apply to all relations
         process_relation!(r_arith, &[$first_scalar, $challenges[0].clone()]);
         process_relation!(r_perm, &$challenges[1..3]);
-        process_relation!(r_lookup, &$challenges[3..5]);
-        process_relation!(r_delta, &$challenges[5..9]);
-        process_relation!(r_elliptic, &$challenges[9..11]);
-        process_relation!(r_aux, &$challenges[11..17]);
-        process_relation!(r_pos_ext, &$challenges[17..21]);
-        process_relation!(r_pos_int, &$challenges[21..]);
+        process_relation!(r_lookup, &$challenges[3..6]);
+        process_relation!(r_delta, &$challenges[6..10]);
+        process_relation!(r_elliptic, &$challenges[10..12]);
+        process_relation!(r_memory, &$challenges[12..18]);
+        process_relation!(r_nnf, &$challenges[18..19]);
+        process_relation!(r_pos_ext, &$challenges[19..23]);
+        process_relation!(r_pos_int, &$challenges[23..]);
 
         HonkProofResult::Ok(())
     }};

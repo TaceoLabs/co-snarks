@@ -70,34 +70,18 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
         let q_pos_by_scaling = q_poseidon2_internal.multiply(scaling_factor, builder, driver)?;
 
         // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
-        let internal_matrix_diag_0 = FieldCT::from_witness(
-            C::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
-            ))
-            .into(),
-            builder,
-        );
-        let internal_matrix_diag_1 = FieldCT::from_witness(
-            C::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
-            ))
-            .into(),
-            builder,
-        );
-        let internal_matrix_diag_2 = FieldCT::from_witness(
-            C::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
-            ))
-            .into(),
-            builder,
-        );
-        let internal_matrix_diag_3 = FieldCT::from_witness(
-            C::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
-            ))
-            .into(),
-            builder,
-        );
+        let internal_matrix_diag_0 = FieldCT::from(C::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
+        )));
+        let internal_matrix_diag_1 = FieldCT::from(C::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
+        )));
+        let internal_matrix_diag_2 = FieldCT::from(C::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
+        )));
+        let internal_matrix_diag_3 = FieldCT::from(C::ScalarField::from(BigUint::from(
+            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
+        )));
 
         u1 = u1
             .multiply(&internal_matrix_diag_0, builder, driver)?

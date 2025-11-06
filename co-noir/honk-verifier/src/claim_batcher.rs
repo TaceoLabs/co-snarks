@@ -2,7 +2,7 @@ use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::{
     prelude::GenericUltraCircuitBuilder,
-    types::{big_field::BigGroup, field_ct::FieldCT},
+    types::{big_group::BigGroup, field_ct::FieldCT},
 };
 use co_noir_common::{
     honk_curve::HonkCurve,
@@ -12,7 +12,7 @@ use itertools::{interleave, izip};
 
 pub struct Batch<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
 {
-    pub(crate) commitments: Vec<BigGroup<C, T>>,
+    pub(crate) commitments: Vec<BigGroup<C::ScalarField, T>>,
     pub(crate) evaluations: Vec<FieldCT<C::ScalarField>>,
     pub(crate) scalar: FieldCT<C::ScalarField>,
 }
@@ -95,7 +95,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn update_batch_mul_inputs_and_batched_evaluation(
         &mut self,
-        commitments: &mut Vec<BigGroup<C, T>>,
+        commitments: &mut Vec<BigGroup<C::ScalarField, T>>,
         scalars: &mut Vec<FieldCT<C::ScalarField>>,
         batched_evaluation: &mut FieldCT<C::ScalarField>,
         rho: &FieldCT<C::ScalarField>,

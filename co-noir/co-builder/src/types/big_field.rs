@@ -1657,7 +1657,7 @@ impl<F: PrimeField> BigField<F> {
                 let tmp = driver.mul_other_acvm_types(&left, &right)?;
                 let tmp = driver.add_other_acvm_types(&tmp, &add_right);
 
-                let (quotient, remainder) = driver.div_mod_other_acvm_type(tmp)?;
+                let (quotient, remainder) = driver.div_mod_other_acvm_type(&tmp)?;
 
                 // TODO CESAR: Maybe wrong
                 return Ok(BigField::from_constant::<P, T>(
@@ -1670,7 +1670,7 @@ impl<F: PrimeField> BigField<F> {
                 // left and right are constant
                 let tmp = driver.mul_other_acvm_types(&left, &right)?;
 
-                let (quotient, remainder) = driver.div_mod_other_acvm_type(tmp)?;
+                let (quotient, remainder) = driver.div_mod_other_acvm_type(&tmp)?;
 
                 let mut new_to_add = to_add.to_vec();
                 new_to_add.push(BigField::from_constant::<P, T>(
@@ -1689,7 +1689,7 @@ impl<F: PrimeField> BigField<F> {
         let tmp = driver.mul_other_acvm_types(&left, &right)?;
         let tmp = driver.add_other_acvm_types(&tmp, &add_right);
 
-        let (quotient, remainder) = driver.div_mod_other_acvm_type::<P>(tmp)?;
+        let (quotient, remainder) = driver.div_mod_other_acvm_type::<P>(&tmp)?;
 
         // TODO CESAR: Set can_overflow and num_quotient_bits properly
         let quotient = BigField::from_witness_other_acvm_type(&quotient, true, 0, driver, builder)?;

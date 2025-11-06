@@ -589,7 +589,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         todo!();
     }
 
-    fn neg<P: CurveGroup<ScalarField = F>>(
+    pub fn neg<P: CurveGroup<ScalarField = F>>(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,

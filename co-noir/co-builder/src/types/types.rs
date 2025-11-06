@@ -387,6 +387,10 @@ impl<F: PrimeField> UltraTraceBlock<F> {
     pub fn len(&self) -> usize {
         self.wires[Self::W_L].len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 pub(crate) struct RangeConstraint {
@@ -518,14 +522,14 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
 
 #[derive(Default)]
 #[expect(dead_code)]
-pub(crate) struct PairingPoints<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+pub struct PairingPoints<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     p0: BigGroup<P::ScalarField, T>,
     p1: BigGroup<P::ScalarField, T>,
     has_data: bool,
 }
 #[expect(dead_code)]
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
-    pub(crate) fn new(p0: BigGroup<P::ScalarField, T>, p1: BigGroup<P::ScalarField, T>) -> Self {
+    pub fn new(p0: BigGroup<P::ScalarField, T>, p1: BigGroup<P::ScalarField, T>) -> Self {
         Self {
             p0,
             p1,

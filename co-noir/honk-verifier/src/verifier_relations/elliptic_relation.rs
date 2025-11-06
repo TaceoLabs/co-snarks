@@ -90,11 +90,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for EllipticRelation {
 
         let lhs = vec![
             x_3.add(&x_2, builder, driver).add(&x_1, builder, driver),
-            y1_sqr.add(
-                &FieldCT::from_witness((-curve_b).into(), builder),
-                builder,
-                driver,
-            ),
+            y1_sqr.add(&FieldCT::from(-curve_b), builder, driver),
             x_3.add(&x_1, builder, driver).add(&x_1, builder, driver),
             x1_sqr_mul_3,
             y_1.add(&y_1, builder, driver),

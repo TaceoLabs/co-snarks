@@ -60,7 +60,7 @@ impl OinkRecursiveVerifier {
             .map(|i| transcript.receive_fr_from_prover(format!("public_input_{i}")))
             .collect::<HonkProofResult<Vec<FieldCT<C::ScalarField>>>>()?;
 
-        let mut commitments = WitnessCommitments::<C, T>::default();
+        let mut commitments = WitnessCommitments::<C::ScalarField, T>::default();
 
         // TACEO TODO: batch `is_zero` calls on `receive_point_from_prover`
         // Get commitments to first three wire polynomials
@@ -128,8 +128,9 @@ impl OinkRecursiveVerifier {
             eta_2,
             eta_3,
             public_input_delta,
-            alphas: alphas.try_into().expect("length checked above"),
-            gate_challenges: Default::default(),
+            // TODO FLORIN / TODO CESAR:
+            // alphas: alphas.try_into().expect("length checked above"),
+            // gate_challenges: Default::default(),
         };
         verification_key.witness_commitments = commitments;
         verification_key.public_inputs = public_inputs;

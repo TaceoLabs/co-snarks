@@ -44,8 +44,8 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for DeltaRangeConstraintRela
         let w_4 = input.witness.w_4().to_owned();
         let w_1_shift = input.shifted_witness.w_l().to_owned();
         let q_delta_range = input.precomputed.q_delta_range().to_owned();
-        let minus_one = FieldCT::from_witness((-C::ScalarField::one()).into(), builder);
-        let minus_two = FieldCT::from_witness((-C::ScalarField::from(2u64)).into(), builder);
+        let minus_one = FieldCT::from(-C::ScalarField::one());
+        let minus_two = FieldCT::from(-C::ScalarField::from(2u64));
 
         // Compute wire differences
         let delta_1 = w_2.sub(&w_1, builder, driver);
