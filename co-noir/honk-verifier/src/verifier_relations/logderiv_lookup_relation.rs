@@ -17,9 +17,10 @@ use co_ultrahonk::types::AllEntities;
 pub(crate) struct LogDerivLookupRelationEvals<F: PrimeField> {
     pub(crate) r0: FieldCT<F>,
     pub(crate) r1: FieldCT<F>,
+    pub(crate) r2: FieldCT<F>,
 }
 
-impl_relation_evals!(LogDerivLookupRelationEvals, r0, r1);
+impl_relation_evals!(LogDerivLookupRelationEvals, r0, r1, r2);
 pub(crate) struct LogDerivLookupRelation;
 
 impl LogDerivLookupRelation {
@@ -145,6 +146,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for LogDerivLookupRelation {
         let inverses = input.witness.lookup_inverses().to_owned();
         let read_counts = input.witness.lookup_read_counts().to_owned();
         let read_selector = input.precomputed.q_lookup().to_owned();
+        let read_tag = input.witness.lookup_read_tags().to_owned();
 
         let inverse_exists = Self::compute_inverse_exists_verifier(input, builder, driver)?;
         let read_term =
@@ -168,21 +170,30 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for LogDerivLookupRelation {
             .multiply(&write_inverse, builder, driver)?
             .sub(&inverse_exists, builder, driver)
             .multiply(scaling_factor, builder, driver)?;
-
         accumulator.r0 = accumulator.r0.add(&tmp, builder, driver);
 
-        ///////////////////////////////////////////////////////////////////////
+        let mul = FieldCT::multiply_many(
+            &[write_inverse, read_tag.clone()],
+            &[read_counts.clone(), read_tag.clone()],
+            builder,
+            driver,
+        )?;
 
         // Establish validity of the read. Note: no scaling factor here since this constraint is 'linearly dependent,
         // i.e. enforced across the entire trace, not on a per-row basis.
         // Degrees:                       1            2 (3)            1            3 (4)
         //
-        let mul = write_inverse.multiply(&read_counts, builder, driver)?;
         let tmp = read_selector
             .multiply(&read_inverse, builder, driver)?
-            .sub(&mul, builder, driver);
-
+            .sub(&mul[0], builder, driver);
         accumulator.r1 = accumulator.r1.add(&tmp, builder, driver);
+
+        // we should make sure that the read_tag is a boolean value
+        let tmp =
+            mul[1]
+                .sub(&read_tag, builder, driver)
+                .multiply(scaling_factor, builder, driver)?;
+        accumulator.r2 = accumulator.r2.add(&tmp, builder, driver);
         Ok(())
     }
 }

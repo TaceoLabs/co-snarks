@@ -40,7 +40,7 @@ impl<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T> + Defau
         builder: &mut GenericUltraCircuitBuilder<P, WT>,
         driver: &mut WT,
     ) -> eyre::Result<FieldCT<P::ScalarField>> {
-        Ok(Self::hash_internal::<1, WT>(&buffer, builder, driver)?)
+        Self::hash_internal::<1, WT>(&buffer, builder, driver)
     }
 }
 

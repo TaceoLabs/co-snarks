@@ -318,7 +318,6 @@ impl<F: PrimeField> Default for Poseidon2CT<F, 4, 5> {
 }
 
 pub trait FieldHashCT<P: CurveGroup, const T: usize> {
-    #[expect(dead_code)]
     fn permutation<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         input: &[FieldCT<P::ScalarField>; T],
@@ -436,7 +435,6 @@ where
      * @return Hash of the input, a single witness field element.
      */
     // This will be used in the fieldct transcript
-    #[expect(unused)]
     pub(crate) fn hash_internal<
         const OUT_LEN: usize,
         WT: NoirWitnessExtensionProtocol<P::ScalarField>,
