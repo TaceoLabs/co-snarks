@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.3.0...co-brillig-v0.4.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* upgrade to Noir 1.0.0-beta.14 and BB 3.0.0-nightly.20250916 ([#480](https://github.com/TaceoLabs/co-snarks/issues/480))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+
+### Features
+
+* add Brillig Opcode Not ([#479](https://github.com/TaceoLabs/co-snarks/issues/479)) ([51560be](https://github.com/TaceoLabs/co-snarks/commit/51560be38f3ad272703f1dc614143ed0201c69d2))
+* add CoNoir solver which allows some precomputed witnesses ([6d7d85e](https://github.com/TaceoLabs/co-snarks/commit/6d7d85eea200a33507d4e6c22c7055d776cb6dae))
+* bump to Noir-1.0.0-beta.4 ([9403dae](https://github.com/TaceoLabs/co-snarks/commit/9403daeaf977120a581d9265bea9ed5df8203f3a))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Miscellaneous Chores
+
+* upgrade to Noir 1.0.0-beta.14 and BB 3.0.0-nightly.20250916 ([#480](https://github.com/TaceoLabs/co-snarks/issues/480)) ([9bdad27](https://github.com/TaceoLabs/co-snarks/commit/9bdad2793e3ca7f82a291f9e9932cf877ef657eb))
+
+
+### Code Refactoring
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * mpc-net bumped from 0.4.0 to 0.5.0
+
 ## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.2.0...co-brillig-v0.3.0) (2025-04-03)
 
 

@@ -1,6 +1,6 @@
 [package]
 name = "co-acvm"
-version = "0.6.0"
+version = "0.7.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -18,15 +18,15 @@ ark-ff.workspace = true
 ark-grumpkin.workspace = true
 blake2.workspace = true
 blake3.workspace = true
-co-brillig = { version = "0.3.0", path = "../co-brillig" }
-co-noir-types = { version = "0.1.0", path = "../co-noir-types" }
-noir-types = { version = "0.1.0", path = "../noir-types" }
-co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
+co-brillig = { version = "0.4.0", path = "../co-brillig" }
+co-noir-types = { version = "0.1.1", path = "../co-noir-types" }
+noir-types = { version = "0.1.1", path = "../noir-types" }
+co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
 eyre.workspace = true
 intmap.workspace = true
 itertools.workspace = true
-mpc-core = { version = "0.9.0", path = "../../mpc-core" }
-mpc-net = { version = "0.4.0", path = "../../mpc-net" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true
 serde.workspace = true

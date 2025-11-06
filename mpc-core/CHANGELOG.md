@@ -2,6 +2,73 @@
 
 
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.9.0...mpc-core-v0.10.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* upgrade to Noir 1.0.0-beta.14 and BB 3.0.0-nightly.20250916 ([#480](https://github.com/TaceoLabs/co-snarks/issues/480))
+* add MPC version of ECCVM builder and prover ([#456](https://github.com/TaceoLabs/co-snarks/issues/456))
+* add u512 IntRing type ([#462](https://github.com/TaceoLabs/co-snarks/issues/462))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* Performance improvements and cleanup for blake2/blake3
+* add BLAKE3 blackbox function to coNoir
+* add BLAKE2s blackbox function to coNoir
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment
+* rename io_mul_vec to reshare_vec
+* move uncompress_shared_witness to co-circom
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Features
+
+* Add AES blackbox functionality ([fd7cd49](https://github.com/TaceoLabs/co-snarks/commit/fd7cd496a1fd21e85aa70c0bd2c5cd7aed69fece))
+* add BLAKE2s blackbox function to coNoir ([e98fb7d](https://github.com/TaceoLabs/co-snarks/commit/e98fb7dd60f52d936f07b3e3a74797dfb091e9f3))
+* add BLAKE3 blackbox function to coNoir ([ddcb10e](https://github.com/TaceoLabs/co-snarks/commit/ddcb10e5d685072279b8f11b6935636fb74ecaf0))
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359)) ([f8509ef](https://github.com/TaceoLabs/co-snarks/commit/f8509ef8147bf29072ba67b4ac0f489546eea2c9))
+* add extension traits for REP3 and Shamir networks ([0c15da8](https://github.com/TaceoLabs/co-snarks/commit/0c15da81550f35c7aaef77d5143824a9436d5731))
+* add MAESTRO style lut protocol for curve points ([4da5f74](https://github.com/TaceoLabs/co-snarks/commit/4da5f74bed1350c4574bf3f3301c522ae068a096))
+* add MPC version of ECCVM builder and prover ([#456](https://github.com/TaceoLabs/co-snarks/issues/456)) ([0230ccb](https://github.com/TaceoLabs/co-snarks/commit/0230ccb52bb52bf6ebe291103f8945e4fea61ed2))
+* add plain ECCVM Prover ([#409](https://github.com/TaceoLabs/co-snarks/issues/409)) ([dc5f175](https://github.com/TaceoLabs/co-snarks/commit/dc5f175c1f1c61a95731129d10995b0f6122a1c1))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment ([ffeaa32](https://github.com/TaceoLabs/co-snarks/commit/ffeaa32f754fa16c77bf050486ce871a77908653))
+* add u512 IntRing type ([#462](https://github.com/TaceoLabs/co-snarks/issues/462)) ([531d08c](https://github.com/TaceoLabs/co-snarks/commit/531d08cb3403b78fd3671de49c39dc97f34a4ccc))
+* add vectorized implementations of b2a and dependencies ([#393](https://github.com/TaceoLabs/co-snarks/issues/393)) ([c734b9b](https://github.com/TaceoLabs/co-snarks/commit/c734b9bb0237f8b6ad80451d40860fcdc24f873c))
+* also add send_prev and recv_next methods ([bee26f0](https://github.com/TaceoLabs/co-snarks/commit/bee26f026ef9d4364ed558a9d99017849bd7d98a))
+* derive CanonicalSerialize and CanonicalDeserialize for Rep3RingShare ([3360969](https://github.com/TaceoLabs/co-snarks/commit/33609690dff2b6738f7bce5cd0482c4b8d3c68a3))
+* derive Hash for rep3 PartyID ([a8620e5](https://github.com/TaceoLabs/co-snarks/commit/a8620e5422dc2a959d5f86a922c9b46b2089b9fe))
+* dont use rayon::join for networking - added std::thread::scope based join functions ([758b069](https://github.com/TaceoLabs/co-snarks/commit/758b0699ad0ef7bca7401afe9063848eb084873f))
+* initial MPC Translator prover and builder implementation ([#467](https://github.com/TaceoLabs/co-snarks/issues/467)) ([ff92fcb](https://github.com/TaceoLabs/co-snarks/commit/ff92fcbe8fa3f2cbc3904d3c28f0890aee3be7fb))
+* Performance improvements and cleanup for blake2/blake3 ([435fcd3](https://github.com/TaceoLabs/co-snarks/commit/435fcd333080201c7c0274519ff6f6b26fb62d50))
+* replace the bitinject algorithms in mpc-core ([ab7e894](https://github.com/TaceoLabs/co-snarks/commit/ab7e89457c5dc770ce9551e5d422895f996d723b))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* correct limbsize calculation for biguint sampling ([1b2db00](https://github.com/TaceoLabs/co-snarks/commit/1b2db005ee550c028af824b3ec4e811d6e8a3705))
+* correct padding in aes circuit ([a2226c2](https://github.com/TaceoLabs/co-snarks/commit/a2226c2f5dd10b4ff7d595807324e92c2b9f9e67))
+* incorrect extra multiply in pow_public for field and ring backends ([#461](https://github.com/TaceoLabs/co-snarks/issues/461)) ([7eaa830](https://github.com/TaceoLabs/co-snarks/commit/7eaa830fd845bfb8c013040a4ac04ebc4728d204))
+
+
+### Miscellaneous Chores
+
+* upgrade to Noir 1.0.0-beta.14 and BB 3.0.0-nightly.20250916 ([#480](https://github.com/TaceoLabs/co-snarks/issues/480)) ([9bdad27](https://github.com/TaceoLabs/co-snarks/commit/9bdad2793e3ca7f82a291f9e9932cf877ef657eb))
+
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* move uncompress_shared_witness to co-circom ([0462a2f](https://github.com/TaceoLabs/co-snarks/commit/0462a2fc2dd145e5306e353a227f66d8862712cb))
+* rename io_mul_vec to reshare_vec ([7067486](https://github.com/TaceoLabs/co-snarks/commit/70674869e91950a59b68272127781ecf56d77094))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-net bumped from 0.4.0 to 0.5.0
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.8.0...mpc-core-v0.9.0) (2025-04-03)
 
 

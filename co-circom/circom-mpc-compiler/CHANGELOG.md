@@ -7,6 +7,29 @@
     * co-groth16 bumped from 0.5.0 to 0.5.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-compiler-v0.9.1...circom-mpc-compiler-v0.10.0) (2025-11-06)
+
+
+### Features
+
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* report correct Circom version by default ([f8249b4](https://github.com/TaceoLabs/co-snarks/commit/f8249b4bc72546768127a3519e6650800e75fdc1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.9.0 to 0.10.0
+    * circom-mpc-vm bumped from 0.8.0 to 0.9.0
+  * dev-dependencies
+    * co-groth16 bumped from 0.9.0 to 0.10.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.9.1](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-compiler-v0.9.0...circom-mpc-compiler-v0.9.1) (2025-04-03)
 
 
