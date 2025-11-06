@@ -1574,6 +1574,7 @@ impl<F: PrimeField> BigField<F> {
         if (carry_lo_msb <= 70) && (carry_hi_msb <= 70) {
             builder.range_constrain_two_limbs(hi_nwi, lo_nwi, carry_hi_msb, carry_lo_msb)?;
         } else {
+            //TACEO TODO: We can batch the two decompositions into a single one here for more efficiency
             builder.decompose_into_default_range(
                 driver,
                 hi_nwi,
@@ -1602,8 +1603,17 @@ impl<F: PrimeField> BigField<F> {
         remainders: &BigField<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<BigField<F>> {
-        todo!();
+    ) -> eyre::Result<()> {
+        Self::unsafe_evaluate_multiply_add(
+            left,
+            left,
+            to_add,
+            quotient,
+            &[remainders.clone()],
+            builder,
+            driver,
+        )?;
+        Ok(())
     }
 
     /**

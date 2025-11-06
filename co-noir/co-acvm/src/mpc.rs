@@ -608,9 +608,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         todo!()
     }
 
-    fn compute_quotient_remainder_values<
-        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
-    >(
+    fn compute_quotient_remainder_values<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &Self::OtherAcvmType<C>,
         b: &Self::OtherAcvmType<C>,

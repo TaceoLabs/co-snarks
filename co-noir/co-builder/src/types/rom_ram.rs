@@ -492,41 +492,52 @@ impl<F: PrimeField> TwinRomTable<F> {
         // Populate table. Table entries must be normalized and cannot be constants
         for entry in self.raw_entries.iter() {
             let first = if entry[0].is_constant() {
-                FieldCT::from_witness_index(builder.put_constant_variable(
-                    T::get_public(&entry[0].get_value(builder, driver))
-                        .expect("Constant should be public"),
-                ))
+                FieldCT::from_witness_index(
+                    builder.put_constant_variable(
+                        T::get_public(&entry[0].get_value(builder, driver))
+                            .expect("Constant should be public"),
+                    ),
+                )
             } else {
                 entry[0].normalize(builder, driver)
             };
 
             let second = if entry[1].is_constant() {
-                FieldCT::from_witness_index(builder.put_constant_variable(
-                    T::get_public(&entry[1].get_value(builder, driver))
-                        .expect("Constant should be public"),
-                ))
+                FieldCT::from_witness_index(
+                    builder.put_constant_variable(
+                        T::get_public(&entry[1].get_value(builder, driver))
+                            .expect("Constant should be public"),
+                    ),
+                )
             } else {
                 entry[1].normalize(builder, driver)
-            };  
+            };
             self.entries.push([first, second]);
         }
         self.rom_id = builder.create_rom_array(self.length * 2);
 
         for i in 0..self.length {
-            builder.set_rom_element_pair(self.rom_id, i, [
-                self.entries[i][0].get_witness_index(),
-                self.entries[i][1].get_witness_index(),
-            ]);
+            builder.set_rom_element_pair(
+                self.rom_id,
+                i,
+                [
+                    self.entries[i][0].get_witness_index(),
+                    self.entries[i][1].get_witness_index(),
+                ],
+            );
         }
 
         self.initialized = true;
     }
 
-    pub(crate) fn get<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    pub(crate) fn get<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
         &mut self,
         index: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T
+        driver: &mut T,
     ) -> eyre::Result<[FieldCT<F>; 2]> {
         if index.is_constant() {
             let value = T::get_public(&index.get_value(builder, driver))
@@ -539,8 +550,8 @@ impl<F: PrimeField> TwinRomTable<F> {
 
         // TODO CESAR: Check bounds
 
-        let output_indices = builder
-            .read_rom_array_pair(self.rom_id, index.get_witness_index(), driver)?;
+        let output_indices =
+            builder.read_rom_array_pair(self.rom_id, index.get_witness_index(), driver)?;
 
         let pair = [
             FieldCT::from_witness_index(output_indices[0]),
