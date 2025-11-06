@@ -10,6 +10,45 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.8.0...circom-mpc-vm-v0.9.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* rework co-circom input splitting (now same as co-noir)
+* move witness and input parsing/sharing to new crates for wasm comp
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Features
+
+* add extension traits for REP3 and Shamir networks ([0c15da8](https://github.com/TaceoLabs/co-snarks/commit/0c15da81550f35c7aaef77d5143824a9436d5731))
+* added calls so that mpc-vm doesnt consume compiled circuit ([6fee634](https://github.com/TaceoLabs/co-snarks/commit/6fee634ed4b2ea2f047675471a1e6795478497bf))
+* dont use rayon::join for networking - added std::thread::scope based join functions ([758b069](https://github.com/TaceoLabs/co-snarks/commit/758b0699ad0ef7bca7401afe9063848eb084873f))
+* move witness and input parsing/sharing to new crates for wasm comp ([333785e](https://github.com/TaceoLabs/co-snarks/commit/333785e275bc9256fb82fd8e2dcf18689bd92862))
+* rework co-circom input splitting (now same as co-noir) ([933bead](https://github.com/TaceoLabs/co-snarks/commit/933bead6b06b5140089978814e8612fd871f4a0b))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* correct panic message ([ed340cf](https://github.com/TaceoLabs/co-snarks/commit/ed340cff358884748c5035f400b11003184a8860))
+
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-types bumped from 0.5.0 to 0.6.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * mpc-net bumped from 0.4.0 to 0.5.0
+
 ## [0.8.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.7.0...circom-mpc-vm-v0.8.0) (2025-04-03)
 
 

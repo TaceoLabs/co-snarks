@@ -2,6 +2,34 @@
 
 ## renamed to co-circom-types
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-types-v0.5.0...co-circom-types-v0.6.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* rework co-circom input splitting (now same as co-noir)
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types
+
+### Features
+
+* rework co-circom input splitting (now same as co-noir) ([933bead](https://github.com/TaceoLabs/co-snarks/commit/933bead6b06b5140089978814e8612fd871f4a0b))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Code Refactoring
+
+* move MPC types and share/combine into new mpc-types crate, rename co-circom-snarks to co-circom-types ([31b773a](https://github.com/TaceoLabs/co-snarks/commit/31b773aa71a5e872c25754de7805b02647b65688))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-types bumped from 0.9.0 to 0.10.0
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-snarks-v0.4.0...co-circom-snarks-v0.5.0) (2025-04-03)
 
 

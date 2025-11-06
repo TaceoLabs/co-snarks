@@ -1029,7 +1029,7 @@ dependencies = [
 
 [[package]]
 name = "circom-mpc-compiler"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -1053,7 +1053,7 @@ dependencies = [
 
 [[package]]
 name = "circom-mpc-vm"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
@@ -1071,7 +1071,7 @@ dependencies = [
 
 [[package]]
 name = "circom-types"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -1168,7 +1168,7 @@ dependencies = [
 
 [[package]]
 name = "co-acvm"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "acir",
  "ark-bn254",
@@ -1200,7 +1200,7 @@ dependencies = [
 
 [[package]]
 name = "co-brillig"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "acir",
  "acvm",
@@ -1219,7 +1219,7 @@ dependencies = [
 
 [[package]]
 name = "co-builder"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "acir",
  "ark-bn254",
@@ -1247,7 +1247,7 @@ dependencies = [
 
 [[package]]
 name = "co-circom"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "ark-bls12-381",
  "ark-bn254",
@@ -1278,7 +1278,7 @@ dependencies = [
 
 [[package]]
 name = "co-circom-types"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
@@ -1295,7 +1295,7 @@ dependencies = [
 
 [[package]]
 name = "co-groth16"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "ark-bls12-377",
  "ark-bls12-381",
@@ -1320,7 +1320,7 @@ dependencies = [
 
 [[package]]
 name = "co-noir"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "acir",
  "ark-bn254",
@@ -1353,7 +1353,7 @@ dependencies = [
 
 [[package]]
 name = "co-noir-common"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -1379,7 +1379,7 @@ dependencies = [
 
 [[package]]
 name = "co-noir-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ark-ff 0.5.0",
  "eyre",
@@ -1390,7 +1390,7 @@ dependencies = [
 
 [[package]]
 name = "co-plonk"
-version = "0.6.1"
+version = "0.7.0"
 dependencies = [
  "ark-bls12-381",
  "ark-bn254",
@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "co-ultrahonk"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -2985,7 +2985,7 @@ dependencies = [
 
 [[package]]
 name = "mpc-core"
-version = "0.9.0"
+version = "0.10.0"
 dependencies = [
  "ark-bn254",
  "ark-ec",
@@ -3018,7 +3018,7 @@ dependencies = [
 
 [[package]]
 name = "mpc-net"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "byteorder",
  "bytes",
@@ -3070,7 +3070,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "noir-types"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "acir",
  "ark-bn254",
@@ -5150,7 +5150,7 @@ dependencies = [
 
 [[package]]
 name = "tests"
-version = "0.1.11"
+version = "0.1.12"
 dependencies = [
  "acir",
  "ark-bls12-381",
@@ -5570,7 +5570,7 @@ dependencies = [
 
 [[package]]
 name = "ultrahonk"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ark-bn254",
  "ark-ec",

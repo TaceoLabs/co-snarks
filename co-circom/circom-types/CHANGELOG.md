@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.9.0...circom-types-v0.10.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* move witness and input parsing/sharing to new crates for wasm comp
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+
+### Features
+
+* add convert-zkey-to-ark binary ([#474](https://github.com/TaceoLabs/co-snarks/issues/474)) ([2fe2ccf](https://github.com/TaceoLabs/co-snarks/commit/2fe2ccf03b38d9f0a24c3764865e9787bf7b2ea8))
+* move witness and input parsing/sharing to new crates for wasm comp ([333785e](https://github.com/TaceoLabs/co-snarks/commit/333785e275bc9256fb82fd8e2dcf18689bd92862))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* align witness variable count with arkworks (only count the private ones here) ([2dfd9af](https://github.com/TaceoLabs/co-snarks/commit/2dfd9af84ebbcfe4be6c4e22fe58d78bde52172b))
+* circom ZKey parsing now also produces a valid VerifyingKey. ([118de75](https://github.com/TaceoLabs/co-snarks/commit/118de7595cbc34110226fc91a4aec68654d50e51))
+* remove unwraps and replace new with new_unchecked to avoid panics in circom ark compat ([dd82cc8](https://github.com/TaceoLabs/co-snarks/commit/dd82cc8ef161b1c5dee69f6e9b79bde05aac0609))
+
+
+### Code Refactoring
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/circom-types-v0.8.0...circom-types-v0.9.0) (2025-04-03)
 
 

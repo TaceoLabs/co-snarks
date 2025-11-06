@@ -1,6 +1,6 @@
 [package]
 name = "co-circom-types"
-version = "0.5.0"
+version = "0.6.0"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -14,9 +14,9 @@ rust-version.workspace = true
 [dependencies]
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
-circom-types = { version = "0.9.0", path = "../circom-types" }
+circom-types = { version = "0.10.0", path = "../circom-types" }
 eyre = { workspace = true }
-mpc-core = { version = "0.9.0", path = "../../mpc-core" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 num-traits = { workspace = true }
 num-bigint = { workspace = true }
 rand = { workspace = true }

@@ -14,13 +14,13 @@ ark-bn254.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
 num-bigint.workspace = true
-co-builder = { version = "0.4.0", path = "../co-builder" }
-co-acvm = { version = "0.6.0", path = "../co-acvm" }
-ultrahonk = { version = "0.5.0", path = "../ultrahonk" }
-co-ultrahonk = { version = "0.5.0", path = "../co-ultrahonk" }
-co-noir-common = { version = "0.1.0", path = "../co-noir-common" }
-mpc-core = { version = "0.9.0", path = "../../mpc-core" }
-mpc-net = { version = "0.4.0", path = "../../mpc-net", features = ["local"] }
+co-builder = { version = "0.5.0", path = "../co-builder" }
+co-acvm = { version = "0.7.0", path = "../co-acvm" }
+ultrahonk = { version = "0.6.0", path = "../ultrahonk" }
+co-ultrahonk = { version = "0.6.0", path = "../co-ultrahonk" }
+co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }
 itertools.workspace = true
 serde.workspace = true
 serde_json.workspace = true

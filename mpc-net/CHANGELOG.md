@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.4.0...mpc-net-v0.5.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* rework MPC trait to return unified connection stats struct
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+
+### Features
+
+* allow to specify timeouts for the testnetwork ([e835dfc](https://github.com/TaceoLabs/co-snarks/commit/e835dfcfd086a2d03ae9b9d84c1fe416ed961568))
+* dont use rayon::join for networking - added std::thread::scope based join functions ([758b069](https://github.com/TaceoLabs/co-snarks/commit/758b0699ad0ef7bca7401afe9063848eb084873f))
+* impl clone for NetworkConfigs ([09e65bc](https://github.com/TaceoLabs/co-snarks/commit/09e65bc4864aaeca7ea40f10cb40f616e821ebc2))
+* improve mpc-net usability for Network trait implementors ([0f7c4ce](https://github.com/TaceoLabs/co-snarks/commit/0f7c4ceacd8a046c6041c7b8f136667e07201bdf))
+* rework MPC trait to return unified connection stats struct ([f24933b](https://github.com/TaceoLabs/co-snarks/commit/f24933b570bc6c287d038934fe1592e367c80cce))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* add feature flags to mpc-net example scripts, add rustls to quic net for installing provider in example ([fd5df9b](https://github.com/TaceoLabs/co-snarks/commit/fd5df9b750f802a2a600b757b52feba18f727f46))
+* setting duplicate length_field_length in LengthDelimitedCodec ([070d6ec](https://github.com/TaceoLabs/co-snarks/commit/070d6ec31f9f2dfd494ac04f47c1cd51d4813d88))
+* sort parties in tcp and tls nets ([3decee1](https://github.com/TaceoLabs/co-snarks/commit/3decee1f7e0008a34cffca571d23dcda3bf0a964))
+
+
+### Code Refactoring
+
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.3.0...mpc-net-v0.4.0) (2025-04-03)
 
 

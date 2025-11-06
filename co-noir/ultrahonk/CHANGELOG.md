@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.5.0...ultrahonk-v0.6.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* upgrade to Noir 1.0.0-beta.14 and BB 3.0.0-nightly.20250916 ([#480](https://github.com/TaceoLabs/co-snarks/issues/480))
+* remove ClientIVC and Mega flavour
+* add functionality to compute transcript in MPC and integrate it ([#472](https://github.com/TaceoLabs/co-snarks/issues/472))
+* Introduce initial implementation of MegaCircuitBuilder for construct_hiding_circuit_key ([#443](https://github.com/TaceoLabs/co-snarks/issues/443))
+* add MPC version of ECCVM builder and prover ([#456](https://github.com/TaceoLabs/co-snarks/issues/456))
+* move HonkProof and the corresponding field serde to noir-types
+* co-protogalaxy prover ([#422](https://github.com/TaceoLabs/co-snarks/issues/422))
+* move witness and input parsing/sharing to new crates for wasm comp
+* plain protogalaxy prover ([#410](https://github.com/TaceoLabs/co-snarks/issues/410))
+* grand product computation with inactive regions ([#411](https://github.com/TaceoLabs/co-snarks/issues/411))
+* moves several components from the `ultrahonk` and `co-ultrahonk` crates into the `common` crate
+* Add MegaFlavour to the Prover and Verifier
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373))
+
+### Features
+
+* add (co-)merge-prover and common crates ([f7eea60](https://github.com/TaceoLabs/co-snarks/commit/f7eea60e71e23ff31aa9e48c801eb3d193a3a4ad))
+* add functionality to compute transcript in MPC and integrate it ([#472](https://github.com/TaceoLabs/co-snarks/issues/472)) ([e636308](https://github.com/TaceoLabs/co-snarks/commit/e636308efdf115149d53e05e70b157cfe5babb6c))
+* Add MegaFlavour to the Prover and Verifier ([06ab1a9](https://github.com/TaceoLabs/co-snarks/commit/06ab1a95f0a8204e377f8e07ee2e0c898fbf6379))
+* add MPC version of ECCVM builder and prover ([#456](https://github.com/TaceoLabs/co-snarks/issues/456)) ([0230ccb](https://github.com/TaceoLabs/co-snarks/commit/0230ccb52bb52bf6ebe291103f8945e4fea61ed2))
+* add plain ECCVM Prover ([#409](https://github.com/TaceoLabs/co-snarks/issues/409)) ([dc5f175](https://github.com/TaceoLabs/co-snarks/commit/dc5f175c1f1c61a95731129d10995b0f6122a1c1))
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373)) ([55f4ca3](https://github.com/TaceoLabs/co-snarks/commit/55f4ca3211a944cb755e541cfabc4519697ce665))
+* co-protogalaxy prover ([#422](https://github.com/TaceoLabs/co-snarks/issues/422)) ([4de48e8](https://github.com/TaceoLabs/co-snarks/commit/4de48e8b99fef2c531111a828622731ba3d43de9))
+* initial MPC Translator prover and builder implementation ([#467](https://github.com/TaceoLabs/co-snarks/issues/467)) ([ff92fcb](https://github.com/TaceoLabs/co-snarks/commit/ff92fcbe8fa3f2cbc3904d3c28f0890aee3be7fb))
+* Introduce initial implementation of MegaCircuitBuilder for construct_hiding_circuit_key ([#443](https://github.com/TaceoLabs/co-snarks/issues/443)) ([c3104a1](https://github.com/TaceoLabs/co-snarks/commit/c3104a1cf28a34372e10a79a08d667b70000c737))
+* move HonkProof and the corresponding field serde to noir-types ([b9821e5](https://github.com/TaceoLabs/co-snarks/commit/b9821e5202855bb9cd931ae32fe9e7d3e5b01378))
+* move witness and input parsing/sharing to new crates for wasm comp ([333785e](https://github.com/TaceoLabs/co-snarks/commit/333785e275bc9256fb82fd8e2dcf18689bd92862))
+* plain protogalaxy prover ([#410](https://github.com/TaceoLabs/co-snarks/issues/410)) ([42d49f5](https://github.com/TaceoLabs/co-snarks/commit/42d49f55a93b48e01c133f7ca5d7fefc559fd470))
+* plain translator prover ([#425](https://github.com/TaceoLabs/co-snarks/issues/425)) ([14167b3](https://github.com/TaceoLabs/co-snarks/commit/14167b33e5b15e3d35bc3971913573d29eb92da9))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* grand product computation with inactive regions ([#411](https://github.com/TaceoLabs/co-snarks/issues/411)) ([a2501da](https://github.com/TaceoLabs/co-snarks/commit/a2501da24ad594f334645d23f7ab5311f98721e1))
+
+
+### Miscellaneous Chores
+
+* upgrade to Noir 1.0.0-beta.14 and BB 3.0.0-nightly.20250916 ([#480](https://github.com/TaceoLabs/co-snarks/issues/480)) ([9bdad27](https://github.com/TaceoLabs/co-snarks/commit/9bdad2793e3ca7f82a291f9e9932cf877ef657eb))
+
+
+### Code Refactoring
+
+* remove ClientIVC and Mega flavour ([8ac7719](https://github.com/TaceoLabs/co-snarks/commit/8ac7719023577a899fd430886d541c660f0b6b83))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-noir-common bumped from 0.1.0 to 0.2.0
+    * co-builder bumped from 0.4.0 to 0.5.0
+    * noir-types bumped from 0.1.0 to 0.1.1
+    * mpc-core bumped from 0.9.0 to 0.10.0
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.4.0...ultrahonk-v0.5.0) (2025-04-03)
 
 
