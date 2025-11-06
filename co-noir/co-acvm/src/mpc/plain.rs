@@ -11,6 +11,7 @@ use mpc_core::{
     protocols::rep3::yao::circuits::SHA256Table,
 };
 use num_bigint::BigUint;
+use rand::thread_rng;
 use std::any::TypeId;
 use std::marker::PhantomData;
 
@@ -269,6 +270,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>> {
         Ok(a.to_vec())
+    }
+
+    fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
+        let mut rng = thread_rng();
+        Ok(Self::ArithmeticShare::rand(&mut rng))
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {

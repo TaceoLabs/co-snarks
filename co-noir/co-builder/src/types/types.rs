@@ -488,11 +488,11 @@ impl<F: PrimeField> LogicConstraint<F> {
 pub(crate) struct RecursionConstraint {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
-    key: Vec<u32>,
-    proof: Vec<u32>,
-    public_inputs: Vec<u32>,
-    key_hash: u32,
-    proof_type: u32,
+    pub(crate) key: Vec<u32>,
+    pub(crate) proof: Vec<u32>,
+    pub(crate) public_inputs: Vec<u32>,
+    pub(crate) key_hash: u32,
+    pub(crate) proof_type: u32,
 }
 
 impl RecursionConstraint {

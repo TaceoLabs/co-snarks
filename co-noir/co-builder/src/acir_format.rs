@@ -19,6 +19,22 @@ use crate::types::types::{
     MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
     Sha256Compression, WitnessOrConstant,
 };
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum ProofType {
+    Plonk,
+    Honk,
+    Oink,
+    PG,
+    AVM,
+    RollupHonk,
+    RootRollupHonk,
+    HonkZk,
+    PgFinal,
+    PgTail,
+    CIVC,
+}
+
+pub(crate) const _PROOF_TYPE_ROOT_ROLLUP_HONK: u32 = 6; //keep for reference
 #[expect(dead_code)]
 pub struct ProgramMetadata {
     // An IVC instance; needed to construct a circuit from IVC recursion constraints

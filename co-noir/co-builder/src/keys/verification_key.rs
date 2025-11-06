@@ -101,23 +101,23 @@ impl<C: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<C> {
         + PRECOMPUTED_ENTITIES_SIZE * 2 * 2 * Self::FIELDSIZE_BYTES as usize; // all elements are serialized as ScalarField elements
     const SER_FULL_SIZE_KECCAK: usize = 3 * 32 + PRECOMPUTED_ENTITIES_SIZE * 2 * 32; // all elements are serialized as U256 elements
 
-    pub fn to_field_elements(&self) -> Vec<TranscriptFieldType> {
+    pub fn to_field_elements(&self) -> Vec<C::ScalarField> {
         let len = 3 + self.commitments.elements.len() * 2 * C::NUM_BASEFIELD_ELEMENTS;
         let mut field_elements = Vec::with_capacity(len);
 
-        field_elements.push(TranscriptFieldType::from(self.log_circuit_size));
-        field_elements.push(TranscriptFieldType::from(self.num_public_inputs));
-        field_elements.push(TranscriptFieldType::from(self.pub_inputs_offset));
+        field_elements.push(C::ScalarField::from(self.log_circuit_size));
+        field_elements.push(C::ScalarField::from(self.num_public_inputs));
+        field_elements.push(C::ScalarField::from(self.pub_inputs_offset));
 
         for el in self.commitments.iter() {
             if el.is_zero() {
-                let convert = C::convert_basefield_into(&C::BaseField::zero());
+                let convert = C::convert_basefield_to_scalarfield(&C::BaseField::zero());
                 field_elements.extend_from_slice(&convert);
                 field_elements.extend(convert);
             } else {
                 let (x, y) = C::g1_affine_to_xy(el);
-                field_elements.extend(C::convert_basefield_into(&x));
-                field_elements.extend(C::convert_basefield_into(&y));
+                field_elements.extend(C::convert_basefield_to_scalarfield(&x));
+                field_elements.extend(C::convert_basefield_to_scalarfield(&y));
             }
         }
 

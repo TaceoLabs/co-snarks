@@ -1696,7 +1696,7 @@ impl<F: PrimeField> BigField<F> {
         let remainder =
             BigField::from_witness_other_acvm_type(&remainder, true, 0, driver, builder)?;
 
-        Self::unsafe_evaluate_square_add(self, &to_add, &quotient, &remainder, builder, driver)?;
+        Self::unsafe_evaluate_square_add(self, to_add, &quotient, &remainder, builder, driver)?;
 
         Ok(remainder)
     }

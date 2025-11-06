@@ -229,6 +229,9 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>>;
 
+    // Generate a shared random value
+    fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare>;
+
     /// Transforms a public value into a shared value: \[a\] = a.
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare;
 

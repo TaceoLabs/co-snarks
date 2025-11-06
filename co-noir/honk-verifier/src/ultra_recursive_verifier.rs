@@ -1,31 +1,21 @@
-use ark_ec::pairing::Pairing;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::GenericUltraCircuitBuilder;
+use co_builder::prelude::{GenericUltraCircuitBuilder, UltraRecursiveVerifierOutput};
 use co_builder::transcript_ct::{TranscriptCT, TranscriptHasherCT};
 use co_builder::types::big_group::BigGroup;
 use co_builder::types::field_ct::FieldCT;
 use co_builder::types::types::PairingPoints;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use co_noir_common::transcript::TranscriptHasher;
 use ultrahonk::CONST_PROOF_SIZE_LOG_N;
 
 use crate::claim_batcher::{Batch, ClaimBatcher};
 use crate::kzg::KZG;
 use crate::oink_recursive_verifier::OinkRecursiveVerifier;
-use crate::padding_indicator_array::{self, constrain_log_circuit_size, padding_indicator_array};
+use crate::padding_indicator_array::{constrain_log_circuit_size, padding_indicator_array};
 use crate::recursive_decider_verification_key::RecursiveDeciderVerificationKey;
 use crate::shplemini::ShpleminiVerifier;
 use crate::sumcheck::SumcheckVerifier;
 use ark_ff::Field;
-
-struct UltraRecursiveVerifierOutput<
-    C: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<C::ScalarField>,
-> {
-    points_accumulator: PairingPoints<C, T>,
-    ipa_proof: Vec<FieldCT<C::ScalarField>>,
-}
 
 struct UltraRecursiveVerifier;
 

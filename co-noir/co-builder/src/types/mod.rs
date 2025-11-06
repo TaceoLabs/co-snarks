@@ -5,6 +5,7 @@ pub(crate) mod blake2s;
 pub(crate) mod blake3;
 pub(crate) mod blake_util;
 pub(crate) mod generators;
+pub(crate) mod honk_recursion_constraint;
 pub(crate) mod plookup;
 pub(crate) mod poseidon2;
 pub(crate) mod rom_ram;

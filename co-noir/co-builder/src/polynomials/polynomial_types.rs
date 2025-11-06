@@ -26,6 +26,7 @@ impl<F: PrimeField> Polynomials<F> {
 }
 
 pub const PROVER_WITNESS_ENTITIES_SIZE: usize = 6;
+pub const WITNESS_ENTITIES_SIZE: usize = PROVER_WITNESS_ENTITIES_SIZE + 2;
 #[derive(Default, Serialize, Deserialize)]
 pub struct ProverWitnessEntities<T: Default> {
     pub elements: [T; PROVER_WITNESS_ENTITIES_SIZE],

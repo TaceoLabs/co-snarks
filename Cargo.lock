@@ -1191,6 +1191,7 @@ dependencies = [
  "noirc_artifacts",
  "num-bigint 0.4.6",
  "paste",
+ "rand 0.8.5",
  "rayon",
  "serde",
  "sha2",

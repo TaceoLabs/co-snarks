@@ -905,18 +905,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         Ok((bits_locations, decomposed, decompose_indices))
     }
 
-    fn process_honk_recursion_constraints(
-        &mut self,
-        constraint_system: &AcirFormat<P::ScalarField>,
-        _has_valid_witness_assignments: bool,
-    ) {
-        {
-            for _constraint in constraint_system.honk_recursion_constraints.iter() {
-                todo!("Honk recursion");
-            }
-        }
-    }
-
     fn process_avm_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
@@ -1082,7 +1070,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.public_inputs.push(witness_index);
     }
 
-    fn add_default_to_public_inputs(&mut self, driver: &mut T) -> eyre::Result<()>
+    pub(crate) fn add_default_to_public_inputs(&mut self, driver: &mut T) -> eyre::Result<()>
     where
         P::BaseField: PrimeField,
     {
@@ -3746,7 +3734,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let b = input.b.map(|limb| self.get_variable(limb as usize));
         let q = input.q.map(|limb| self.get_variable(limb as usize));
         let r = input.r.map(|limb| self.get_variable(limb as usize));
-        let neg_modulus = input.neg_modulus.clone();
+        let neg_modulus = input.neg_modulus;
 
         let limb_shift = P::ScalarField::from(1u64 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
         let limb_rshift = limb_shift.inverse().unwrap();
@@ -4353,6 +4341,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.process_honk_recursion_constraints(
                 constraint_system,
                 has_valid_witness_assignments,
+                driver,
             );
         }
 
@@ -4400,6 +4389,23 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         Ok(())
+    }
+
+    fn process_honk_recursion_constraints(
+        &mut self,
+        constraint_system: &AcirFormat<P::ScalarField>,
+        has_valid_witness_assignments: bool,
+        driver: &mut T,
+    ) {
+        // Add recursion constraints
+        for constraint in constraint_system.honk_recursion_constraints.iter() {
+            let honk_recursion_constraint = self.create_honk_recursion_constraints(
+                constraint,
+                has_valid_witness_assignments,
+                driver,
+            );
+        }
+        todo!("update honk_recursion_constraint");
     }
 
     fn get_table(&mut self, id: BasicTableId) -> &mut PlookupBasicTable<P, T> {

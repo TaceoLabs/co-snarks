@@ -522,6 +522,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         arithmetic::open_vec(a, self.net, &mut self.state)
     }
 
+    fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
+        self.state.rand(self.net)
+    }
+
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(public_value)
     }
