@@ -2,7 +2,6 @@ use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::prelude::PrecomputedEntities;
 use crate::types::aes128;
 use crate::types::big_field::BigField;
-use crate::types::big_group::BigGroup;
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
@@ -3931,7 +3930,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             false,
         );
 
-        return Ok([lo_1_idx, hi_3_idx]);
+        Ok([lo_1_idx, hi_3_idx])
     }
 }
 

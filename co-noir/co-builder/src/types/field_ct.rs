@@ -3431,7 +3431,6 @@ impl<F: PrimeField> CycleScalarCT<F> {
         Ok(res)
     }
 
-    #[expect(unused)] // This will be used in the fieldct transcript
     pub(crate) fn from_field_ct<
         P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,

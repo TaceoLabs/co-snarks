@@ -527,7 +527,6 @@ pub struct PairingPoints<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::Scala
     p1: BigGroup<P::ScalarField, T>,
     has_data: bool,
 }
-#[expect(dead_code)]
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
     pub fn new(p0: BigGroup<P::ScalarField, T>, p1: BigGroup<P::ScalarField, T>) -> Self {
         Self {
@@ -544,7 +543,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoin
 pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
 
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
-    #[expect(dead_code)]
     pub fn set_public(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -580,7 +578,6 @@ pub(crate) enum MemorySelectors {
     RamWrite,
 }
 
-#[expect(dead_code)]
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) enum NnfSelectors {
     NnfNone,
@@ -962,7 +959,7 @@ impl ActiveRegionData {
     }
 }
 
-pub(crate) type AddSimple<F: PrimeField> = (
+pub(crate) type AddSimple<F> = (
     (u32, F), // Scaled witness
     (u32, F), // Scaled witness
     F,

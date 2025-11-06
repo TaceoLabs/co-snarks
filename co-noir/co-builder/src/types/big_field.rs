@@ -974,7 +974,7 @@ impl<F: PrimeField> BigField<F> {
 
         // Compute the limbs of `constant_to_add`, including our offset terms t0, t1, t2, t3 that ensure each result limb is positive
         let to_add_0 = constant_to_add.clone()
-            & ((BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one()) + &t0;
+            & (((BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one()) + &t0);
         let to_add_1 = ((constant_to_add.clone() >> Self::NUM_LIMB_BITS)
             & ((BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one()))
             + &t1;
@@ -1139,7 +1139,7 @@ impl<F: PrimeField> BigField<F> {
                 .prime_basis_limb
                 .sub(&other.prime_basis_limb, builder, driver);
 
-        return Ok(result);
+        Ok(result)
     }
 
     pub(crate) fn mul<
@@ -1193,7 +1193,7 @@ impl<F: PrimeField> BigField<F> {
             other,
             &[],
             &quotient,
-            &[remainder.clone()],
+            std::slice::from_ref(&remainder),
             builder,
             driver,
         )?;
@@ -1287,7 +1287,7 @@ impl<F: PrimeField> BigField<F> {
             builder,
             driver,
         )?;
-        return Ok(inverse);
+        Ok(inverse)
     }
 
     /**
@@ -1540,11 +1540,11 @@ impl<F: PrimeField> BigField<F> {
                 .binary_basis_limbs
                 .map(|limb| limb.element.get_normalized_witness_index(builder, driver)),
             r: remainder_limbs.map(|limb| limb.get_normalized_witness_index(builder, driver)),
-            neg_modulus: neg_modulus_limbs.map(|limb| F::from(limb).into()),
+            neg_modulus: neg_modulus_limbs.map(|limb| F::from(limb)),
 
             // TODO CESAR: Clarify this, modulus represents Fq::MODULUS and it is a u256, but here it is implicitly casted to Fr.
             // Then: Is modulus = Fq::MODULUS % Fr::MODULUS?
-            modulus: F::from(modulus.clone()).into(),
+            modulus: F::from(modulus.clone()),
         };
 
         // N.B. this method also evaluates the prime field component of the non-native field mul
@@ -1609,7 +1609,7 @@ impl<F: PrimeField> BigField<F> {
             left,
             to_add,
             quotient,
-            &[remainders.clone()],
+            std::slice::from_ref(remainders),
             builder,
             driver,
         )?;
@@ -1909,7 +1909,7 @@ impl<F: PrimeField> BigField<F> {
             binary_basis_limbs: binary_basis_limbs
                 .try_into()
                 .expect("We provided NUM_LIMBS elements"),
-            prime_basis_limb: prime_basis_limb,
+            prime_basis_limb,
         })
     }
 }

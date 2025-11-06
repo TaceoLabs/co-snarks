@@ -81,7 +81,7 @@ impl UltraRecursiveVerifier {
             &key.relation_parameters,
             todo!(), // &key.relation_parameters.alphas,
             &mut gate_challenges,
-            &mut padding_indicator_array,
+            &padding_indicator_array,
             builder,
             driver,
         )?;

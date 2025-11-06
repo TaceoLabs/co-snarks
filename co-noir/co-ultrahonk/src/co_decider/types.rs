@@ -4,7 +4,6 @@ use crate::{
     types_batch::AllEntitiesBatch,
 };
 use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::PrimeField;
 use co_noir_common::mpc::NoirUltraHonkProver;
 use itertools::izip;
 use std::iter;

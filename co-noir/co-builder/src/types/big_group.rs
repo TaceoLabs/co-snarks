@@ -794,7 +794,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
     ) -> eyre::Result<ChainAddAccumulator<F>> {
         // use `chain_add_start` to start an addition chain (i.e. if acc has a y-coordinate)
         if acc.is_element {
-            return Self::chain_add_start(
+            Self::chain_add_start(
                 p1,
                 &BigGroup {
                     x: acc.x3_prev.clone(),
@@ -803,7 +803,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 },
                 builder,
                 driver,
-            );
+            )
         } else {
             // validate we can use incomplete addition formulae
             p1.x.assert_is_not_equal(&acc.x3_prev, builder, driver)?;
@@ -818,7 +818,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
             let x2 = &acc.x3_prev;
             let lambda = BigField::msub_div(
-                &[acc.lambda_prev.clone()],
+                std::slice::from_ref(&acc.lambda_prev),
                 &[x2.sub(&acc.x1_prev, builder, driver)?],
                 &x2.sub(&p1.x, builder, driver)?,
                 &[acc.y1_prev.clone(), p1.y.clone()],
@@ -1025,7 +1025,7 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
         let coordinates = Self::create_group_element_rom_tables(&element_table, &limb_max)?;
 
         Ok(LookupTablePlookup {
-            element_table: element_table.try_into().unwrap(),
+            element_table,
             coordinates,
             limb_max,
         })
@@ -1408,7 +1408,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        naf_entries: &Vec<BoolCT<F, T>>,
+        naf_entries: &[BoolCT<F, T>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<ChainAddAccumulator<F>> {

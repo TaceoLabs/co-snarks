@@ -54,7 +54,7 @@ impl<P: CurveGroup> ProvingKey<P> {
         // Find index of last non-trivial wire value in the trace
         let mut final_active_wire_idx = 0;
         for block in circuit.blocks.get() {
-            if block.len() > 0 {
+            if !block.is_empty() {
                 final_active_wire_idx = block.trace_offset as usize + block.len() - 1;
             }
         }

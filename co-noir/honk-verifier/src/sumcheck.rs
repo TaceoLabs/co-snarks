@@ -41,7 +41,7 @@ impl SumcheckVerifier {
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
         alphas: &[FieldCT<C::ScalarField>; NUM_ALPHAS],
         gate_challenges: &mut Vec<FieldCT<C::ScalarField>>,
-        padding_indicator_array: &Vec<FieldCT<C::ScalarField>>,
+        padding_indicator_array: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<SumcheckOutput<C>> {

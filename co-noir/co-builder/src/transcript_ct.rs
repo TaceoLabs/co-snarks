@@ -22,7 +22,8 @@ use std::{collections::BTreeMap, ops::Index};
 
 pub type Bn254G1 = <Bn254 as Pairing>::G1;
 pub type TranscriptFieldType = ark_bn254::Fr;
-pub type Poseidon2SpongeCT = FieldSpongeCT<Bn254G1, 4, 3, Poseidon2CT<TranscriptFieldType, 4, 5>>;
+pub(crate) type Poseidon2SpongeCT =
+    FieldSpongeCT<Bn254G1, 4, 3, Poseidon2CT<TranscriptFieldType, 4, 5>>;
 
 pub trait TranscriptHasherCT<P: CurveGroup> {
     fn hash<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(

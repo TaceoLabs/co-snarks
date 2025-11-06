@@ -318,6 +318,7 @@ impl<F: PrimeField> Default for Poseidon2CT<F, 4, 5> {
 }
 
 pub trait FieldHashCT<P: CurveGroup, const T: usize> {
+    #[expect(unused)]
     fn permutation<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
         &self,
         input: &[FieldCT<P::ScalarField>; T],
