@@ -14,15 +14,15 @@ use crate::{
         },
         types::{
             BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, ProverUnivariates,
-            RelationParameters,
         },
         univariates::SharedUnivariate,
     },
-    types::AllEntities,
     types_batch::{AllEntitiesBatchRelations, SumCheckDataForRelation},
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;
+use co_noir_common::polynomials::entities::AllEntities;
+use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},

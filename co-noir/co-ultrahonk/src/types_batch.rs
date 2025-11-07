@@ -1,29 +1,30 @@
 use ark_ec::{CurveGroup, PrimeGroup};
-use co_builder::prelude::PrecomputedEntities;
 use co_noir_common::{
-    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, mpc::NoirUltraHonkProver,
+    honk_curve::HonkCurve,
+    honk_proof::TranscriptFieldType,
+    mpc::NoirUltraHonkProver,
+    polynomials::entities::{
+        AllEntities, PrecomputedEntities, ShiftedWitnessEntities, WitnessEntities,
+    },
 };
-use ultrahonk::prelude::{ShiftedWitnessEntities, Univariate, WitnessEntities};
+use ultrahonk::prelude::Univariate;
 
 pub(crate) type WitnessEntitiesBatch<T> = WitnessEntities<Vec<T>>;
 pub(crate) type PrecomputedEntitiesBatch<T> = PrecomputedEntities<Vec<T>>;
 pub(crate) type ShiftedWitnessEntitiesBatch<T> = ShiftedWitnessEntities<Vec<T>>;
 
-use crate::{
-    co_decider::{
-        relations::{
-            Relation as _, delta_range_constraint_relation::DeltaRangeConstraintRelation,
-            elliptic_relation::EllipticRelation, logderiv_lookup_relation::LogDerivLookupRelation,
-            memory_relation::MemoryRelation, non_native_field_relation::NonNativeFieldRelation,
-            permutation_relation::UltraPermutationRelation,
-            poseidon2_external_relation::Poseidon2ExternalRelation,
-            poseidon2_internal_relation::Poseidon2InternalRelation,
-            ultra_arithmetic_relation::UltraArithmeticRelation,
-        },
-        types::MAX_PARTIAL_RELATION_LENGTH,
-        univariates::SharedUnivariate,
+use crate::co_decider::{
+    relations::{
+        Relation as _, delta_range_constraint_relation::DeltaRangeConstraintRelation,
+        elliptic_relation::EllipticRelation, logderiv_lookup_relation::LogDerivLookupRelation,
+        memory_relation::MemoryRelation, non_native_field_relation::NonNativeFieldRelation,
+        permutation_relation::UltraPermutationRelation,
+        poseidon2_external_relation::Poseidon2ExternalRelation,
+        poseidon2_internal_relation::Poseidon2InternalRelation,
+        ultra_arithmetic_relation::UltraArithmeticRelation,
     },
-    types::AllEntities,
+    types::MAX_PARTIAL_RELATION_LENGTH,
+    univariates::SharedUnivariate,
 };
 
 type Shared<T, P> = SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>;

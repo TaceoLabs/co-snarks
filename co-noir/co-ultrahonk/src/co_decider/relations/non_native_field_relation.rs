@@ -1,12 +1,11 @@
 use super::{ProverUnivariatesBatch, Relation};
 use crate::co_decider::{
-    relations::fold_accumulator,
-    types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
-    univariates::SharedUnivariate,
+    relations::fold_accumulator, types::MAX_PARTIAL_RELATION_LENGTH, univariates::SharedUnivariate,
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
+use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},

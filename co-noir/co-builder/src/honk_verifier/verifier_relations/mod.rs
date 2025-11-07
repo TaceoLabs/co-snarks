@@ -10,7 +10,6 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use crate::accumulate_all_relations;
-use crate::honk_verifier::verifier_relations::VerifyAccGetter;
 use crate::honk_verifier::verifier_relations::memory_relation::MemoryRelation;
 use crate::honk_verifier::verifier_relations::memory_relation::MemoryRelationEvals;
 use crate::honk_verifier::verifier_relations::non_native_field_relation::NonNativeFieldRelation;
@@ -27,14 +26,17 @@ use crate::honk_verifier::verifier_relations::{
     ultra_arithmetic_relation::{UltraArithmeticRelation, UltraArithmeticRelationEvals},
 };
 use crate::prelude::GenericUltraCircuitBuilder;
+use crate::scale_and_batch_all;
 use crate::types::field_ct::FieldCT;
+use crate::types::gate_separator::GateSeparatorPolynomial;
 use ark_ff::AdditiveGroup;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::entities::AllEntities;
+use co_noir_common::types::RelationParameters;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::HonkProofResult};
-use co_ultrahonk::{co_decider::types::RelationParameters, types::AllEntities};
 
 #[derive(Default)]
 pub struct AllRelationsEvals<F: PrimeField> {

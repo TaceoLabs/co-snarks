@@ -2,7 +2,8 @@ use super::univariate::Univariate;
 use crate::{NUM_ALPHAS, types::AllEntities};
 use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_ff::PrimeField;
-use co_builder::prelude::{Polynomials, VerifyingKey};
+use co_builder::prelude::VerifyingKey;
+use co_noir_common::polynomials::polynomial::Polynomials;
 use itertools::izip;
 use std::{iter, vec};
 

@@ -10,9 +10,7 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::{
-    types::{
-        MAX_PARTIAL_RELATION_LENGTH, ProverUnivariates, ProverUnivariatesBatch, RelationParameters,
-    },
+    types::{MAX_PARTIAL_RELATION_LENGTH, ProverUnivariates, ProverUnivariatesBatch},
     univariates::SharedUnivariate,
 };
 use crate::{
@@ -23,6 +21,7 @@ use crate::{
     types_batch::SumCheckDataForRelation,
 };
 use ark_ec::CurveGroup;
+use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},

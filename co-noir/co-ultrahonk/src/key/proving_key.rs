@@ -4,15 +4,12 @@ use crate::co_oink::{
     CRAND_PAIRS_CONST, CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE, CRAND_PAIRS_FACTOR_N,
 };
 use crate::key::types::TraceData;
-use crate::types::Polynomials;
 use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_builder::prelude::ActiveRegionData;
 use co_builder::prelude::GenericUltraCircuitBuilder;
-use co_builder::prelude::PrecomputedEntities;
-use co_builder::prelude::ProverWitnessEntities;
 use co_builder::prelude::ProvingKey as PlainProvingKey;
 use co_builder::prelude::VerifyingKey;
 use co_noir_common::crs::ProverCrs;
@@ -21,6 +18,9 @@ use co_noir_common::honk_proof::{HonkProofError, HonkProofResult, TranscriptFiel
 use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::mpc::rep3::Rep3UltraHonkDriver;
 use co_noir_common::mpc::shamir::ShamirUltraHonkDriver;
+use co_noir_common::polynomials::entities::Polynomials;
+use co_noir_common::polynomials::entities::PrecomputedEntities;
+use co_noir_common::polynomials::entities::ProverWitnessEntities;
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_common::types::ZeroKnowledge;
 use eyre::Result;

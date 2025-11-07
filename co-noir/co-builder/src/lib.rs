@@ -7,7 +7,6 @@ use crate::prelude::AcirFormat;
 pub(crate) mod acir_format;
 pub(crate) mod honk_verifier;
 pub(crate) mod keys;
-pub mod polynomials;
 pub mod prelude;
 pub mod transcript_ct;
 pub mod types;

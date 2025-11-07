@@ -4,9 +4,8 @@ use crate::{
 };
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{
-    honk_curve::HonkCurve,
-    honk_proof::TranscriptFieldType,
-    types::{RelationParameters, WitnessEntities},
+    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, polynomials::entities::WitnessEntities,
+    types::RelationParameters,
 };
 
 pub type WitnessCommitments<C, T> = WitnessEntities<BigGroup<C, T>>;

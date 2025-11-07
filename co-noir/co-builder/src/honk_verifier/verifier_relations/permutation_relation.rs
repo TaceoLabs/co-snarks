@@ -5,11 +5,12 @@ use crate::prelude::GenericUltraCircuitBuilder;
 use crate::types::field_ct::FieldCT;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::polynomials::entities::AllEntities;
+use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
-use co_ultrahonk::types::AllEntities;
 
 #[derive(Clone, Debug)]
 pub(crate) struct UltraPermutationRelationEvals<F: PrimeField> {

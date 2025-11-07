@@ -5,7 +5,7 @@ use crate::types::types::{AddQuad, NonNativeFieldWitnesses};
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use ark_bn254::Fq;
 use ark_ec::CurveGroup;
-use ark_ff::{Field, One, PrimeField, Zero};
+use ark_ff::{One, PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::utils::Utils;
 use num_bigint::BigUint;

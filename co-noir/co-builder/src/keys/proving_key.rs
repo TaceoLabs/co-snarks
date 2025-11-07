@@ -4,17 +4,19 @@ use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_noir_common::{
     crs::ProverCrs,
     honk_proof::HonkProofResult,
-    polynomials::polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial},
+    polynomials::{
+        entities::PrecomputedEntities,
+        polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial, Polynomials},
+    },
 };
 use num_bigint::BigUint;
 use std::sync::Arc;
 
 use crate::{
     PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
-    polynomials::polynomial_types::Polynomials,
     prelude::{
         ActiveRegionData, CyclicPermutation, GenericUltraCircuitBuilder, NUM_WIRES,
-        PrecomputedEntities, UltraCircuitBuilder,
+        UltraCircuitBuilder,
     },
     types::types::{Mapping, PermutationMapping, TraceData},
 };

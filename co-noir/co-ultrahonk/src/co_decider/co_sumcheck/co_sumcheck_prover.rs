@@ -1,16 +1,13 @@
 use super::{SumcheckOutput, zk_data::SharedZKSumcheckData};
 
-use crate::{
-    co_decider::{
-        co_decider_prover::CoDecider,
-        co_sumcheck::co_sumcheck_round::SumcheckRound,
-        types::{BATCHED_RELATION_PARTIAL_LENGTH_ZK, ClaimedEvaluations, PartiallyEvaluatePolys},
-    },
-    types::AllEntities,
+use crate::co_decider::{
+    co_decider_prover::CoDecider,
+    co_sumcheck::co_sumcheck_round::SumcheckRound,
+    types::{BATCHED_RELATION_PARTIAL_LENGTH_ZK, ClaimedEvaluations, PartiallyEvaluatePolys},
 };
-
 use ark_ff::One;
 use ark_ff::Zero;
+use co_noir_common::polynomials::entities::AllEntities;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},

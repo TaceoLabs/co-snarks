@@ -5,10 +5,12 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoSolver};
-use co_builder::prelude::{PROVER_WITNESS_ENTITIES_SIZE, ProverWitnessEntities};
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::entities::{
+    PROVER_WITNESS_ENTITIES_SIZE, Polynomials, ProverWitnessEntities,
+};
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_types::{Rep3SharedInput, Rep3SharedWitness, ShamirType};
 use co_noir_types::{Rep3Type, ShamirSharedWitness};
@@ -35,7 +37,7 @@ pub use co_noir_types::split_witness_shamir;
 pub use co_ultrahonk::{
     Rep3CoBuilder, ShamirCoBuilder,
     prelude::{
-        AcirFormat, HonkRecursion, PlainProvingKey, Polynomials, Rep3CoUltraHonk, Rep3ProvingKey,
+        AcirFormat, HonkRecursion, PlainProvingKey, Rep3CoUltraHonk, Rep3ProvingKey,
         ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder, UltraHonk, VerifyingKey,
         VerifyingKeyBarretenberg,
     },

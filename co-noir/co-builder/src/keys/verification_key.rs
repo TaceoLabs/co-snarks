@@ -1,20 +1,18 @@
+use crate::prelude::UltraCircuitBuilder;
 use ark_ec::{AffineRepr, CurveGroup, pairing::Pairing};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::PlainAcvmSolver;
+use co_noir_common::polynomials::entities::PRECOMPUTED_ENTITIES_SIZE;
 use co_noir_common::{
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    polynomials::entities::PrecomputedEntities,
     transcript::{Transcript, TranscriptHasher},
 };
 use noir_types::{SerializeF, U256};
 use num_bigint::BigUint;
 use std::sync::Arc;
-
-use crate::{
-    polynomials::polynomial_types::PRECOMPUTED_ENTITIES_SIZE,
-    prelude::{PrecomputedEntities, UltraCircuitBuilder},
-};
 
 #[derive(Clone)]
 pub struct VerifyingKey<P: Pairing> {

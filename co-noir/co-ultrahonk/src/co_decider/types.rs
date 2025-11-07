@@ -1,10 +1,9 @@
 use super::univariates::SharedUnivariate;
-use crate::{
-    types::{AllEntities, Polynomials},
-    types_batch::AllEntitiesBatch,
-};
+use crate::types_batch::AllEntitiesBatch;
 use ark_ec::{CurveGroup, PrimeGroup};
-use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::polynomials::entities::AllEntities;
+use co_noir_common::types::RelationParameters;
+use co_noir_common::{mpc::NoirUltraHonkProver, polynomials::entities::Polynomials};
 use itertools::izip;
 use std::iter;
 use ultrahonk::{NUM_ALPHAS, prelude::Univariate};
@@ -31,15 +30,6 @@ pub(crate) type PartiallyEvaluatePolys<T, P> = AllEntities<
     Vec<<P as PrimeGroup>::ScalarField>,
 >;
 pub(crate) type ClaimedEvaluations<F> = AllEntities<F, F>;
-
-pub struct RelationParameters<F> {
-    pub eta_1: F,
-    pub eta_2: F,
-    pub eta_3: F,
-    pub beta: F,
-    pub gamma: F,
-    pub public_input_delta: F,
-}
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> ProverMemory<T, P> {
     pub(crate) fn from_memory_and_polynomials(

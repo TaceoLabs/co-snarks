@@ -1,7 +1,6 @@
 pub use crate::key::proving_key::{ProvingKey, Rep3ProvingKey, ShamirProvingKey};
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
 pub use crate::co_ultra_prover::{CoUltraHonk, Rep3CoUltraHonk, ShamirCoUltraHonk};
-pub use crate::types::Polynomials;
 pub use crate::{PlainCoBuilder, Rep3CoBuilder, ShamirCoBuilder};
 // Re-exporting the following types from `ultrahonk` and `co_builder` crates:
 pub use co_builder::prelude::{

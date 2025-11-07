@@ -1,6 +1,5 @@
 use crate::acir_format::ProofType;
-use crate::polynomials::polynomial_types::WITNESS_ENTITIES_SIZE;
-use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, VerifyingKeyBarretenberg};
+use crate::prelude::{GenericUltraCircuitBuilder, VerifyingKeyBarretenberg};
 use crate::types::big_field::BigField;
 use crate::types::big_group::BigGroup;
 use crate::types::types::{PairingPoints, RecursionConstraint};
@@ -11,6 +10,7 @@ use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
 use co_noir_common::types::ZeroKnowledge;
 
 pub const HONK_PROOF_PUBLIC_INPUT_OFFSET: u32 = 3;

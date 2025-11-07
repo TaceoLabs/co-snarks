@@ -1,5 +1,4 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
-use crate::prelude::PrecomputedEntities;
 use crate::types::aes128;
 use crate::types::big_field::BigField;
 use crate::types::blake2s::Blake2s;
@@ -40,6 +39,7 @@ use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::polynomials::entities::PrecomputedEntities;
 use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::utils::Utils;
 use itertools::izip;

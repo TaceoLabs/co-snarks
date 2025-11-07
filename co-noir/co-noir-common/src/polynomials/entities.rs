@@ -1,27 +1,111 @@
-use ark_ff::PrimeField;
-use co_noir_common::polynomials::polynomial::Polynomial;
+use crate::polynomials::polynomial::Polynomial;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 // This is what we get from the proving key, we shift at a later point
 #[derive(Default, Serialize, Deserialize)]
-pub struct Polynomials<F: PrimeField> {
-    pub witness: ProverWitnessEntities<Polynomial<F>>,
-    pub precomputed: PrecomputedEntities<Polynomial<F>>,
+#[serde(bound = "")]
+pub struct Polynomials<Shared: Default, Public: Default>
+where
+    Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
+    Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
+{
+    pub witness: ProverWitnessEntities<Polynomial<Shared>>,
+    pub precomputed: PrecomputedEntities<Polynomial<Public>>,
 }
 
-impl<F: PrimeField> Polynomials<F> {
+impl<Shared: Clone + Default, Public: Clone + Default> Polynomials<Shared, Public>
+where
+    Polynomial<Shared>: Serialize + for<'a> Deserialize<'a>,
+    Polynomial<Public>: Serialize + for<'a> Deserialize<'a>,
+{
     pub fn new(circuit_size: usize) -> Self {
         let mut polynomials = Self::default();
         // Shifting is done at a later point
         polynomials
+            .witness
             .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+        polynomials.precomputed.iter_mut().for_each(|el| {
+            el.resize(circuit_size, Default::default());
+        });
+
+        polynomials
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct AllEntities<Shared: Default, Public: Default> {
+    pub witness: WitnessEntities<Shared>,
+    pub precomputed: PrecomputedEntities<Public>,
+    pub shifted_witness: ShiftedWitnessEntities<Shared>,
+}
+
+impl<Shared: Default + Debug, Public: Default + Debug> AllEntities<Shared, Public> {
+    pub fn from_elements(mut shared_elements: Vec<Shared>, public_elements: Vec<Public>) -> Self {
+        let precomputed: [Public; PRECOMPUTED_ENTITIES_SIZE] = public_elements
+            .try_into()
+            .expect("Incorrect number of public elements provided to AllEntities::from_elements");
+        let shifted_witness: [Shared; SHIFTED_WITNESS_ENTITIES_SIZE] = shared_elements
+            .split_off(WITNESS_ENTITIES_SIZE)
+            .try_into()
+            .expect("Incorrect number of shared elements provided to AllEntities::from_elements");
+        let witness: [Shared; WITNESS_ENTITIES_SIZE] = shared_elements
+            .try_into()
+            .expect("Incorrect number of shared elements provided to AllEntities::from_elements");
+        Self {
+            witness: witness.into(),
+            precomputed: precomputed.into(),
+            shifted_witness: shifted_witness.into(),
+        }
+    }
+}
+
+impl<Shared: Default, Public: Default> AllEntities<Shared, Public> {
+    pub fn public_iter(&self) -> impl Iterator<Item = &Public> {
+        self.precomputed.iter()
+    }
+
+    pub fn shared_iter(&self) -> impl Iterator<Item = &Shared> {
+        self.witness.iter().chain(self.shifted_witness.iter())
+    }
+
+    pub fn into_shared_iter(self) -> impl Iterator<Item = Shared> {
+        self.witness.into_iter().chain(self.shifted_witness)
+    }
+
+    pub fn public_iter_mut(&mut self) -> impl Iterator<Item = &mut Public> {
+        self.precomputed.iter_mut()
+    }
+
+    pub fn shared_iter_mut(&mut self) -> impl Iterator<Item = &mut Shared> {
+        self.witness
+            .iter_mut()
+            .chain(self.shifted_witness.iter_mut())
+    }
+}
+
+impl<Shared: Default + Clone, Public: Default + Clone> AllEntities<Vec<Shared>, Vec<Public>> {
+    pub fn new(circuit_size: usize) -> Self {
+        let mut polynomials = Self::default();
+        // Shifting is done at a later point
+        polynomials
+            .shared_iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+        polynomials
+            .public_iter_mut()
             .for_each(|el| el.resize(circuit_size, Default::default()));
 
         polynomials
     }
+}
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
-        self.witness.iter_mut().chain(self.precomputed.iter_mut())
+impl<T: Default> AllEntities<T, T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.precomputed
+            .iter()
+            .chain(self.witness.iter())
+            .chain(self.shifted_witness.iter())
     }
 }
 
@@ -78,13 +162,13 @@ impl<T: Default> IntoIterator for ProverWitnessEntities<T> {
 
 impl<T: Default> ProverWitnessEntities<T> {
     /// column 0
-    pub(crate) const W_L: usize = 0;
+    pub const W_L: usize = 0;
     /// column 1
     pub const W_R: usize = 1;
     /// column 2
-    pub(crate) const W_O: usize = 2;
+    pub const W_O: usize = 2;
     /// column 3 (modified by prover)
-    pub(crate) const W_4: usize = 3;
+    pub const W_4: usize = 3;
     /// column 6
     const LOOKUP_READ_COUNTS: usize = 4;
     /// column 7
@@ -170,33 +254,33 @@ impl<T: Default> ProverWitnessEntities<T> {
 
 impl<T: Default> PrecomputedEntities<T> {
     /// column 0
-    pub(crate) const Q_M: usize = 0;
+    pub const Q_M: usize = 0;
     /// column 1
-    pub(crate) const Q_C: usize = 1;
+    pub const Q_C: usize = 1;
     /// column 2
-    pub(crate) const Q_L: usize = 2;
+    pub const Q_L: usize = 2;
     /// column 3
-    pub(crate) const Q_R: usize = 3;
+    pub const Q_R: usize = 3;
     /// column 4
-    pub(crate) const Q_O: usize = 4;
+    pub const Q_O: usize = 4;
     /// column 5
-    pub(crate) const Q_4: usize = 5;
+    pub const Q_4: usize = 5;
     /// column 6
-    pub(crate) const Q_LOOKUP: usize = 6;
+    pub const Q_LOOKUP: usize = 6;
     /// column 7
-    pub(crate) const Q_ARITH: usize = 7;
+    pub const Q_ARITH: usize = 7;
     /// column 8
-    pub(crate) const Q_DELTA_RANGE: usize = 8;
+    pub const Q_DELTA_RANGE: usize = 8;
     /// column 9
-    pub(crate) const Q_ELLIPTIC: usize = 9;
+    pub const Q_ELLIPTIC: usize = 9;
     /// column 10
-    pub(crate) const Q_MEMORY: usize = 10;
+    pub const Q_MEMORY: usize = 10;
     /// column 11
-    pub(crate) const Q_NNF: usize = 11;
+    pub const Q_NNF: usize = 11;
     /// column 12
-    pub(crate) const Q_POSEIDON2_EXTERNAL: usize = 12;
+    pub const Q_POSEIDON2_EXTERNAL: usize = 12;
     /// column 13
-    pub(crate) const Q_POSEIDON2_INTERNAL: usize = 13;
+    pub const Q_POSEIDON2_INTERNAL: usize = 13;
     /// column 14
     const SIGMA_1: usize = 14;
     /// column 15
@@ -476,5 +560,234 @@ impl<T: Default> PrecomputedEntities<T> {
 
     pub fn id_4_mut(&mut self) -> &mut T {
         &mut self.elements[Self::ID_4]
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct WitnessEntities<T: Default> {
+    pub elements: [T; WITNESS_ENTITIES_SIZE],
+}
+
+pub const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
+#[derive(Default, Clone, Debug)]
+pub struct ShiftedWitnessEntities<T: Default> {
+    pub elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE],
+}
+
+impl<T: Default> IntoIterator for WitnessEntities<T> {
+    type Item = T;
+    type IntoIter = std::array::IntoIter<T, WITNESS_ENTITIES_SIZE>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.elements.into_iter()
+    }
+}
+
+impl<T: Default> From<[T; WITNESS_ENTITIES_SIZE]> for WitnessEntities<T> {
+    fn from(elements: [T; WITNESS_ENTITIES_SIZE]) -> Self {
+        Self { elements }
+    }
+}
+
+impl<T: Default> WitnessEntities<Vec<T>> {
+    pub fn new() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| Vec::new()),
+        }
+    }
+
+    pub fn add(&mut self, witness_entity: WitnessEntities<T>) {
+        for (src, dst) in witness_entity.into_iter().zip(self.iter_mut()) {
+            dst.push(src);
+        }
+    }
+}
+
+impl<T: Default> IntoIterator for ShiftedWitnessEntities<T> {
+    type Item = T;
+    type IntoIter = std::array::IntoIter<T, SHIFTED_WITNESS_ENTITIES_SIZE>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.elements.into_iter()
+    }
+}
+
+impl<T: Default> ShiftedWitnessEntities<Vec<T>> {
+    pub fn new() -> Self {
+        Self {
+            elements: std::array::from_fn(|_| Vec::new()),
+        }
+    }
+
+    pub fn add(&mut self, shifted_witness_entities: ShiftedWitnessEntities<T>) {
+        for (src, dst) in shifted_witness_entities.into_iter().zip(self.iter_mut()) {
+            dst.push(src);
+        }
+    }
+}
+
+impl<T: Default> From<[T; SHIFTED_WITNESS_ENTITIES_SIZE]> for ShiftedWitnessEntities<T> {
+    fn from(elements: [T; SHIFTED_WITNESS_ENTITIES_SIZE]) -> Self {
+        Self { elements }
+    }
+}
+
+impl<T: Default> WitnessEntities<T> {
+    /// column 0
+    const W_L: usize = 0;
+    /// column 1
+    const W_R: usize = 1;
+    /// column 2
+    const W_O: usize = 2;
+    /// column 3 (computed by prover)
+    const W_4: usize = 3;
+    /// column 4 (computed by prover)
+    const Z_PERM: usize = 4;
+    /// column 5 (computed by prover);
+    pub(crate) const LOOKUP_INVERSES: usize = 5;
+    /// column 6
+    pub(crate) const LOOKUP_READ_COUNTS: usize = 6;
+    /// column 7
+    pub(crate) const LOOKUP_READ_TAGS: usize = 7;
+
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.elements.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.elements.iter_mut()
+    }
+
+    pub fn to_be_shifted(&self) -> &[T] {
+        &self.elements[Self::W_L..=Self::Z_PERM]
+    }
+
+    pub fn to_be_shifted_mut(&mut self) -> &mut [T] {
+        &mut self.elements[Self::W_L..=Self::Z_PERM]
+    }
+
+    pub fn w_l(&self) -> &T {
+        &self.elements[Self::W_L]
+    }
+
+    pub fn w_r(&self) -> &T {
+        &self.elements[Self::W_R]
+    }
+
+    pub fn w_o(&self) -> &T {
+        &self.elements[Self::W_O]
+    }
+
+    pub fn w_4(&self) -> &T {
+        &self.elements[Self::W_4]
+    }
+
+    pub fn z_perm(&self) -> &T {
+        &self.elements[Self::Z_PERM]
+    }
+
+    pub fn lookup_inverses(&self) -> &T {
+        &self.elements[Self::LOOKUP_INVERSES]
+    }
+
+    pub fn lookup_read_counts(&self) -> &T {
+        &self.elements[Self::LOOKUP_READ_COUNTS]
+    }
+
+    pub fn lookup_read_tags(&self) -> &T {
+        &self.elements[Self::LOOKUP_READ_TAGS]
+    }
+
+    pub fn w_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_L]
+    }
+
+    pub fn w_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_R]
+    }
+
+    pub fn w_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_O]
+    }
+
+    pub fn w_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_4]
+    }
+
+    pub fn z_perm_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Z_PERM]
+    }
+
+    pub fn lookup_inverses_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::LOOKUP_INVERSES]
+    }
+
+    pub fn lookup_read_counts_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::LOOKUP_READ_COUNTS]
+    }
+
+    pub fn lookup_read_tags_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::LOOKUP_READ_TAGS]
+    }
+}
+
+impl<T: Default> ShiftedWitnessEntities<T> {
+    /// column 0
+    const W_L: usize = 0;
+    /// column 1
+    const W_R: usize = 1;
+    /// column 2
+    const W_O: usize = 2;
+    /// column 3
+    const W_4: usize = 3;
+    /// column 4
+    const Z_PERM: usize = 4;
+
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.elements.iter()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.elements.iter_mut()
+    }
+
+    pub fn w_l(&self) -> &T {
+        &self.elements[Self::W_L]
+    }
+
+    pub fn w_r(&self) -> &T {
+        &self.elements[Self::W_R]
+    }
+
+    pub fn w_o(&self) -> &T {
+        &self.elements[Self::W_O]
+    }
+
+    pub fn w_4(&self) -> &T {
+        &self.elements[Self::W_4]
+    }
+
+    pub fn z_perm(&self) -> &T {
+        &self.elements[Self::Z_PERM]
+    }
+
+    pub fn w_l_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_L]
+    }
+
+    pub fn w_r_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_R]
+    }
+
+    pub fn w_o_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_O]
+    }
+
+    pub fn w_4_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::W_4]
+    }
+
+    pub fn z_perm_mut(&mut self) -> &mut T {
+        &mut self.elements[Self::Z_PERM]
     }
 }

@@ -9,6 +9,7 @@ use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
 use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};

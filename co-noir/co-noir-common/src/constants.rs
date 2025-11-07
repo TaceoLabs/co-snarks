@@ -1,3 +1,5 @@
+use crate::polynomials::entities::{PRECOMPUTED_ENTITIES_SIZE, WITNESS_ENTITIES_SIZE};
+
 pub const NUM_ALPHAS: usize = 28; //TODO FLORIN
 
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
@@ -20,3 +22,6 @@ pub const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
 pub const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
 pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
 pub const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
+
+pub const NUM_ALL_ENTITIES: usize =
+    WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;

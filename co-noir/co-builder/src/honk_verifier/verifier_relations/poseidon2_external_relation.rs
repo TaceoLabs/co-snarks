@@ -9,8 +9,8 @@ use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
-use co_ultrahonk::co_decider::types::RelationParameters;
-use co_ultrahonk::types::AllEntities;
+use co_noir_common::polynomials::entities::AllEntities;
+use co_noir_common::types::RelationParameters;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Poseidon2ExternalRelationEvals<F: PrimeField> {

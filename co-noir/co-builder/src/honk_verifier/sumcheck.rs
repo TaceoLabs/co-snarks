@@ -1,7 +1,6 @@
 use crate::honk_verifier::verifier_relations::AllRelationsEvals;
 use crate::honk_verifier::verifier_relations::compute_full_relation_purported_value;
 use crate::prelude::GenericUltraCircuitBuilder;
-use crate::prelude::PRECOMPUTED_ENTITIES_SIZE;
 use crate::transcript_ct::TranscriptCT;
 use crate::transcript_ct::TranscriptHasherCT;
 use crate::types::field_ct::FieldCT;
@@ -11,9 +10,12 @@ use ark_ff::Field;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::barycentric::Barycentric;
+use co_noir_common::constants::BATCHED_RELATION_PARTIAL_LENGTH;
 use co_noir_common::constants::CONST_PROOF_SIZE_LOG_N;
+use co_noir_common::constants::NUM_ALL_ENTITIES;
 use co_noir_common::constants::NUM_ALPHAS;
-use co_noir_common::types::AllEntities;
+use co_noir_common::polynomials::entities::AllEntities;
+use co_noir_common::polynomials::entities::PRECOMPUTED_ENTITIES_SIZE;
 use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
