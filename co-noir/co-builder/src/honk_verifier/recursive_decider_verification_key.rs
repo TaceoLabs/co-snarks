@@ -15,7 +15,7 @@ pub struct RecursiveDeciderVerificationKey<
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
     pub vk_and_hash: VKAndHash<C, T>,
-    pub is_accumulator: bool,
+    pub is_complete: bool,
     pub public_inputs: Vec<FieldCT<C::ScalarField>>,
     pub relation_parameters: RelationParameters<FieldCT<C::ScalarField>>,
     pub target_sum: FieldCT<C::ScalarField>,

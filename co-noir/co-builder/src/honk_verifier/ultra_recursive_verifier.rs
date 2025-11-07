@@ -20,7 +20,7 @@ use crate::{
     types::{big_group::BigGroup, field_ct::FieldCT},
 };
 
-struct UltraRecursiveVerifier;
+pub(crate) struct UltraRecursiveVerifier;
 
 impl UltraRecursiveVerifier {
     pub fn verify_proof<
@@ -32,7 +32,7 @@ impl UltraRecursiveVerifier {
         mut key: RecursiveDeciderVerificationKey<C, T>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> HonkProofResult<UltraRecursiveVerifierOutput<C, T>> {
+    ) -> eyre::Result<UltraRecursiveVerifierOutput<C, T>> {
         // TODO CESAR: Assert length of proof
         let mut transcript = TranscriptCT::<C, H>::new_verifier(proof);
 

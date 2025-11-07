@@ -1,5 +1,10 @@
 use crate::acir_format::ProofType;
+use crate::honk_verifier::recursive_decider_verification_key::{
+    RecursiveDeciderVerificationKey, VKAndHash,
+};
+use crate::honk_verifier::ultra_recursive_verifier::UltraRecursiveVerifier;
 use crate::prelude::{GenericUltraCircuitBuilder, VerifyingKeyBarretenberg};
+use crate::transcript_ct::Poseidon2SpongeCT;
 use crate::types::big_field::BigField;
 use crate::types::big_group::BigGroup;
 use crate::types::types::{PairingPoints, RecursionConstraint};
@@ -12,8 +17,6 @@ use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
 use co_noir_common::types::ZeroKnowledge;
-
-pub const HONK_PROOF_PUBLIC_INPUT_OFFSET: u32 = 3;
 
 pub struct UltraRecursiveVerifierOutput<
     C: CurveGroup,
@@ -144,8 +147,30 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         }
 
         let vkey = RecursiveVerificationKey::<C, T>::new(&key_fields, self, driver)?;
+        let vk_and_hash = VKAndHash {
+            vk: vkey,
+            hash: vk_hash,
+        };
+        let recursive_decider_vkey = RecursiveDeciderVerificationKey {
+            vk_and_hash,
+            is_complete: false,
+            public_inputs: proof_fields
+                .iter()
+                .take(input.public_inputs.len())
+                .cloned()
+                .collect(),
+            relation_parameters: Default::default(),
+            target_sum: FieldCT::<C::ScalarField>::default(),
+            witness_commitments: Default::default(),
+        };
 
-        todo!("create_honk_recursion_constraints not yet implemented")
+        UltraRecursiveVerifier::verify_proof::<C, Poseidon2SpongeCT<C>, T>(
+            proof_fields,
+            recursive_decider_vkey,
+            self,
+            driver,
+        )
+        .into()
     }
 
     /// Creates a dummy vkey and proof object.

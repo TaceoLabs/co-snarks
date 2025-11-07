@@ -349,28 +349,28 @@ impl<P: CurveGroup, const T: usize> FieldHashCT<P, T> for Poseidon2CT<P::ScalarF
     }
 }
 
-pub struct FieldSpongeCT<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T>> {
-    state: [FieldCT<P::ScalarField>; T],
-    cache: [FieldCT<P::ScalarField>; R],
+pub struct FieldSpongeCT<C: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<C, T>> {
+    state: [FieldCT<C::ScalarField>; T],
+    cache: [FieldCT<C::ScalarField>; R],
     cache_size: usize,
     hasher: H,
 }
 
-impl<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T>> FieldSpongeCT<P, T, R, H>
+impl<C: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<C, T>> FieldSpongeCT<C, T, R, H>
 where
     H: Default,
 {
-    pub(crate) fn new<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+    pub(crate) fn new<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
+        builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
         in_len: usize,
     ) -> Self {
         // Add the domain separation to the initial state.
         let iv = BigUint::from(in_len) << 64;
-        let mut iv = FieldCT::from(P::ScalarField::from(iv));
+        let mut iv = FieldCT::from(C::ScalarField::from(iv));
         iv.convert_constant_to_fixed_witness(builder, driver);
-        let mut state: [FieldCT<P::ScalarField>; T] = array::from_fn(|_| FieldCT::default());
-        let cache: [FieldCT<P::ScalarField>; R] = array::from_fn(|_| FieldCT::default());
+        let mut state: [FieldCT<C::ScalarField>; T] = array::from_fn(|_| FieldCT::default());
+        let cache: [FieldCT<C::ScalarField>; R] = array::from_fn(|_| FieldCT::default());
         state[R] = iv;
 
         Self {
@@ -381,9 +381,9 @@ where
         }
     }
 
-    fn perform_duplex<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    fn perform_duplex<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
         &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()> {
         // add the cache into sponge state
@@ -400,10 +400,10 @@ where
         Ok(())
     }
 
-    fn absorb<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    fn absorb<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
         &mut self,
-        input: FieldCT<P::ScalarField>,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        input: FieldCT<C::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()> {
         if self.cache_size == R {
@@ -419,11 +419,11 @@ where
         Ok(())
     }
 
-    fn squeeze<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+    fn squeeze<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
         &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
-    ) -> eyre::Result<FieldCT<P::ScalarField>> {
+    ) -> eyre::Result<FieldCT<C::ScalarField>> {
         self.perform_duplex(builder, driver)?;
 
         Ok(self.state[0].clone())
@@ -438,12 +438,12 @@ where
     // This will be used in the fieldct transcript
     pub(crate) fn hash_internal<
         const OUT_LEN: usize,
-        WT: NoirWitnessExtensionProtocol<P::ScalarField>,
+        WT: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        input: &[FieldCT<P::ScalarField>],
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        input: &[FieldCT<C::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
-    ) -> eyre::Result<FieldCT<P::ScalarField>> {
+    ) -> eyre::Result<FieldCT<C::ScalarField>> {
         let in_len = input.len();
 
         let mut sponge = Self::new(builder, driver, in_len);

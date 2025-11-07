@@ -14,7 +14,8 @@ impl From<bool> for ZeroKnowledge {
     }
 }
 
-pub struct RelationParameters<F> {
+#[derive(Default)]
+pub struct RelationParameters<F: Default> {
     pub eta_1: F,
     pub eta_2: F,
     pub eta_3: F,

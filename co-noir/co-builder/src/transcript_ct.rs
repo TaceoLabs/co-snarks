@@ -11,6 +11,7 @@ use crate::{prelude::GenericUltraCircuitBuilder, types::poseidon2::FieldSpongeCT
 use ark_bn254::Bn254;
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
+use ark_ec::PrimeGroup;
 use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use ark_poly::domain::general::GeneralElements;
@@ -22,8 +23,8 @@ use std::{collections::BTreeMap, ops::Index};
 
 pub type Bn254G1 = <Bn254 as Pairing>::G1;
 pub type TranscriptFieldType = ark_bn254::Fr;
-pub(crate) type Poseidon2SpongeCT =
-    FieldSpongeCT<Bn254G1, 4, 3, Poseidon2CT<TranscriptFieldType, 4, 5>>;
+pub(crate) type Poseidon2SpongeCT<C> =
+    FieldSpongeCT<C, 4, 3, Poseidon2CT<<C as PrimeGroup>::ScalarField, 4, 5>>;
 
 pub trait TranscriptHasherCT<P: CurveGroup> {
     fn hash<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
@@ -33,14 +34,14 @@ pub trait TranscriptHasherCT<P: CurveGroup> {
     ) -> eyre::Result<FieldCT<P::ScalarField>>;
 }
 
-impl<P: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<P, T> + Default>
-    TranscriptHasherCT<P> for FieldSpongeCT<P, T, R, H>
+impl<C: CurveGroup, const T: usize, const R: usize, H: FieldHashCT<C, T> + Default>
+    TranscriptHasherCT<C> for FieldSpongeCT<C, T, R, H>
 {
-    fn hash<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        buffer: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+    fn hash<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
+        buffer: Vec<FieldCT<C::ScalarField>>,
+        builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
-    ) -> eyre::Result<FieldCT<P::ScalarField>> {
+    ) -> eyre::Result<FieldCT<C::ScalarField>> {
         Self::hash_internal::<1, WT>(&buffer, builder, driver)
     }
 }
