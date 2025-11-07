@@ -1,10 +1,12 @@
+use std::array;
+
 use crate::acir_format::ProofType;
 use crate::honk_verifier::recursive_decider_verification_key::{
     RecursiveDeciderVerificationKey, VKAndHash,
 };
 use crate::honk_verifier::ultra_recursive_verifier::UltraRecursiveVerifier;
 use crate::prelude::{GenericUltraCircuitBuilder, VerifyingKeyBarretenberg};
-use crate::transcript_ct::Poseidon2SpongeCT;
+use crate::transcript_ct::{Poseidon2SpongeCT, TranscriptCT, TranscriptHasherCT};
 use crate::types::big_field::BigField;
 use crate::types::big_group::BigGroup;
 use crate::types::types::{PairingPoints, RecursionConstraint};
@@ -13,6 +15,7 @@ use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::constants::{CONST_PROOF_SIZE_LOG_N, NUM_ALPHAS};
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
@@ -41,7 +44,7 @@ pub struct RecursiveVerificationKey<
 impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
     RecursiveVerificationKey<C, T>
 {
-    pub fn new(
+    fn new(
         elements: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
@@ -81,6 +84,23 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             precomputed_commitments,
         })
     }
+
+    pub fn hash_through_transcript<H: TranscriptHasherCT<C>>(
+        &self,
+        transcript: &mut TranscriptCT<C, H>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<FieldCT<C::ScalarField>> {
+        transcript.add_fr_to_independent_hash_buffer::<T>(&self.log_circuit_size);
+        transcript.add_fr_to_independent_hash_buffer::<T>(&self.num_public_inputs);
+        transcript.add_fr_to_independent_hash_buffer::<T>(&self.pub_inputs_offset);
+
+        for commitment in self.precomputed_commitments.elements.iter() {
+            transcript.add_point_to_independent_hash_buffer(commitment, builder, driver)?;
+        }
+
+        transcript.hash_independent_buffer(builder, driver)
+    }
 }
 
 impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
@@ -88,7 +108,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 {
     const PUBLIC_INPUTS_SIZE: usize = 16;
     //TODO FLORIN move this somewhere else
-    const CONST_PROOF_SIZE_LOG_N: usize = 28;
 
     /// Add constraints required to recursively verify an UltraHonk proof
     pub(crate) fn create_honk_recursion_constraints(
@@ -162,6 +181,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             relation_parameters: Default::default(),
             target_sum: FieldCT::<C::ScalarField>::default(),
             witness_commitments: Default::default(),
+            alphas: array::from_fn(|_| FieldCT::<C::ScalarField>::default()),
+            gate_challenges: Vec::new(),
         };
 
         UltraRecursiveVerifier::verify_proof::<C, Poseidon2SpongeCT<C>, T>(
@@ -169,8 +190,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             recursive_decider_vkey,
             self,
             driver,
+            has_zk,
         )
-        .into()
     }
 
     /// Creates a dummy vkey and proof object.
@@ -193,7 +214,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
         // Generate mock honk vk
         let honk_vk = Self::create_mock_honk_vk(
-            1 << Self::CONST_PROOF_SIZE_LOG_N,
+            1 << CONST_PROOF_SIZE_LOG_N,
             pub_inputs_offset,
             num_inner_public_inputs,
         );
@@ -301,7 +322,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     ) -> eyre::Result<Vec<T::AcvmType>> {
         let mut proof = Vec::with_capacity(1); //TODO FLORIN set correct size
 
-        let const_proof_log_n = Self::CONST_PROOF_SIZE_LOG_N; //TODO FLORIN FIX THIS DEP ON FLAVOUR
+        let const_proof_log_n = CONST_PROOF_SIZE_LOG_N; //TODO FLORIN FIX THIS DEP ON FLAVOUR
 
         if has_zk == ZeroKnowledge::Yes {
             // Libra concatenation commitment

@@ -1,3 +1,4 @@
+use crate::PERMUTATION_ARGUMENT_VALUE_SEPARATOR;
 use crate::honk_verifier::recursive_decider_verification_key::RecursiveDeciderVerificationKey;
 use crate::honk_verifier::recursive_decider_verification_key::WitnessCommitments;
 use crate::{
@@ -14,6 +15,7 @@ use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
+use num_bigint::BigUint;
 
 pub(crate) struct OinkRecursiveVerifier;
 
@@ -28,37 +30,38 @@ impl OinkRecursiveVerifier {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        // let circuit_size = verification_key.verification_key.circuit_size.clone();
-        let public_input_size = verification_key.vk_and_hash.vk.num_public_inputs.clone();
-        let pub_inputs_offset = verification_key.vk_and_hash.vk.pub_inputs_offset.clone();
+        let vk_hash = verification_key
+            .vk_and_hash
+            .vk
+            .hash_through_transcript(transcript, builder, driver)?;
 
-        todo!("Hash through transcript");
-        // transcript.add_element_frs_to_hash_buffer(
-        //     "circuit_size".to_owned(),
-        //     std::slice::from_ref(&circuit_size),
-        // );
-        transcript.add_element_frs_to_hash_buffer(
-            "public_input_size".to_owned(),
-            std::slice::from_ref(&public_input_size),
-        );
-        transcript.add_element_frs_to_hash_buffer(
-            "pub_inputs_offset".to_owned(),
-            std::slice::from_ref(&pub_inputs_offset),
-        );
+        // Check that the vk hash matches the hash of the verification key
+        verification_key
+            .vk_and_hash
+            .hash
+            .assert_equal(&vk_hash, builder, driver);
 
-        let public_input_size_bigint = T::get_public(&public_input_size.get_value(builder, driver))
-            .expect("public_input_size should be public")
-            .into_bigint();
+        transcript.add_element_frs_to_hash_buffer("vk_hash".to_string(), &[vk_hash]);
 
-        // Ensure that only the first limb is used
-        assert!(
-            public_input_size_bigint.num_bits() < 64,
-            "public_input_size should fit within a single limb"
-        );
-        let public_input_size_int = public_input_size_bigint.as_ref()[0] as usize;
-        let public_inputs = (0..public_input_size_int)
-            .map(|i| transcript.receive_fr_from_prover(format!("public_input_{i}")))
-            .collect::<HonkProofResult<Vec<FieldCT<C::ScalarField>>>>()?;
+        let num_public_inputs: BigUint = T::get_public(
+            &verification_key
+                .vk_and_hash
+                .vk
+                .num_public_inputs
+                .get_value(builder, driver),
+        )
+        .expect("Number of public inputs should be public")
+        .into();
+        let num_public_inputs_usize = *num_public_inputs
+            .to_u64_digits()
+            .first()
+            .expect("Should fit into 64 bits") as usize;
+        let mut public_inputs = Vec::with_capacity(num_public_inputs_usize);
+
+        for i in 0..num_public_inputs_usize {
+            let pi = transcript.receive_fr_from_prover(format!("public_input_{i}"))?;
+            public_inputs.push(pi);
+        }
 
         let mut commitments = WitnessCommitments::<C::ScalarField, T>::default();
 
@@ -106,8 +109,7 @@ impl OinkRecursiveVerifier {
             &public_inputs,
             &beta,
             &gamma,
-            // &circuit_size,
-            &pub_inputs_offset,
+            &verification_key.vk_and_hash.vk.pub_inputs_offset,
             builder,
             driver,
         )?;
@@ -128,11 +130,9 @@ impl OinkRecursiveVerifier {
             eta_2,
             eta_3,
             public_input_delta,
-            // TODO FLORIN / TODO CESAR:
-            // alphas: alphas.try_into().expect("length checked above"),
-            // gate_challenges: Default::default(),
         };
         verification_key.witness_commitments = commitments;
+        verification_key.alphas = alphas.try_into().expect("Should fit into NUM_ALPHAS");
         verification_key.public_inputs = public_inputs;
         Ok(())
     }
@@ -162,8 +162,6 @@ impl OinkRecursiveVerifier {
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
-        let mut numerator = one.clone();
-        let mut denominator = one.clone();
 
         // Let m be the number of public inputs x₀,…, xₘ₋₁.
         // Recall that we broke the permutation σ⁰ by changing the mapping
@@ -188,15 +186,14 @@ impl OinkRecursiveVerifier {
         // initial zero row or Goblin-stlye ECC op gates. Accordingly, the indices i in the above formulas are given by i =
         // [0, m-1] + offset, i.e. i = offset, 1 + offset, …, m - 1 + offset.
 
-        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1158): Ensure correct construction of public input
-        // delta in the face of increases to virtual size caused by execution trace overflow
-        let n_plus_i = todo!();
-        // domain_size.add(offset, builder, driver);
-        let one_plus_i = one.add(offset, builder, driver);
+        let mut numerator = one.clone();
+        let mut denominator = one.clone();
+        let separator = FieldCT::from(C::ScalarField::from(PERMUTATION_ARGUMENT_VALUE_SEPARATOR));
 
-        let beta_mul_n_plus_i = beta.multiply(&n_plus_i, builder, driver)?;
-        let beta_mul_one_plus_i = beta.multiply(&one_plus_i, builder, driver)?;
-
+        let beta_mul_n_plus_i =
+            beta.multiply(&separator.add(offset, builder, driver), builder, driver)?;
+        let beta_mul_one_plus_i =
+            beta.multiply(&offset.add(&one, builder, driver), builder, driver)?;
         let mut numerator_acc = gamma.add(&beta_mul_n_plus_i, builder, driver);
         let mut denominator_acc = gamma.sub(&beta_mul_one_plus_i, builder, driver);
 

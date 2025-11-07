@@ -1,11 +1,10 @@
 use super::plain::PlainAcvmSolver;
 use super::{NoirWitnessExtensionProtocol, downcast};
-use ark_ec::{AffineRepr, CurveGroup, scalar_mul};
+use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use co_noir_types::Rep3Type;
-use core::num;
 use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;

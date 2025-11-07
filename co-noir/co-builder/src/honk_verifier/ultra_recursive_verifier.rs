@@ -1,9 +1,8 @@
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 
 use ark_ff::Field;
-use co_noir_common::{
-    constants::CONST_PROOF_SIZE_LOG_N, honk_curve::HonkCurve, honk_proof::HonkProofResult,
-};
+use co_noir_common::types::ZeroKnowledge;
+use co_noir_common::{constants::CONST_PROOF_SIZE_LOG_N, honk_curve::HonkCurve};
 
 use crate::honk_verifier::padding_indicator_array::padding_indicator_array;
 use crate::{
@@ -32,22 +31,23 @@ impl UltraRecursiveVerifier {
         mut key: RecursiveDeciderVerificationKey<C, T>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
+        has_zk: ZeroKnowledge,
     ) -> eyre::Result<UltraRecursiveVerifierOutput<C, T>> {
         // TODO CESAR: Assert length of proof
         let mut transcript = TranscriptCT::<C, H>::new_verifier(proof);
+        //TODO FLORIN: Get right CONST_PROOF_SIZE_LOG_N (virtual_log_n)
 
         // No IPA accumulator on the UltraRecursiveFlavor
 
         OinkRecursiveVerifier::verify(&mut key, &mut transcript, builder, driver)?;
 
-        let gate_challenges = (0..CONST_PROOF_SIZE_LOG_N)
-            .map(|idx| {
-                transcript.get_challenge(format!("Sumcheck:gate_challenge_{idx}"), builder, driver)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // Extract the aggregation object from the public inputs
-        // let nested_point_accumulator = unimplemented!();
+        // Get the gate challenges for sumcheck computation
+        key.gate_challenges = transcript.get_powers_of_challenge(
+            "Sumcheck:gate_challenge".to_string(),
+            CONST_PROOF_SIZE_LOG_N,
+            builder,
+            driver,
+        )?;
 
         // output.points_accumulator = nested_point_accumulator;
 
@@ -57,24 +57,45 @@ impl UltraRecursiveVerifier {
             &key.vk_and_hash.vk.log_circuit_size,
             builder,
             driver,
+            has_zk,
         )?;
 
-        // Since UltraRecursiveFlavor does not have ZK, we slip the computation of the 0th libra commitment
+        // Receive commitments to Libra masking polynomials
+        let mut libra_commitments = Vec::new();
+        if has_zk == ZeroKnowledge::Yes {
+            libra_commitments.push(transcript.receive_point_from_prover(
+                "Libra:concatenation_commitment".to_owned(),
+                builder,
+                driver,
+            )?);
+        }
 
         let sumcheck_output = SumcheckVerifier::verify::<C, T, H>(
             &mut transcript,
             &mut key.target_sum,
             &key.relation_parameters,
-            todo!(), // &key.relation_parameters.alphas,
-            &mut gate_challenges,
+            &key.alphas,
+            &key.gate_challenges,
             &padding_indicator_array,
             builder,
             driver,
         )?;
 
-        // Since UltraRecursiveFlavor does not have ZK, we skip the computation of the 1st and 2nd libra commitments
+        if has_zk == ZeroKnowledge::Yes {
+            libra_commitments.push(transcript.receive_point_from_prover(
+                "Libra:grand_sum_commitment".to_owned(),
+                builder,
+                driver,
+            )?);
+            libra_commitments.push(transcript.receive_point_from_prover(
+                "Libra:quotient_commitment".to_owned(),
+                builder,
+                driver,
+            )?);
+        }
 
         // Execute Shplemini to produce a batch opening claim subsequently verified by a univariate PCS
+        let mut consistency_checked = true;
         let unshifted_commitments = [
             key.vk_and_hash.vk.precomputed_commitments.elements.to_vec(),
             key.witness_commitments.elements.to_vec(),
@@ -131,5 +152,6 @@ impl UltraRecursiveVerifier {
             builder,
             driver,
         )?;
+        todo!("Finalize UltraRecursiveVerifier output");
     }
 }

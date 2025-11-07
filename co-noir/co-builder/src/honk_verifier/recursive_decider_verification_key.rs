@@ -4,28 +4,30 @@ use crate::{
 };
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{
-    honk_curve::HonkCurve, honk_proof::TranscriptFieldType, polynomials::entities::WitnessEntities,
-    types::RelationParameters,
+    constants::NUM_ALPHAS, honk_curve::HonkCurve, honk_proof::TranscriptFieldType,
+    polynomials::entities::WitnessEntities, types::RelationParameters,
 };
 
 pub type WitnessCommitments<C, T> = WitnessEntities<BigGroup<C, T>>;
 
-pub struct RecursiveDeciderVerificationKey<
+pub(crate) struct RecursiveDeciderVerificationKey<
     C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
-    pub vk_and_hash: VKAndHash<C, T>,
-    pub is_complete: bool,
-    pub public_inputs: Vec<FieldCT<C::ScalarField>>,
-    pub relation_parameters: RelationParameters<FieldCT<C::ScalarField>>,
-    pub target_sum: FieldCT<C::ScalarField>,
-    pub witness_commitments: WitnessCommitments<C::ScalarField, T>,
+    pub(crate) vk_and_hash: VKAndHash<C, T>,
+    pub(crate) is_complete: bool,
+    pub(crate) public_inputs: Vec<FieldCT<C::ScalarField>>,
+    pub(crate) alphas: [FieldCT<C::ScalarField>; NUM_ALPHAS],
+    pub(crate) gate_challenges: Vec<FieldCT<C::ScalarField>>,
+    pub(crate) relation_parameters: RelationParameters<FieldCT<C::ScalarField>>,
+    pub(crate) target_sum: FieldCT<C::ScalarField>,
+    pub(crate) witness_commitments: WitnessCommitments<C::ScalarField, T>,
 }
 
-pub struct VKAndHash<
+pub(crate) struct VKAndHash<
     C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 > {
-    pub vk: RecursiveVerificationKey<C, T>,
-    pub hash: FieldCT<C::ScalarField>,
+    pub(crate) vk: RecursiveVerificationKey<C, T>,
+    pub(crate) hash: FieldCT<C::ScalarField>,
 }

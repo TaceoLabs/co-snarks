@@ -40,17 +40,15 @@ impl SumcheckVerifier {
         target_sum: &mut FieldCT<C::ScalarField>,
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
         alphas: &[FieldCT<C::ScalarField>; NUM_ALPHAS],
-        gate_challenges: &mut Vec<FieldCT<C::ScalarField>>,
+        gate_challenges: &[FieldCT<C::ScalarField>],
         padding_indicator_array: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<SumcheckOutput<C>> {
         let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
 
-        Self::pad_gate_challenges::<C, T>(gate_challenges, builder);
-
         let mut gate_separators =
-            GateSeparatorPolynomial::new_without_products(gate_challenges.clone(), builder);
+            GateSeparatorPolynomial::new_without_products(gate_challenges.to_vec(), builder);
 
         // MegaRecursiveFlavor does not have ZK
         let mut multivariate_challenge = Vec::with_capacity(padding_indicator_array.len());

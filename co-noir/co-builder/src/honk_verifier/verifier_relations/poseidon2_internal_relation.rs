@@ -5,12 +5,12 @@ use crate::prelude::GenericUltraCircuitBuilder;
 use crate::types::field_ct::FieldCT;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::polynomials::entities::AllEntities;
+use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
-use co_noir_common::polynomials::entities::AllEntities;
-use co_noir_common::types::RelationParameters;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
 

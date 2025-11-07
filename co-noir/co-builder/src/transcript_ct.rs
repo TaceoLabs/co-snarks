@@ -2,6 +2,7 @@
 
 #![expect(unused)]
 use crate::types::big_field::BigField;
+use crate::types::big_field::NUM_LIMB_BITS;
 use crate::types::big_group::BigGroup;
 use crate::types::field_ct::CycleScalarCT;
 use crate::types::field_ct::FieldCT;
@@ -19,6 +20,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofError;
 use co_noir_common::honk_proof::HonkProofResult;
+use num_bigint::BigUint;
 use std::{collections::BTreeMap, ops::Index};
 
 pub type Bn254G1 = <Bn254 as Pairing>::G1;
@@ -58,6 +60,7 @@ where
     round_number: usize,
     is_first_challenge: bool,
     current_round_data: Vec<FieldCT<P::ScalarField>>,
+    independent_hash_buffer: Vec<FieldCT<P::ScalarField>>,
     previous_challenge: FieldCT<P::ScalarField>,
     phantom_data: std::marker::PhantomData<H>,
 }
@@ -78,15 +81,11 @@ where
 {
     pub fn new() -> Self {
         Self {
-            proof_data: Default::default(),
-            manifest: Default::default(),
             num_frs_written: 0,
             num_frs_read: 0,
             round_number: 0,
             is_first_challenge: true,
-            current_round_data: Default::default(),
-            previous_challenge: Default::default(),
-            phantom_data: Default::default(),
+            ..Default::default()
         }
     }
 }
@@ -99,14 +98,11 @@ where
     pub fn new_verifier(proof: Vec<FieldCT<P::ScalarField>>) -> Self {
         Self {
             proof_data: proof,
-            manifest: Default::default(),
             num_frs_written: 0,
             num_frs_read: 0,
             round_number: 0,
             is_first_challenge: true,
-            current_round_data: Default::default(),
-            previous_challenge: Default::default(),
-            phantom_data: Default::default(),
+            ..Default::default()
         }
     }
 
@@ -132,20 +128,55 @@ where
         self.num_frs_written += len;
     }
 
-    // pub fn add_point_to_hash_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
-    //     &mut self,
-    //     label: String,
-    //     point: &GoblinElement<P, WT>,
-    // ) {
-    //     let mut elements = Vec::with_capacity(P::NUM_BASEFIELD_ELEMENTS * 2);
-    //     for limb in point.x.limbs.iter() {
-    //         elements.push(limb.clone());
-    //     }
-    //     for limb in point.y.limbs.iter() {
-    //         elements.push(limb.clone());
-    //     }
-    //     self.add_element_frs_to_hash_buffer(label, &elements);
-    // }
+    fn add_element_frs_to_independent_hash_buffer(&mut self, elements: &[FieldCT<P::ScalarField>]) {
+        self.independent_hash_buffer.extend_from_slice(elements);
+    }
+
+    pub fn add_point_to_independent_hash_buffer<
+        WT: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        point: &BigGroup<P::ScalarField, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<()> {
+        let shift: BigUint = BigUint::from(1u64) << NUM_LIMB_BITS;
+        let shift = FieldCT::from(P::ScalarField::from(shift));
+        let mut elements = Vec::with_capacity(P::NUM_BASEFIELD_ELEMENTS * 2);
+        elements.push(
+            point.x.binary_basis_limbs[1]
+                .element
+                .multiply(&shift, builder, driver)?
+                .add(&point.x.binary_basis_limbs[0].element, builder, driver),
+        );
+        elements.push(
+            point.x.binary_basis_limbs[3]
+                .element
+                .multiply(&shift, builder, driver)?
+                .add(&point.x.binary_basis_limbs[2].element, builder, driver),
+        );
+        elements.push(
+            point.y.binary_basis_limbs[1]
+                .element
+                .multiply(&shift, builder, driver)?
+                .add(&point.y.binary_basis_limbs[0].element, builder, driver),
+        );
+        elements.push(
+            point.y.binary_basis_limbs[3]
+                .element
+                .multiply(&shift, builder, driver)?
+                .add(&point.y.binary_basis_limbs[2].element, builder, driver),
+        );
+        self.add_element_frs_to_independent_hash_buffer(&elements);
+        Ok(())
+    }
+
+    pub fn add_fr_to_independent_hash_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        element: &FieldCT<P::ScalarField>,
+    ) {
+        self.add_element_frs_to_independent_hash_buffer(std::slice::from_ref(element));
+    }
 
     pub fn receive_n_from_prover(
         &mut self,
@@ -312,6 +343,46 @@ where
 
         self.round_number += 1;
         Ok(res.to_owned())
+    }
+
+    pub fn hash_independent_buffer<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<FieldCT<P::ScalarField>> {
+        H::hash(
+            std::mem::take(&mut self.independent_hash_buffer),
+            builder,
+            driver,
+        )
+    }
+
+    fn compute_round_challenge_pows<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &self,
+        num_powers: usize,
+        round_challenge: FieldCT<P::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<Vec<FieldCT<P::ScalarField>>> {
+        let mut pows = Vec::with_capacity(num_powers);
+        if num_powers > 0 {
+            pows.push(round_challenge);
+            for i in 1..num_powers {
+                pows.push(pows[i - 1].multiply(&pows[i - 1], builder, driver)?);
+            }
+        }
+        Ok(pows)
+    }
+
+    pub fn get_powers_of_challenge<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        label: String,
+        num_challenges: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<Vec<FieldCT<P::ScalarField>>> {
+        let challenge = self.get_challenge(label, builder, driver)?;
+        self.compute_round_challenge_pows(num_challenges, challenge, builder, driver)
     }
 }
 

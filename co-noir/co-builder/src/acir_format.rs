@@ -20,18 +20,19 @@ use crate::types::types::{
     Sha256Compression, WitnessOrConstant,
 };
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[expect(unused)]
 pub(crate) enum ProofType {
     Plonk,
     Honk,
     Oink,
     PG,
-    AVM,
+    Avm,
     RollupHonk,
     RootRollupHonk,
     HonkZk,
     PgFinal,
     PgTail,
-    CIVC,
+    Chonk,
 }
 
 pub(crate) const _PROOF_TYPE_ROOT_ROLLUP_HONK: u32 = 6; //keep for reference
