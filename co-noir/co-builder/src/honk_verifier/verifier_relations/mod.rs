@@ -10,12 +10,12 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use crate::accumulate_all_relations;
-use crate::scale_and_batch_all;
-use crate::verifier_relations::memory_relation::MemoryRelation;
-use crate::verifier_relations::memory_relation::MemoryRelationEvals;
-use crate::verifier_relations::non_native_field_relation::NonNativeFieldRelation;
-use crate::verifier_relations::non_native_field_relation::NonNativeFieldRelationEvals;
-use crate::verifier_relations::{
+use crate::honk_verifier::verifier_relations::VerifyAccGetter;
+use crate::honk_verifier::verifier_relations::memory_relation::MemoryRelation;
+use crate::honk_verifier::verifier_relations::memory_relation::MemoryRelationEvals;
+use crate::honk_verifier::verifier_relations::non_native_field_relation::NonNativeFieldRelation;
+use crate::honk_verifier::verifier_relations::non_native_field_relation::NonNativeFieldRelationEvals;
+use crate::honk_verifier::verifier_relations::{
     delta_range_constraint_relation::{
         DeltaRangeConstraintRelation, DeltaRangeConstraintRelationEvals,
     },
@@ -26,13 +26,12 @@ use crate::verifier_relations::{
     poseidon2_internal_relation::{Poseidon2InternalRelation, Poseidon2InternalRelationEvals},
     ultra_arithmetic_relation::{UltraArithmeticRelation, UltraArithmeticRelationEvals},
 };
+use crate::prelude::GenericUltraCircuitBuilder;
+use crate::types::field_ct::FieldCT;
 use ark_ff::AdditiveGroup;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::GenericUltraCircuitBuilder;
-use co_builder::types::field_ct::FieldCT;
-use co_builder::types::gate_separator::GateSeparatorPolynomial;
 use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::HonkProofResult};
 use co_ultrahonk::{co_decider::types::RelationParameters, types::AllEntities};

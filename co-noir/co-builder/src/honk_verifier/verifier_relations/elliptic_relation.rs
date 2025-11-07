@@ -1,11 +1,10 @@
-use crate::impl_relation_evals;
-use crate::verifier_relations::VerifyAccGetter;
-
 use super::Relation;
+use crate::honk_verifier::verifier_relations::VerifyAccGetter;
+use crate::impl_relation_evals;
+use crate::prelude::GenericUltraCircuitBuilder;
+use crate::types::field_ct::FieldCT;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::GenericUltraCircuitBuilder;
-use co_builder::types::field_ct::FieldCT;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
