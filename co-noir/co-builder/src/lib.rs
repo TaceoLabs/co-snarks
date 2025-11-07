@@ -5,6 +5,7 @@ use noir_types::ProgramArtifact;
 use crate::prelude::AcirFormat;
 
 pub(crate) mod acir_format;
+pub(crate) mod honk_verifier;
 pub(crate) mod keys;
 pub mod polynomials;
 pub mod prelude;

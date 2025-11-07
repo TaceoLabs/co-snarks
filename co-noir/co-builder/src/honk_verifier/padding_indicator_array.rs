@@ -1,8 +1,8 @@
+use crate::prelude::GenericUltraCircuitBuilder;
+use crate::types::field_ct::FieldCT;
 use ark_ff::AdditiveGroup;
 use ark_ff::fields::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::GenericUltraCircuitBuilder;
-use co_builder::types::field_ct::FieldCT;
 use co_noir_common::barycentric::Barycentric;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;

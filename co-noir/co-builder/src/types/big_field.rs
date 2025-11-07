@@ -18,7 +18,7 @@ pub(crate) const DEFAULT_MAXIMUM_LIMB: u128 = (1 << NUM_LIMB_BITS) - 1;
 pub(crate) const MAXIMUM_SUMMAND_COUNT: usize = 16;
 
 #[derive(Debug, Default, Clone)]
-pub(crate) struct BigField<F: PrimeField> {
+pub struct BigField<F: PrimeField> {
     pub(crate) binary_basis_limbs: [Limb<F>; NUM_LIMBS],
     pub(crate) prime_basis_limb: FieldCT<F>,
 }
@@ -48,6 +48,7 @@ impl<F: PrimeField> Limb<F> {
 impl<F: PrimeField> BigField<F> {
     pub(crate) const NUM_LIMB_BITS: u32 = 68;
     pub(crate) const NUM_LAST_LIMB_BITS: u32 = 50;
+    pub(crate) const NUM_BN254_SCALARS: u32 = 2;
 
     /// Set the witness indices of the binary basis limbs to public
     ///
@@ -107,7 +108,6 @@ impl<F: PrimeField> BigField<F> {
         }
     }
 
-    #[expect(dead_code)]
     pub(crate) fn is_constant(&self) -> bool {
         self.prime_basis_limb.is_constant()
     }
@@ -150,12 +150,7 @@ impl<F: PrimeField> BigField<F> {
         Self::from_slices(low, high, driver, builder)
     }
 
-    pub(crate) fn from_constant<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<F>,
-    >(
-        value: &BigUint,
-    ) -> Self {
+    pub(crate) fn from_constant(value: &BigUint) -> Self {
         let mut limbs = Vec::with_capacity(NUM_LIMBS);
         let mut shift = 0;
         for _ in 0..NUM_LIMBS {
@@ -308,21 +303,13 @@ impl<F: PrimeField> BigField<F> {
         }
 
         result.prime_basis_limb = prime_limb;
-        builder.range_constrain_two_limbs(
-            limb_0_witness_index,
-            a,
-            NUM_LIMB_BITS as usize,
-            NUM_LIMB_BITS as usize,
-        )?;
+        builder.range_constrain_two_limbs(limb_0_witness_index, a, NUM_LIMB_BITS, NUM_LIMB_BITS)?;
 
-        builder.range_constrain_two_limbs(b, c, NUM_LIMB_BITS as usize, num_last_limb_bits)?;
+        builder.range_constrain_two_limbs(b, c, NUM_LIMB_BITS, num_last_limb_bits)?;
         Ok(result)
     }
 
-    pub(crate) fn from_slices<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<F>,
-    >(
+    pub fn from_slices<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         low_bits_in: FieldCT<F>,
         high_bits_in: FieldCT<F>,
         driver: &mut T,
@@ -659,7 +646,7 @@ impl<F: PrimeField> BigField<F> {
         )?;
         let multiplicand = BigField::conditional_select(
             &is_equal,
-            &BigField::from_constant::<P, T>(&BigUint::one()),
+            &BigField::from_constant(&BigUint::one()),
             &inverse,
             builder,
             driver,
@@ -708,7 +695,7 @@ impl<F: PrimeField> BigField<F> {
             let other_value = other.get_value(builder, driver)?;
             result_value = driver.add_other_acvm_types(&result_value, &other_value);
 
-            return Ok(BigField::from_constant::<P, T>(
+            return Ok(BigField::from_constant(
                 &T::get_public_other_acvm_type(&result_value)
                     .expect("Constants are public")
                     .into_bigint()
@@ -868,7 +855,7 @@ impl<F: PrimeField> BigField<F> {
             let other_value = other.get_value(builder, driver)?;
             result_value = driver.sub_other_acvm_types::<P>(result_value, other_value);
 
-            return Ok(BigField::from_constant::<P, T>(
+            return Ok(BigField::from_constant(
                 &T::get_public_other_acvm_type(&result_value)
                     .expect("Constants are public")
                     .into_bigint()
@@ -1161,7 +1148,7 @@ impl<F: PrimeField> BigField<F> {
         };
 
         if self.is_constant() && other.is_constant() {
-            return Ok(BigField::from_constant::<P, T>(
+            return Ok(BigField::from_constant(
                 &T::get_public_other_acvm_type(&remainder_value)
                     .expect("Constants are public")
                     .into_bigint()
@@ -1258,7 +1245,7 @@ impl<F: PrimeField> BigField<F> {
         let result_value = driver.mul_other_acvm_types(&numerator_sum, &inverse_value)?;
 
         if numerator_constant && denominator.is_constant() {
-            return Ok(BigField::from_constant::<P, T>(
+            return Ok(BigField::from_constant(
                 &T::get_public_other_acvm_type(&result_value)
                     .expect("Constants are public")
                     .into_bigint()
@@ -1660,7 +1647,7 @@ impl<F: PrimeField> BigField<F> {
                 let (quotient, remainder) = driver.div_mod_other_acvm_type(&tmp)?;
 
                 // TODO CESAR: Maybe wrong
-                return Ok(BigField::from_constant::<P, T>(
+                return Ok(BigField::from_constant(
                     &T::get_public_other_acvm_type(&remainder)
                         .expect("Constants are public")
                         .into_bigint()
@@ -1673,7 +1660,7 @@ impl<F: PrimeField> BigField<F> {
                 let (quotient, remainder) = driver.div_mod_other_acvm_type(&tmp)?;
 
                 let mut new_to_add = to_add.to_vec();
-                new_to_add.push(BigField::from_constant::<P, T>(
+                new_to_add.push(BigField::from_constant(
                     // TODO CESAR: Maybe wrong
                     &T::get_public_other_acvm_type(&remainder)
                         .expect("Constants are public")
@@ -1802,7 +1789,7 @@ impl<F: PrimeField> BigField<F> {
 
         // If everything is constant, then we just return the constant result
         if products_constant && sub_constant && divisor.is_constant() {
-            return Ok(BigField::from_constant::<P, T>(
+            return Ok(BigField::from_constant(
                 &T::get_public_other_acvm_type(&result_value)
                     .expect("Constants are public")
                     .into_bigint()

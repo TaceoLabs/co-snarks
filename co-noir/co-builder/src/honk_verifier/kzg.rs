@@ -1,10 +1,10 @@
-use crate::shplemini::BatchOpeningClaim;
-use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::{
+use crate::honk_verifier::shplemini::BatchOpeningClaim;
+use crate::{
     prelude::GenericUltraCircuitBuilder,
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
     types::{big_group::BigGroup, types::PairingPoints},
 };
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},

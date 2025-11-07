@@ -17,6 +17,7 @@ use mpc_net::Network;
 
 pub mod barycentric;
 pub mod co_shplemini;
+pub mod constants;
 pub mod crs;
 pub mod honk_curve;
 pub mod honk_proof;

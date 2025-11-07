@@ -51,7 +51,8 @@ where
 }
 
 impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
-    pub(crate) fn new(x: BigField<F>, y: BigField<F>) -> Self {
+    pub const NUM_BN254_FRS: usize = BigField::<F>::NUM_BN254_SCALARS as usize * 2;
+    pub fn new(x: BigField<F>, y: BigField<F>) -> Self {
         BigGroup {
             x,
             y,

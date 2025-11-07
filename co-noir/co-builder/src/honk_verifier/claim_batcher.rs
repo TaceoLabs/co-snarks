@@ -1,9 +1,9 @@
+use crate::{
+    types::{big_group::BigGroup, field_ct::FieldCT},
+    ultra_builder::GenericUltraCircuitBuilder,
+};
 use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::{
-    prelude::GenericUltraCircuitBuilder,
-    types::{big_group::BigGroup, field_ct::FieldCT},
-};
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},

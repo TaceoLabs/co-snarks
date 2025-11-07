@@ -1,19 +1,18 @@
-use ark_ff::{BigInteger, Field, PrimeField};
-use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::{
+use crate::honk_verifier::recursive_decider_verification_key::RecursiveDeciderVerificationKey;
+use crate::honk_verifier::recursive_decider_verification_key::WitnessCommitments;
+use crate::{
     prelude::GenericUltraCircuitBuilder,
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
     types::field_ct::FieldCT,
 };
+use ark_ff::{BigInteger, Field, PrimeField};
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+
+use co_noir_common::constants::NUM_ALPHAS;
+use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
-};
-use co_ultrahonk::co_decider::types::RelationParameters;
-use ultrahonk::NUM_ALPHAS;
-
-use crate::recursive_decider_verification_key::{
-    RecursiveDeciderVerificationKey, WitnessCommitments,
 };
 
 pub(crate) struct OinkRecursiveVerifier;
@@ -29,14 +28,15 @@ impl OinkRecursiveVerifier {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let circuit_size = verification_key.verification_key.circuit_size.clone();
-        let public_input_size = verification_key.verification_key.num_public_inputs.clone();
-        let pub_inputs_offset = verification_key.verification_key.pub_inputs_offset.clone();
+        // let circuit_size = verification_key.verification_key.circuit_size.clone();
+        let public_input_size = verification_key.vk_and_hash.vk.num_public_inputs.clone();
+        let pub_inputs_offset = verification_key.vk_and_hash.vk.pub_inputs_offset.clone();
 
-        transcript.add_element_frs_to_hash_buffer(
-            "circuit_size".to_owned(),
-            std::slice::from_ref(&circuit_size),
-        );
+        todo!("Hash through transcript");
+        // transcript.add_element_frs_to_hash_buffer(
+        //     "circuit_size".to_owned(),
+        //     std::slice::from_ref(&circuit_size),
+        // );
         transcript.add_element_frs_to_hash_buffer(
             "public_input_size".to_owned(),
             std::slice::from_ref(&public_input_size),
@@ -106,7 +106,7 @@ impl OinkRecursiveVerifier {
             &public_inputs,
             &beta,
             &gamma,
-            &circuit_size,
+            // &circuit_size,
             &pub_inputs_offset,
             builder,
             driver,
@@ -156,7 +156,7 @@ impl OinkRecursiveVerifier {
         public_inputs: &[FieldCT<C::ScalarField>],
         beta: &FieldCT<C::ScalarField>,
         gamma: &FieldCT<C::ScalarField>,
-        domain_size: &FieldCT<C::ScalarField>,
+        // domain_size: &FieldCT<C::ScalarField>,
         offset: &FieldCT<C::ScalarField>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
@@ -190,7 +190,8 @@ impl OinkRecursiveVerifier {
 
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1158): Ensure correct construction of public input
         // delta in the face of increases to virtual size caused by execution trace overflow
-        let n_plus_i = domain_size.add(offset, builder, driver);
+        let n_plus_i = todo!();
+        // domain_size.add(offset, builder, driver);
         let one_plus_i = one.add(offset, builder, driver);
 
         let beta_mul_n_plus_i = beta.multiply(&n_plus_i, builder, driver)?;

@@ -1,21 +1,24 @@
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::{GenericUltraCircuitBuilder, UltraRecursiveVerifierOutput};
-use co_builder::transcript_ct::{TranscriptCT, TranscriptHasherCT};
-use co_builder::types::big_group::BigGroup;
-use co_builder::types::field_ct::FieldCT;
-use co_builder::types::types::PairingPoints;
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
-use ultrahonk::CONST_PROOF_SIZE_LOG_N;
 
-use crate::claim_batcher::{Batch, ClaimBatcher};
-use crate::kzg::KZG;
-use crate::oink_recursive_verifier::OinkRecursiveVerifier;
-use crate::padding_indicator_array::{constrain_log_circuit_size, padding_indicator_array};
-use crate::recursive_decider_verification_key::RecursiveDeciderVerificationKey;
-use crate::shplemini::ShpleminiVerifier;
-use crate::sumcheck::SumcheckVerifier;
 use ark_ff::Field;
+use co_noir_common::{
+    constants::CONST_PROOF_SIZE_LOG_N, honk_curve::HonkCurve, honk_proof::HonkProofResult,
+};
+
+use crate::honk_verifier::padding_indicator_array::padding_indicator_array;
+use crate::{
+    honk_verifier::{
+        claim_batcher::{Batch, ClaimBatcher},
+        kzg::KZG,
+        oink_recursive_verifier::OinkRecursiveVerifier,
+        recursive_decider_verification_key::RecursiveDeciderVerificationKey,
+        shplemini::ShpleminiVerifier,
+        sumcheck::SumcheckVerifier,
+    },
+    prelude::{GenericUltraCircuitBuilder, UltraRecursiveVerifierOutput},
+    transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT},
+    types::{big_group::BigGroup, field_ct::FieldCT},
+};
 
 struct UltraRecursiveVerifier;
 
@@ -51,14 +54,7 @@ impl UltraRecursiveVerifier {
         // Execute Sumcheck Verifier and extract multivariate opening point u = (u_0, ..., u_{d-1}) and purported
         // multivariate evaluations at u
         let padding_indicator_array = padding_indicator_array::<_, _, CONST_PROOF_SIZE_LOG_N>(
-            &key.verification_key.log_circuit_size,
-            builder,
-            driver,
-        )?;
-
-        constrain_log_circuit_size::<_, _, CONST_PROOF_SIZE_LOG_N>(
-            &padding_indicator_array,
-            &key.verification_key.circuit_size,
+            &key.vk_and_hash.vk.log_circuit_size,
             builder,
             driver,
         )?;
@@ -80,7 +76,7 @@ impl UltraRecursiveVerifier {
 
         // Execute Shplemini to produce a batch opening claim subsequently verified by a univariate PCS
         let unshifted_commitments = [
-            key.precomputed_commitments.elements.to_vec(),
+            key.vk_and_hash.vk.precomputed_commitments.elements.to_vec(),
             key.witness_commitments.elements.to_vec(),
         ]
         .concat();

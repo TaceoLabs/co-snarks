@@ -1,14 +1,16 @@
 use crate::acir_format::ProofType;
 use crate::polynomials::polynomial_types::WITNESS_ENTITIES_SIZE;
 use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, VerifyingKeyBarretenberg};
+use crate::types::big_field::BigField;
+use crate::types::big_group::BigGroup;
 use crate::types::types::{PairingPoints, RecursionConstraint};
 use crate::{transcript_ct::TranscriptFieldType, types::field_ct::FieldCT};
 use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
-use ark_ec::pairing::Pairing;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::types::ZeroKnowledge;
 
 pub const HONK_PROOF_PUBLIC_INPUT_OFFSET: u32 = 3;
@@ -19,6 +21,63 @@ pub struct UltraRecursiveVerifierOutput<
 > {
     points_accumulator: PairingPoints<C, T>,
     ipa_proof: Vec<FieldCT<C::ScalarField>>,
+}
+
+pub type PrecomputedCommitments<C, T> = PrecomputedEntities<BigGroup<C, T>>;
+
+pub struct RecursiveVerificationKey<
+    C: HonkCurve<TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+> {
+    pub log_circuit_size: FieldCT<C::ScalarField>,
+    pub num_public_inputs: FieldCT<C::ScalarField>,
+    pub pub_inputs_offset: FieldCT<C::ScalarField>,
+    pub precomputed_commitments: PrecomputedCommitments<C::ScalarField, T>,
+}
+
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
+    RecursiveVerificationKey<C, T>
+{
+    pub fn new(
+        elements: &[FieldCT<C::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<Self> {
+        let log_circuit_size = elements[0].clone();
+        let num_public_inputs = elements[1].clone();
+        let pub_inputs_offset = elements[2].clone();
+        let mut precomputed_commitments = PrecomputedCommitments::default();
+
+        // TACEO TODO: We could batch the is_zero checks here
+        for (des, src) in precomputed_commitments
+            .elements
+            .iter_mut()
+            .zip(elements[3..].chunks(BigGroup::<C::ScalarField, T>::NUM_BN254_FRS))
+        {
+            let [x_lo, x_hi] = [src[0].clone(), src[1].clone()]; //todo florin remove clone
+            let [y_lo, y_hi] = [src[2].clone(), src[3].clone()];
+
+            let sum = FieldCT::default()
+                .add_two(&x_lo, &x_hi, builder, driver)
+                .add_two(&y_lo, &y_hi, builder, driver);
+
+            let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
+            let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
+
+            let mut result = BigGroup::new(x, y);
+
+            let is_zero = sum.is_zero(builder, driver)?;
+            result.set_is_infinity(is_zero);
+            *des = result;
+        }
+
+        Ok(RecursiveVerificationKey {
+            log_circuit_size,
+            num_public_inputs,
+            pub_inputs_offset,
+            precomputed_commitments,
+        })
+    }
 }
 
 impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
@@ -83,6 +142,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                 driver,
             )?;
         }
+
+        let vkey = RecursiveVerificationKey::<C, T>::new(&key_fields, self, driver)?;
 
         todo!("create_honk_recursion_constraints not yet implemented")
     }

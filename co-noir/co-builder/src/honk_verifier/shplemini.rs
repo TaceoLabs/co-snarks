@@ -1,22 +1,20 @@
-use ark_ff::Field;
-use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::{
+use crate::polynomials::polynomial_types::WITNESS_ENTITIES_SIZE;
+use crate::{
+    honk_verifier::claim_batcher::ClaimBatcher,
     prelude::{GenericUltraCircuitBuilder, PRECOMPUTED_ENTITIES_SIZE},
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
     types::{big_group::BigGroup, field_ct::FieldCT},
 };
-use itertools::{interleave, izip};
-use ultrahonk::{
-    NUM_INTERLEAVING_CLAIMS,
-    prelude::{SHIFTED_WITNESS_ENTITIES_SIZE, WITNESS_ENTITIES_SIZE},
-};
-
-use crate::claim_batcher::ClaimBatcher;
 use ark_ff::AdditiveGroup;
+use ark_ff::Field;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::constants::SHIFTED_WITNESS_ENTITIES_SIZE;
 use co_noir_common::{
+    constants::NUM_INTERLEAVING_CLAIMS,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
+use itertools::{interleave, izip};
 pub struct BatchOpeningClaim<
     C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,

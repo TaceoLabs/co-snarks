@@ -484,7 +484,6 @@ impl<F: PrimeField> LogicConstraint<F> {
     }
 }
 
-#[expect(dead_code)]
 pub(crate) struct RecursionConstraint {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
