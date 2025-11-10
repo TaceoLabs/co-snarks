@@ -540,7 +540,12 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<
     ) -> eyre::Result<ChainAddAccumulator<F>> {
         {
             let mut add_accumulator = Vec::new();
-
+            for six_table in &self.six_tables {
+                add_accumulator.push(six_table.element_table[0].clone());
+            }
+            for five_table in &self.five_tables {
+                add_accumulator.push(five_table.element_table[0].clone());
+            }
             for quad_table in &self.quad_tables {
                 add_accumulator.push(quad_table.element_table[0].clone());
             }

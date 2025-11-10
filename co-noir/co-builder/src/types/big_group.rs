@@ -9,10 +9,12 @@ use crate::types::field_ct::WitnessCT;
 use crate::types::plookup::LookupHashMap;
 use crate::types::rom_ram::TwinRomTable;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
-use ark_ec::CurveGroup;
-use ark_ff::PrimeField;
+use ark_ec::{AffineRepr, CurveGroup};
+use ark_ff::Zero;
+use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
+use serde::de;
 
 use super::field_ct::BoolCT;
 
@@ -48,7 +50,11 @@ where
     T: NoirWitnessExtensionProtocol<F>,
 {
     fn default() -> Self {
-        todo!();
+        BigGroup {
+            x: BigField::default(),
+            y: BigField::default(),
+            is_infinity: BoolCT::from(false),
+        }
     }
 }
 
@@ -60,6 +66,27 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             y,
             is_infinity: BoolCT::from(false),
         }
+    }
+
+    pub(crate) fn from_witness<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        point: &P::Affine,
+        driver: &mut T,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) -> eyre::Result<Self> {
+        let (x, y, i) = match point.xy() {
+            Some((x, y)) => (x, y, false),
+            None => (P::BaseField::zero(), P::BaseField::zero(), true),
+        };
+
+        // TODO CESAR: Use affine one when point is infinity
+        Ok(BigGroup {
+            x: BigField::from_witness_other_acvm_type(&x.into(), driver, builder)?,
+            y: BigField::from_witness_other_acvm_type(&y.into(), driver, builder)?,
+            is_infinity: BoolCT::from_witness_ct(
+                WitnessCT::from_acvm_type(F::from(i as u64).into(), builder),
+                builder,
+            ),
+        })
     }
 
     /// Set the witness indices for the x and y coordinates to public
@@ -91,11 +118,30 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         })
     }
 
+    pub(crate) fn from_constant_coordinates<P: CurveGroup<ScalarField = F>>(
+        x: &BigUint,
+        y: &BigUint,
+        is_infinity: bool,
+    ) -> eyre::Result<Self> {
+        Ok(BigGroup {
+            x: BigField::from_constant(x),
+            y: BigField::from_constant(y),
+            is_infinity: BoolCT::from(is_infinity),
+        })
+    }
+
+    pub(crate) fn from_constant_affine<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        native_point: &P::Affine,
+    ) -> eyre::Result<Self> {
+        let (x, y, i) = match native_point.xy() {
+            Some((x, y)) => (x.into(), y.into(), false),
+            None => (BigUint::from(0u64), BigUint::from(0u64), true),
+        };
+        BigGroup::from_constant_coordinates::<P>(&x, &y, i)
+    }
+
     /**
      * @brief Generic batch multiplication that works for all elliptic curve types.
-     *
-     * @details Implementation is identical to `bn254_endo_batch_mul` but WITHOUT the endomorphism transforms OR support for
-     * short scalars See `bn254_endo_batch_mul` for description of algorithm.
      *
      * @tparam C The circuit builder type.
      * @tparam Fq The field of definition of the points in `_points`.
@@ -106,82 +152,245 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
      * @param max_num_bits The max of the bit lengths of the scalars.
      * @param with_edgecases Use when points are linearly dependent. Randomises them.
      * @return element<C, Fq, Fr, G>
+     *
+     * @details This is an implementation of the Strauss algorithm for multi-scalar-multiplication (MSM).
+     *          It uses the Non-Adjacent Form (NAF) representation of scalars and ROM lookups to
+     *          efficiently compute the MSM. The algorithm processes 4 bits of each scalar per iteration,
+     *          accumulating the results in an accumulator point. The first NAF entry (I, see below) is used to
+     *          -------------------------------
+     *          Point  NAF(scalar)
+     *          G1    [+1, -1, -1, -1, +1, ...]
+     *          G2    [+1, +1, -1, -1, +1, ...]
+     *          G3    [-1, +1, +1, -1, +1, ...]
+     *                  ↑  ↑____________↑
+     *                  I    Iteration 1
+     *          -------------------------------
+     *          select the initial point to add to the offset generator. Thereafter, we process 4 NAF entries
+     *          per iteration. For one NAF entry, we lookup the corresponding points to add, and accumulate
+     *          them using `chain_add_accumulator`. After processing 4 NAF entries, we perform a single
+     *          `multiple_montgomery_ladder` call to update the accumulator. For example, in iteration 1 above,
+     *          for the second NAF entry, the lookup output is:
+     *          table(-1, +1, +1) = (-G1 + G2 + G3)
+     *          This lookup output is accumulated with the lookup outputs from the other 3 NAF entries.
      */
     pub fn batch_mul<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         points: &[Self],
         scalars: &[FieldCT<F>],
         max_num_bits: usize,
+        with_edgecases: bool,
+        masking_scalar: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let (points, scalars) =
+        // Sanity checks input sizes
+        debug_assert!(
+            points.len() > 0,
+            "biggroup batch_mul: no points provided for batch multiplication"
+        );
+        debug_assert_eq!(
+            points.len(),
+            scalars.len(),
+            "biggroup batch_mul: points and scalars have different lengths"
+        );
+
+        // Replace (∞, scalar) pairs by the pair (G, 0).
+        let (mut points, mut scalars) =
             BigGroup::handle_points_at_infinity(points, scalars, builder, driver)?;
 
-        // TODO TACEO: Origin tags?
-
-        // Perform goblinized batched mul if available; supported only for BN254
-        // with_edgecases == true
-        let (mut points, scalars) = BigGroup::mask_points(&points, &scalars, builder, driver)?;
-
-        assert_eq!(points.len(), scalars.len());
-        let mut point_table = BatchLookupTablePlookup::new(&points, builder, driver)?;
-
-        let mut naf_entries = Vec::with_capacity(points.len());
-        for i in 0..points.len() {
-            naf_entries.push(Self::compute_naf(
-                &scalars[i],
-                max_num_bits,
-                builder,
-                driver,
-            )?);
+        // If with_edgecases is false, masking_scalar must be constant and equal to 1 (as it is unused).
+        if !with_edgecases {
+            debug_assert!(
+                masking_scalar.is_constant()
+                    && masking_scalar.get_value(builder, driver) == F::ONE.into(),
+            );
         }
 
-        let mut offset_generators = Self::compute_offset_generators::<P>(max_num_bits)?;
+        if with_edgecases {
+            // If points are linearly dependent, we randomise them using a masking scalar.
+            // We do this to ensure that the x-coordinates of the points are all distinct. This is required
+            // while creating the ROM lookup table with the points.
+            (points, scalars) =
+                BigGroup::mask_points(&mut points, &scalars, &masking_scalar, builder, driver)?;
+        }
 
-        let mut accumulator = Self::chain_add_end(
-            Self::chain_add(
-                &mut offset_generators.0,
-                &mut point_table.get_chain_initial_entry(builder, driver)?,
+        debug_assert_eq!(
+            points.len(),
+            scalars.len(),
+            "biggroup batch_mul: points and scalars size mismatch after handling edgecases"
+        );
+
+        // Separate out zero scalars and corresponding points (because NAF(0) = NAF(modulus) which is 254 bits long)
+        // Also add the last point and scalar to big_points and big_scalars (because its a 254-bit scalar)
+        // We do this only if max_num_bits != 0 (i.e. we are not forced to use 254 bits anyway)
+        let original_size = scalars.len();
+        let mut big_scalars = Vec::new();
+        let mut big_points = Vec::new();
+        let mut small_scalars = Vec::new();
+        let mut small_points = Vec::new();
+        for i in 0..original_size {
+            if max_num_bits == 0 {
+                big_points.push(points[i].clone());
+                big_scalars.push(scalars[i].clone());
+            } else {
+                let is_last_scalar_big = (i == original_size - 1) && with_edgecases;
+                let scalar_value = scalars[i].get_value(builder, driver);
+
+                // TODO CESAR: But here we are not checking if the scalar is constant
+                if scalar_value == F::zero().into() || is_last_scalar_big {
+                    big_points.push(points[i].clone());
+                    big_scalars.push(scalars[i].clone());
+                } else {
+                    small_points.push(points[i].clone());
+                    small_scalars.push(scalars[i].clone());
+                }
+            }
+        }
+
+        debug_assert_eq!(
+            original_size,
+            small_points.len() + big_points.len(),
+            "biggroup batch_mul: points size mismatch after separating big scalars"
+        );
+        debug_assert_eq!(
+            big_points.len(),
+            big_scalars.len(),
+            "biggroup batch_mul: big points and scalars size mismatch after separating big scalars"
+        );
+        debug_assert_eq!(
+            small_points.len(),
+            small_scalars.len(),
+            "biggroup batch_mul: small points and scalars size mismatch after separating big scalars"
+        );
+
+        let max_num_bits_in_field = F::MODULUS_BIT_SIZE as usize;
+        let mut accumulator = BigGroup::default();
+        if !big_points.is_empty() {
+            // Process big scalars separately
+            let big_result = BigGroup::process_strauss_msm_rounds(
+                &mut big_points,
+                &big_scalars,
+                max_num_bits_in_field,
                 builder,
                 driver,
-            )?,
+            )?;
+            accumulator = big_result;
+        }
+
+        if !small_points.is_empty() {
+            // Process small scalars
+            let effective_max_num_bits = if max_num_bits == 0 {
+                max_num_bits_in_field
+            } else {
+                max_num_bits
+            };
+            let mut small_result = BigGroup::process_strauss_msm_rounds(
+                &mut small_points,
+                &small_scalars,
+                effective_max_num_bits,
+                builder,
+                driver,
+            )?;
+            accumulator = if big_points.len() > 0 {
+                accumulator.add(&mut small_result, builder, driver)?
+            } else {
+                small_result
+            };
+        }
+
+        Ok(accumulator)
+    }
+
+    fn process_strauss_msm_rounds<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        points: &mut [Self],
+        scalars: &[FieldCT<F>],
+        max_num_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        // Sanity checks
+        debug_assert!(
+            points.len() > 0,
+            "biggroup process_strauss_msm_rounds: no points provided for batch multiplication"
+        );
+        debug_assert_eq!(
+            points.len(),
+            scalars.len(),
+            "biggroup process_strauss_msm_rounds: points and scalars have different lengths"
+        );
+
+        // TACEO TODO: Check that all scalars are in range?
+
+        // Constant parameters
+        let num_rounds = max_num_bits;
+        let msm_size = scalars.len();
+
+        // Compute ROM lookup table for points. Example if we have 3 points G1, G2, G3:
+        // ┌───────┬─────────────────┐
+        // │ Index │ Point           │
+        // ├───────┼─────────────────┤
+        // │   0   │  G1 + G2 + G3   │
+        // │   1   │  G1 + G2 - G3   │
+        // │   2   │  G1 - G2 + G3   │
+        // │   3   │  G1 - G2 - G3   │
+        // │   4   │ -G1 + G2 + G3   │
+        // │   5   │ -G1 + G2 - G3   │
+        // │   6   │ -G1 - G2 + G3   │
+        // │   7   │ -G1 - G2 - G3   │
+        // └───────┴─────────────────┘
+        let mut point_table = BatchLookupTablePlookup::new(&points, builder, driver)?;
+
+        // Compute NAF representation of scalars
+        let mut naf_entries = Vec::with_capacity(msm_size);
+        for i in 0..msm_size {
+            naf_entries.push(Self::compute_naf(&scalars[i], num_rounds, builder, driver)?);
+        }
+
+        // We choose a deterministic offset generator based on the number of rounds.
+        // We compute both the initial and final offset generators: G_offset, 2ⁿ⁻¹ * G_offset.
+        let (mut offset_generator_start, mut offset_generator_end) =
+            Self::compute_offset_generators::<P>(num_rounds)?;
+
+        // Initialize accumulator with initial offset generator + first NAF column
+        let mut inital_entry = point_table.get_chain_initial_entry(builder, driver)?;
+        let tmp = Self::chain_add(
+            &mut offset_generator_start,
+            &mut inital_entry,
             builder,
             driver,
         )?;
+        let mut accumulator = Self::chain_add_end(tmp, builder, driver)?;
 
-        let num_rounds = if max_num_bits == 0 {
-            (P::ScalarField::MODULUS_BIT_SIZE + 1) as usize
-        } else {
-            max_num_bits
-        };
+        // Process 4 NAF entries per iteration (for the remaining (num_rounds - 1) rounds)
         let num_rounds_per_iteration = 4;
-        let mut num_iterations = num_rounds / num_rounds_per_iteration;
-        num_iterations += if num_rounds % num_rounds_per_iteration != 0 {
-            1
-        } else {
-            0
-        };
+        let num_iterations =
+            ((num_rounds - 1) as u64).div_ceil(num_rounds_per_iteration as u64) as usize;
         let num_rounds_per_final_iteration =
             (num_rounds - 1) - ((num_iterations - 1) * num_rounds_per_iteration);
 
         for i in 0..num_iterations {
-            let mut nafs = Vec::with_capacity(points.len());
-            let mut to_add = Vec::with_capacity(points.len());
+            let mut to_add = Vec::with_capacity(msm_size);
             let inner_num_rounds = if i != num_iterations - 1 {
                 num_rounds_per_iteration
             } else {
                 num_rounds_per_final_iteration
             };
+
             for j in 0..inner_num_rounds {
-                for k in 0..points.len() {
-                    nafs.push(naf_entries[k][i * num_rounds_per_iteration + j + 1].clone());
+                let mut nafs = vec![BoolCT::from(false); msm_size];
+                for k in 0..msm_size {
+                    nafs[k] = naf_entries[k][i * num_rounds_per_iteration + j + 1].clone();
                 }
                 to_add.push(point_table.get_chain_add_accumulator(&nafs, builder, driver)?);
             }
+
+            // Once we have looked-up all points from the four NAF columns, we update the accumulator as:
+            // accumulator = 2.(2.(2.(2.accumulator + to_add[0]) + to_add[1]) + to_add[2]) + to_add[3]
+            //             = 2⁴.accumulator + 2³.to_add[0] + 2².to_add[1] + 2¹.to_add[2] + to_add[3]
             accumulator = accumulator.multiple_montgomery_ladder(&mut to_add, builder, driver)?;
         }
 
-        for i in 0..points.len() {
+        // Subtract the skew factors (if any)
+        for i in 0..msm_size {
             let skew = accumulator.sub(&mut points[i], builder, driver)?;
             let out_x = accumulator.x.conditional_select(
                 &skew.x,
@@ -198,7 +407,9 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             )?;
             accumulator = BigGroup::new(out_x, out_y);
         }
-        accumulator.sub(&mut offset_generators.1, builder, driver)
+
+        // Subtract the scaled offset generator
+        accumulator.sub(&mut offset_generator_end, builder, driver)
     }
 
     /**
@@ -424,13 +635,16 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         Ok(BigGroup::new(x_out, y_out))
     }
 
-    pub fn compute_offset_generators<P: CurveGroup<ScalarField = F>>(
+    pub fn compute_offset_generators<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         num_rounds: usize,
     ) -> eyre::Result<(Self, Self)> {
         let offset_generator = offset_generator::<P>("biggroup batch mul offset generator");
         let offset_multiplier = F::from(2u64).pow([(num_rounds - 1) as u64]);
         let offset_generator_end = (offset_generator * offset_multiplier).into();
-        todo!("convert to BigGroup")
+        Ok((
+            BigGroup::from_constant_affine::<P>(&offset_generator)?,
+            BigGroup::from_constant_affine::<P>(&offset_generator_end)?,
+        ))
     }
 
     pub fn compute_naf<P: CurveGroup<ScalarField = F>>(
@@ -439,20 +653,27 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Vec<BoolCT<F, T>>> {
-        // We are not handling the case of odd bit lengths here.
-        assert!(max_num_bits % 2 == 0);
-
         let num_rounds = if max_num_bits == 0 {
-            (P::ScalarField::MODULUS_BIT_SIZE + 1) as usize
+            (P::ScalarField::MODULUS_BIT_SIZE) as usize
         } else {
             max_num_bits
         };
 
         let scalar_value = scalar.get_value(builder, driver);
-        let naf_entries_acvm_type = driver.compute_naf_entries(&scalar_value, max_num_bits)?;
-        let mut naf_entries = Vec::with_capacity(num_rounds + 1);
+        let naf_entries_acvm_type = driver.compute_naf_entries(&scalar_value, num_rounds)?;
+
+        // NAF representation consists of num_rounds bits and a skew bit.
+        // Given a scalar k, we compute the NAF representation as follows:
+        //
+        // k = -skew + ₀∑ⁿ⁻¹ (1 - 2 * naf_i) * 2^i
+        //
+        // where naf_i = (1 - k_{i + 1}) ∈ {0, 1} and k_{i + 1} is the (i + 1)-th bit of the scalar k.
+        // If naf_i = 0, then the i-th NAF entry is +1, otherwise it is -1. See the README for more details.
+        //
+        let mut naf_entries = vec![BoolCT::from(false); num_rounds + 1];
+        // TODO CESAR: Use range constraint
         naf_entries[num_rounds] = BoolCT::from_witness_ct(
-            WitnessCT::from_acvm_type(naf_entries_acvm_type[num_rounds].clone(), builder),
+            WitnessCT::from_acvm_type(naf_entries_acvm_type[0].clone(), builder),
             builder,
         );
 
@@ -462,27 +683,32 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             // range constraint per bool, and not a full 1-bit range gate
             // TODO CESAR: Check if this is correct
             let bit = BoolCT::from_witness_ct(
-                WitnessCT::from_acvm_type(
-                    naf_entries_acvm_type[num_rounds - i - 1].clone(),
-                    builder,
-                ),
+                WitnessCT::from_acvm_type(naf_entries_acvm_type[i + 1].clone(), builder),
                 builder,
             );
 
             builder.create_new_range_constraint(bit.witness_index, 1);
+            naf_entries[num_rounds - 1 - i] = bit;
         }
-        naf_entries[0] = BoolCT::from(false);
+
+        // The most significant NAF entry is always (+1) as we are working with scalars < 2^{max_num_bits}.
+        // Recall that true represents (-1) and false represents (+1).
+        naf_entries[0] = BoolCT::from_witness_ct(
+            WitnessCT::from_acvm_type(F::zero().into(), builder),
+            builder,
+        );
+        // TODO CESAR: Range constraint
 
         // Validate correctness of NAF
         // TODO CESAR: Fr is composite?
         let mut accumulators = Vec::with_capacity(num_rounds + 1);
-        let minus_two = FieldCT::from_witness(F::from(2u64).into(), builder);
-        let one = FieldCT::from_witness(F::ONE.into(), builder);
+        let minus_two = FieldCT::from(F::from(2u64));
+        let one = FieldCT::from(F::one());
         for i in 0..num_rounds {
             // bit = 1 - 2 * naf
-            let shift = FieldCT::from_witness(F::from(1u64 << (2 * i as u32)).into(), builder);
+            let shift = FieldCT::from(F::from(BigUint::one() << i));
 
-            let entry = naf_entries[naf_entries.len() - 2 - i]
+            let entry = naf_entries[num_rounds - 1 - i]
                 .to_field_ct(driver)
                 .multiply(&minus_two, builder, driver)?
                 .add(&one, builder, driver)
@@ -864,9 +1090,10 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
      * doubling the point every time, we ensure that no +-1 combination of 6 sequential elements run into edgecases, unless
      * the points are deliberately constructed to trigger it.
      */
-    fn mask_points<P: CurveGroup<ScalarField = F>>(
-        points: &[Self],
+    fn mask_points<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        points: &mut [Self],
         scalars: &[FieldCT<F>],
+        masking_scalar: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<(Vec<Self>, Vec<FieldCT<F>>)> {
@@ -874,58 +1101,49 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let mut masked_scalars = Vec::new();
 
         debug_assert!(points.len() == scalars.len());
-        let mut running_scalar = F::ONE;
 
         // Get the offset generator G_offset in native and in-circuit form
         let native_offset_generator = offset_generator::<P>("biggroup table offset generator");
-        let generator_coefficient = F::from(2u64).pow([points.len() as u64]);
-        let generator_coefficient_inverse = generator_coefficient
-            .inverse()
-            .expect("Generator coefficient should have an inverse");
+        let offset_generator_element =
+            BigGroup::from_witness(&native_offset_generator, driver, builder)?;
 
-        let mut last_scalar = FieldCT::from_witness(F::ZERO.into(), builder);
+        // Compute initial point to be added: (δ)⋅G_offset
+        let mut running_point =
+            offset_generator_element.scalar_mul(masking_scalar, 128, builder, driver)?;
+
+        // Start the running scalar at 1
+        let mut running_scalar = FieldCT::from(F::ONE);
+        let mut last_scalar = FieldCT::from(F::ZERO);
 
         // For each point and scalar
-        for (point, scalar) in points.iter().zip(scalars.iter()) {
+        for (point, scalar) in points.iter_mut().zip(scalars.iter()) {
             masked_scalars.push(scalar.clone());
 
             // Convert point into point + 2ⁱ⋅G_offset
-            masked_points.push(point.add_native_point(
-                &(native_offset_generator * running_scalar).into(),
-                builder,
-                driver,
-            )?);
+            masked_points.push(point.add(&mut running_point, builder, driver)?);
 
-            // Add \frac{2ⁱ⋅scalar}{2ⁿ} to the last scalar
-            let tmp = FieldCT::from_witness(
-                (running_scalar * generator_coefficient_inverse).into(),
-                builder,
-            );
-            last_scalar.add_assign(&scalar.multiply(&tmp, builder, driver)?, builder, driver);
+            // Add 2ⁱ⋅scalar_i to the last scalar
+            let tmp = scalar.multiply(&running_scalar, builder, driver)?;
+            last_scalar = last_scalar.add(&tmp, builder, driver);
 
-            // Double the running_scalar
-            running_scalar *= F::from(2u64);
+            // Double the running scalar and point for next iteration
+            running_scalar.add_assign(&running_scalar.clone(), builder, driver);
+
+            // TODO CESAR: Optimize this to use point.dbl()
+            running_point = running_point.add(&mut running_point.clone(), builder, driver)?;
         }
 
         // Add a scalar -(<(1,2,4,...,2ⁿ⁻¹ ),(scalar₀,...,scalarₙ₋₁)> / 2ⁿ)
+        let n = points.len();
+        let two_power_n = F::from(BigUint::one() << n);
+        let two_power_n_inv = two_power_n.inverse().expect("Scalar inversion failed");
+        last_scalar = last_scalar.multiply(&FieldCT::from(two_power_n_inv), builder, driver)?;
         masked_scalars.push(last_scalar.neg());
 
-        // TODO CESAR: Fr is composite?
-
-        // Add in-circuit G_offset to points
-        let g_offset = native_offset_generator * generator_coefficient;
-        masked_points.push(todo!());
+        // Add in-circuit 2ⁿ.(δ.G_offset) to points
+        masked_points.push(running_point);
 
         Ok((masked_points, masked_scalars))
-    }
-
-    fn add_native_point<P: CurveGroup<ScalarField = F>>(
-        &self,
-        native_point_to_add: &P::Affine,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<Self> {
-        todo!();
     }
 
     /**
@@ -989,6 +1207,56 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         }
 
         return Ok((new_points, new_scalars));
+    }
+
+    /// Implements scalar multiplication that supports short scalars.
+    /// For multiple scalar multiplication use `batch_mul` to save gates.
+    /// `scalar` is a field element. If `max_num_bits` > 0, the length of the scalar must not exceed `max_num_bits`.
+    /// `max_num_bits` should be even and < 254. Default value 0 corresponds to unspecified scalar length.
+    pub fn scalar_mul<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        scalar: &FieldCT<F>,
+        max_num_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        // Ensure max_num_bits is even
+        assert!(max_num_bits % 2 == 0);
+
+        // Check if the point is at infinity
+        let is_point_at_infinity = self.is_infinity.clone();
+
+        // Use batch_mul for single scalar multiplication
+        let mut result = Self::batch_mul(
+            &[self.clone()],
+            &[scalar.clone()],
+            max_num_bits,
+            false,
+            &FieldCT::from(F::ONE),
+            builder,
+            driver,
+        )?;
+
+        // If the input point is at infinity, propagate its coordinates and infinity flag
+        let x = BigField::conditional_assign(
+            &is_point_at_infinity,
+            &mut self.x.clone(),
+            &mut result.x,
+            builder,
+            driver,
+        )?;
+        let y = BigField::conditional_assign(
+            &is_point_at_infinity,
+            &mut self.y.clone(),
+            &mut result.y,
+            builder,
+            driver,
+        )?;
+
+        let mut out = Self::new(x, y);
+        out.is_infinity = is_point_at_infinity;
+
+        Ok(out)
     }
 
     /*
@@ -1130,72 +1398,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             is_infinity: BoolCT::from(false),
         })
     }
-
-    pub fn scalar_mul<P: CurveGroup<ScalarField = F>>(
-        &self,
-        scalar: &FieldCT<F>,
-        max_num_bits: usize,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<Self> {
-        debug_assert_eq!(max_num_bits % 2, 0);
-        /*
-         *
-         * Let's say we have some curve E defined over a field Fq. The order of E is p, which is prime.
-         *
-         * Now lets say we are constructing a SNARK circuit over another curve E2, whose order is r.
-         *
-         * All of our addition / multiplication / custom gates are going to be evaluating low degree multivariate
-         * polynomials modulo r.
-         *
-         * E.g. our addition/mul gate (for wires a, b, c and selectors q_m, q_l, q_r, q_o, q_c) is:
-         *
-         *  q_m * a * b + q_l * a + q_r * b + q_o * c + q_c = 0 mod r
-         *
-         * We want to construct a circuit that evaluates scalar multiplications of curve E. Where q > r and p > r.
-         *
-         * i.e. we need to perform arithmetic in one prime field, using prime field arithmetic in a completely
-         *different prime field.
-         *
-         * To do *this*, we need to emulate a binary (or in our case quaternary) number system in Fr, so that we can
-         * use the binary/quaternary basis to emulate arithmetic in Fq. Which is very messy. See bigfield.hpp for
-         *the specifics.
-         */
-
-        let num_rounds = if max_num_bits == 0 {
-            P::ScalarField::MODULUS_BIT_SIZE as usize + 1
-        } else {
-            max_num_bits
-        };
-
-        let mut result: Self = todo!(); //if max_num_bits != 0 {
-        //     // The case of short scalars
-        // element::bn254_endo_batch_mul({}, {}, { *this }, { scalar }, num_rounds);
-        // } else {
-        //     // The case of arbitrary length scalars
-        // element::bn254_endo_batch_mul({ *this }, { scalar }, {}, {}, num_rounds);
-        // };
-
-        // Handle point at infinity
-        result.x = BigField::conditional_assign(
-            &self.is_infinity,
-            &mut self.x.clone(),
-            &mut result.x,
-            builder,
-            driver,
-        )?;
-        result.y = BigField::conditional_assign(
-            &self.is_infinity,
-            &mut self.y.clone(),
-            &mut result.y,
-            builder,
-            driver,
-        )?;
-
-        result.set_is_infinity(self.is_infinity);
-
-        Ok(result)
-    }
 }
 
 pub(crate) struct ChainAddAccumulator<F: PrimeField> {
@@ -1210,13 +1412,16 @@ pub(crate) struct ChainAddAccumulator<F: PrimeField> {
 mod tests {
     use ark_bn254::{Fq, Fr, G1Affine};
     use ark_ec::{AffineRepr, CurveGroup};
-    use ark_ff::UniformRand;
+    use ark_ff::One;
+    use ark_ff::Zero;
+    use ark_ff::{PrimeField, UniformRand};
     use co_acvm::PlainAcvmSolver;
+    use num_bigint::BigUint;
 
     use crate::{
         prelude::GenericUltraCircuitBuilder,
         transcript_ct::Bn254G1,
-        types::{big_field::BigField, big_group::BigGroup},
+        types::{big_field::BigField, big_group::BigGroup, field_ct::FieldCT},
     };
 
     fn affine_to_biggroup(
@@ -1251,7 +1456,7 @@ mod tests {
     }
 
     #[test]
-    fn test_biggroup_add_sub() {
+    fn test_add_sub() {
         let mut rng = rand::thread_rng();
         let builder = &mut GenericUltraCircuitBuilder::<Bn254G1, PlainAcvmSolver<Fr>>::new(1);
         let driver = &mut PlainAcvmSolver::<Fr>::new();
@@ -1285,5 +1490,83 @@ mod tests {
 
         assert_eq!(add_wit_affine, point_add.into_affine());
         assert_eq!(sub_wit_affine, point_sub.into_affine());
+    }
+
+    #[test]
+    fn test_compute_naf() {
+        let mut rng = rand::thread_rng();
+        let builder = &mut GenericUltraCircuitBuilder::<Bn254G1, PlainAcvmSolver<Fr>>::new(1);
+        let driver = &mut PlainAcvmSolver::<Fr>::new();
+
+        for length in 2..254 {
+            let mut scalar_biguint: BigUint = Fr::rand(&mut rng).into();
+            scalar_biguint = scalar_biguint >> (256 - length);
+
+            // NAF with short scalars doesn't handle 0
+            if scalar_biguint == BigUint::from(0u64) {
+                scalar_biguint = BigUint::one();
+            }
+
+            let scalar_field = FieldCT::from(Fr::from(scalar_biguint.clone()));
+
+            let naf = BigGroup::<Fr, PlainAcvmSolver<Fr>>::compute_naf(
+                &scalar_field,
+                length,
+                builder,
+                driver,
+            )
+            .unwrap();
+
+            // scalar = -naf[L] + \sum_{i=0}^{L-1}(1-2*naf[i]) 2^{L-1-i}
+            let mut reconstructed_scalar = Fr::zero();
+            for i in 0..length {
+                reconstructed_scalar += (Fr::one() - Fr::from(2u64) * naf[i].get_value(driver))
+                    * Fr::from(BigUint::one() << (length - 1 - i) as u32);
+            }
+
+            reconstructed_scalar -= Fr::from(naf[length].get_value(driver));
+            assert_eq!(
+                reconstructed_scalar,
+                Fr::from(scalar_biguint),
+                "Failed for length {}",
+                length
+            );
+        }
+    }
+
+    #[test]
+    fn test_batch_mul() {
+        let mut rng = rand::thread_rng();
+        let builder = &mut GenericUltraCircuitBuilder::<Bn254G1, PlainAcvmSolver<Fr>>::new(100);
+        let driver = &mut PlainAcvmSolver::<Fr>::new();
+
+        let num_points = 5;
+        let mut points = Vec::new();
+        let mut scalars = Vec::new();
+        let mut expected_result = G1Affine::zero();
+
+        for _ in 0..num_points {
+            let point = G1Affine::rand(&mut rng);
+            let scalar = Fr::rand(&mut rng);
+
+            expected_result = (expected_result + point * scalar).into_affine();
+
+            points.push(affine_to_biggroup(&point, builder, driver, true));
+            scalars.push(FieldCT::from(scalar));
+        }
+
+        let result = BigGroup::batch_mul(
+            &points,
+            &scalars,
+            0,
+            false,
+            &FieldCT::from(Fr::one()),
+            builder,
+            driver,
+        )
+        .unwrap();
+        let result_affine = biggroup_to_affine(&result, driver, builder);
+
+        assert_eq!(result_affine, expected_result);
     }
 }

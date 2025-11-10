@@ -550,8 +550,9 @@ impl<F: PrimeField> TwinRomTable<F> {
 
         // TODO CESAR: Check bounds
 
+        let normalized_witness_index = index.normalize(builder, driver).get_witness_index();
         let output_indices =
-            builder.read_rom_array_pair(self.rom_id, index.get_witness_index(), driver)?;
+            builder.read_rom_array_pair(self.rom_id, normalized_witness_index, driver)?;
 
         let pair = [
             FieldCT::from_witness_index(output_indices[0]),

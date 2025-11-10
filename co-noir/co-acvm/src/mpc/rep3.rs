@@ -5,7 +5,7 @@ use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use co_noir_types::Rep3Type;
-use core::{num, panic};
+use core::panic;
 use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
@@ -17,23 +17,19 @@ use mpc_core::protocols::rep3::{
     Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion,
     network::Rep3NetworkExt, pointshare, yao,
 };
-use mpc_core::protocols::rep3_ring::arithmetic::mul;
-use mpc_core::protocols::rep3_ring::casts::field_to_ring_a2b_many;
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
-use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512};
-use mpc_core::protocols::rep3_ring::yao::ring_div_by_public;
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
-use rayon::{prelude::*, vec};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::any::TypeId;
 use std::array;
 use std::marker::PhantomData;
-use std::ops::{Add, BitXor};
+use std::ops::BitXor;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
