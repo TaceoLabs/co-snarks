@@ -1,8 +1,9 @@
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, MontConfig, One, PrimeField};
+use ark_ff::{BigInteger, Field, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
+use co_noir_common::utils::Utils;
 use core::panic;
 use libaes::Cipher;
 use mpc_core::{
@@ -14,7 +15,6 @@ use num_bigint::BigUint;
 use rand::thread_rng;
 use std::any::TypeId;
 use std::marker::PhantomData;
-
 pub struct PlainAcvmSolver<F: PrimeField> {
     plain_lut: PlainLookupTableProvider<F>,
     phantom_data: PhantomData<F>,
@@ -261,6 +261,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn get_public(a: &Self::AcvmType) -> Option<F> {
+        Some(*a)
+    }
+
+    fn get_public_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::BaseField> {
         Some(*a)
     }
 
@@ -523,6 +529,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> eyre::Result<Self::AcvmType> {
+        Ok(Self::ArithmeticShare::from(a == b))
+    }
+
+    fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &Self::OtherAcvmType<C>,
+        b: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::AcvmType> {
         Ok(Self::ArithmeticShare::from(a == b))
     }
 
@@ -905,5 +919,157 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare {
         *value
+    }
+
+    fn compute_naf_entries(
+        &mut self,
+        scalar: &Self::AcvmType,
+        max_num_bits: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        todo!()
+    }
+
+    fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        lhs + rhs
+    }
+
+    fn sub_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        lhs - rhs
+    }
+
+    fn inverse_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        Ok(a.inverse()
+            .ok_or_else(|| eyre::eyre!("Element has no inverse"))?)
+    }
+
+    fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        limbs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        Ok(Utils::field_limbs_to_biguint::<_, 4, 68>(limbs).into())
+    }
+
+    fn other_acvm_type_to_acvm_type_limbs<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]> {
+        Ok(Utils::biguint_to_field_limbs::<_, NUM_LIMBS, LIMB_BITS>(
+            &input.into_bigint().into(),
+        ))
+    }
+
+    // TODO CESAR: Make all these generic over the number of limbs and limb size
+    fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> [Self::AcvmType; 4] {
+        let lhs_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(lhs);
+        let rhs_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(rhs);
+
+        let sum = lhs_as_biguint + rhs_as_biguint;
+
+        Utils::biguint_to_field_limbs::<_, 4, 68>(&sum)
+    }
+
+    fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        let lhs_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(lhs);
+        let rhs_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(rhs);
+
+        let modulus: BigUint = C::BaseField::MODULUS.into();
+
+        let diff = if lhs_as_biguint >= rhs_as_biguint {
+            &lhs_as_biguint - &rhs_as_biguint
+        } else {
+            &lhs_as_biguint + &modulus - &rhs_as_biguint
+        };
+
+        Ok(Utils::biguint_to_field_limbs::<_, 4, 68>(&diff))
+    }
+
+    fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        let lhs_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(lhs);
+        let rhs_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(rhs);
+
+        let modulus: BigUint = C::BaseField::MODULUS.into();
+
+        let product = (&lhs_as_biguint * &rhs_as_biguint) % &modulus;
+
+        Ok(Utils::biguint_to_field_limbs::<_, 4, 68>(&product))
+    }
+
+    fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        let a_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(a);
+
+        let modulus: BigUint = C::BaseField::MODULUS.into();
+
+        let inv = a_as_biguint.modpow(&(modulus.clone() - BigUint::from(2u64)), &modulus);
+
+        Ok(Utils::biguint_to_field_limbs::<_, 4, 68>(&inv))
+    }
+
+    fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        let a_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(a);
+
+        let modulus: BigUint = C::BaseField::MODULUS.into();
+
+        let quotient = &a_as_biguint / &modulus;
+        let remainder = &a_as_biguint % &modulus;
+
+        let quotient_limbs = Utils::biguint_to_field_limbs::<_, 4, 68>(&quotient);
+
+        Ok((quotient_limbs, Self::OtherAcvmType::<C>::from(remainder)))
+    }
+
+    fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+        b: &[Self::AcvmType; 4],
+        to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        let a_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(a);
+        let b_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(b);
+        let to_add_as_biguint = to_add.iter().fold(BigUint::zero(), |acc, x| {
+            acc + Utils::field_limbs_to_biguint::<_, 4, 68>(x)
+        });
+
+        let modulus: BigUint = C::BaseField::MODULUS.into();
+
+        let mul = (a_as_biguint * b_as_biguint) + to_add_as_biguint;
+        let remainder = &mul % &modulus;
+        let quotient = &mul / &modulus;
+
+        let quotient_limbs = Utils::biguint_to_field_limbs::<_, 4, 68>(&quotient);
+
+        Ok((quotient_limbs, Self::OtherAcvmType::<C>::from(remainder)))
     }
 }

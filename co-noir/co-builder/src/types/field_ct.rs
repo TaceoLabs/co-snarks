@@ -1805,7 +1805,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
         }
     }
 
-    fn and<P: CurveGroup<ScalarField = F>>(
+    pub(crate) fn and<P: CurveGroup<ScalarField = F>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1913,7 +1913,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
         Ok(result)
     }
 
-    fn or<P: CurveGroup<ScalarField = F>>(
+    pub(crate) fn or<P: CurveGroup<ScalarField = F>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1994,7 +1994,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
         Ok(result)
     }
 
-    fn not(&self) -> Self {
+    pub(crate) fn not(&self) -> Self {
         let mut result = self.to_owned();
         if result.is_constant() {
             result.witness_bool = (F::one()

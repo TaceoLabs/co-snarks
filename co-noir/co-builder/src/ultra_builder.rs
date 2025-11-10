@@ -3736,7 +3736,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let r = input.r.map(|limb| self.get_variable(limb as usize));
         let neg_modulus = input.neg_modulus;
 
-        let limb_shift = P::ScalarField::from(1u64 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+        let limb_shift = P::ScalarField::from(1u128 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
         let limb_rshift = limb_shift.inverse().unwrap();
         let limb_rshift_2 = limb_rshift * limb_rshift;
 
@@ -3986,7 +3986,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder
     }
 
-    fn new(size_hint: usize) -> Self {
+    pub(crate) fn new(size_hint: usize) -> Self {
         tracing::trace!("Builder new");
         let variables = Vec::with_capacity(size_hint * 3);
         // let _variable_names = BTreeMap::with_capacity(size_hint * 3);

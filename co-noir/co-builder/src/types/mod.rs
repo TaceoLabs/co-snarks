@@ -1,6 +1,7 @@
 pub(crate) mod aes128;
 pub mod big_field;
 pub mod big_group;
+pub(crate) mod big_group_tables;
 pub(crate) mod blake2s;
 pub(crate) mod blake3;
 pub(crate) mod blake_util;

@@ -41,7 +41,7 @@ impl KZG {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<PairingPoints<C, T>> {
-        let quotient_commitment =
+        let mut quotient_commitment =
             transcript.receive_point_from_prover("KZG:W".to_owned(), builder, driver)?;
 
         // The pairing check can be expressed as

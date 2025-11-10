@@ -5,6 +5,7 @@ use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use co_noir_types::Rep3Type;
+use core::{num, panic};
 use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
@@ -16,7 +17,11 @@ use mpc_core::protocols::rep3::{
     Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion,
     network::Rep3NetworkExt, pointshare, yao,
 };
+use mpc_core::protocols::rep3_ring::arithmetic::mul;
+use mpc_core::protocols::rep3_ring::casts::field_to_ring_a2b_many;
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
+use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512};
+use mpc_core::protocols::rep3_ring::yao::ring_div_by_public;
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -28,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use std::any::TypeId;
 use std::array;
 use std::marker::PhantomData;
-use std::ops::BitXor;
+use std::ops::{Add, BitXor};
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
@@ -351,6 +356,30 @@ fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] 
         output[i] = tmp & &mask;
     }
     output
+}
+
+#[derive(Clone)]
+pub(crate) enum Rep3AcvmBinaryType<F: PrimeField> {
+    Public(BigUint),
+    Shared(Rep3BigUintShare<F>),
+}
+
+impl<F: PrimeField> Default for Rep3AcvmBinaryType<F> {
+    fn default() -> Self {
+        Self::Public(BigUint::zero())
+    }
+}
+
+impl<F: PrimeField> From<BigUint> for Rep3AcvmBinaryType<F> {
+    fn from(value: BigUint) -> Self {
+        Self::Public(value)
+    }
+}
+
+impl<F: PrimeField> From<Rep3BigUintShare<F>> for Rep3AcvmBinaryType<F> {
+    fn from(value: Rep3BigUintShare<F>) -> Self {
+        Self::Shared(value)
+    }
 }
 
 impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<'a, F, N> {

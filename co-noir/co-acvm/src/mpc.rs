@@ -4,8 +4,9 @@ use co_brillig::mpc::BrilligDriver;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::LookupTableProvider,
-    protocols::rep3::yao::circuits::SHA256Table,
+    protocols::rep3::{arithmetic::BinaryShare, yao::circuits::SHA256Table},
 };
+use num_bigint::BigUint;
 use std::{any::Any, fmt};
 
 pub(super) mod plain;
@@ -22,6 +23,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     type Lookup: LookupTableProvider<F>;
     type ArithmeticShare: Clone;
     type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>: Clone;
+
     /// A type representing the values encountered during Noir compilation. It should at least contain public field elements and shared values.
     type AcvmType: Clone
         + Default
@@ -558,13 +560,6 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         todo!()
     }
 
-    fn other_acvm_type_to_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        &mut self,
-        input: &Self::OtherAcvmType<C>,
-    ) -> eyre::Result<[Self::AcvmType; 4]> {
-        todo!()
-    }
-
     fn neg_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: Self::OtherAcvmType<C>,
@@ -574,8 +569,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        lhs: &Self::OtherAcvmType<C>,
-        rhs: &Self::OtherAcvmType<C>,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
     ) -> Self::OtherAcvmType<C> {
         todo!()
     }
@@ -595,6 +590,37 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         todo!()
     }
 
+    fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        todo!()
+    }
+
+    fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> [Self::AcvmType; 4] {
+        todo!()
+    }
+
+    fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        todo!()
+    }
+
+    fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        todo!()
+    }
+
     fn div_unchecked_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: Self::OtherAcvmType<C>,
@@ -611,19 +637,30 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         todo!()
     }
 
-    fn compute_quotient_remainder_values<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &Self::OtherAcvmType<C>,
-        b: &Self::OtherAcvmType<C>,
-        to_add: &[Self::OtherAcvmType<C>],
-    ) -> eyre::Result<(Self::OtherAcvmType<C>, Self::OtherAcvmType<C>)> {
+        a: &[Self::AcvmType; 4],
+        b: &[Self::AcvmType; 4],
+        to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
         todo!()
     }
 
-    fn div_mod_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        a: &Self::OtherAcvmType<C>,
-    ) -> eyre::Result<(Self::OtherAcvmType<C>, Self::OtherAcvmType<C>)> {
+        a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        todo!()
+    }
+
+    fn other_acvm_type_to_acvm_type_limbs<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]> {
         todo!()
     }
 }
