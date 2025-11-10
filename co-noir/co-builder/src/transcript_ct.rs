@@ -142,31 +142,10 @@ where
     ) -> eyre::Result<()> {
         let shift: BigUint = BigUint::from(1u64) << NUM_LIMB_BITS;
         let shift = FieldCT::from(P::ScalarField::from(shift));
-        let mut elements = Vec::with_capacity(P::NUM_BASEFIELD_ELEMENTS * 2);
-        elements.push(
-            point.x.binary_basis_limbs[1]
-                .element
-                .multiply(&shift, builder, driver)?
-                .add(&point.x.binary_basis_limbs[0].element, builder, driver),
-        );
-        elements.push(
-            point.x.binary_basis_limbs[3]
-                .element
-                .multiply(&shift, builder, driver)?
-                .add(&point.x.binary_basis_limbs[2].element, builder, driver),
-        );
-        elements.push(
-            point.y.binary_basis_limbs[1]
-                .element
-                .multiply(&shift, builder, driver)?
-                .add(&point.y.binary_basis_limbs[0].element, builder, driver),
-        );
-        elements.push(
-            point.y.binary_basis_limbs[3]
-                .element
-                .multiply(&shift, builder, driver)?
-                .add(&point.y.binary_basis_limbs[2].element, builder, driver),
-        );
+        let mut elements = Self::convert_grumpkin_fr_to_bn254_frs(&point.x, builder, driver)?;
+        elements.extend(Self::convert_grumpkin_fr_to_bn254_frs(
+            &point.y, builder, driver,
+        )?);
         self.add_element_frs_to_independent_hash_buffer(&elements);
         Ok(())
     }
@@ -237,13 +216,22 @@ where
         Ok(result)
     }
 
-    // pub fn send_point_to_verifier<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
-    //     &mut self,
-    //     label: String,
-    //     element: &GoblinElement<P, WT>,
-    // ) {
-    //     self.send_to_verifier(label, &element.to_vec());
-    // }
+    pub fn send_point_to_verifier<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        &mut self,
+        label: String,
+        point: &BigGroup<P::ScalarField, WT>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<()> {
+        let shift: BigUint = BigUint::from(1u64) << NUM_LIMB_BITS;
+        let shift = FieldCT::from(P::ScalarField::from(shift));
+        let mut elements = Self::convert_grumpkin_fr_to_bn254_frs(&point.x, builder, driver)?;
+        elements.extend(Self::convert_grumpkin_fr_to_bn254_frs(
+            &point.y, builder, driver,
+        )?);
+        self.send_to_verifier(label, &elements.to_vec());
+        Ok(())
+    }
 
     fn send_to_verifier(&mut self, label: String, elements: &[FieldCT<P::ScalarField>]) {
         self.proof_data.extend_from_slice(elements);
@@ -383,6 +371,29 @@ where
     ) -> eyre::Result<Vec<FieldCT<P::ScalarField>>> {
         let challenge = self.get_challenge(label, builder, driver)?;
         self.compute_round_challenge_pows(num_challenges, challenge, builder, driver)
+    }
+
+    fn convert_grumpkin_fr_to_bn254_frs<WT: NoirWitnessExtensionProtocol<P::ScalarField>>(
+        element: &BigField<P::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<P, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<Vec<FieldCT<P::ScalarField>>> {
+        let shift: BigUint = BigUint::from(1u64) << NUM_LIMB_BITS;
+        let shift = FieldCT::from(P::ScalarField::from(shift));
+        let mut elements = Vec::with_capacity(P::NUM_BASEFIELD_ELEMENTS);
+        elements.push(
+            element.binary_basis_limbs[1]
+                .element
+                .multiply(&shift, builder, driver)?
+                .add(&element.binary_basis_limbs[0].element, builder, driver),
+        );
+        elements.push(
+            element.binary_basis_limbs[3]
+                .element
+                .multiply(&shift, builder, driver)?
+                .add(&element.binary_basis_limbs[2].element, builder, driver),
+        );
+        Ok(elements)
     }
 }
 

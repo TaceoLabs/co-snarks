@@ -991,7 +991,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         return Ok((new_points, new_scalars));
     }
 
-    /**
+    /*
      * Evaluate a chain addition!
      *
      * When adding a set of points P_1 + ... + P_N, we do not need to compute the y-coordinate of intermediate addition
@@ -1002,13 +1002,10 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
      * `lambda_prev, x1_prev, y1_prev` are the `lambda, x1, y1` terms from the previous addition operation.
      *
      * `chain_add` requires 1 less non-native field reduction than a regular add operation.
-     **/
-
-    /**
      * begin a chain of additions
      * input points p1 p2
      * output accumulator = x3_prev (output x coordinate), x1_prev, y1_prev (p1), lambda_prev (y2 - y1) / (x2 - x1)
-     **/
+     */
     pub(crate) fn chain_add_start<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         p1: &mut Self,
         p2: &mut Self,
@@ -1119,6 +1116,85 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         )?;
 
         Ok(BigGroup::new(x3, y3))
+    }
+
+    pub fn reconstruct_from_public<P: CurveGroup<ScalarField = F>>(
+        limbs: &[FieldCT<F>],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        debug_assert_eq!(limbs.len(), 2 * crate::types::big_field::NUM_LIMBS);
+        Ok(BigGroup {
+            x: BigField::reconstruct_from_public(&limbs[0..4], builder, driver)?,
+            y: BigField::reconstruct_from_public(&limbs[4..8], builder, driver)?,
+            is_infinity: BoolCT::from(false),
+        })
+    }
+
+    pub fn scalar_mul<P: CurveGroup<ScalarField = F>>(
+        &self,
+        scalar: &FieldCT<F>,
+        max_num_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        debug_assert_eq!(max_num_bits % 2, 0);
+        /*
+         *
+         * Let's say we have some curve E defined over a field Fq. The order of E is p, which is prime.
+         *
+         * Now lets say we are constructing a SNARK circuit over another curve E2, whose order is r.
+         *
+         * All of our addition / multiplication / custom gates are going to be evaluating low degree multivariate
+         * polynomials modulo r.
+         *
+         * E.g. our addition/mul gate (for wires a, b, c and selectors q_m, q_l, q_r, q_o, q_c) is:
+         *
+         *  q_m * a * b + q_l * a + q_r * b + q_o * c + q_c = 0 mod r
+         *
+         * We want to construct a circuit that evaluates scalar multiplications of curve E. Where q > r and p > r.
+         *
+         * i.e. we need to perform arithmetic in one prime field, using prime field arithmetic in a completely
+         *different prime field.
+         *
+         * To do *this*, we need to emulate a binary (or in our case quaternary) number system in Fr, so that we can
+         * use the binary/quaternary basis to emulate arithmetic in Fq. Which is very messy. See bigfield.hpp for
+         *the specifics.
+         */
+
+        let num_rounds = if max_num_bits == 0 {
+            P::ScalarField::MODULUS_BIT_SIZE as usize + 1
+        } else {
+            max_num_bits
+        };
+
+        let mut result: Self = todo!(); //if max_num_bits != 0 {
+        //     // The case of short scalars
+        // element::bn254_endo_batch_mul({}, {}, { *this }, { scalar }, num_rounds);
+        // } else {
+        //     // The case of arbitrary length scalars
+        // element::bn254_endo_batch_mul({ *this }, { scalar }, {}, {}, num_rounds);
+        // };
+
+        // Handle point at infinity
+        result.x = BigField::conditional_assign(
+            &self.is_infinity,
+            &mut self.x.clone(),
+            &mut result.x,
+            builder,
+            driver,
+        )?;
+        result.y = BigField::conditional_assign(
+            &self.is_infinity,
+            &mut self.y.clone(),
+            &mut result.y,
+            builder,
+            driver,
+        )?;
+
+        result.set_is_infinity(self.is_infinity);
+
+        Ok(result)
     }
 }
 

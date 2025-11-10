@@ -3,12 +3,12 @@ use super::field_ct::{CycleGroupCT, FieldCT};
 use crate::keys::proving_key::ProvingKey;
 use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, ProverWitnessEntities};
 use crate::types::field_ct::BoolCT;
+use crate::transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT};
 use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
 use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
@@ -520,32 +520,45 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) result: [u32; 32],
 }
 
-#[derive(Default)]
-#[expect(dead_code)]
-pub struct PairingPoints<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
-    p0: BigGroup<P::ScalarField, T>,
-    p1: BigGroup<P::ScalarField, T>,
+#[derive(Default, Clone)]
+pub struct PairingPoints<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> {
+    p0: BigGroup<C::ScalarField, T>,
+    p1: BigGroup<C::ScalarField, T>,
     has_data: bool,
 }
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
-    pub fn new(p0: BigGroup<P::ScalarField, T>, p1: BigGroup<P::ScalarField, T>) -> Self {
+// An aggregation state is represented by two G1 affine elements. Each G1 point has
+// two field element coordinates (x, y). Thus, four base field elements
+// Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
+pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
+impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoints<C, T> {
+    pub fn new(p0: BigGroup<C::ScalarField, T>, p1: BigGroup<C::ScalarField, T>) -> Self {
         Self {
             p0,
             p1,
             has_data: true,
         }
     }
-}
 
-// An aggregation state is represented by two G1 affine elements. Each G1 point has
-// two field element coordinates (x, y). Thus, four base field elements
-// Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
-pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
+    pub fn reconstruct_from_public(
+        public_inputs: &[FieldCT<C::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        // Assumes that the app-io public inputs are at the end of the public_inputs vector
+        let index = public_inputs.len() - PAIRING_POINT_ACCUMULATOR_SIZE as usize;
+        let (p0_limbs, p1_limbs) =
+            public_inputs[..index].split_at(PAIRING_POINT_ACCUMULATOR_SIZE as usize / 2);
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
+        Ok(Self {
+            p0: BigGroup::reconstruct_from_public(p0_limbs, builder, driver)?,
+            p1: BigGroup::reconstruct_from_public(p1_limbs, builder, driver)?,
+            has_data: true,
+        })
+    }
+
     pub fn set_public(
         &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> usize {
         let start_idx = self.p0.set_public(driver, builder);
@@ -553,16 +566,67 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoin
 
         start_idx
     }
-
+}
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
+    PairingPoints<C, T>
+{
     // TODO FLORIN/ TODO CESAR: Do we need this or is it a leftover?
-    // pub fn aggregate<P: CurveGroup<ScalarField = F>>(
-    //     &mut self,
-    //     other: &AggregationState<F, T>,
-    //     builder: &mut GenericUltraCircuitBuilder<P, T>,
-    //     driver: &mut T,
-    // ) -> eyre::Result<()> {
-    //     todo!()
-    // }
+    pub fn aggregate<H: TranscriptHasherCT<C>>(
+        &mut self,
+        other: PairingPoints<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        assert!(other.has_data, "Cannot aggregate null pairing points.");
+
+        // If LHS is empty, simply set it equal to the incoming pairing points
+        if !self.has_data && other.has_data {
+            *self = other;
+            return Ok(());
+        }
+        let mut transcript = TranscriptCT::<C, H>::new();
+
+        transcript.send_point_to_verifier(
+            "Accumulator_P0".to_string(),
+            &self.p0,
+            builder,
+            driver,
+        )?;
+        transcript.send_point_to_verifier(
+            "Accumulator_P1".to_string(),
+            &self.p1,
+            builder,
+            driver,
+        )?;
+        transcript.send_point_to_verifier(
+            "Aggregated_P0".to_string(),
+            &other.p0,
+            builder,
+            driver,
+        )?;
+        transcript.send_point_to_verifier(
+            "Aggregated_P1".to_string(),
+            &other.p1,
+            builder,
+            driver,
+        )?;
+        let recursion_separator =
+            transcript.get_challenge("recursion_separator".to_string(), builder, driver)?;
+
+        // Save gates using short scalars. We don't apply `bn254_endo_batch_mul` to the vector {1,
+        // recursion_separator} directly to avoid edge cases.
+        let mut point_to_aggregate =
+            other
+                .p0
+                .scalar_mul(&recursion_separator, 128, builder, driver)?;
+        self.p0 = self.p0.add(&mut point_to_aggregate, builder, driver)?;
+        point_to_aggregate = other
+            .p1
+            .scalar_mul(&recursion_separator, 128, builder, driver)?;
+        self.p1 = self.p1.add(&mut point_to_aggregate, builder, driver)?;
+
+        Ok(())
+    }
 }
 
 pub const AGGREGATION_OBJECT_SIZE: usize = 16;

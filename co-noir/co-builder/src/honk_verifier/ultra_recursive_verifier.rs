@@ -1,10 +1,14 @@
+use std::array;
+
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 
 use ark_ff::Field;
+use co_noir_common::constants::NUM_LIBRA_COMMITMENTS;
 use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{constants::CONST_PROOF_SIZE_LOG_N, honk_curve::HonkCurve};
 
 use crate::honk_verifier::padding_indicator_array::padding_indicator_array;
+use crate::types::types::PairingPoints;
 use crate::{
     honk_verifier::{
         claim_batcher::{Batch, ClaimBatcher},
@@ -14,7 +18,7 @@ use crate::{
         shplemini::ShpleminiVerifier,
         sumcheck::SumcheckVerifier,
     },
-    prelude::{GenericUltraCircuitBuilder, UltraRecursiveVerifierOutput},
+    prelude::GenericUltraCircuitBuilder,
     transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT},
     types::{big_group::BigGroup, field_ct::FieldCT},
 };
@@ -32,7 +36,7 @@ impl UltraRecursiveVerifier {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
         has_zk: ZeroKnowledge,
-    ) -> eyre::Result<UltraRecursiveVerifierOutput<C, T>> {
+    ) -> eyre::Result<PairingPoints<C, T>> {
         // TODO CESAR: Assert length of proof
         let mut transcript = TranscriptCT::<C, H>::new_verifier(proof);
         //TODO FLORIN: Get right CONST_PROOF_SIZE_LOG_N (virtual_log_n)
@@ -61,13 +65,15 @@ impl UltraRecursiveVerifier {
         )?;
 
         // Receive commitments to Libra masking polynomials
-        let mut libra_commitments = Vec::new();
+        let mut libra_commitments: [BigGroup<C::ScalarField, T>; NUM_LIBRA_COMMITMENTS] =
+            array::from_fn(|_| BigGroup::<C::ScalarField, T>::default());
+
         if has_zk == ZeroKnowledge::Yes {
-            libra_commitments.push(transcript.receive_point_from_prover(
+            libra_commitments[0] = transcript.receive_point_from_prover(
                 "Libra:concatenation_commitment".to_owned(),
                 builder,
                 driver,
-            )?);
+            )?;
         }
 
         let sumcheck_output = SumcheckVerifier::verify::<C, T, H>(
@@ -78,20 +84,21 @@ impl UltraRecursiveVerifier {
             &key.gate_challenges,
             &padding_indicator_array,
             builder,
+            has_zk,
             driver,
         )?;
 
         if has_zk == ZeroKnowledge::Yes {
-            libra_commitments.push(transcript.receive_point_from_prover(
+            libra_commitments[1] = transcript.receive_point_from_prover(
                 "Libra:grand_sum_commitment".to_owned(),
                 builder,
                 driver,
-            )?);
-            libra_commitments.push(transcript.receive_point_from_prover(
+            )?;
+            libra_commitments[2] = transcript.receive_point_from_prover(
                 "Libra:quotient_commitment".to_owned(),
                 builder,
                 driver,
-            )?);
+            )?;
         }
 
         // Execute Shplemini to produce a batch opening claim subsequently verified by a univariate PCS
@@ -126,13 +133,18 @@ impl UltraRecursiveVerifier {
             unshifted: Batch {
                 commitments: unshifted_commitments,
                 evaluations: unshifted_scalars,
-                scalar: FieldCT::from_witness(C::ScalarField::ONE.into(), builder),
+                scalar: FieldCT::from(C::ScalarField::ONE),
             },
             shifted: Batch {
                 commitments: to_be_shifted_commitments,
                 evaluations: shifted_scalars,
-                scalar: FieldCT::from_witness(C::ScalarField::ONE.into(), builder),
+                scalar: FieldCT::from(C::ScalarField::ONE),
             },
+        };
+        let libra_commitments = if has_zk == ZeroKnowledge::Yes {
+            Some(&libra_commitments)
+        } else {
+            None
         };
 
         // TODO CESAR: Check if REPEATED_COMMITMENTS is correct
@@ -142,16 +154,25 @@ impl UltraRecursiveVerifier {
             &sumcheck_output.challenges,
             &BigGroup::one(builder, driver)?,
             &mut transcript,
+            &mut consistency_checked,
+            libra_commitments,
+            sumcheck_output.claimed_libra_evaluation.as_ref(),
             builder,
             driver,
         )?;
 
-        KZG::reduce_verify_batch_opening_claim(
+        let pairing_points = KZG::reduce_verify_batch_opening_claim(
             &mut opening_claim,
             &mut transcript,
             builder,
             driver,
         )?;
-        todo!("Finalize UltraRecursiveVerifier output");
+
+        let mut inputs =
+            PairingPoints::reconstruct_from_public(&key.public_inputs, builder, driver)?;
+
+        inputs.aggregate::<H>(pairing_points, builder, driver)?;
+
+        Ok(inputs)
     }
 }

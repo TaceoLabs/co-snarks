@@ -6,7 +6,7 @@ use crate::{
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
     types::field_ct::FieldCT,
 };
-use ark_ff::{BigInteger, Field, PrimeField};
+use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 
 use co_noir_common::constants::NUM_ALPHAS;
@@ -161,7 +161,7 @@ impl OinkRecursiveVerifier {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
 
         // Let m be the number of public inputs x₀,…, xₘ₋₁.
         // Recall that we broke the permutation σ⁰ by changing the mapping

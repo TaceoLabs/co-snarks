@@ -449,6 +449,18 @@ impl<F: PrimeField> FieldCT<F> {
         self.divide_no_zero_check(other, builder, driver)
     }
 
+    pub fn inverse<
+        C: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        let one = FieldCT::from(C::ScalarField::ONE);
+        one.divide(self, builder, driver)
+    }
+
     fn divide_no_zero_check<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,

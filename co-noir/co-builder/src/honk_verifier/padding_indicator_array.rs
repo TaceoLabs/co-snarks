@@ -42,11 +42,11 @@ pub fn padding_indicator_array<
     driver: &mut T,
     has_zk: ZeroKnowledge,
 ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
-    let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+    let one = FieldCT::from(C::ScalarField::ONE);
     if has_zk == ZeroKnowledge::No {
         Ok(vec![one.clone(); VIRTUAL_LOG_N])
     } else {
-        let zero = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+        let zero = FieldCT::from(C::ScalarField::ZERO);
 
         // Create a domain of size `virtual_log_n` and compute Lagrange denominators
         let big_domain: Vec<C::ScalarField> = Barycentric::construct_big_domain(VIRTUAL_LOG_N, 1);
@@ -58,11 +58,9 @@ pub fn padding_indicator_array<
 
         let terms = (0..VIRTUAL_LOG_N)
             .map(|i| {
-                log_n.sub(&one, builder, driver).sub(
-                    &FieldCT::from_witness(big_domain[i].into(), builder),
-                    builder,
-                    driver,
-                )
+                log_n
+                    .sub(&one, builder, driver)
+                    .sub(&FieldCT::from(big_domain[i]), builder, driver)
             })
             .collect::<Vec<_>>();
 
@@ -95,7 +93,7 @@ pub fn padding_indicator_array<
 
         for i in 0..VIRTUAL_LOG_N {
             result[i] = prefix_by_suffix[i].multiply(
-                &FieldCT::from_witness(precomputed_denominator_inverses[i].into(), builder),
+                &FieldCT::from(precomputed_denominator_inverses[i]),
                 builder,
                 driver,
             )?;

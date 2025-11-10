@@ -1,3 +1,5 @@
+use std::array;
+
 use crate::{
     honk_verifier::claim_batcher::ClaimBatcher,
     prelude::GenericUltraCircuitBuilder,
@@ -6,15 +8,18 @@ use crate::{
 };
 use ark_ff::AdditiveGroup;
 use ark_ff::Field;
+use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{
-    constants::NUM_INTERLEAVING_CLAIMS,
+    constants::{NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS},
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::entities::WITNESS_ENTITIES_SIZE,
 };
 use co_noir_common::{
-    constants::SHIFTED_WITNESS_ENTITIES_SIZE, polynomials::entities::PRECOMPUTED_ENTITIES_SIZE,
+    constants::{NUM_SMALL_IPA_EVALUATIONS, SHIFTED_WITNESS_ENTITIES_SIZE},
+    polynomials::entities::PRECOMPUTED_ENTITIES_SIZE,
+    types::ZeroKnowledge,
 };
 use itertools::{interleave, izip};
 pub struct BatchOpeningClaim<
@@ -29,7 +34,8 @@ pub struct BatchOpeningClaim<
 pub struct ShpleminiVerifier;
 
 impl ShpleminiVerifier {
-    pub fn compute_batch_opening_claim<
+    #[expect(clippy::too_many_arguments)]
+    pub(crate) fn compute_batch_opening_claim<
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
@@ -39,11 +45,26 @@ impl ShpleminiVerifier {
         multivariate_challenge: &[FieldCT<C::ScalarField>],
         g1_identity: &BigGroup<C::ScalarField, T>,
         transcript: &mut TranscriptCT<C, H>,
+        consistency_checked: &mut bool,
+        libra_commitments: Option<&[BigGroup<C::ScalarField, T>; NUM_LIBRA_COMMITMENTS]>,
+        libra_univariate_evaluation: Option<&FieldCT<C::ScalarField>>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<BatchOpeningClaim<C, T>> {
+        let has_zk = ZeroKnowledge::from(libra_commitments.is_some());
         let virtual_log_n = multivariate_challenge.len();
-        let mut batched_evaluation = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+        let mut batched_evaluation = FieldCT::from(C::ScalarField::ZERO);
+
+        let mut hiding_polynomial_commitment = BigGroup::default();
+        if has_zk == ZeroKnowledge::Yes {
+            hiding_polynomial_commitment = transcript.receive_point_from_prover(
+                "Gemini:masking_poly_comm".to_string(),
+                builder,
+                driver,
+            )?;
+            batched_evaluation =
+                transcript.receive_fr_from_prover("Gemini:masking_poly_eval".to_owned())?;
+        }
 
         // Get the challenge ρ to batch commitments to multilinear polynomials and their shifts
         let gemini_batching_challenge =
@@ -71,8 +92,6 @@ impl ShpleminiVerifier {
             .map(|i| transcript.receive_fr_from_prover(format!("Gemini:a_{}", i + 1)))
             .collect::<HonkProofResult<Vec<FieldCT<C::ScalarField>>>>()?;
 
-        // TACEO TODO: Interleaved claim batchers
-
         // - Compute vector (r, r², ... , r^{2^{d-1}}), where d = log_n
         let gemini_eval_challenge_powers =
             std::iter::successors(Some(gemini_evaluation_challenge.clone()), |last| {
@@ -84,7 +103,18 @@ impl ShpleminiVerifier {
             .take(virtual_log_n)
             .collect::<Vec<_>>();
 
-        // TACEO TODO: HasZK case
+        let mut libra_evaluations: [FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS] =
+            array::from_fn(|_| FieldCT::default());
+        if has_zk == ZeroKnowledge::Yes {
+            libra_evaluations[0] =
+                transcript.receive_fr_from_prover("Libra:concatenation_eval".to_string())?;
+            libra_evaluations[1] =
+                transcript.receive_fr_from_prover("Libra:shifted_grand_sum_eval".to_string())?;
+            libra_evaluations[2] =
+                transcript.receive_fr_from_prover("Libra:grand_sum_eval".to_string())?;
+            libra_evaluations[3] =
+                transcript.receive_fr_from_prover("Libra:quotient_eval".to_string())?;
+        }
 
         // Process Shplonk transcript data:
         // - Get Shplonk batching challenge
@@ -94,17 +124,15 @@ impl ShpleminiVerifier {
         // Compute the powers of ν that are required for batching Gemini, SmallSubgroupIPA, and committed sumcheck
         // univariate opening claims.
         let num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
-        let shplonk_batching_challenge_powers = std::iter::successors(
-            Some(FieldCT::from_witness(C::ScalarField::ONE.into(), builder)),
-            |last| {
+        let shplonk_batching_challenge_powers =
+            std::iter::successors(Some(FieldCT::from(C::ScalarField::ONE)), |last| {
                 Some(
                     last.multiply(&shplonk_batching_challenge, builder, driver)
                         .expect("failed to compute powers of shplonk batching challenge"),
                 )
-            },
-        )
-        .take(num_powers)
-        .collect::<Vec<_>>();
+            })
+            .take(num_powers)
+            .collect::<Vec<_>>();
 
         // - Get the quotient commitment for the Shplonk batching of Gemini opening claims
         let q_commitment =
@@ -119,10 +147,9 @@ impl ShpleminiVerifier {
             transcript.get_challenge("Shplonk:z".to_string(), builder, driver)?;
 
         // Start computing the scalar to be multiplied by [1]₁
-        let mut constant_term_accumulator =
-            FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+        let mut constant_term_accumulator = FieldCT::from(C::ScalarField::ZERO);
 
-        let mut scalars = vec![FieldCT::from_witness(C::ScalarField::ONE.into(), builder)];
+        let mut scalars = vec![FieldCT::from(C::ScalarField::ONE)];
 
         // Compute 1/(z − r), 1/(z + r), 1/(z - r²),  1/(z + r²), … , 1/(z - r^{2^{d-1}}), 1/(z + r^{2^{d-1}})
         // These represent the denominators of the summand terms in Shplonk partially evaluated polynomial Q_z
@@ -143,9 +170,23 @@ impl ShpleminiVerifier {
             driver,
         )?;
 
-        // TODO TACEO: HasZK case
+        if has_zk == ZeroKnowledge::Yes {
+            commitments.push(hiding_polynomial_commitment);
+            scalars.push(claim_batcher.get_unshifted_batch_scalar().neg()); // corresponds to ρ⁰
+        }
 
-        // TODO TACEO: ClaimBatcher interleaved case
+        // Place the commitments to prover polynomials in the commitments vector. Compute the evaluation of the
+        // batched multilinear polynomial. Populate the vector of scalars for the final batch mul
+
+        let mut gemini_batching_challenge_power = FieldCT::from(C::ScalarField::ONE);
+        if has_zk == ZeroKnowledge::Yes {
+            // ρ⁰ is used to batch the hiding polynomial which has already been added to the commitments vector
+            gemini_batching_challenge_power = gemini_batching_challenge_power.multiply(
+                &gemini_batching_challenge,
+                builder,
+                driver,
+            )?;
+        }
 
         // Update the commitments and scalars vectors as well as the batched evaluation given the present batches
         claim_batcher.update_batch_mul_inputs_and_batched_evaluation(
@@ -153,7 +194,7 @@ impl ShpleminiVerifier {
             &mut scalars,
             &mut batched_evaluation,
             &gemini_batching_challenge,
-            &mut FieldCT::from_witness(C::ScalarField::ONE.into(), builder),
+            &mut gemini_batching_challenge_power,
             builder,
             driver,
         )?;
@@ -206,7 +247,30 @@ impl ShpleminiVerifier {
 
         // For ZK flavors, the sumcheck output contains the evaluations of Libra univariates that submitted to the
         // ShpleminiVerifier, otherwise this argument is set to be empty
-        // TODO TACEO: HasZK case
+        if has_zk == ZeroKnowledge::Yes {
+            Self::add_zk_data(
+                virtual_log_n,
+                &mut commitments,
+                &mut scalars,
+                &mut constant_term_accumulator,
+                libra_commitments.expect("We have ZK"),
+                &libra_evaluations,
+                &gemini_evaluation_challenge,
+                &shplonk_batching_challenge_powers,
+                &shplonk_evaluation_challenge,
+                builder,
+                driver,
+            )?;
+
+            *consistency_checked = Self::check_libra_evaluations_consistency(
+                &libra_evaluations,
+                &gemini_evaluation_challenge,
+                multivariate_challenge,
+                libra_univariate_evaluation.expect("We have ZK"),
+                builder,
+                driver,
+            )?;
+        }
 
         // Currently, only used in ECCVM
         // TACEO TODO: committed_sumcheck
@@ -261,7 +325,7 @@ impl ShpleminiVerifier {
             ));
         }
 
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
 
         // TACEO TODO: Batch invert
         for denom in denominators.iter_mut() {
@@ -318,7 +382,7 @@ impl ShpleminiVerifier {
         let virtual_log_n = evaluation_point.len();
         let evals = fold_neg_evals.to_vec();
         let mut eval_pos_prev = batched_evaluation.clone();
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
 
         let mut fold_pos_evaluations = Vec::with_capacity(virtual_log_n);
 
@@ -351,11 +415,7 @@ impl ShpleminiVerifier {
             // Compute the numerator
             let lhs = challenge_power
                 .multiply(&eval_pos_prev, builder, driver)?
-                .multiply(
-                    &FieldCT::from_witness((C::ScalarField::from(2u64)).into(), builder),
-                    builder,
-                    driver,
-                )?;
+                .multiply(&FieldCT::from(C::ScalarField::from(2u64)), builder, driver)?;
             let rhs = &challs_by_one_sub_u_add_u_by_eval_neg[l - 1];
             let mut eval_pos = lhs.sub(rhs, builder, driver);
 
@@ -581,5 +641,298 @@ impl ShpleminiVerifier {
             scalars.remove(second_range_shifted_start);
             commitments.remove(second_range_shifted_start);
         }
+    }
+
+    #[expect(clippy::too_many_arguments)]
+    fn add_zk_data<
+        C: HonkCurve<TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        virtual_log_n: usize,
+        commitments: &mut Vec<BigGroup<C::ScalarField, T>>,
+        scalars: &mut Vec<FieldCT<C::ScalarField>>,
+        constant_term_accumulator: &mut FieldCT<C::ScalarField>,
+        libra_commitments: &[BigGroup<C::ScalarField, T>; NUM_LIBRA_COMMITMENTS],
+        libra_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS],
+        gemini_evaluation_challenge: &FieldCT<C::ScalarField>,
+        shplonk_batching_challenge_powers: &[FieldCT<C::ScalarField>],
+        shplonk_evaluation_challenge: &FieldCT<C::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<()> {
+        // Add Libra commitments to the vector of commitments
+        commitments.extend_from_slice(libra_commitments);
+
+        // Compute corresponding scalars and the correction to the constant term
+        let mut denominators: [FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS] =
+            array::from_fn(|_| FieldCT::default());
+        let mut batching_scalars: [FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS] =
+            array::from_fn(|_| FieldCT::default());
+
+        // Compute Shplonk denominators and invert them
+        let one = FieldCT::from(C::ScalarField::ONE);
+        denominators[0] = one.divide(
+            &shplonk_evaluation_challenge.sub(gemini_evaluation_challenge, builder, driver),
+            builder,
+            driver,
+        )?;
+
+        let subgroup_generator = FieldCT::from(C::get_subgroup_generator());
+        let temp = subgroup_generator.multiply(gemini_evaluation_challenge, builder, driver)?;
+        denominators[1] = one.divide(
+            &shplonk_evaluation_challenge.sub(&temp, builder, driver),
+            builder,
+            driver,
+        )?;
+
+        denominators[2] = denominators[0].clone();
+        denominators[3] = denominators[0].clone();
+
+        // Compute the scalars to be multiplied against the commitments
+        for idx in 0..NUM_SMALL_IPA_EVALUATIONS {
+            let scaling_factor = denominators[idx].multiply(
+                &shplonk_batching_challenge_powers
+                    [2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize + idx],
+                builder,
+                driver,
+            )?;
+            batching_scalars[idx] = scaling_factor.neg();
+            *constant_term_accumulator = constant_term_accumulator.add(
+                &scaling_factor.multiply(&libra_evaluations[idx], builder, driver)?,
+                builder,
+                driver,
+            );
+        }
+
+        // To save a scalar mul, add the sum of the batching scalars corresponding to the big sum evaluations
+        scalars.push(batching_scalars[0].clone());
+        scalars.push(batching_scalars[1].add(&batching_scalars[2], builder, driver));
+        scalars.push(batching_scalars[3].clone());
+
+        Ok(())
+    }
+
+    /**
+     * A method required by ZKSumcheck. The challenge polynomial is concatenated from the powers of the sumcheck
+     * challenges.
+     */
+    fn check_libra_evaluations_consistency<
+        C: HonkCurve<TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        libra_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS],
+        gemini_evaluation_challenge: &FieldCT<C::ScalarField>,
+        multilinear_challenge: &[FieldCT<C::ScalarField>],
+        inner_product_eval_claim: &FieldCT<C::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<bool> {
+        // Compute the evaluation of the vanishing polynomial Z_H(X) at X = gemini_evaluation_challenge
+        let one = FieldCT::from(C::ScalarField::ONE);
+        let subgroup_size = FieldCT::from(C::ScalarField::from(C::SUBGROUP_SIZE as u64));
+        let vanishing_poly_eval = gemini_evaluation_challenge
+            .pow(&subgroup_size, builder, driver)?
+            .sub(&one, builder, driver);
+
+        Self::check_consistency(
+            libra_evaluations,
+            gemini_evaluation_challenge,
+            &Self::compute_challenge_polynomial_coeffs(multilinear_challenge, builder, driver)?,
+            inner_product_eval_claim,
+            &vanishing_poly_eval,
+            builder,
+            driver,
+        )
+    }
+
+    /**
+     * Given the sumcheck multivariate challenge (u₀,...,u_{D-1}), where D = CONST_PROOF_SIZE_LOG_N,
+     * the verifier constructs and evaluates the polynomial whose coefficients are given by
+     * (1, u₀, u₀², u₁,...,1, u_{D-1}, u_{D-1}²). We spend D multiplications to construct the coefficients.
+     */
+    fn compute_challenge_polynomial_coeffs<
+        C: HonkCurve<TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        multivariate_challenge: &[FieldCT<C::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Vec<FieldCT<C::ScalarField>>> {
+        let mut challenge_polynomial_lagrange = Vec::with_capacity(C::SUBGROUP_SIZE);
+
+        let libra_univariates_length = C::LIBRA_UNIVARIATES_LENGTH;
+
+        let challenge_poly_length = libra_univariates_length * multivariate_challenge.len() + 1;
+
+        let mut one = FieldCT::from(C::ScalarField::ONE);
+        let mut zero = FieldCT::from(C::ScalarField::ZERO);
+
+        one.convert_constant_to_fixed_witness(builder, driver);
+        zero.convert_constant_to_fixed_witness(builder, driver);
+
+        challenge_polynomial_lagrange.resize(C::SUBGROUP_SIZE, zero.clone()); //TODO FLORIN THIS FEELS STUPID
+        challenge_polynomial_lagrange[0] = one.clone();
+
+        // Populate the vector with the powers of the challenges
+        for (round_idx, challenge) in multivariate_challenge.iter().enumerate() {
+            let current_idx = 1 + libra_univariates_length * round_idx;
+            challenge_polynomial_lagrange[current_idx] = one.clone();
+
+            // Recursively compute the powers of the challenge up to the length of libra univariates
+            for idx in (current_idx + 1)..(current_idx + libra_univariates_length) {
+                challenge_polynomial_lagrange[idx] =
+                    challenge_polynomial_lagrange[idx - 1].multiply(challenge, builder, driver)?;
+            }
+        }
+
+        // Ensure that the coefficients are padded with zeros
+        challenge_polynomial_lagrange[challenge_poly_length..].fill(zero.clone());
+
+        Ok(challenge_polynomial_lagrange)
+    }
+
+    /**
+     * @brief Generic consistency check agnostic to challenge polynomial \f$ F\f$.
+     *
+     * @param small_ipa_evaluations \f$ G(r) \f$ , \f$ A(g* r) \f$, \f$ A(r) \f$ , \f$ Q(r)\f$.
+     * @param small_ipa_eval_challenge
+     * @param challenge_polynomial The polynomial \f$ F \f$ that the verifier computes and evaluates on its own.
+     * @param inner_product_eval_claim \f$ <F,G> \f$ where the polynomials are treated as vectors of coefficients (in
+     * Lagrange basis).
+     * @param vanishing_poly_eval \f$ Z_H(r) \f$
+     * @return true
+     * @return false
+     */
+    fn check_consistency<
+        C: HonkCurve<TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        small_ipa_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS],
+        small_ipa_eval_challenge: &FieldCT<C::ScalarField>,
+        challenge_polynomial: &[FieldCT<C::ScalarField>],
+        inner_product_eval_claim: &FieldCT<C::ScalarField>,
+        vanishing_poly_eval: &FieldCT<C::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<bool> {
+        // Check if Z_H(r) = 0.
+        // handle_edge_cases(vanishing_poly_eval); //TACEO NOTE: We skip this check
+
+        // Compute evaluations at r of F, Lagrange first, and Lagrange last for the fixed small subgroup
+        let [challenge_poly, lagrange_first, lagrange_last] =
+            Self::compute_batched_barycentric_evaluations(
+                challenge_polynomial,
+                small_ipa_eval_challenge,
+                vanishing_poly_eval,
+                builder,
+                driver,
+            )?;
+
+        let concatenated_at_r = &small_ipa_evaluations[0];
+        let grand_sum_shifted_eval = &small_ipa_evaluations[1];
+        let grand_sum_eval = &small_ipa_evaluations[2];
+        let quotient_eval = &small_ipa_evaluations[3];
+
+        // Compute the evaluation of L_1(X) * A(X) + (X - 1/g) (A(gX) - A(X) - F(X) G(X)) + L_{|H|}(X)(A(X) - s) -
+        // Z_H(X) * Q(X)
+        let mut diff = lagrange_first.multiply(grand_sum_eval, builder, driver)?;
+
+        let subgroup_gen_inv = FieldCT::from(C::get_subgroup_generator_inverse());
+        let temp = small_ipa_eval_challenge
+            .sub(&subgroup_gen_inv, builder, driver)
+            .multiply(
+                &grand_sum_shifted_eval
+                    .sub(grand_sum_eval, builder, driver)
+                    .sub(
+                        &concatenated_at_r.multiply(&challenge_poly, builder, driver)?,
+                        builder,
+                        driver,
+                    ),
+                builder,
+                driver,
+            )?;
+        diff = diff.add(&temp, builder, driver);
+
+        let temp = lagrange_last.multiply(
+            &grand_sum_eval.sub(inner_product_eval_claim, builder, driver),
+            builder,
+            driver,
+        )?;
+        diff = diff.add(&temp, builder, driver);
+
+        let temp = vanishing_poly_eval.multiply(quotient_eval, builder, driver)?;
+        diff = diff.sub(&temp, builder, driver);
+
+        let zero = FieldCT::from(C::ScalarField::ZERO);
+        diff.assert_equal(&zero, builder, driver);
+
+        // TODO(https://github.com/AztecProtocol/barretenberg/issues/1186).
+        // Insecure pattern.
+        // TACEO TODO: We could also ignore the result?
+        Ok(T::get_public(&diff.get_value(builder, driver))
+            .expect("Is this ever shared?")
+            .is_zero())
+    }
+
+    fn compute_batched_barycentric_evaluations<
+        C: HonkCurve<TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        coeffs: &[FieldCT<C::ScalarField>],
+        r: &FieldCT<C::ScalarField>,
+        vanishing_poly_eval: &FieldCT<C::ScalarField>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<[FieldCT<C::ScalarField>; 3]> {
+        let mut one = FieldCT::from(C::ScalarField::ONE);
+        let mut zero = FieldCT::from(C::ScalarField::ZERO);
+
+        one.convert_constant_to_fixed_witness(builder, driver);
+        zero.convert_constant_to_fixed_witness(builder, driver);
+
+        let subgroup_generator_inverse = FieldCT::from(C::get_subgroup_generator_inverse());
+
+        let mut denominators = vec![FieldCT::from(C::ScalarField::ZERO); C::SUBGROUP_SIZE];
+
+        let subgroup_size_inverse = FieldCT::from(C::ScalarField::from(C::SUBGROUP_SIZE as u64))
+            .inverse(builder, driver)?;
+
+        let numerator = vanishing_poly_eval.multiply(&subgroup_size_inverse, builder, driver)?;
+        // (r^n - 1) / n
+
+        let mut running_power = one.clone();
+        //
+        // Compute the denominators of the Lagrange polynomials evaluated at r
+        for denominator in denominators.iter_mut() {
+            *denominator = running_power.multiply(r, builder, driver)?; // r * g^{-i} - 1
+            *denominator = denominator.sub(&one, builder, driver);
+            running_power = running_power.multiply(&subgroup_generator_inverse, builder, driver)?;
+        }
+
+        // Invert/Batch invert denominators
+        for denominator in denominators.iter_mut() {
+            *denominator = denominator.inverse(builder, driver)?;
+        }
+
+        let mut result = [
+            zero,
+            FieldCT::from(C::ScalarField::ZERO),
+            FieldCT::from(C::ScalarField::ZERO),
+        ];
+
+        // Accumulate the evaluation of the polynomials given by `coeffs` vector
+        for (coeff, denominator) in coeffs.iter().zip(denominators.iter()) {
+            result[0] = result[0].add(
+                &coeff.multiply(denominator, builder, driver)?,
+                builder,
+                driver,
+            ); // + coeffs_i * 1/(r * g^{-i}  - 1)
+        }
+
+        result[0] = result[0].multiply(&numerator, builder, driver)?; // The evaluation of the polynomials given by its evaluations over H
+        result[1] = denominators[0].multiply(&numerator, builder, driver)?; // Lagrange first evaluated at r
+        result[2] = denominators[C::SUBGROUP_SIZE - 1].multiply(&numerator, builder, driver)?; // Lagrange last evaluated at r
+
+        Ok(result)
     }
 }

@@ -5,33 +5,33 @@ use crate::transcript_ct::TranscriptCT;
 use crate::transcript_ct::TranscriptHasherCT;
 use crate::types::field_ct::FieldCT;
 use crate::types::gate_separator::GateSeparatorPolynomial;
-use ark_ff::AdditiveGroup;
 use ark_ff::Field;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::barycentric::Barycentric;
 use co_noir_common::constants::BATCHED_RELATION_PARTIAL_LENGTH;
-use co_noir_common::constants::CONST_PROOF_SIZE_LOG_N;
 use co_noir_common::constants::NUM_ALL_ENTITIES;
 use co_noir_common::constants::NUM_ALPHAS;
 use co_noir_common::polynomials::entities::AllEntities;
 use co_noir_common::polynomials::entities::PRECOMPUTED_ENTITIES_SIZE;
 use co_noir_common::types::RelationParameters;
+use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
 
 pub struct SumcheckOutput<C: HonkCurve<TranscriptFieldType>> {
-    pub challenges: Vec<FieldCT<C::ScalarField>>,
-    pub claimed_evaluations: AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
+    pub(crate) challenges: Vec<FieldCT<C::ScalarField>>,
+    pub(crate) claimed_evaluations: AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
+    pub(crate) claimed_libra_evaluation: Option<FieldCT<C::ScalarField>>,
 }
 
 pub struct SumcheckVerifier;
 
 impl SumcheckVerifier {
     #[expect(clippy::too_many_arguments)]
-    pub fn verify<
+    pub(crate) fn verify<
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
@@ -43,12 +43,25 @@ impl SumcheckVerifier {
         gate_challenges: &[FieldCT<C::ScalarField>],
         padding_indicator_array: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
+        has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> HonkProofResult<SumcheckOutput<C>> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
 
         let mut gate_separators =
             GateSeparatorPolynomial::new_without_products(gate_challenges.to_vec(), builder);
+
+        let libra_challenge = if has_zk == ZeroKnowledge::Yes {
+            // If running zero-knowledge sumcheck the target total sum is corrected by the claimed sum of libra masking
+            // multivariate over the hypercube
+            let libra_total_sum = transcript.receive_fr_from_prover("Libra:Sum".to_owned())?;
+            let libra_challenge =
+                transcript.get_challenge("Libra:Challenge".to_string(), builder, driver)?;
+            *target_sum = libra_total_sum.multiply(&libra_challenge, builder, driver)?;
+            Some(libra_challenge)
+        } else {
+            None
+        };
 
         // MegaRecursiveFlavor does not have ZK
         let mut multivariate_challenge = Vec::with_capacity(padding_indicator_array.len());
@@ -93,18 +106,18 @@ impl SumcheckVerifier {
                 driver,
             )?;
         }
-
+        // Extract claimed evaluations of Libra univariates and compute their sum multiplied by the Libra challenge
+        // Final round
         let transcript_evaluations = transcript
             .receive_n_from_prover("Sumcheck:evaluations".to_owned(), NUM_ALL_ENTITIES)?;
 
-        // For ZK Flavors: the evaluation of the Row Disabling Polynomial at the sumcheck challenge
-        // Evaluate the Honk relation at the point (u_0, ..., u_{d-1}) using claimed evaluations of prover polynomials.
-        // In ZK Flavors, the evaluation is corrected by full_libra_purported_value
         let (precomputed, witness) = transcript_evaluations.split_at(PRECOMPUTED_ENTITIES_SIZE);
         let claimed_evaluations =
             AllEntities::from_elements(witness.to_vec(), precomputed.to_vec());
 
-        let full_honk_purported_value = compute_full_relation_purported_value(
+        // Evaluate the Honk relation at the point (u_0, ..., u_{d-1}) using claimed evaluations of prover polynomials.
+        // In ZK Flavors, the evaluation is corrected by full_libra_purported_value
+        let mut full_honk_purported_value = compute_full_relation_purported_value(
             &claimed_evaluations,
             &mut AllRelationsEvals::default(),
             relation_parameters,
@@ -114,12 +127,29 @@ impl SumcheckVerifier {
             driver,
         )?;
 
+        // For ZK Flavors: compute the evaluation of the Row Disabling Polynomial at the sumcheck challenge and of the
+        // libra univariate used to hide the contribution from the actual Honk relation
+        let libra_evaluation = if has_zk == ZeroKnowledge::Yes {
+            let libra_evaluation =
+                transcript.receive_fr_from_prover("Libra:claimed_evaluation".to_owned())?;
+            let tmp = libra_evaluation.multiply(
+                &libra_challenge.expect("We have ZK"),
+                builder,
+                driver,
+            )?;
+            full_honk_purported_value = full_honk_purported_value.add(&tmp, builder, driver);
+            Some(libra_evaluation)
+        } else {
+            None
+        };
+
         // Final Verification Step
         full_honk_purported_value.assert_equal(target_sum, builder, driver);
 
         Ok(SumcheckOutput {
             challenges: multivariate_challenge,
             claimed_evaluations,
+            claimed_libra_evaluation: libra_evaluation,
         })
     }
 
@@ -141,7 +171,7 @@ impl SumcheckVerifier {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
         let lhs = [
             one.sub(indicator, builder, driver),
             univariate[0].add(&univariate[1], builder, driver),
@@ -157,21 +187,6 @@ impl SumcheckVerifier {
         target_sum.assert_equal(&total_sum, builder, driver);
         Ok(())
     }
-
-    fn pad_gate_challenges<
-        C: HonkCurve<TranscriptFieldType>,
-        T: NoirWitnessExtensionProtocol<C::ScalarField>,
-    >(
-        gate_challenges: &mut Vec<FieldCT<C::ScalarField>>,
-        builder: &mut GenericUltraCircuitBuilder<C, T>,
-    ) {
-        if gate_challenges.len() < CONST_PROOF_SIZE_LOG_N {
-            let zero = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
-            for _ in gate_challenges.len()..CONST_PROOF_SIZE_LOG_N {
-                gate_challenges.push(zero.clone());
-            }
-        }
-    }
 }
 
 pub fn evaluate_with_domain_start<
@@ -185,10 +200,10 @@ pub fn evaluate_with_domain_start<
     builder: &mut GenericUltraCircuitBuilder<C, T>,
     driver: &mut T,
 ) -> HonkProofResult<FieldCT<C::ScalarField>> {
-    let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+    let one = FieldCT::from(C::ScalarField::ONE);
     let mut full_numerator_value = one.clone();
     for i in domain_start..SIZE + domain_start {
-        let coeff = FieldCT::from_witness(C::ScalarField::from(i as u64).into(), builder);
+        let coeff = FieldCT::from(C::ScalarField::from(i as u64));
         let tmp = u.sub(&coeff, builder, driver);
         full_numerator_value = full_numerator_value.multiply(&tmp, builder, driver)?;
     }
@@ -201,7 +216,7 @@ pub fn evaluate_with_domain_start<
     let mut denominator_inverses = vec![FieldCT::default(); SIZE];
 
     let lhs = (0..SIZE)
-        .map(|i| FieldCT::from_witness(lagrange_denominators[i].into(), builder))
+        .map(|i| FieldCT::from(lagrange_denominators[i]))
         .collect::<Vec<_>>();
     let rhs = (0..SIZE)
         .map(|i| u.sub(&big_domain[i].into(), builder, driver))
@@ -215,10 +230,9 @@ pub fn evaluate_with_domain_start<
     // Compute each term v_j / (d_j*(x-x_j)) of the sum
     let result = FieldCT::multiply_many(evals, &denominator_inverses, builder, driver)?
         .iter()
-        .fold(
-            FieldCT::from_witness(C::ScalarField::zero().into(), builder),
-            |acc, x| acc.add(x, builder, driver),
-        );
+        .fold(FieldCT::from(C::ScalarField::zero()), |acc, x| {
+            acc.add(x, builder, driver)
+        });
 
     // Scale the sum by the value of B(x)
     Ok(result.multiply(&full_numerator_value, builder, driver)?)

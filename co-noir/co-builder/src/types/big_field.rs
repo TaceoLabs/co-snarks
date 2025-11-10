@@ -536,6 +536,122 @@ impl<F: PrimeField> BigField<F> {
         result
     }
 
+    /**
+     * @brief Construct a bigfield element from binary limbs that are already reduced and ensure they are range
+     * constrained
+     *
+     */
+    pub fn construct_from_limbs<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        a: &FieldCT<F>,
+        b: &FieldCT<F>,
+        c: &FieldCT<F>,
+        d: &FieldCT<F>,
+        can_overflow: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        assert!(a.is_constant() == b.is_constant());
+        assert!(b.is_constant() == c.is_constant());
+        assert!(c.is_constant() == d.is_constant());
+
+        let mut result = Self::default();
+
+        result.binary_basis_limbs[0] = Limb::new(a.clone(), BigUint::from(DEFAULT_MAXIMUM_LIMB));
+        result.binary_basis_limbs[1] = Limb::new(b.clone(), BigUint::from(DEFAULT_MAXIMUM_LIMB));
+        result.binary_basis_limbs[2] = Limb::new(c.clone(), BigUint::from(DEFAULT_MAXIMUM_LIMB));
+        result.binary_basis_limbs[3] = Limb::new(
+            d.clone(),
+            if can_overflow {
+                BigUint::from(DEFAULT_MAXIMUM_LIMB)
+            } else {
+                (BigUint::one() << Self::NUM_LAST_LIMB_BITS) - BigUint::one()
+            },
+        );
+
+        let shift_1 = FieldCT::from(F::from(BigUint::one() << Self::NUM_LIMB_BITS));
+        let shift_2 = FieldCT::from(F::from(BigUint::one() << (Self::NUM_LIMB_BITS * 2)));
+        let shift_3 = FieldCT::from(F::from(BigUint::one() << (Self::NUM_LIMB_BITS * 3)));
+
+        let mul_3 = FieldCT::multiply(
+            &result.binary_basis_limbs[3].element,
+            &shift_3,
+            builder,
+            driver,
+        )?;
+        let mul_2 = FieldCT::multiply(
+            &result.binary_basis_limbs[2].element,
+            &shift_2,
+            builder,
+            driver,
+        )?;
+        let mul_1 = FieldCT::multiply(
+            &result.binary_basis_limbs[1].element,
+            &shift_1,
+            builder,
+            driver,
+        )?;
+
+        let add = FieldCT::add_two(&mul_3, &mul_2, &mul_1, builder, driver);
+        result.prime_basis_limb =
+            FieldCT::add(&add, &result.binary_basis_limbs[0].element, builder, driver);
+
+        // Range constrain the first two limbs each to NUM_LIMB_BITS
+        let first_index = result.binary_basis_limbs[0]
+            .element
+            .get_normalized_witness_index(builder, driver);
+        let second_index = result.binary_basis_limbs[1]
+            .element
+            .get_normalized_witness_index(builder, driver);
+        builder.range_constrain_two_limbs(
+            first_index,
+            second_index,
+            Self::NUM_LIMB_BITS as usize,
+            Self::NUM_LIMB_BITS as usize,
+        )?;
+
+        // Range constrain the last two limbs to NUM_LIMB_BITS and NUM_LAST_LIMB_BITS
+        let num_last_limb_bits = if can_overflow {
+            Self::NUM_LIMB_BITS
+        } else {
+            Self::NUM_LAST_LIMB_BITS
+        };
+
+        let first_index = result.binary_basis_limbs[2]
+            .element
+            .get_normalized_witness_index(builder, driver);
+        let second_index = result.binary_basis_limbs[3]
+            .element
+            .get_normalized_witness_index(builder, driver);
+        builder.range_constrain_two_limbs(
+            first_index,
+            second_index,
+            Self::NUM_LIMB_BITS as usize,
+            num_last_limb_bits as usize,
+        )?;
+
+        Ok(result)
+    }
+
+    /**
+     * @brief Reconstruct a bigfield from limbs (generally stored in the public inputs)
+     */
+    pub(crate) fn reconstruct_from_public<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        limbs: &[FieldCT<F>],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        debug_assert_eq!(limbs.len(), NUM_LIMBS);
+        Self::construct_from_limbs(
+            &limbs[0], &limbs[1], &limbs[2], &limbs[3], false, builder, driver,
+        )
+    }
+
     pub(crate) fn get_value_fq<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
         T: NoirWitnessExtensionProtocol<F>,

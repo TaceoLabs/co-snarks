@@ -28,6 +28,10 @@ pub struct ClaimBatcher<
 impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
     ClaimBatcher<C, T>
 {
+    pub fn get_unshifted_batch_scalar(&self) -> FieldCT<C::ScalarField> {
+        self.unshifted.scalar.clone()
+    }
+
     /*
      * @brief Compute scalars used to batch each set of claims, excluding contribution from batching challenge \rho
      * @details Computes scalars s_0, s_1, s_2 given by
@@ -61,7 +65,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
         let inverse_vanishing_eval_pos = &inverted_vanishing_evals[0];
         let inverse_vanishing_eval_neg = &inverted_vanishing_evals[1];
 

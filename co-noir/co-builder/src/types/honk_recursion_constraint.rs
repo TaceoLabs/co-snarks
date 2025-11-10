@@ -12,22 +12,13 @@ use crate::types::big_group::BigGroup;
 use crate::types::types::{PairingPoints, RecursionConstraint};
 use crate::{transcript_ct::TranscriptFieldType, types::field_ct::FieldCT};
 use ark_ec::AffineRepr;
-use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_noir_common::constants::{CONST_PROOF_SIZE_LOG_N, NUM_ALPHAS};
+use co_noir_common::constants::CONST_PROOF_SIZE_LOG_N;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
 use co_noir_common::types::ZeroKnowledge;
-
-pub struct UltraRecursiveVerifierOutput<
-    C: CurveGroup,
-    T: NoirWitnessExtensionProtocol<C::ScalarField>,
-> {
-    points_accumulator: PairingPoints<C, T>,
-    ipa_proof: Vec<FieldCT<C::ScalarField>>,
-}
 
 pub type PrecomputedCommitments<C, T> = PrecomputedEntities<BigGroup<C, T>>;
 
@@ -115,7 +106,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         input: &RecursionConstraint,
         has_valid_witness_assignments: bool,
         driver: &mut T,
-    ) -> eyre::Result<UltraRecursiveVerifierOutput<C, T>> {
+    ) -> eyre::Result<PairingPoints<C, T>> {
         assert!(
             input.proof_type == ProofType::Honk as u32
                 || input.proof_type == ProofType::HonkZk as u32
