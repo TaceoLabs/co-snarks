@@ -23,6 +23,10 @@ impl_relation_evals!(LogDerivLookupRelationEvals, r0, r1, r2);
 pub(crate) struct LogDerivLookupRelation;
 
 impl LogDerivLookupRelation {
+    pub(crate) const NUM_RELATIONS: usize = 3;
+}
+
+impl LogDerivLookupRelation {
     fn compute_inverse_exists_verifier<
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,

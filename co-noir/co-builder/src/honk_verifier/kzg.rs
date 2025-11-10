@@ -59,7 +59,7 @@ impl KZG {
         let p0 = BigGroup::batch_mul(
             &batch_opening_claim.commitments,
             &batch_opening_claim.scalars,
-            42, //TODO FLORIN / TODO CESAR
+            0,
             builder,
             driver,
         )?;

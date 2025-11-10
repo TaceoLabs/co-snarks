@@ -26,6 +26,10 @@ pub(crate) struct MemoryRelationEvals<F: PrimeField> {
 impl_relation_evals!(MemoryRelationEvals, r0, r1, r2, r3, r4, r5);
 pub(crate) struct MemoryRelation;
 
+impl MemoryRelation {
+    pub(crate) const NUM_RELATIONS: usize = 6;
+}
+
 impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
     type VerifyAcc = MemoryRelationEvals<C::ScalarField>;
 

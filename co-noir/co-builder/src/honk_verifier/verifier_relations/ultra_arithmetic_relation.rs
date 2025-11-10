@@ -23,6 +23,7 @@ impl_relation_evals!(UltraArithmeticRelationEvals, r0, r1);
 pub(crate) struct UltraArithmeticRelation;
 
 impl UltraArithmeticRelation {
+    pub(crate) const NUM_RELATIONS: usize = 2;
     fn compute_r0_verifier<
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,

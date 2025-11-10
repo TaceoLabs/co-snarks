@@ -51,6 +51,16 @@ pub struct AllRelationsEvals<F: PrimeField> {
     r_pos_int: Poseidon2InternalRelationEvals<F>,
 }
 
+pub(crate) const NUM_SUBRELATIONS: usize = UltraArithmeticRelation::NUM_RELATIONS
+    + UltraPermutationRelation::NUM_RELATIONS
+    + DeltaRangeConstraintRelation::NUM_RELATIONS
+    + EllipticRelation::NUM_RELATIONS
+    + MemoryRelation::NUM_RELATIONS
+    + NonNativeFieldRelation::NUM_RELATIONS
+    + LogDerivLookupRelation::NUM_RELATIONS
+    + Poseidon2ExternalRelation::NUM_RELATIONS
+    + Poseidon2InternalRelation::NUM_RELATIONS;
+
 pub(crate) trait VerifyAccGetter<C: HonkCurve<TranscriptFieldType>> {
     fn get_accumulators(&self) -> Vec<FieldCT<C::ScalarField>>;
     fn scale_by_challenge_and_accumulate<T: NoirWitnessExtensionProtocol<C::ScalarField>>(

@@ -770,18 +770,18 @@ impl ShpleminiVerifier {
         one.convert_constant_to_fixed_witness(builder, driver);
         zero.convert_constant_to_fixed_witness(builder, driver);
 
-        challenge_polynomial_lagrange.resize(C::SUBGROUP_SIZE, zero.clone()); //TODO FLORIN THIS FEELS STUPID
-        challenge_polynomial_lagrange[0] = one.clone();
+        challenge_polynomial_lagrange.push(one.clone());
 
         // Populate the vector with the powers of the challenges
         for (round_idx, challenge) in multivariate_challenge.iter().enumerate() {
             let current_idx = 1 + libra_univariates_length * round_idx;
-            challenge_polynomial_lagrange[current_idx] = one.clone();
+            challenge_polynomial_lagrange.push(one.clone());
 
             // Recursively compute the powers of the challenge up to the length of libra univariates
             for idx in (current_idx + 1)..(current_idx + libra_univariates_length) {
-                challenge_polynomial_lagrange[idx] =
-                    challenge_polynomial_lagrange[idx - 1].multiply(challenge, builder, driver)?;
+                challenge_polynomial_lagrange.push(
+                    challenge_polynomial_lagrange[idx - 1].multiply(challenge, builder, driver)?,
+                );
             }
         }
 

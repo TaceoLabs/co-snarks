@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 // Des describes the PrimeField used for the Transcript
 pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
-    type CycleGroup: CurveGroup<BaseField = Self::ScalarField> + HonkCurve<Des>;
+    type CycleGroup: CurveGroup<BaseField = Self::ScalarField>;
 
     const NUM_BASEFIELD_ELEMENTS: usize;
     const NUM_SCALARFIELD_ELEMENTS: usize;
@@ -218,7 +218,7 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
     }
 
     fn convert_basefield_to_scalarfield(_src: &Self::BaseField) -> Vec<Self::ScalarField> {
-        unimplemented!("Not needed for grumpkin") //TODO FLORIN Actually can we delete grumpkin entirely?
+        unimplemented!("Not needed for grumpkin")
     }
 }
 

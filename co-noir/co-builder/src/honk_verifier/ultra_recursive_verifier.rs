@@ -39,7 +39,6 @@ impl UltraRecursiveVerifier {
     ) -> eyre::Result<PairingPoints<C, T>> {
         // TODO CESAR: Assert length of proof
         let mut transcript = TranscriptCT::<C, H>::new_verifier(proof);
-        //TODO FLORIN: Get right CONST_PROOF_SIZE_LOG_N (virtual_log_n)
 
         // No IPA accumulator on the UltraRecursiveFlavor
 
@@ -52,8 +51,6 @@ impl UltraRecursiveVerifier {
             builder,
             driver,
         )?;
-
-        // output.points_accumulator = nested_point_accumulator;
 
         // Execute Sumcheck Verifier and extract multivariate opening point u = (u_0, ..., u_{d-1}) and purported
         // multivariate evaluations at u

@@ -24,6 +24,10 @@ impl_relation_evals!(Poseidon2ExternalRelationEvals, r0, r1, r2, r3);
 
 pub(crate) struct Poseidon2ExternalRelation;
 
+impl Poseidon2ExternalRelation {
+    pub(crate) const NUM_RELATIONS: usize = 4;
+}
+
 impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2ExternalRelation {
     type VerifyAcc = Poseidon2ExternalRelationEvals<C::ScalarField>;
 

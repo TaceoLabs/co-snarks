@@ -1,4 +1,5 @@
 use crate::honk_verifier::verifier_relations::AllRelationsEvals;
+use crate::honk_verifier::verifier_relations::NUM_SUBRELATIONS;
 use crate::honk_verifier::verifier_relations::compute_full_relation_purported_value;
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::TranscriptCT;
@@ -11,7 +12,6 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::barycentric::Barycentric;
 use co_noir_common::constants::BATCHED_RELATION_PARTIAL_LENGTH;
 use co_noir_common::constants::NUM_ALL_ENTITIES;
-use co_noir_common::constants::NUM_ALPHAS;
 use co_noir_common::polynomials::entities::AllEntities;
 use co_noir_common::polynomials::entities::PRECOMPUTED_ENTITIES_SIZE;
 use co_noir_common::types::RelationParameters;
@@ -39,7 +39,7 @@ impl SumcheckVerifier {
         transcript: &mut TranscriptCT<C, H>,
         target_sum: &mut FieldCT<C::ScalarField>,
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
-        alphas: &[FieldCT<C::ScalarField>; NUM_ALPHAS],
+        alphas: &[FieldCT<C::ScalarField>; NUM_SUBRELATIONS],
         gate_challenges: &[FieldCT<C::ScalarField>],
         padding_indicator_array: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,

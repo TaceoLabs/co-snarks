@@ -1,6 +1,7 @@
 use crate::PERMUTATION_ARGUMENT_VALUE_SEPARATOR;
 use crate::honk_verifier::recursive_decider_verification_key::RecursiveDeciderVerificationKey;
 use crate::honk_verifier::recursive_decider_verification_key::WitnessCommitments;
+use crate::honk_verifier::verifier_relations::NUM_SUBRELATIONS;
 use crate::{
     prelude::GenericUltraCircuitBuilder,
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
@@ -9,7 +10,6 @@ use crate::{
 use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 
-use co_noir_common::constants::NUM_ALPHAS;
 use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
@@ -118,7 +118,7 @@ impl OinkRecursiveVerifier {
         *commitments.z_perm_mut() =
             transcript.receive_point_from_prover("Z_PERM".to_owned(), builder, driver)?;
 
-        let labels = (0..NUM_ALPHAS)
+        let labels = (0..NUM_SUBRELATIONS)
             .map(|i| format!("alpha_{i}"))
             .collect::<Vec<_>>();
         let alphas = transcript.get_challenges(&labels, builder, driver)?;

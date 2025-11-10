@@ -21,6 +21,10 @@ pub(crate) struct UltraPermutationRelationEvals<F: PrimeField> {
 impl_relation_evals!(UltraPermutationRelationEvals, r0, r1);
 pub(crate) struct UltraPermutationRelation;
 
+impl UltraPermutationRelation {
+    pub(crate) const NUM_RELATIONS: usize = 2;
+}
+
 impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for UltraPermutationRelation {
     type VerifyAcc = UltraPermutationRelationEvals<C::ScalarField>;
 

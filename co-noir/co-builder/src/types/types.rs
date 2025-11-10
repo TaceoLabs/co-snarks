@@ -570,7 +570,6 @@ impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoin
 impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
     PairingPoints<C, T>
 {
-    // TODO FLORIN/ TODO CESAR: Do we need this or is it a leftover?
     pub fn aggregate<H: TranscriptHasherCT<C>>(
         &mut self,
         other: PairingPoints<C, T>,

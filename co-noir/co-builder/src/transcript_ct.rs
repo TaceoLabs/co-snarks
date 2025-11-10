@@ -206,8 +206,8 @@ where
             .add_two(&x_lo, &x_hi, builder, driver)
             .add_two(&y_lo, &y_hi, builder, driver);
 
-        let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
-        let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
+        let x = BigField::from_slices(&x_lo, &x_hi, driver, builder)?;
+        let y = BigField::from_slices(&y_lo, &y_hi, driver, builder)?;
 
         let mut result = BigGroup::new(x, y);
 

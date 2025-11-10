@@ -14,7 +14,12 @@ use crate::{transcript_ct::TranscriptFieldType, types::field_ct::FieldCT};
 use ark_ec::AffineRepr;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_noir_common::constants::CONST_PROOF_SIZE_LOG_N;
+use co_noir_common::constants::{
+    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, CONST_PROOF_SIZE_LOG_N,
+    DECIDER_PROOF_LENGTH, NUM_ALL_ENTITIES, NUM_SMALL_IPA_EVALUATIONS,
+    OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS, PUBLIC_INPUTS_SIZE,
+    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS,
+};
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
@@ -51,12 +56,12 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             .iter_mut()
             .zip(elements[3..].chunks(BigGroup::<C::ScalarField, T>::NUM_BN254_FRS))
         {
-            let [x_lo, x_hi] = [src[0].clone(), src[1].clone()]; //todo florin remove clone
-            let [y_lo, y_hi] = [src[2].clone(), src[3].clone()];
+            let [x_lo, x_hi] = [&src[0], &src[1]];
+            let [y_lo, y_hi] = [&src[2], &src[3]];
 
             let sum = FieldCT::default()
-                .add_two(&x_lo, &x_hi, builder, driver)
-                .add_two(&y_lo, &y_hi, builder, driver);
+                .add_two(x_lo, x_hi, builder, driver)
+                .add_two(y_lo, y_hi, builder, driver);
 
             let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
             let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
@@ -97,9 +102,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
     GenericUltraCircuitBuilder<C, T>
 {
-    const PUBLIC_INPUTS_SIZE: usize = 16;
-    //TODO FLORIN move this somewhere else
-
     /// Add constraints required to recursively verify an UltraHonk proof
     pub(crate) fn create_honk_recursion_constraints(
         &mut self,
@@ -143,8 +145,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         if !has_valid_witness_assignments {
             // In the constraint, the agg object public inputs are still contained in the proof. To get the 'raw' size of
             // the proof and public_inputs, we subtract and add the corresponding amount from the respective sizes.
-            let size_of_proof_with_no_pub_inputs = input.proof.len() - Self::PUBLIC_INPUTS_SIZE;
-            let total_num_public_inputs = input.public_inputs.len() + Self::PUBLIC_INPUTS_SIZE;
+            let size_of_proof_with_no_pub_inputs = input.proof.len() - PUBLIC_INPUTS_SIZE;
+            let total_num_public_inputs = input.public_inputs.len() + PUBLIC_INPUTS_SIZE;
 
             self.create_dummy_vkey_and_proof(
                 size_of_proof_with_no_pub_inputs,
@@ -196,11 +198,9 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        //TODO FLORIN: reinstate this assert
-        // Set vkey->circuit_size correctly based on the proof size
-        // BB_ASSERT_EQ(proof_size, NativeFlavor::PROOF_LENGTH_WITHOUT_PUB_INPUTS());
+        assert_eq!(proof_size, ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
 
-        let num_inner_public_inputs = public_inputs_size - Self::PUBLIC_INPUTS_SIZE;
+        let num_inner_public_inputs = public_inputs_size - PUBLIC_INPUTS_SIZE;
         let pub_inputs_offset = 1; // NativeFlavor::has_zero_row ? 1 : 0; We always have a zero row for Ultra flavours
 
         // Generate mock honk vk
@@ -255,7 +255,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
         VerifyingKeyBarretenberg {
             log_circuit_size: dyadic_size.ilog2().into(),
-            num_public_inputs: (inner_public_inputs_size + Self::PUBLIC_INPUTS_SIZE) as u64,
+            num_public_inputs: (inner_public_inputs_size + PUBLIC_INPUTS_SIZE) as u64,
             pub_inputs_offset: pub_inputs_offset as u64,
             commitments,
         }
@@ -273,7 +273,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         driver: &mut T,
     ) -> eyre::Result<Vec<T::AcvmType>> {
         // Construct a Honk proof as the concatenation of an Oink proof and a Decider proof
-        let mut proof = Vec::with_capacity(1); //TODO FLORIN set correct size
+        let mut proof = Vec::with_capacity(ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
         proof.extend_from_slice(&self.create_mock_oink_proof(inner_public_inputs_size, driver)?);
         proof.extend_from_slice(&self.create_mock_decider_proof(has_zk, driver)?);
         Ok(proof)
@@ -286,7 +286,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     ) -> eyre::Result<Vec<T::AcvmType>> {
         self.add_default_to_public_inputs(driver)?;
 
-        let mut proof = Vec::with_capacity(1); //TODO FLORIN set correct size
+        let mut proof = Vec::with_capacity(OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
 
         // Populate the proof with as many public inputs as required from the ACIR constraints
         populate_field_elements::<C, T>(&mut proof, inner_public_inputs_size, None, driver)?;
@@ -311,9 +311,9 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> eyre::Result<Vec<T::AcvmType>> {
-        let mut proof = Vec::with_capacity(1); //TODO FLORIN set correct size
+        let mut proof = Vec::with_capacity(DECIDER_PROOF_LENGTH);
 
-        let const_proof_log_n = CONST_PROOF_SIZE_LOG_N; //TODO FLORIN FIX THIS DEP ON FLAVOUR
+        let const_proof_log_n = CONST_PROOF_SIZE_LOG_N;
 
         if has_zk == ZeroKnowledge::Yes {
             // Libra concatenation commitment
@@ -323,10 +323,14 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         }
 
         // Sumcheck univariates
-        let total_size_sumcheck_univariates = const_proof_log_n; //TODO FLORIN: * BATCHED_RELATION_PARTIAL_LENGTH;
+        let total_size_sumcheck_univariates = if has_zk == ZeroKnowledge::Yes {
+            const_proof_log_n * BATCHED_RELATION_PARTIAL_LENGTH_ZK
+        } else {
+            const_proof_log_n * BATCHED_RELATION_PARTIAL_LENGTH
+        };
         populate_field_elements::<C, T>(&mut proof, total_size_sumcheck_univariates, None, driver)?;
 
-        let num_all_entities = 41; // TODO FLORIN: NUM_ALL_ENTITIES<Flavor>;
+        let num_all_entities = NUM_ALL_ENTITIES;
         populate_field_elements::<C, T>(&mut proof, num_all_entities, None, driver)?;
 
         if has_zk == ZeroKnowledge::Yes {
@@ -358,8 +362,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         populate_field_elements::<C, T>(&mut proof, num_gemini_fold_evaluations, None, driver)?;
 
         if has_zk == ZeroKnowledge::Yes {
-            let num_small_ipa_evaluations = 4; // TODO FLORIN: NUM_SMALL_IPA_EVALUATIONS<Flavor>;
-            // NUM_SMALL_IPA_EVALUATIONS libra evals
+            let num_small_ipa_evaluations = NUM_SMALL_IPA_EVALUATIONS;
             populate_field_elements::<C, T>(&mut proof, num_small_ipa_evaluations, None, driver)?;
         }
 

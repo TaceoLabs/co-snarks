@@ -170,7 +170,7 @@ impl<F: PrimeField> BigField<F> {
         };
         let low = FieldCT::from_witness(lo, builder);
         let high = FieldCT::from_witness(hi, builder);
-        Self::from_slices(low, high, driver, builder)
+        Self::from_slices(&low, &high, driver, builder)
     }
 
     pub(crate) fn from_constant(value: &BigUint) -> Self {
@@ -226,7 +226,7 @@ impl<F: PrimeField> BigField<F> {
             driver.other_acvm_type_to_acvm_type_limbs::<2, { 2 * NUM_LIMB_BITS }, _>(&input)?;
         let low = FieldCT::from_witness(lo, builder);
         let high = FieldCT::from_witness(hi, builder);
-        Self::from_slices(low, high, driver, builder)
+        Self::from_slices(&low, &high, driver, builder)
     }
 
     pub(crate) fn from_acvm_limbs<
@@ -353,8 +353,8 @@ impl<F: PrimeField> BigField<F> {
     }
 
     pub fn from_slices<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
-        low_bits_in: FieldCT<F>,
-        high_bits_in: FieldCT<F>,
+        low_bits_in: &FieldCT<F>,
+        high_bits_in: &FieldCT<F>,
         driver: &mut T,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> eyre::Result<Self> {
@@ -893,8 +893,8 @@ impl<F: PrimeField> BigField<F> {
         let [remainder_lo, remainder_hi] = driver
             .other_acvm_type_to_acvm_type_limbs::<2, { 2 * NUM_LIMB_BITS }, _>(&remainder_value)?;
         let remainder = BigField::from_slices::<P, T>(
-            FieldCT::from_witness(remainder_lo, builder),
-            FieldCT::from_witness(remainder_hi, builder),
+            &FieldCT::from_witness(remainder_lo, builder),
+            &FieldCT::from_witness(remainder_hi, builder),
             driver,
             builder,
         )?;

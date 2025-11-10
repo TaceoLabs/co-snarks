@@ -26,6 +26,10 @@ impl_relation_evals!(DeltaRangeConstraintRelationEvals, r0, r1, r2, r3);
 
 pub(crate) struct DeltaRangeConstraintRelation;
 
+impl DeltaRangeConstraintRelation {
+    pub(crate) const NUM_RELATIONS: usize = 4;
+}
+
 impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for DeltaRangeConstraintRelation {
     type VerifyAcc = DeltaRangeConstraintRelationEvals<C::ScalarField>;
 

@@ -22,6 +22,10 @@ pub(crate) struct NonNativeFieldRelationEvals<F: PrimeField> {
 impl_relation_evals!(NonNativeFieldRelationEvals, r0);
 pub(crate) struct NonNativeFieldRelation;
 
+impl NonNativeFieldRelation {
+    pub(crate) const NUM_RELATIONS: usize = 1;
+}
+
 impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for NonNativeFieldRelation {
     type VerifyAcc = NonNativeFieldRelationEvals<C::ScalarField>;
 
