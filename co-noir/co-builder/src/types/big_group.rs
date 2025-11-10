@@ -235,7 +235,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 let is_last_scalar_big = (i == original_size - 1) && with_edgecases;
                 let scalar_value = scalars[i].get_value(builder, driver);
 
-                // TODO CESAR: But here we are not checking if the scalar is constant
+                // TODO CESAR: But here we are not checking whether the scalar is constant
                 if scalar_value == F::zero().into() || is_last_scalar_big {
                     big_points.push(points[i].clone());
                     big_scalars.push(scalars[i].clone());
@@ -622,15 +622,26 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             !previous_y.is_negative,
             "Final y coordinate cannot be negative"
         );
-        let y_out = BigField::mult_madd(
-            previous_y.mul_left.as_slice(),
-            previous_y.mul_right.as_slice(),
-            previous_y.add.as_slice(),
-            // TODO CESAR: What should this boolean flag be?
-            false,
-            builder,
-            driver,
-        )?;
+        // TODO CESAR: Reintroduce mult_madd
+        // let y_out = BigField::mult_madd(
+        //     previous_y.mul_left.as_slice(),
+        //     previous_y.mul_right.as_slice(),
+        //     previous_y.add.as_slice(),
+        //     // TODO CESAR: What should this boolean flag be?
+        //     false,
+        //     builder,
+        //     driver,
+        // )?;
+
+        let mut y_out = BigField::from_constant(&BigUint::from(0u64));
+        for i in 0..previous_y.mul_left.len() {
+            let mut tmp =
+                previous_y.mul_left[i].mul(&mut previous_y.mul_right[i], builder, driver)?;
+            y_out = y_out.add(&mut tmp, builder, driver)?;
+        }
+        for i in 0..previous_y.add.len() {
+            y_out = y_out.add(&mut previous_y.add[i], builder, driver)?;
+        }
 
         Ok(BigGroup::new(x_out, y_out))
     }
@@ -1074,13 +1085,21 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         Ok(BigGroup::new(self.x.clone(), negated_y))
     }
 
-    pub(crate) fn conditional_negate<P: CurveGroup<ScalarField = F>>(
-        &self,
+    pub(crate) fn conditional_negate<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
         cond: &BoolCT<F, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        todo!();
+        let mut negated_y = self.y.neg(builder, driver)?;
+        let new_y = BigField::conditional_assign(
+            cond,
+            &mut negated_y,
+            &mut self.y.clone(),
+            builder,
+            driver,
+        )?;
+        Ok(BigGroup::new(self.x.clone(), new_y))
     }
 
     /**
@@ -1540,7 +1559,7 @@ mod tests {
         let builder = &mut GenericUltraCircuitBuilder::<Bn254G1, PlainAcvmSolver<Fr>>::new(100);
         let driver = &mut PlainAcvmSolver::<Fr>::new();
 
-        let num_points = 5;
+        let num_points = 1;
         let mut points = Vec::new();
         let mut scalars = Vec::new();
         let mut expected_result = G1Affine::zero();

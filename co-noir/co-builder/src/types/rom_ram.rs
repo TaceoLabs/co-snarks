@@ -499,7 +499,7 @@ impl<F: PrimeField> TwinRomTable<F> {
                     ),
                 )
             } else {
-                entry[0].normalize(builder, driver)
+                entry[0].clone()
             };
 
             let second = if entry[1].is_constant() {
@@ -510,11 +510,11 @@ impl<F: PrimeField> TwinRomTable<F> {
                     ),
                 )
             } else {
-                entry[1].normalize(builder, driver)
+                entry[1].clone()
             };
             self.entries.push([first, second]);
         }
-        self.rom_id = builder.create_rom_array(self.length * 2);
+        self.rom_id = builder.create_rom_array(self.length);
 
         for i in 0..self.length {
             builder.set_rom_element_pair(
@@ -550,7 +550,7 @@ impl<F: PrimeField> TwinRomTable<F> {
 
         // TODO CESAR: Check bounds
 
-        let normalized_witness_index = index.normalize(builder, driver).get_witness_index();
+        let normalized_witness_index = index.get_witness_index();
         let output_indices =
             builder.read_rom_array_pair(self.rom_id, normalized_witness_index, driver)?;
 

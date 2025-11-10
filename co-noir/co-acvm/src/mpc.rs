@@ -631,8 +631,8 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     fn mul_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        lhs: &Self::OtherAcvmType<C>,
-        rhs: &Self::OtherAcvmType<C>,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
         todo!()
     }

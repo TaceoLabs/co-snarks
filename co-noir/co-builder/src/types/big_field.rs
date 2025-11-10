@@ -2190,7 +2190,7 @@ impl<F: PrimeField> BigField<F> {
             let mul_right_native = mul_right[i].get_value_fq(builder, driver)?;
 
             let tmp = driver.neg_other_acvm_type(mul_right_native);
-            let tmp = driver.mul_other_acvm_types(&mul_left_native, &tmp)?;
+            let tmp = driver.mul_other_acvm_types(mul_left_native, tmp)?;
             product_native = driver.add_other_acvm_types(product_native, tmp);
 
             products_constant &= mul_left[i].is_constant() && mul_right[i].is_constant();

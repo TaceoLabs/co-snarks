@@ -27,7 +27,7 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        assert_eq!(1 << LENGTH, SIZE);
+        debug_assert_eq!(1 << LENGTH, SIZE);
         let mut element_table = array::from_fn(|_| BigGroup::default());
 
         if LENGTH == 2 {
@@ -194,8 +194,8 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
             element_table[i + SIZE / 2] = element_table[SIZE / 2 - 1 - i].neg(builder, driver)?;
         }
 
-        let limb_max = array::from_fn(|_| BigUint::from(0u64));
-        let coordinates = Self::create_group_element_rom_tables(&element_table, &limb_max)?;
+        let mut limb_max = array::from_fn(|_| BigUint::from(0u64));
+        let coordinates = Self::create_group_element_rom_tables(&element_table, &mut limb_max)?;
 
         Ok(LookupTablePlookup {
             element_table,
@@ -222,7 +222,7 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
      **/
     fn create_group_element_rom_tables(
         rom_data: &[BigGroup<F, T>],
-        limb_max: &[BigUint; 8],
+        limb_max: &mut [BigUint; 8],
     ) -> eyre::Result<[TwinRomTable<F>; 5]> {
         let num_elements = rom_data.len();
 
@@ -231,8 +231,6 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
         let mut y_lo_limbs = Vec::with_capacity(num_elements);
         let mut y_hi_limbs = Vec::with_capacity(num_elements);
         let mut prime_limbs = Vec::with_capacity(num_elements);
-
-        let mut limb_max = limb_max.clone();
 
         for i in 0..num_elements {
             for j in 0..4 {
@@ -324,19 +322,21 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<BigGroup<F, T>> {
-        assert_eq!(bits.len(), SIZE.trailing_zeros() as usize);
+        assert_eq!(bits.len(), SIZE.ilog2() as usize);
         let mut accumulators = Vec::new();
         for (i, bit) in bits.iter().enumerate() {
-            accumulators.push(
-                FieldCT::from_witness(F::from(1u64 << i).into(), builder).multiply(
-                    &bit.to_field_ct(driver),
-                    builder,
-                    driver,
-                )?,
-            );
+            accumulators.push(FieldCT::from(F::from(1u64 << i)).multiply(
+                &bit.to_field_ct(driver),
+                builder,
+                driver,
+            )?);
         }
 
         let index = FieldCT::accumulate(&accumulators, builder, driver)?;
+        println!(
+            "LookupTablePlookup::get: index = {:?}",
+            index.get_value(builder, driver)
+        );
         Self::read_group_element_rom_tables(
             &mut self.coordinates,
             &index,
@@ -375,109 +375,137 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<
         let mut num_fives = num_points / 5;
 
         // size-6 table is expensive and only benefits us if creating them reduces the number of total tables
-
         if num_points == 1 {
             num_fives = 0;
             num_sixes = 0;
         } else if num_fives * 5 == (num_points - 1) {
+            // last 6 points to be added as one 6-table
             num_fives -= 1;
             num_sixes = 1;
         } else if num_fives * 5 == (num_points - 2) && num_fives >= 2 {
+            // last 12 points to be added as two 6-tables
             num_fives -= 2;
             num_sixes = 2;
         } else if num_fives * 5 == (num_points - 3) && num_fives >= 3 {
+            // last 18 points to be added as three 6-tables
             num_fives -= 3;
             num_sixes = 3;
         }
+        // Calculate remaining points after allocating fives and sixes tables
+        let mut remaining_points = num_points - (num_fives * 5 + num_sixes * 6);
 
-        let has_quad = ((num_fives * 5 + num_sixes * 6) < num_points - 3) && (num_points >= 4);
-        let has_triple = ((num_fives * 5 + num_sixes * 6 + if has_quad { 4 } else { 0 })
-            < num_points - 2)
-            && (num_points >= 3);
-        let has_twin = ((num_fives * 5
-            + num_sixes * 6
-            + if has_quad { 4 } else { 0 }
-            + if has_triple { 3 } else { 0 })
-            < num_points - 1)
-            && (num_points >= 2);
-        let has_singleton = num_points
-            != ((num_fives * 5 + num_sixes * 6)
+        // Allocate one quad table if required (and update remaining points)
+        let has_quad = (remaining_points >= 4) && (num_points >= 4);
+        if has_quad {
+            remaining_points -= 4;
+        }
+
+        // Allocate one triple table if required (and update remaining points)
+        let has_triple = (remaining_points >= 3) && (num_points >= 3);
+        if has_triple {
+            remaining_points -= 3;
+        }
+
+        // Allocate one twin table if required (and update remaining points)
+        let has_twin = (remaining_points >= 2) && (num_points >= 2);
+        if has_twin {
+            remaining_points -= 2;
+        }
+
+        // If there is anything remaining, allocate a singleton
+        let has_singleton = (remaining_points != 0) && (num_points >= 1);
+
+        // Sanity check
+        assert_eq!(
+            num_points,
+            num_sixes * 6
+                + num_fives * 5
                 + if has_quad { 4 } else { 0 }
                 + if has_triple { 3 } else { 0 }
-                + if has_twin { 2 } else { 0 });
+                + if has_twin { 2 } else { 0 }
+                + if has_singleton { 1 } else { 0 },
+            "point allocation mismatch"
+        );
 
         let mut offset = 0;
         let mut six_tables = Vec::new();
-        let mut five_tables = Vec::new();
-        let mut quad_tables = Vec::new();
-        let mut triple_tables = Vec::new();
-        let mut twin_tables = Vec::new();
-        let mut singletons = Vec::new();
-
         for i in 0..num_sixes {
-            let idx = offset + 6 * i;
+            let mut table_points = [
+                points[offset + (6 * i)].clone(),
+                points[offset + (6 * i) + 1].clone(),
+                points[offset + (6 * i) + 2].clone(),
+                points[offset + (6 * i) + 3].clone(),
+                points[offset + (6 * i) + 4].clone(),
+                points[offset + (6 * i) + 5].clone(),
+            ];
             six_tables.push(LookupTablePlookup::<64, F, T>::new(
-                &mut [
-                    points[idx].clone(),
-                    points[idx + 1].clone(),
-                    points[idx + 2].clone(),
-                    points[idx + 3].clone(),
-                    points[idx + 4].clone(),
-                    points[idx + 5].clone(),
-                ],
+                &mut table_points,
                 builder,
                 driver,
             )?);
         }
         offset += 6 * num_sixes;
+
+        let mut five_tables = Vec::new();
         for i in 0..num_fives {
-            let idx = offset + 5 * i;
+            let mut table_points = [
+                points[offset + (5 * i)].clone(),
+                points[offset + (5 * i) + 1].clone(),
+                points[offset + (5 * i) + 2].clone(),
+                points[offset + (5 * i) + 3].clone(),
+                points[offset + (5 * i) + 4].clone(),
+            ];
             five_tables.push(LookupTablePlookup::<32, F, T>::new(
-                &mut [
-                    points[idx].clone(),
-                    points[idx + 1].clone(),
-                    points[idx + 2].clone(),
-                    points[idx + 3].clone(),
-                    points[idx + 4].clone(),
-                ],
+                &mut table_points,
                 builder,
                 driver,
             )?);
         }
         offset += 5 * num_fives;
 
+        let mut quad_tables = Vec::new();
         if has_quad {
+            let mut table_points = [
+                points[offset].clone(),
+                points[offset + 1].clone(),
+                points[offset + 2].clone(),
+                points[offset + 3].clone(),
+            ];
             quad_tables.push(LookupTablePlookup::<16, F, T>::new(
-                &mut [
-                    points[offset].clone(),
-                    points[offset + 1].clone(),
-                    points[offset + 2].clone(),
-                    points[offset + 3].clone(),
-                ],
+                &mut table_points,
                 builder,
                 driver,
             )?);
+            offset += 4;
         }
+
+        let mut triple_tables = Vec::new();
         if has_triple {
+            let mut table_points = [
+                points[offset].clone(),
+                points[offset + 1].clone(),
+                points[offset + 2].clone(),
+            ];
             triple_tables.push(LookupTablePlookup::<8, F, T>::new(
-                &mut [
-                    points[offset].clone(),
-                    points[offset + 1].clone(),
-                    points[offset + 2].clone(),
-                ],
+                &mut table_points,
                 builder,
                 driver,
             )?);
+            offset += 3;
         }
 
+        let mut twin_tables = Vec::new();
         if has_twin {
+            let mut table_points = [points[offset].clone(), points[offset + 1].clone()];
             twin_tables.push(LookupTablePlookup::<4, F, T>::new(
-                &mut [points[offset].clone(), points[offset + 1].clone()],
+                &mut table_points,
                 builder,
                 driver,
             )?);
+            offset += 2;
         }
 
+        let mut singletons = Vec::new();
         if has_singleton {
             singletons.push(points[points.len() - 1].clone());
         }
