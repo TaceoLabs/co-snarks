@@ -424,12 +424,7 @@ impl FixedBaseParams {
         Self::NUM_BASIC_TABLES_PER_BASE_POINT * Self::NUM_POINTS;
 
     pub(crate) const fn get_num_tables_per_multi_table<const NUM_BITS: usize>() -> usize {
-        (NUM_BITS / Self::BITS_PER_TABLE)
-            + if NUM_BITS % Self::BITS_PER_TABLE == 0 {
-                0
-            } else {
-                1
-            }
+        NUM_BITS.div_ceil(Self::BITS_PER_TABLE)
     }
 
     const fn get_num_bits_of_multi_table(multitable_index: usize) -> usize {

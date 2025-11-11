@@ -186,7 +186,11 @@ impl<F: PrimeField> AcirFormat<F> {
         af: &mut AcirFormat<F>,
         opcode_index: usize,
     ) {
-        if arg.linear_combinations.len() <= 3 && arg.mul_terms.len() <= 1 {
+        // If the expression fits in a polytriple, we use it.
+        let might_fit_in_polytriple =
+            arg.linear_combinations.len() <= 3 && arg.mul_terms.len() <= 1;
+        let mut needs_to_be_parsed_as_mul_quad = !might_fit_in_polytriple;
+        if might_fit_in_polytriple {
             let mut pt = Self::serialize_arithmetic_gate(&arg);
 
             let (w1, w2) = Self::is_assert_equal(&arg, &pt, af);
@@ -230,18 +234,15 @@ impl<F: PrimeField> AcirFormat<F> {
             // case, the serialize_arithmetic_gate() function will return a poly_triple with all 0's, and we use a width-4
             // gate instead. We could probably always use a width-4 gate in fact.
             if pt == PolyTriple::default() {
-                af.quad_constraints
-                    .push(Self::serialize_mul_quad_gate(&arg));
-                af.original_opcode_indices
-                    .quad_constraints
-                    .push(opcode_index);
+                needs_to_be_parsed_as_mul_quad = true;
             } else {
                 af.poly_triple_constraints.push(pt);
                 af.original_opcode_indices
                     .poly_triple_constraints
                     .push(opcode_index);
             }
-        } else {
+        }
+        if needs_to_be_parsed_as_mul_quad {
             let mut mul_quads = Vec::new();
             // We try to use a single mul_quad gate to represent the expression.
             if arg.mul_terms.len() <= 1 {
@@ -782,6 +783,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 points,
                 scalars,
                 outputs,
+                predicate,
                 ..
             } => {
                 af.multi_scalar_mul_constraints.push(MultiScalarMul {
@@ -789,6 +791,7 @@ impl<F: PrimeField> AcirFormat<F> {
                     scalars: scalars.into_iter().map(|e| Self::parse_input(e)).collect(),
                     out_point_x: outputs.0.witness_index(),
                     out_point_y: outputs.1.witness_index(),
+                    predicate: Self::parse_input(predicate),
                     out_point_is_infinity: outputs.2.witness_index(),
                 });
                 af.constrained_witness.insert(outputs.0.witness_index());
@@ -802,6 +805,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 input1,
                 input2,
                 outputs,
+                predicate,
                 ..
             } => {
                 let input1_x = Self::parse_input(input1[0]);
@@ -810,6 +814,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 let input2_x = Self::parse_input(input2[0]);
                 let input2_y = Self::parse_input(input2[1]);
                 let input2_infinite = Self::parse_input(input2[2]);
+                let predicate = Self::parse_input(predicate);
                 af.ec_add_constraints.push(EcAdd {
                     input1_x,
                     input1_y,
@@ -817,6 +822,7 @@ impl<F: PrimeField> AcirFormat<F> {
                     input2_x,
                     input2_y,
                     input2_infinite,
+                    predicate,
                     result_x: outputs.0.witness_index(),
                     result_y: outputs.1.witness_index(),
                     result_infinite: outputs.2.witness_index(),

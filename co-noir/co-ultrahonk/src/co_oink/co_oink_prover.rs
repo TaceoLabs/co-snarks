@@ -34,7 +34,7 @@ use co_noir_common::{
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use std::{array, marker::PhantomData};
+use std::marker::PhantomData;
 use ultrahonk::{NUM_ALPHAS, prelude::VerifyingKeyBarretenberg};
 
 pub(crate) struct CoOink<
@@ -495,11 +495,13 @@ impl<
     fn generate_alphas_round(&mut self, transcript: &mut Transcript<TranscriptFieldType, H>) {
         tracing::trace!("generate alpha round");
 
-        let args: [String; NUM_ALPHAS] = array::from_fn(|i| format!("ALPHA_{i}"));
-        self.memory
-            .challenges
-            .alphas
-            .copy_from_slice(&transcript.get_challenges::<C>(&args));
+        let alpha = transcript.get_challenge::<C>("alpha".to_string());
+        let mut alpha_powers = [C::ScalarField::one(); NUM_ALPHAS];
+        alpha_powers[0] = alpha;
+        for i in 1..NUM_ALPHAS {
+            alpha_powers[i] = alpha_powers[i - 1] * alpha;
+        }
+        self.memory.challenges.alphas.copy_from_slice(&alpha_powers);
     }
 
     // Add circuit size public input size and public inputs to transcript
