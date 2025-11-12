@@ -51,7 +51,7 @@ tokio = { version = "1.34.0", features = [
     "io-util",
     "macros",
 ], optional = true }
-tokio-util = { version = "0.7.10", features = ["codec"], optional = true }
+tokio-util = { version = "0.7.17", features = ["codec"], optional = true }
 toml.workspace = true
 tracing = { workspace = true }
 crossbeam-channel = { version = "0.5.15", optional = true }
