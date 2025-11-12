@@ -165,7 +165,7 @@ fn run_tests<T: NoirWitnessExtensionProtocol<Fr>>(test_file: &str, driver: &mut 
 }
 
 #[test]
-fn test_big_group_consistency_plaindriver() {
+fn test_batch_mul_consistency_plaindriver() {
     const TEST_FILE: &str = "tests/test_data/big_group_consistency";
     tracing_subscriber::fmt().init();
     let mut driver = PlainAcvmSolver::<Fr>::new();
@@ -173,7 +173,7 @@ fn test_big_group_consistency_plaindriver() {
 }
 
 #[test]
-fn test_big_group_edge_case_equivalence_plaindriver() {
+fn test_batch_mul_edge_case_equivalence_plaindriver() {
     const TEST_FILE: &str = "tests/test_data/big_group_consistency";
     tracing_subscriber::fmt().init();
     let mut driver = PlainAcvmSolver::<Fr>::new();
@@ -182,6 +182,22 @@ fn test_big_group_edge_case_equivalence_plaindriver() {
     test_data.into_iter().for_each(|mut data| {
         data.with_edge_cases = true;
         data.masking_scalar = FieldCT::from(Fr::one());
+        run_test(data, &mut builder, &mut driver);
+    });
+}
+
+#[test]
+fn test_batch_mul_edge_case_set_plaindriver() {
+    const TEST_FILE: &str = "tests/test_data/big_group_consistency";
+    tracing_subscriber::fmt().init();
+    let mut driver = PlainAcvmSolver::<Fr>::new();
+    let mut builder = GenericUltraCircuitBuilder::<Bn254G1, _>::new(10);
+    let test_data = TestData::get_from_file(TEST_FILE, &mut builder, &mut driver);
+    test_data.into_iter().for_each(|mut data| {
+        data.with_edge_cases = true;
+        data.masking_scalar = FieldCT::from(Fr::one());
+        data.points.push(BigGroup::point_at_infinity());
+        data.scalars.push(FieldCT::from(Fr::one()));
         run_test(data, &mut builder, &mut driver);
     });
 }

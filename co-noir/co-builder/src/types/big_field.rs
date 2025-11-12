@@ -1434,22 +1434,14 @@ impl<F: PrimeField> BigField<F> {
 
         // Update the maximum possible value of the result. We assume here that (*this.value) = 0
         let mut result = BigField::default();
-        result.binary_basis_limbs[0].maximum_value = self.binary_basis_limbs[0]
-            .maximum_value
-            .clone()
-            + &to_add_0;
-        result.binary_basis_limbs[1].maximum_value = self.binary_basis_limbs[1]
-            .maximum_value
-            .clone()
-            + &to_add_1;
-        result.binary_basis_limbs[2].maximum_value = self.binary_basis_limbs[2]
-            .maximum_value
-            .clone()
-            + &to_add_2;
-        result.binary_basis_limbs[3].maximum_value = self.binary_basis_limbs[3]
-            .maximum_value
-            .clone()
-            + &to_add_3;
+        result.binary_basis_limbs[0].maximum_value =
+            self.binary_basis_limbs[0].maximum_value.clone() + &to_add_0;
+        result.binary_basis_limbs[1].maximum_value =
+            self.binary_basis_limbs[1].maximum_value.clone() + &to_add_1;
+        result.binary_basis_limbs[2].maximum_value =
+            self.binary_basis_limbs[2].maximum_value.clone() + &to_add_2;
+        result.binary_basis_limbs[3].maximum_value =
+            self.binary_basis_limbs[3].maximum_value.clone() + &to_add_3;
 
         // Convert to_add_i to FieldCT and add to each limb
         let to_add_0 = FieldCT::from_witness(F::from(to_add_0).into(), builder);
