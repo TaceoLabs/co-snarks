@@ -1204,11 +1204,11 @@ impl<F: PrimeField> BigField<F> {
             ));
         }
 
-        let mut result = self.clone();
+        let mut result = BigField::default();
 
         for i in 0..NUM_LIMBS {
-            result.binary_basis_limbs[i].maximum_value +=
-                &other.binary_basis_limbs[i].maximum_value;
+            result.binary_basis_limbs[i].maximum_value = &self.binary_basis_limbs[i].maximum_value
+                + &other.binary_basis_limbs[i].maximum_value;
         }
 
         // If both the elements are witnesses, we use an optimized addition trick that uses 4 gates instead of 5.
@@ -1233,7 +1233,7 @@ impl<F: PrimeField> BigField<F> {
                 || other.is_constant()
                 || (self.prime_basis_limb.witness_index == other.prime_basis_limb.witness_index);
             if !limbconst {
-                let [x0, x1, x2, x3] = result
+                let [x0, x1, x2, x3] = self
                     .binary_basis_limbs
                     .iter()
                     .map(|limb| {
@@ -1259,7 +1259,7 @@ impl<F: PrimeField> BigField<F> {
                     .expect("We have 4 limbs");
                 let [c0, c1, c2, c3] = (0..4)
                     .map(|i| {
-                        result.binary_basis_limbs[i].element.additive_constant
+                        self.binary_basis_limbs[i].element.additive_constant
                             + other.binary_basis_limbs[i].element.additive_constant
                     })
                     .collect::<Vec<_>>()
@@ -1289,15 +1289,15 @@ impl<F: PrimeField> BigField<F> {
         // use the standard addition method. This will not use additional gates because field addition with one constant
         // does not require any additional gates.
         for i in 0..NUM_LIMBS {
-            result.binary_basis_limbs[i].element.add_assign(
+            result.binary_basis_limbs[i].element = self.binary_basis_limbs[i].element.add(
                 &other.binary_basis_limbs[i].element,
                 builder,
                 driver,
             );
         }
-        result
-            .prime_basis_limb
-            .add_assign(&other.prime_basis_limb, builder, driver);
+        result.prime_basis_limb =
+            self.prime_basis_limb
+                .add(&other.prime_basis_limb, builder, driver);
         Ok(result)
     }
 
