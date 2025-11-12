@@ -82,10 +82,10 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) poseidon2_constraints: Vec<Poseidon2Constraint<F>>,
     pub(crate) multi_scalar_mul_constraints: Vec<MultiScalarMul<F>>,
     pub(crate) ec_add_constraints: Vec<EcAdd<F>>,
-    pub(crate) honk_recursion_constraints: Vec<RecursionConstraint>,
-    pub(crate) avm_recursion_constraints: Vec<RecursionConstraint>,
-    pub(crate) pg_recursion_constraints: Vec<RecursionConstraint>,
-    pub(crate) civc_recursion_constraints: Vec<RecursionConstraint>,
+    pub(crate) honk_recursion_constraints: Vec<RecursionConstraint<F>>,
+    pub(crate) avm_recursion_constraints: Vec<RecursionConstraint<F>>,
+    pub(crate) pg_recursion_constraints: Vec<RecursionConstraint<F>>,
+    pub(crate) civc_recursion_constraints: Vec<RecursionConstraint<F>>,
     pub(crate) assert_equalities: Vec<PolyTriple<F>>,
 
     /// A standard plonk arithmetic constraint, as defined in the poly_triple struct, consists of selector values

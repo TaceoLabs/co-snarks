@@ -1300,7 +1300,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
         CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
             crs_path,
             circuit_size,
-            ZeroKnowledge::No,
+            ZeroKnowledge::Yes, // TACEO TODO: Get this from the constraint system
         )?;
 
     // connect to network

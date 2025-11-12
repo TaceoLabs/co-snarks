@@ -484,7 +484,7 @@ impl<F: PrimeField> LogicConstraint<F> {
     }
 }
 
-pub(crate) struct RecursionConstraint {
+pub(crate) struct RecursionConstraint<F: PrimeField> {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
     pub(crate) key: Vec<u32>,
@@ -492,9 +492,10 @@ pub(crate) struct RecursionConstraint {
     pub(crate) public_inputs: Vec<u32>,
     pub(crate) key_hash: u32,
     pub(crate) proof_type: u32,
+    pub(crate) predicate: WitnessOrConstant<F>,
 }
 
-impl RecursionConstraint {
+impl<F: PrimeField> RecursionConstraint<F> {
     #[expect(dead_code)]
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
 }
@@ -881,9 +882,9 @@ impl PermutationMapping {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WitnessOrConstant<F: PrimeField> {
-    index: u32,
+    pub(crate) index: u32,
     value: F,
-    is_constant: bool,
+    pub(crate) is_constant: bool,
 }
 
 impl<F: PrimeField> WitnessOrConstant<F> {

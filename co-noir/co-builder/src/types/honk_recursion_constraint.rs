@@ -3,10 +3,12 @@ use crate::honk_verifier::recursive_decider_verification_key::{
     RecursiveDeciderVerificationKey, VKAndHash,
 };
 use crate::honk_verifier::ultra_recursive_verifier::UltraRecursiveVerifier;
+use crate::keys::proving_key::ProvingKeyTrait;
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{Poseidon2SpongeCT, TranscriptCT, TranscriptHasherCT};
 use crate::types::big_field::BigField;
 use crate::types::big_group::BigGroup;
+use crate::types::field_ct::BoolCT;
 use crate::types::types::{AddQuad, PairingPoints, RecursionConstraint};
 use crate::{transcript_ct::TranscriptFieldType, types::field_ct::FieldCT};
 use ark_ec::AffineRepr;
@@ -17,18 +19,29 @@ use co_noir_common::constants::{
     BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, CONST_PROOF_SIZE_LOG_N,
     DECIDER_PROOF_LENGTH, NUM_ALL_ENTITIES, NUM_SMALL_IPA_EVALUATIONS,
     OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS, PUBLIC_INPUTS_SIZE,
-    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS,
+    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS, ULTRA_VERIFICATION_KEY_LENGTH,
 };
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::keys::proving_key::ProvingKey;
 use co_noir_common::keys::verification_key::VerifyingKeyBarretenberg;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
 use co_noir_common::transcript::{Poseidon2Sponge, Transcript};
 use co_noir_common::types::ZeroKnowledge;
+use co_ultrahonk::prelude::CoUltraHonk;
+use mpc_core::MpcState;
+use std::any::Any;
 use std::array;
 
 pub type PrecomputedCommitments<C, T> = PrecomputedEntities<BigGroup<C, T>>;
+
+// TACEO TODO: This is not so nice, can we avoid?
+fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
+    (a as &dyn Any).downcast_ref::<B>()
+}
 
 pub struct RecursiveVerificationKey<
     C: HonkCurve<TranscriptFieldType>,
@@ -108,7 +121,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     /// Add constraints required to recursively verify an UltraHonk proof
     pub(crate) fn create_honk_recursion_constraints(
         &mut self,
-        input: &RecursionConstraint,
+        input: &RecursionConstraint<C::ScalarField>,
         has_valid_witness_assignments: bool,
         crs: &ProverCrs<C>,
         driver: &mut T,
@@ -126,14 +139,14 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         // Construct an in-circuit representation of the verification key.
         // For now, the v-key is a circuit constant and is fixed for the circuit.
         // (We may need a separate recursion opcode for this to vary, or add more config witnesses to this opcode)
-        let mut key_fields = Vec::with_capacity(input.key.len());
+        let mut vk_fields = Vec::with_capacity(input.key.len());
         for idx in &input.key {
             let field = FieldCT::<C::ScalarField>::from_witness_index(*idx);
-            key_fields.push(field);
+            vk_fields.push(field);
         }
 
         // Create circuit type for vkey hash.
-        let vk_hash = FieldCT::<C::ScalarField>::from_witness_index(input.key_hash);
+        let mut vk_hash = FieldCT::<C::ScalarField>::from_witness_index(input.key_hash);
 
         // Create witness indices for the proof with public inputs reinserted
         let proof_indices =
@@ -144,25 +157,73 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             let field = FieldCT::<C::ScalarField>::from_witness_index(*idx);
             proof_fields.push(field);
         }
+        // Recursion constraints come with a predicate (e.g. when the black-box call is done in an if conditional depending
+        // on a witness value in a Noir circuit) To keep the circuit constants (selectors and copy constraints) the same
+        // independent of value of the conditional, we create a place holder proof, vk and vk_hash and conditionally select
+        // between the two (in circuit) depending on the predicate value.
+        let mut place_holder_vk_fields: Vec<C::ScalarField> =
+            Vec::with_capacity(ULTRA_VERIFICATION_KEY_LENGTH);
+        let mut place_holder_proof: Vec<C::ScalarField> =
+            Vec::with_capacity(ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
+        let mut place_holder_vk_hash = FieldCT::<C::ScalarField>::default();
 
-        // Populate the key fields and proof fields with dummy values to prevent issues (e.g., points must be on curve).
-        if !has_valid_witness_assignments {
-            // In the constraint, the agg object public inputs are still contained in the proof. To get the 'raw' size of
-            // the proof and public_inputs, we subtract and add the corresponding amount from the respective sizes.
-            let size_of_proof_with_no_pub_inputs = input.proof.len() - PUBLIC_INPUTS_SIZE;
-            let total_num_public_inputs = input.public_inputs.len() + PUBLIC_INPUTS_SIZE;
+        self.place_holder_proof_and_vk(
+            &mut place_holder_vk_fields,
+            &mut place_holder_proof,
+            &mut place_holder_vk_hash,
+            has_valid_witness_assignments,
+            input.proof.len(),
+            input.public_inputs.len(),
+            &mut vk_fields,
+            &mut proof_fields,
+            has_zk,
+            crs,
+            driver,
+        )?;
 
-            self.create_dummy_vkey_and_proof(
-                size_of_proof_with_no_pub_inputs,
-                total_num_public_inputs,
-                &mut key_fields,
-                &mut proof_fields,
-                has_zk,
+        if (!input.predicate.is_constant) {
+            let predicate_witness = BoolCT::from_witness_index_unsafe(input.predicate.index, self);
+
+            let mut result_proof: Vec<FieldCT<C::ScalarField>> =
+                Vec::with_capacity(proof_fields.len());
+            let mut result_vk: Vec<FieldCT<C::ScalarField>> = Vec::with_capacity(vk_fields.len());
+            // Replace the proof by the placeholder proof in case the predicate is 1
+            for (i, p) in place_holder_proof.iter().enumerate() {
+                let place_holder_proof_witness = FieldCT::from_witness((*p).into(), self);
+                let valid_proof = FieldCT::conditional_assign(
+                    &predicate_witness,
+                    &proof_fields[i],
+                    &place_holder_proof_witness,
+                    self,
+                    driver,
+                )?;
+                result_proof.push(valid_proof);
+            }
+            // Replace the VK with the placeholder vk in case the predicate is 1
+            for (i, vk) in place_holder_vk_fields.iter().enumerate() {
+                let place_holder_vk_witness = FieldCT::from_witness((*vk).into(), self);
+                let valid_vk = FieldCT::conditional_assign(
+                    &predicate_witness,
+                    &vk_fields[i],
+                    &place_holder_vk_witness,
+                    self,
+                    driver,
+                )?;
+                result_vk.push(valid_vk);
+            }
+            let place_holder_vk_hash_val = place_holder_vk_hash.get_value(self, driver);
+            vk_hash = FieldCT::conditional_assign(
+                &predicate_witness,
+                &vk_hash,
+                &FieldCT::from_witness(place_holder_vk_hash_val, self),
+                self,
                 driver,
             )?;
+            proof_fields = result_proof;
+            vk_fields = result_vk;
         }
 
-        let vkey = RecursiveVerificationKey::<C, T>::new(&key_fields, self, driver)?;
+        let vkey = RecursiveVerificationKey::<C, T>::new(&vk_fields, self, driver)?;
         let vk_and_hash = VKAndHash {
             vk: vkey,
             hash: vk_hash,
@@ -208,7 +269,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     pub fn place_holder_proof_and_vk(
         &mut self,
         place_holder_vk_fields: &mut Vec<C::ScalarField>,
-        place_holder_proof: &mut Vec<T::AcvmType>,
+        place_holder_proof: &mut Vec<C::ScalarField>,
         place_holder_vk_hash: &mut FieldCT<C::ScalarField>,
         has_valid_witness_assignments: bool,
         proof_size: usize,
@@ -252,7 +313,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             *place_holder_proof = mock_proof;
 
             // Assume a function exists to compute hash of vk (returns scalar field element)
-            let vk_hash_scalar = honk_vk.hash_through_transcript("", &mut transcript);
+            *place_holder_vk_hash =
+                FieldCT::from(honk_vk.hash_through_transcript("", &mut transcript));
         } else {
             // Generate an actually verifiable honk proof & vk for a trivial circuit.
             // Assume this helper exists and returns (proof, vk, vk_hash_scalar).
@@ -279,7 +341,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         crs: &ProverCrs<C>,
         has_zk: ZeroKnowledge,
         driver: &mut T,
-    ) -> eyre::Result<(Vec<T::AcvmType>, VerifyingKeyBarretenberg<C>)> {
+    ) -> eyre::Result<(Vec<C::ScalarField>, VerifyingKeyBarretenberg<C>)> {
         let mut random_fields = Vec::with_capacity(3 + num_inner_public_inputs);
         for _ in 0..num_inner_public_inputs + 3 {
             let pi = driver.rand()?;
@@ -327,11 +389,27 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
         // prove the circuit constructed above
         // Create the decider proving key
-        // let decider_pk = ProvingKey::create::<PlainAcvmSolver<_>>(builder, crs, &mut plain_driver)?;
+        let (pk, vk) = ProvingKey::create_keys_barretenberg::<PlainAcvmSolver<_>>(
+            ().id(),
+            builder,
+            crs,
+            &mut plain_driver,
+        )?;
 
-        let proof = self.create_mock_honk_proof(num_inner_public_inputs, has_zk, driver)?;
-        todo!()
-        // Ok((proof, vk))
+        let proof = CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove_inner(
+            &(),
+            &mut (),
+            pk,
+            crs,
+            has_zk,
+            &vk,
+        )?
+        .inner();
+        let proof: Vec<C::ScalarField> = downcast::<_, Vec<C::ScalarField>>(&proof)
+            .expect("We checked types")
+            .clone();
+
+        Ok((proof, vk))
     }
 
     /// Creates a dummy vkey and proof object.
@@ -361,10 +439,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
         // Set honk vk in builder
         for vk_element in honk_vk.to_field_elements() {
-            self.set_variable(
-                key_fields[offset].witness_index, //TODO FLORIN AFTER REBASE:    key_fields[offset].get_witness_index(builder, driver)?,
-                T::AcvmType::from(vk_element),
-            );
+            let index = key_fields[offset].get_witness_index(self, driver);
+            self.set_variable(index, T::AcvmType::from(vk_element));
             offset += 1;
         }
 
@@ -374,7 +450,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         offset = 0;
         // Set honk proof in builder
         for proof_element in honk_proof {
-            self.set_variable(proof_fields[offset].witness_index, proof_element);
+            self.set_variable(proof_fields[offset].witness_index, proof_element.into());
             offset += 1;
         }
 
@@ -418,12 +494,15 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         inner_public_inputs_size: usize,
         has_zk: ZeroKnowledge,
         driver: &mut T,
-    ) -> eyre::Result<Vec<T::AcvmType>> {
+    ) -> eyre::Result<Vec<C::ScalarField>> {
         // Construct a Honk proof as the concatenation of an Oink proof and a Decider proof
         let mut proof = Vec::with_capacity(ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
         proof.extend_from_slice(&self.create_mock_oink_proof(inner_public_inputs_size, driver)?);
         proof.extend_from_slice(&self.create_mock_decider_proof(has_zk, driver)?);
-        Ok(proof)
+        let shared: Vec<_> = proof.iter().map(|y| driver.get_as_shared(y)).collect();
+        let proof_as_scalars: Vec<C::ScalarField> = driver.open_many(&shared)?;
+
+        Ok(proof_as_scalars)
     }
 
     fn create_mock_oink_proof(

@@ -5,19 +5,21 @@ use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use ark_ff::One;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_noir_common::crs::ProverCrs;
-use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType};
-use co_noir_common::keys::plain_proving_key::PlainProvingKey;
-use co_noir_common::keys::proving_key::ProvingKey;
-use co_noir_common::keys::types::ActiveRegionData;
-use co_noir_common::keys::verification_key::{VerifyingKey, VerifyingKeyBarretenberg};
-use co_noir_common::mpc::NoirUltraHonkProver;
-use co_noir_common::mpc::rep3::Rep3UltraHonkDriver;
-use co_noir_common::mpc::shamir::ShamirUltraHonkDriver;
-use co_noir_common::polynomials::entities::Polynomials;
-use co_noir_common::polynomials::entities::PrecomputedEntities;
-use co_noir_common::utils::Utils;
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    keys::plain_proving_key::PlainProvingKey,
+    keys::proving_key::ProvingKey,
+    keys::types::ActiveRegionData,
+    keys::verification_key::{VerifyingKey, VerifyingKeyBarretenberg},
+    mpc::NoirUltraHonkProver,
+    mpc::rep3::Rep3UltraHonkDriver,
+    mpc::shamir::ShamirUltraHonkDriver,
+    polynomials::entities::Polynomials,
+    polynomials::entities::PrecomputedEntities,
+    utils::Utils,
+};
 use mpc_core::MpcState;
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
