@@ -1,6 +1,3 @@
-use std::array;
-use std::sync::Arc;
-
 use crate::acir_format::ProofType;
 use crate::honk_verifier::recursive_decider_verification_key::{
     RecursiveDeciderVerificationKey, VKAndHash,
@@ -12,8 +9,8 @@ use crate::types::big_field::BigField;
 use crate::types::big_group::BigGroup;
 use crate::types::types::{AddQuad, PairingPoints, RecursionConstraint};
 use crate::{transcript_ct::TranscriptFieldType, types::field_ct::FieldCT};
-use ark_ec::{AffineRepr, PrimeGroup};
-use ark_ff::{One, UniformRand, Zero};
+use ark_ec::AffineRepr;
+use ark_ff::{One, Zero};
 use co_acvm::PlainAcvmSolver;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::constants::{
@@ -29,7 +26,7 @@ use co_noir_common::keys::verification_key::VerifyingKeyBarretenberg;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
 use co_noir_common::transcript::{Poseidon2Sponge, Transcript};
 use co_noir_common::types::ZeroKnowledge;
-use rand::thread_rng;
+use std::array;
 
 pub type PrecomputedCommitments<C, T> = PrecomputedEntities<BigGroup<C, T>>;
 
@@ -581,67 +578,4 @@ fn populate_field_elements_for_mock_commitments<
     for _ in 0..num_commitments {
         fields.clone_from_slice(&mock_commitment_frs);
     }
-}
-
-#[test]
-fn test() {
-    type C = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;
-    let mut rng = thread_rng();
-    let mut random_fields = Vec::with_capacity(3);
-    for _ in 0..3 {
-        let pi = ark_bn254::Fr::rand(&mut rng);
-        random_fields.push(pi);
-    }
-    let size = 32;
-    let mut public_inputs = Vec::with_capacity(size);
-    for _ in 0..size {
-        let pi = ark_bn254::Fr::rand(&mut rng);
-        public_inputs.push(pi);
-    }
-
-    let a = random_fields[0];
-    let b = random_fields[1];
-    let c = random_fields[2];
-    let d = a + b + c;
-
-    // TACEO TODO: I think this is fine?
-    let mut builder = GenericUltraCircuitBuilder::<
-        C,
-        PlainAcvmSolver<<C as PrimeGroup>::ScalarField>,
-    >::new_minimal(0);
-    let mut plain_driver = PlainAcvmSolver::<<C as PrimeGroup>::ScalarField>::new();
-
-    let a_idx = builder.add_variable(a);
-    let b_idx = builder.add_variable(b);
-    let c_idx = builder.add_variable(c);
-    let d_idx = builder.add_variable(d);
-
-    builder.create_big_add_gate(
-        &AddQuad {
-            a: a_idx,
-            b: b_idx,
-            c: c_idx,
-            d: d_idx,
-            a_scaling: <C as PrimeGroup>::ScalarField::one(),
-            b_scaling: <C as PrimeGroup>::ScalarField::one(),
-            c_scaling: <C as PrimeGroup>::ScalarField::one(),
-            d_scaling: -<C as PrimeGroup>::ScalarField::one(),
-            const_scaling: <C as PrimeGroup>::ScalarField::zero(),
-        },
-        false,
-    );
-
-    // Add the public inputs
-    for pi in public_inputs.iter() {
-        builder.add_public_variable(*pi);
-    }
-
-    // Add the default pairing points and IPA claim
-    builder
-        .add_default_to_public_inputs(&mut plain_driver)
-        .unwrap(); //TODO FLORIN/ TODO CESAR: I think this is not the right one anymore
-
-    builder.finalize_circuit(true, &mut plain_driver).unwrap();
-
-    println!("size: {}", builder.compute_dyadic_size());
 }

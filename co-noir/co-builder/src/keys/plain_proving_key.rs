@@ -393,7 +393,7 @@ impl<P: CurveGroup> PlainPkTrait<P> for PlainProvingKey<P> {
         //  ignored, as used for regular constraints and padding to the next power of 2.
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
         assert!(dyadic_circuit_size > circuit.get_tables_size() + additional_offset);
-           let mut offset = 0;
+        let mut offset = 0;
 
         for table in circuit.lookup_tables.iter() {
             let table_index = table.table_index;
@@ -414,7 +414,7 @@ impl<P: CurveGroup> PlainPkTrait<P> for PlainProvingKey<P> {
         circuit: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> eyre::Result<()> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
-      let mut table_offset = 0;
+        let mut table_offset = 0;
         for table in circuit.lookup_tables.iter_mut() {
             // we need the index_map hash table in this case
             if table.requires_index_map() {

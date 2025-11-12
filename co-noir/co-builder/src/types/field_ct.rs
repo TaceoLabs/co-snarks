@@ -1072,7 +1072,7 @@ impl<F: PrimeField> FieldCT<F> {
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
-        predicate: &BoolCT<P, T>,
+        predicate: &BoolCT<P::ScalarField, T>,
         lhs: &Self,
         rhs: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1681,8 +1681,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> From<bool> for BoolCT<F,
 }
 
 impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
-
-     pub(crate) fn get_witness_index<P: CurveGroup<ScalarField = F>>(
+    pub(crate) fn get_witness_index<P: CurveGroup<ScalarField = F>>(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -1782,7 +1781,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
         }
     }
 
-    fn conditional_assign<P: CurveGroup<ScalarField = F>>(
+    pub(crate) fn conditional_assign<P: CurveGroup<ScalarField = F>>(
         predicate: &Self,
         lhs: &Self,
         rhs: &Self,
@@ -1816,7 +1815,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
         Ok((l.or(&r, builder, driver)?).normalize(builder, driver))
     }
 
-    fn assert_equal<P: CurveGroup<ScalarField = F>>(
+    pub(crate) fn assert_equal<P: CurveGroup<ScalarField = F>>(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -2390,7 +2389,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     pub(crate) fn new_with_assert(
         x: FieldCT<P::ScalarField>,
         y: FieldCT<P::ScalarField>,
-        is_infinity: BoolCT<P, T>,
+        is_infinity: BoolCT<P::ScalarField, T>,
         assert_on_curve: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -3324,7 +3323,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
         let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
-        let add_result = CycleGroupCT::new(x3, y3, x_coordinates_match.to_owned(), driver);
+        let add_result = CycleGroupCT::<P, T>::new(x3, y3, x_coordinates_match.to_owned(), driver);
 
         let dbl_result = self.dbl(None, builder, driver)?;
 
@@ -3390,7 +3389,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(result)
     }
 
-    fn conditional_assign(
+    pub(crate) fn conditional_assign(
         predicate: &BoolCT<P::ScalarField, T>,
         lhs: &Self,
         rhs: &Self,

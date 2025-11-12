@@ -4,9 +4,8 @@ use co_brillig::mpc::BrilligDriver;
 use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::LookupTableProvider,
-    protocols::rep3::{arithmetic::BinaryShare, yao::circuits::SHA256Table},
+    protocols::rep3::yao::circuits::SHA256Table,
 };
-use num_bigint::BigUint;
 use std::{any::Any, fmt};
 
 pub(super) mod plain;

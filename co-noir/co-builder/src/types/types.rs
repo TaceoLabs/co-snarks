@@ -2,6 +2,7 @@ use super::big_group::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT};
+use crate::types::field_ct::BoolCT;
 use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
@@ -922,7 +923,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         input_x: &Self,
         input_y: &Self,
         input_infinity: &Self,
-        predicate: &BoolCT<P, T>,
+        predicate: &BoolCT<P::ScalarField, T>,
         has_valid_witness_assignments: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,

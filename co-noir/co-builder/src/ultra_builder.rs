@@ -3867,7 +3867,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             },
             true,
         );
-        create_dummy_gate!(
+        create_unconstrained_gate!(
             self,
             &mut self.blocks.arithmetic,
             self.zero_idx,

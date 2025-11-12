@@ -302,7 +302,8 @@ impl<F: PrimeField> BigField<F> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy necessary for preceeding big add
         // gate
 
-        GenericUltraCircuitBuilder::<P, T>::create_dummy_gate(
+        GenericUltraCircuitBuilder::<P, T>::create_unconstrained_gate(
+            //TODO CESAR: Is this the right one? (as it does not increment the gate count)
             &mut builder.blocks.arithmetic,
             builder.zero_idx,
             builder.zero_idx,
@@ -1000,7 +1001,7 @@ impl<F: PrimeField> BigField<F> {
         let last_quotient_limb = quotient_value.last().expect("At least one limb").clone();
         let quotient_limb_index = builder.add_variable(last_quotient_limb);
         let quotient_limb = FieldCT::from_witness_index(quotient_limb_index);
-        let quotient_limb_wi = quotient_limb.get_witness_index();
+        let quotient_limb_wi = quotient_limb.get_witness_index(builder, driver);
 
         // UltraFlavor has plookup
         // Range-constrain the quotient limb
