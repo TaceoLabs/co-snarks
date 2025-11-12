@@ -1391,28 +1391,11 @@ impl<F: PrimeField> BigField<F> {
         // As long as the above holds, we can borrow bits from X.limb[3] to ensure less significant limbs are positive
         //
         // Start by setting constant_to_add = p
-        let modulus: BigUint = Fq::MODULUS.into();
-        let mut constant_to_add = modulus.clone();
-        // add a large enough multiple of p to not get negative result in subtraction
-        // TODO CESAR: Check whether this is correct
-        while {
-            // Get the 4th limb (most significant) using .to_bytes_be
-            let bytes = constant_to_add.to_bytes_be();
-            // Calculate the starting and ending bit positions for the 4th limb
-            let start_bit = (Self::NUM_LIMB_BITS * 3) as usize;
-            let end_bit = (Self::NUM_LIMB_BITS * 4) as usize;
-            // Convert bytes to BigUint, then shift and mask to get the limb value
-            let total_bits = constant_to_add.bits() as usize;
-            let mut limb_3 = BigUint::zero();
-            if total_bits > start_bit {
-                let shifted = &constant_to_add >> start_bit;
-                let mask = (BigUint::one() << (end_bit - start_bit)) - BigUint::one();
-                limb_3 = &shifted & &mask;
-            }
-            limb_3 <= limb_3_maximum_value
-        } {
-            constant_to_add += modulus.clone();
-        }
+        let modulus_biguint: BigUint = Fq::MODULUS.into();
+        let constant_to_add_factor = ((limb_3_maximum_value << (Self::NUM_LIMB_BITS * 3))
+            / &modulus_biguint)
+            + BigUint::one();
+        let constant_to_add = &modulus_biguint * &constant_to_add_factor;
 
         // Step 3: Compute offset terms t0, t1, t2, t3 that we add to our result to ensure each limb is positive
         //
@@ -1443,24 +1426,30 @@ impl<F: PrimeField> BigField<F> {
         let t3 = BigUint::one() << (limb_2_borrow_shift - Self::NUM_LIMB_BITS);
 
         // Compute the limbs of `constant_to_add`, including our offset terms t0, t1, t2, t3 that ensure each result limb is positive
-        let to_add_0 = constant_to_add.clone()
-            & (((BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one()) + &t0);
-        let to_add_1 = ((constant_to_add.clone() >> Self::NUM_LIMB_BITS)
-            & ((BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one()))
-            + &t1;
-        let to_add_2 = ((constant_to_add.clone() >> (Self::NUM_LIMB_BITS * 2))
-            & ((BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one()))
-            + &t2;
-        let to_add_3 = ((constant_to_add.clone() >> (Self::NUM_LIMB_BITS * 3))
-            & ((BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one()))
-            - &t3;
+        let mask = (BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one();
+        let to_add_0 = (constant_to_add.clone() & &mask) + &t0;
+        let to_add_1 = ((constant_to_add.clone() >> Self::NUM_LIMB_BITS) & &mask) + &t1;
+        let to_add_2 = ((constant_to_add.clone() >> (Self::NUM_LIMB_BITS * 2)) & &mask) + &t2;
+        let to_add_3 = ((constant_to_add.clone() >> (Self::NUM_LIMB_BITS * 3)) & &mask) - &t3;
 
         // Update the maximum possible value of the result. We assume here that (*this.value) = 0
-        let mut result = self.clone();
-        result.binary_basis_limbs[0].maximum_value += &to_add_0;
-        result.binary_basis_limbs[1].maximum_value += &to_add_1;
-        result.binary_basis_limbs[2].maximum_value += &to_add_2;
-        result.binary_basis_limbs[3].maximum_value += &to_add_3;
+        let mut result = BigField::default();
+        result.binary_basis_limbs[0].maximum_value = self.binary_basis_limbs[0]
+            .maximum_value
+            .clone()
+            + &to_add_0;
+        result.binary_basis_limbs[1].maximum_value = self.binary_basis_limbs[1]
+            .maximum_value
+            .clone()
+            + &to_add_1;
+        result.binary_basis_limbs[2].maximum_value = self.binary_basis_limbs[2]
+            .maximum_value
+            .clone()
+            + &to_add_2;
+        result.binary_basis_limbs[3].maximum_value = self.binary_basis_limbs[3]
+            .maximum_value
+            .clone()
+            + &to_add_3;
 
         // Convert to_add_i to FieldCT and add to each limb
         let to_add_0 = FieldCT::from_witness(F::from(to_add_0).into(), builder);
