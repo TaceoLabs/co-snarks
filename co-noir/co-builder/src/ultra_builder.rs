@@ -3755,15 +3755,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             a1b0,
             a1b1,
             a1b2,
-            a1b3,
+            _,
             a2b0,
             a2b1,
-            a2b2,
-            a2b3,
+            _,
+            _,
             a3b0,
-            a3b1,
-            a3b2,
-            a3b3,
+            _,
+            _,
+            _,
         ]: [_; 16] = driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
 
         // lo_0 = a[0] * b[0] - r[0] + (a[1] * b[0] + a[0] * b[1]) * limb_shift
@@ -3986,7 +3986,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder
     }
 
-    pub(crate) fn new(size_hint: usize) -> Self {
+    pub fn new(size_hint: usize) -> Self {
         tracing::trace!("Builder new");
         let variables = Vec::with_capacity(size_hint * 3);
         // let _variable_names = BTreeMap::with_capacity(size_hint * 3);

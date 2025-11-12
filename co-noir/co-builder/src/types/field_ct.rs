@@ -927,7 +927,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(())
     }
 
-    fn assert_is_zero<
+    pub(crate) fn assert_is_zero<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(

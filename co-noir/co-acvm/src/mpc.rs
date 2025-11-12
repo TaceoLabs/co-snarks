@@ -231,6 +231,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     // TODO do we want this here?
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>>;
 
+    fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<C::BaseField>> {
+        todo!()
+    }
+
     // Generate a shared random value
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare>;
 
@@ -641,6 +648,15 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         a: &[Self::AcvmType; 4],
         b: &[Self::AcvmType; 4],
+        to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        todo!()
+    }
+
+    fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[[Self::AcvmType; 4]],
+        b: &[[Self::AcvmType; 4]],
         to_add: &[[Self::AcvmType; 4]],
     ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
         todo!()

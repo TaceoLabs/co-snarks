@@ -278,6 +278,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(a.to_vec())
     }
 
+    fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<C::BaseField>> {
+        Ok(a.to_vec())
+    }
+
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         Ok(Self::ArithmeticShare::rand(&mut rng))
@@ -1117,6 +1124,29 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
         let quotient_limbs = Utils::biguint_to_field_limbs::<_, 4, 68>(&quotient);
 
+        Ok((quotient_limbs, Self::OtherAcvmType::<C>::from(remainder)))
+    }
+
+    fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[[Self::AcvmType; 4]],
+        b: &[[Self::AcvmType; 4]],
+        to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        let as_as_biguint = a.iter().map(Utils::field_limbs_to_biguint::<_, 4, 68>);
+        let bs_as_biguint = b.iter().map(Utils::field_limbs_to_biguint::<_, 4, 68>);
+        let to_add_as_biguint = to_add.iter().map(Utils::field_limbs_to_biguint::<_, 4, 68>);
+        let modulus: BigUint = C::BaseField::MODULUS.into();
+
+        let unreduced = as_as_biguint
+            .zip(bs_as_biguint)
+            .fold(BigUint::zero(), |acc, (a, b)| acc + (a * b))
+            + to_add_as_biguint.fold(BigUint::zero(), |acc, x| acc + x);
+
+        let remainder = &unreduced % &modulus;
+        let quotient = &unreduced / &modulus;
+
+        let quotient_limbs = Utils::biguint_to_field_limbs::<_, 4, 68>(&quotient);
         Ok((quotient_limbs, Self::OtherAcvmType::<C>::from(remainder)))
     }
 }

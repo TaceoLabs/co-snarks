@@ -1,22 +1,20 @@
-use core::num;
-use std::cmp::max;
-use std::{array, clone};
+use std::any::TypeId;
+use std::mem;
 
+use super::field_ct::BoolCT;
 use crate::prelude::offset_generator;
+use crate::transcript_ct::Bn254G1;
 use crate::types::big_field::BigField;
 use crate::types::big_group_tables::BatchLookupTablePlookup;
 use crate::types::field_ct::WitnessCT;
-use crate::types::plookup::LookupHashMap;
-use crate::types::rom_ram::TwinRomTable;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
+use ark_bn254::G1Affine;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::Zero;
 use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use mpc_core::gadgets::field_from_hex_string;
 use num_bigint::BigUint;
-use serde::de;
-
-use super::field_ct::BoolCT;
 
 pub struct BigGroup<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> {
     pub(crate) x: BigField<F>,
@@ -65,6 +63,14 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             x,
             y,
             is_infinity: BoolCT::from(false),
+        }
+    }
+
+    pub fn point_at_infinity() -> Self {
+        BigGroup {
+            x: BigField::default(),
+            y: BigField::default(),
+            is_infinity: BoolCT::from(true),
         }
     }
 
@@ -342,23 +348,43 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // Compute NAF representation of scalars
         let mut naf_entries = Vec::with_capacity(msm_size);
         for i in 0..msm_size {
-            naf_entries.push(Self::compute_naf(&scalars[i], num_rounds, builder, driver)?);
+            let naf = Self::compute_naf(&scalars[i], num_rounds, builder, driver)?;
+            print!("NAF for scalar {}: ", i);
+            for j in 0..naf.len() {
+                let naf_bit = naf[j].get_value(driver);
+                print!("{:?} ", naf_bit);
+            }
+            naf_entries.push(naf);
         }
+        println!("");
 
         // We choose a deterministic offset generator based on the number of rounds.
         // We compute both the initial and final offset generators: G_offset, 2ⁿ⁻¹ * G_offset.
         let (mut offset_generator_start, mut offset_generator_end) =
-            Self::compute_offset_generators::<P>(num_rounds)?;
+            Self::precomputed_offset_generators::<P>(num_rounds)?;
 
         // Initialize accumulator with initial offset generator + first NAF column
-        let mut inital_entry = point_table.get_chain_initial_entry(builder, driver)?;
+        let mut inital_entry: ChainAddAccumulator<F> =
+            point_table.get_chain_initial_entry(builder, driver)?;
+        println!("Initial chain entry: ");
+        println!("{}", inital_entry.debug_print(builder, driver));
+
         let tmp = Self::chain_add(
             &mut offset_generator_start,
             &mut inital_entry,
             builder,
             driver,
         )?;
+        println!(
+            "Point table initial entry added to offset generator: {}",
+            tmp.debug_print(builder, driver)
+        );
+
         let mut accumulator = Self::chain_add_end(tmp, builder, driver)?;
+        // println!(
+        //     "Initial accumulator: {}",
+        //     accumulator.debug_print(builder, driver)
+        // );
 
         // Process 4 NAF entries per iteration (for the remaining (num_rounds - 1) rounds)
         let num_rounds_per_iteration = 4;
@@ -367,6 +393,10 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let num_rounds_per_final_iteration =
             (num_rounds - 1) - ((num_iterations - 1) * num_rounds_per_iteration);
 
+        println!(
+            "Processing {} iterations of {} rounds each (final iteration has {} rounds)",
+            num_iterations, num_rounds_per_iteration, num_rounds_per_final_iteration
+        );
         for i in 0..num_iterations {
             let mut to_add = Vec::with_capacity(msm_size);
             let inner_num_rounds = if i != num_iterations - 1 {
@@ -380,13 +410,21 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 for k in 0..msm_size {
                     nafs[k] = naf_entries[k][i * num_rounds_per_iteration + j + 1].clone();
                 }
-                to_add.push(point_table.get_chain_add_accumulator(&nafs, builder, driver)?);
+                let tmp = point_table.get_chain_add_accumulator(&nafs, builder, driver)?;
+                to_add.push(tmp);
             }
 
             // Once we have looked-up all points from the four NAF columns, we update the accumulator as:
             // accumulator = 2.(2.(2.(2.accumulator + to_add[0]) + to_add[1]) + to_add[2]) + to_add[3]
             //             = 2⁴.accumulator + 2³.to_add[0] + 2².to_add[1] + 2¹.to_add[2] + to_add[3]
             accumulator = accumulator.multiple_montgomery_ladder(&mut to_add, builder, driver)?;
+            // if i % 10 == 0 {
+            //     println!(
+            //         "Accumulator after iteration {}: {}",
+            //         i,
+            //         accumulator.debug_print(builder, driver)
+            //     );
+            // }
         }
 
         // Subtract the skew factors (if any)
@@ -412,25 +450,13 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         accumulator.sub(&mut offset_generator_end, builder, driver)
     }
 
-    /**
-     * @brief Perform repeated iterations of the montgomery ladder algorithm.
-     *
-     * For points P, Q, montgomery ladder computes R = (P + Q) + P
-     * i.e. it's "double-and-add" without explicit doublings.
-     *
-     * This method can apply repeated iterations of the montgomery ladder.
-     * Each iteration reduces the number of field multiplications by 1, at the cost of more additions.
-     * (i.e. we don't compute intermediate y-coordinates).
-     *
-     * The number of additions scales with the size of the input vector. The optimal input size appears to be 4.
-     *
-     * @tparam C
-     * @tparam Fq
-     * @tparam Fr
-     * @tparam G
-     * @param add
-     * @return element<C, Fq, Fr, G>
-     */
+    // Perform repeated iterations of the montgomery ladder algorithm.
+    // For points P, Q, montgomery ladder computes R = (P + Q) + P
+    // i.e. it's "double-and-add" without explicit doublings.
+    // This method can apply repeated iterations of the montgomery ladder.
+    // Each iteration reduces the number of field multiplications by 1, at the cost of more additions.
+    // (i.e. we don't compute intermediate y-coordinates).
+    // The number of additions scales with the size of the input vector. The optimal input size appears to be 4.
     fn multiple_montgomery_ladder<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         add: &mut [ChainAddAccumulator<F>],
@@ -444,84 +470,194 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             is_negative: bool,
         }
 
-        let mut previous_x = self.x.clone();
-        let mut previous_y = CompositeY {
-            mul_left: vec![],
-            mul_right: vec![],
-            add: vec![],
-            is_negative: false,
+        // Handle edge case of empty input
+        if add.is_empty() {
+            return Ok(self.clone());
+        }
+
+        // Let A = (x, y) and P = (x₁, y₁)
+        // For the first point P, we want to compute: (2A + P) = (A + P) + A
+        // We first need to check if x ≠ x₁.
+        self.x
+            .assert_is_not_equal(&add[0].x3_prev, builder, driver)?;
+
+        // Compute λ₁ for computing the first addition: (A + P)
+        let mut lambda1 = if !add[0].is_element {
+            // Case 1: P is an accumulator (i.e., it lacks a y-coordinate)
+            //         λ₁ = (y - y₁) / (x - x₁)
+            //            = -(y₁ - y) / (x - x₁)
+            //            = -(λ₁_ₚᵣₑᵥ * (x₁_ₚᵣₑᵥ - x₁) - y₁_ₚᵣₑᵥ - y) / (x - x₁)
+            //
+            // NOTE: msub_div computes -(∑ᵢ aᵢ * bᵢ + ∑ⱼcⱼ) / d
+            // TODO CESAR: Use variables for the arguments for readability
+            BigField::msub_div(
+                &mut [add[0].lambda_prev.clone()],
+                &mut [add[0]
+                    .x1_prev
+                    .clone()
+                    .sub(&mut add[0].x3_prev, builder, driver)?],
+                &mut self.x.sub(&mut add[0].x3_prev, builder, driver)?,
+                &mut [
+                    add[0].y1_prev.neg(builder, driver)?,
+                    self.y.neg(builder, driver)?,
+                ],
+                false,
+                builder,
+                driver,
+            )?
+        } else {
+            // Case 2: P is a full element (i.e., it has a y-coordinate)
+            //         λ₁ = (y - y₁) / (x - x₁)
+            //
+            BigField::div_without_denominator_check(
+                &mut [self.y.sub(&mut add[0].y3_prev, builder, driver)?],
+                &mut self.x.sub(&mut add[0].x3_prev, builder, driver)?,
+                builder,
+                driver,
+            )?
         };
 
-        for i in 0..add.len() {
+        // Using λ₁, compute x₃ for (A + P):
+        // x₃ = λ₁.λ₁ - x₁ - x
+        let mut x_3 = lambda1.madd(
+            &mut lambda1.clone(),
+            &mut [
+                add[0].x3_prev.neg(builder, driver)?,
+                self.x.neg(builder, driver)?,
+            ],
+            builder,
+            driver,
+        )?;
+
+        // Compute λ₂ for the addition (A + P) + A:
+        // λ₂ = (y - y₃) / (x - x₃)
+        //    = (y - (λ₁ * (x - x₃) - y)) / (x - x₃)    (substituting y₃)
+        //    = (2y) / (x - x₃) - λ₁
+        //
+        self.x.assert_is_not_equal(&x_3, builder, driver)?;
+        let mut lambda_2 = BigField::div_without_denominator_check(
+            &mut [self.y.clone().add(&mut self.y, builder, driver)?],
+            &mut self.x.sub(&mut x_3, builder, driver)?,
+            builder,
+            driver,
+        )?
+        .sub(&mut lambda1, builder, driver)?;
+
+        // Using λ₂, compute x₄ for the final result:
+        // x₄ = λ₂.λ₂ - x₃ - x
+        let mut x_4 = lambda_2.sqradd(
+            &mut [x_3.neg(builder, driver)?, self.x.neg(builder, driver)?],
+            builder,
+            driver,
+        )?;
+
+        // Compute y₄ for the final result:
+        // y₄ = λ₂ * (x - x₄) - y
+        //
+        // However, we don't actually compute y₄ here. Instead, we build a "composite" y value that contains
+        // the components needed to compute y₄ later. This is done to avoid the explicit multiplication here.
+        //
+        // We store the result as either y₄ or -y₄, depending on whether the number of points added
+        // is even or odd. This sign adjustment simplifies the handling of subsequent additions in the loop below.
+        // +y₄ = λ₂ * (x - x₄) - y
+        // -y₄ = λ₂ * (x₄ - x) + y
+        let num_points_even = (add.len() % 2) == 0;
+        let tmp_add = if num_points_even {
+            self.y.clone()
+        } else {
+            self.y.neg(builder, driver)?
+        };
+        let mul_left = vec![lambda_2];
+        let tmp_mul_right = if num_points_even {
+            x_4.sub(&mut self.x, builder, driver)?
+        } else {
+            self.x.sub(&mut x_4, builder, driver)?
+        };
+        let mut previous_y = CompositeY {
+            mul_left,
+            mul_right: vec![tmp_mul_right],
+            add: vec![tmp_add],
+            is_negative: num_points_even,
+        };
+
+        // Handle remaining iterations (i > 0) in a loop
+        let mut previous_x = x_4;
+        for i in 1..add.len() {
+            // Let x = previous_x, y = previous_y
+            // Let P = (xᵢ, yᵢ) be the next point to add (represented by add[i])
+            // Ensure x-coordinates are distinct: x ≠ xᵢ
             previous_x.assert_is_not_equal(&add[i].x3_prev, builder, driver)?;
 
-            // composite y add_y
-            let negate_add_y = (i > 0) && previous_y.is_negative;
-            let mut lambda1_left = Vec::new();
-            let mut lambda1_right = Vec::new();
-            let mut lambda1_add = Vec::new();
+            // Determine sign adjustment based on previous y's sign
+            // If the previous y was positive, we need to negate the y-component from add[i]
+            let negate_add_y = !previous_y.is_negative;
 
-            if i == 0 {
-                lambda1_add.push(self.y.neg(builder, driver)?);
-            } else {
-                lambda1_left = previous_y.mul_left.clone();
-                lambda1_right = previous_y.mul_right.clone();
-                lambda1_add = previous_y.add.clone();
-            }
+            // Build λ₁ numerator components from previous composite y and current accumulator
+            // TODO CESAR: Clones here?
+            let mut lambda1_left = previous_y.mul_left.clone();
+            let mut lambda1_right = previous_y.mul_right.clone();
+            let mut lambda1_add = previous_y.add.clone();
 
             if !add[i].is_element {
+                // Case 1: add[i] is an accumulator (lacks y-coordinate)
+                //         λ₁ = (y - yᵢ) / (x - xᵢ)
+                //            = -(yᵢ - y) / (x - xᵢ)
+                //            = -(λᵢ_ₚᵣₑᵥ * (xᵢ_ₚᵣₑᵥ - xᵢ) - yᵢ_ₚᵣₑᵥ - y) / (x - xᵢ)
+                //
+                // If (previous) y is stored as positive, we compute λ₁ as:
+                //         λ₁ = -(λᵢ_ₚᵣₑᵥ * (xᵢ - xᵢ_ₚᵣₑᵥ) + yᵢ_ₚᵣₑᵥ + y) / (xᵢ - x)
+                //
                 lambda1_left.push(add[i].lambda_prev.clone());
-                lambda1_right.push(if negate_add_y {
+                let tmp = if negate_add_y {
                     add[i].x3_prev.sub(&mut add[i].x1_prev, builder, driver)?
                 } else {
                     add[i].x1_prev.sub(&mut add[i].x3_prev, builder, driver)?
-                });
-                lambda1_add.push(if negate_add_y {
-                    add[i].y1_prev.neg(builder, driver)?
-                } else {
+                };
+
+                lambda1_right.push(tmp);
+                let tmp = if negate_add_y {
                     add[i].y1_prev.clone()
-                });
+                } else {
+                    add[i].y1_prev.neg(builder, driver)?
+                };
+
+                lambda1_add.push(tmp);
             } else {
-                lambda1_add.push(if negate_add_y {
+                // Case 2: add[i] is a full element (has y-coordinate)
+                //         λ₁ = (yᵢ - y) / (xᵢ - x)
+                //
+                // If previous y is positive, we compute λ₁ as:
+                //         λ₁ = -(y - yᵢ) / (xᵢ - x)
+                //
+                let tmp = if negate_add_y {
                     add[i].y3_prev.neg(builder, driver)?
                 } else {
                     add[i].y3_prev.clone()
-                });
+                };
+                lambda1_add.push(tmp);
             }
 
-            // if previous_y is negated then add stays positive
-            // if previous_y is positive then add stays negated
-            // | add.y is negated | previous_y is negated | output of msub_div is -lambda |
-            // | --- | --- | --- |
-            // | no  | yes | yes |
-            // | yes | no  | no  |
-
-            let mut lambda1 = if (!add[i].is_element || i > 0) {
-                let denominator = if !negate_add_y {
-                    previous_x.sub(&mut add[i].x3_prev, builder, driver)?
-                } else {
-                    add[i].x3_prev.sub(&mut previous_x, builder, driver)?
-                };
-                BigField::msub_div(
-                    &lambda1_left,
-                    &lambda1_right,
-                    &denominator,
-                    &lambda1_add,
-                    false,
-                    builder,
-                    driver,
-                )?
+            // Compute λ₁
+            let denominator = if negate_add_y {
+                add[i].x3_prev.sub(&mut previous_x, builder, driver)?
             } else {
-                BigField::div_without_denominator_check(
-                    &mut [add[i].y3_prev.sub(&mut self.y, builder, driver)?],
-                    &mut add[i].x3_prev.sub(&mut self.x, builder, driver)?,
-                    builder,
-                    driver,
-                )?
+                previous_x.sub(&mut add[i].x3_prev, builder, driver)?
             };
+            let mut lambda1 = BigField::msub_div(
+                &lambda1_left,
+                &lambda1_right,
+                &denominator,
+                &lambda1_add,
+                false,
+                builder,
+                driver,
+            )?;
 
-            // TODO CESAR: Verify if this is correct
-            let mut x_3 = lambda1.sqradd(
+            // Using λ₁, compute x₃ for (previous + P):
+            // x₃ = λ₁.λ₁ - xᵢ - x
+            // y₃ = λ₁ * (x - x₃) - y (we don't compute this explicitly)
+            let mut x_3 = lambda1.clone().madd(
+                &mut lambda1.clone(),
                 &mut [
                     add[i].x3_prev.neg(builder, driver)?,
                     previous_x.neg(builder, driver)?,
@@ -530,131 +666,117 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 driver,
             )?;
 
-            // We can avoid computing y_4, instead substituting the expression `minus_lambda_2 * (x_4 - x) - y` where
-            // needed. This is cheaper, because we can evaluate two field multiplications (or a field multiplication + a
-            // field division) with only one non-native field reduction. E.g. evaluating (a * b) + (c * d) = e mod p only
-            // requires 1 quotient and remainder, which is the major cost of a non-native field multiplication
-            let mut lambda2 = if i == 0 {
-                let two_y = self.y.clone().add(&mut self.y, builder, driver)?;
-                BigField::div_without_denominator_check(
-                    &mut [two_y],
-                    &mut previous_x.sub(&mut x_3, builder, driver)?,
-                    builder,
-                    driver,
-                )?
-                .sub(&mut lambda1, builder, driver)?
+            // Compute λ₂ using previous composite y
+            // λ₂ = (y - y₃) / (x - x₃)
+            //    = (y - (λ₁ * (x - x₃) - y)) / (x - x₃)    (substituting y₃)
+            //    = (2y) / (x - x₃) - λ₁
+            //    = -2(y / (x₃ - x)) - λ₁
+            //
+            previous_x.assert_is_not_equal(&x_3, builder, driver)?;
+            let l2_denominator = if previous_y.is_negative {
+                previous_x.sub(&mut x_3, builder, driver)?
             } else {
-                let l2_denominator = if previous_y.is_negative {
-                    previous_x.sub(&mut x_3, builder, driver)?
-                } else {
-                    x_3.sub(&mut previous_x, builder, driver)?
-                };
-                let mut partial_lambda2 = BigField::msub_div(
-                    &previous_y.mul_left,
-                    &previous_y.mul_right,
-                    &l2_denominator,
-                    &previous_y.add,
-                    false,
-                    builder,
-                    driver,
-                )?;
-                let mut partial_lambda2 =
-                    partial_lambda2
-                        .clone()
-                        .add(&mut partial_lambda2, builder, driver)?;
-                partial_lambda2.sub(&mut lambda1, builder, driver)?
+                x_3.sub(&mut previous_x, builder, driver)?
             };
+            let mut partial_lambda2 = BigField::msub_div(
+                &previous_y.mul_left,
+                &previous_y.mul_right,
+                &l2_denominator,
+                &previous_y.add,
+                false,
+                builder,
+                driver,
+            )?;
+            let mut partial_lambda2 =
+                partial_lambda2
+                    .clone()
+                    .add(&mut partial_lambda2, builder, driver)?;
+            let mut lambda_2 = partial_lambda2.sub(&mut lambda1, builder, driver)?;
 
-            let mut x_4 = lambda2.sqradd(
+            // Using λ₂, compute x₄ for the final result of this iteration:
+            // x₄ = λ₂.λ₂ - x₃ - x
+            let mut x_4 = lambda_2.sqradd(
                 &mut [x_3.neg(builder, driver)?, previous_x.neg(builder, driver)?],
                 builder,
                 driver,
             )?;
 
+            // Build composite y for this iteration
+            // y₄ = λ₂ * (x - x₄) - y
+            // However, we don't actually compute y₄ explicitly, we rather store components to compute it later.
+            // We store the result as either y₄ or -y₄, depending on the sign of previous_y.
+            // +y₄ = λ₂ * (x - x₄) - y
+            // -y₄ = λ₂ * (x₄ - x) + y
+
             let mut y_4 = CompositeY {
-                mul_left: vec![],
-                mul_right: vec![],
+                mul_left: vec![lambda_2],
+                mul_right: vec![if previous_y.is_negative {
+                    previous_x.sub(&mut x_4, builder, driver)?
+                } else {
+                    x_4.sub(&mut previous_x, builder, driver)?
+                }],
                 add: vec![],
-                is_negative: false,
+                is_negative: !previous_y.is_negative,
             };
 
-            if i == 0 {
-                // We want to make sure that at the final iteration, `y_previous.is_negative = false`
-                // Each iteration flips the sign of y_previous.is_negative.
-                // i.e. whether we store y_4 or -y_4 depends on the number of points we have
-                let num_points_even = add.len() % 2 == 0;
-                y_4.add.push(if num_points_even {
-                    self.y.clone()
-                } else {
-                    self.y.neg(builder, driver)?
-                });
-                y_4.mul_left.push(lambda2.clone());
-                y_4.mul_right.push(if num_points_even {
-                    x_4.sub(&mut previous_x, builder, driver)?
-                } else {
-                    previous_x.sub(&mut x_4, builder, driver)?
-                });
-                y_4.is_negative = num_points_even;
-            } else {
-                y_4.is_negative = !previous_y.is_negative;
-                y_4.mul_left.push(lambda2.clone());
-                y_4.mul_right.push(if previous_y.is_negative {
-                    previous_x.sub(&mut x_4, builder, driver)?
-                } else {
-                    x_4.sub(&mut previous_x, builder, driver)?
-                });
+            // append terms in previous_y to y_4. We want to make sure the terms above are added into the start of y_4.
+            // This is to ensure they are cached correctly when
+            // `builder::evaluate_partial_non_native_field_multiplication` is called.
+            // (the 1st mul_left, mul_right elements will trigger builder::evaluate_non_native_field_multiplication
+            //  when Fq::mult_madd is called - this term cannot be cached so we want to make sure it is unique)
+            // TODO CESAR: Verify this is correct
+            y_4.mul_left.extend(previous_y.mul_left.iter().cloned());
+            y_4.mul_right.extend(previous_y.mul_right.iter().cloned());
+            y_4.add.extend(previous_y.add.iter().cloned());
 
-                // append terms in previous_y to y_4. We want to make sure the terms above are added into the start of y_4.
-                // This is to ensure they are cached correctly when
-                // `builder::evaluate_partial_non_native_field_multiplication` is called.
-                // (the 1st mul_left, mul_right elements will trigger builder::evaluate_non_native_field_multiplication
-                //  when Fq::mult_madd is called - this term cannot be cached so we want to make sure it is unique)
-                // TODO CESAR: Verify this is correct
-                y_4.mul_left.extend(previous_y.mul_left.iter().cloned());
-                y_4.mul_right.extend(previous_y.mul_right.iter().cloned());
-                y_4.add.extend(previous_y.add.iter().cloned());
-            }
             previous_x = x_4;
             previous_y = y_4;
         }
         let x_out = previous_x;
+
         assert!(
             !previous_y.is_negative,
             "Final y coordinate cannot be negative"
         );
-        // TODO CESAR: Reintroduce mult_madd
-        // let y_out = BigField::mult_madd(
-        //     previous_y.mul_left.as_slice(),
-        //     previous_y.mul_right.as_slice(),
-        //     previous_y.add.as_slice(),
-        //     // TODO CESAR: What should this boolean flag be?
-        //     false,
-        //     builder,
-        //     driver,
-        // )?;
 
-        let mut y_out = BigField::from_constant(&BigUint::from(0u64));
-        for i in 0..previous_y.mul_left.len() {
-            let mut tmp =
-                previous_y.mul_left[i].mul(&mut previous_y.mul_right[i], builder, driver)?;
-            y_out = y_out.add(&mut tmp, builder, driver)?;
-        }
-        for i in 0..previous_y.add.len() {
-            y_out = y_out.add(&mut previous_y.add[i], builder, driver)?;
-        }
+        let y_out = BigField::mult_madd(
+            &mut previous_y.mul_left.clone(),
+            &mut previous_y.mul_right.clone(),
+            &mut previous_y.add.clone(),
+            false,
+            builder,
+            driver,
+        )?;
 
         Ok(BigGroup::new(x_out, y_out))
     }
 
-    pub fn compute_offset_generators<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    pub fn precomputed_offset_generators<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         num_rounds: usize,
     ) -> eyre::Result<(Self, Self)> {
-        let offset_generator = offset_generator::<P>("biggroup batch mul offset generator");
-        let offset_multiplier = F::from(2u64).pow([(num_rounds - 1) as u64]);
-        let offset_generator_end = (offset_generator * offset_multiplier).into();
+        let offset_generator = if TypeId::of::<P::Affine>() == TypeId::of::<G1Affine>() {
+            let offset_generator_bn254 = G1Affine::new(
+                field_from_hex_string(
+                    "0x169b33374f53b95f16edf369c34509da6485297ee10452a62af4bd2820d6fb33",
+                )
+                .expect("Invalid hex string for offset generator"),
+                field_from_hex_string(
+                    "0x019d6e473e9b638cfe2b8f232288a075050a381b745cffaa9f9264121567315b",
+                )
+                .expect("Invalid hex string for offset generator"),
+            );
+
+            // TACEO TODO: This will only work for BN254, hence the unsafe cast to P::Affine
+            *unsafe { std::mem::transmute::<&G1Affine, &P::Affine>(&offset_generator_bn254) }
+        } else {
+            eyre::bail!("Precomputed offset generators not available for this curve");
+        };
+
+        let offset_multiplier = F::from(BigUint::one() << (num_rounds - 1));
+        let offset_generator_end = offset_generator * offset_multiplier;
         Ok((
             BigGroup::from_constant_affine::<P>(&offset_generator)?,
-            BigGroup::from_constant_affine::<P>(&offset_generator_end)?,
+            BigGroup::from_constant_affine::<P>(&offset_generator_end.into_affine())?,
         ))
     }
 
@@ -1091,14 +1213,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let mut negated_y = self.y.neg(builder, driver)?;
-        let new_y = BigField::conditional_assign(
-            cond,
-            &mut negated_y,
-            &mut self.y.clone(),
-            builder,
-            driver,
-        )?;
+        let new_y = self.y.conditional_negate(cond, builder, driver)?;
         Ok(BigGroup::new(self.x.clone(), new_y))
     }
 
@@ -1299,7 +1414,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<ChainAddAccumulator<F>> {
-        p1.x.assert_is_not_equal(&p2.x, builder, driver);
+        p1.x.assert_is_not_equal(&p2.x, builder, driver)?;
         let mut lambda = BigField::div_without_denominator_check(
             &mut [p2.y.clone(), p1.y.neg(builder, driver)?],
             &mut p2.x.sub(&mut p1.x, builder, driver)?,
@@ -1417,6 +1532,46 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             is_infinity: BoolCT::from(false),
         })
     }
+
+    #[cfg(test)]
+    pub fn debug_print<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> String {
+        let x_hex = self.x.debug_print(builder, driver);
+        let y_hex = self.y.debug_print(builder, driver);
+
+        format!("({},{})", x_hex, y_hex)
+    }
+
+    pub fn to_affine<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<P::Affine> {
+        let x_value = self.x.get_value_fq(builder, driver)?;
+        let y_value = self.y.get_value_fq(builder, driver)?;
+        let [x, y] = driver
+            .open_many_other(&[x_value, y_value])?
+            .try_into()
+            .unwrap();
+
+        if TypeId::of::<P>() == TypeId::of::<Bn254G1>() {
+            let (x_bn254, y_bn254) = unsafe {
+                (
+                    *mem::transmute::<&P::BaseField, &ark_bn254::Fq>(&x),
+                    *mem::transmute::<&P::BaseField, &ark_bn254::Fq>(&y),
+                )
+            };
+            let point_bn254 = ark_bn254::G1Affine::new(x_bn254, y_bn254);
+            let point: P::Affine =
+                unsafe { *mem::transmute::<&ark_bn254::G1Affine, &P::Affine>(&point_bn254) };
+            return Ok(point);
+        }
+
+        eyre::bail!("to_affine not implemented for this curve")
+    }
 }
 
 pub(crate) struct ChainAddAccumulator<F: PrimeField> {
@@ -1428,6 +1583,27 @@ pub(crate) struct ChainAddAccumulator<F: PrimeField> {
     pub(crate) is_element: bool,
 }
 
+impl<F: PrimeField> ChainAddAccumulator<F> {
+    pub(crate) fn debug_print<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> String {
+        format!(
+            "ChainAddAccumulator(\n\tx3_prev: {},\n\t y3_prev: {},\n\t x1_prev: {},\n\t y1_prev: {},\n\t lambda_prev: {},\n\t is_element: {}\n)",
+            self.x3_prev.debug_print(builder, driver),
+            self.y3_prev.debug_print(builder, driver),
+            self.x1_prev.debug_print(builder, driver),
+            self.y1_prev.debug_print(builder, driver),
+            self.lambda_prev.debug_print(builder, driver),
+            self.is_element
+        )
+    }
+}
+
 mod tests {
     use ark_bn254::{Fq, Fr, G1Affine};
     use ark_ec::{AffineRepr, CurveGroup};
@@ -1435,6 +1611,7 @@ mod tests {
     use ark_ff::Zero;
     use ark_ff::{PrimeField, UniformRand};
     use co_acvm::PlainAcvmSolver;
+    use mpc_core::gadgets::field_from_hex_string;
     use num_bigint::BigUint;
 
     use crate::{
@@ -1554,24 +1731,42 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_mul() {
-        let mut rng = rand::thread_rng();
+    fn test_batch_mul_consistency() {
         let builder = &mut GenericUltraCircuitBuilder::<Bn254G1, PlainAcvmSolver<Fr>>::new(100);
         let driver = &mut PlainAcvmSolver::<Fr>::new();
 
         let num_points = 1;
+        let point_x: Fq = field_from_hex_string(
+            "0x14f0c23a3ed30648669282fc85f27e9774fd8f2f6159ad296ddaffdfb47dbfbe",
+        )
+        .unwrap();
+        let point_y: Fq = field_from_hex_string(
+            "0x16e9ac387918e0a1a326b5b103f51dec1cbeb1e28c0c6630fa4c54f9c64aa6fa",
+        )
+        .unwrap();
+        let scalar: Fr = field_from_hex_string(
+            "0x0a778a2e61449eee90a6459895a8250e8564315d8e76790e5f479651dbe9be45",
+        )
+        .unwrap();
+
+        let result_x: Fq = field_from_hex_string(
+            "0x072d8907368eac980ef02f2078a8bd44d9d38102d379bdb7f54c169c31f434e6",
+        )
+        .unwrap();
+        let result_y: Fq = field_from_hex_string(
+            "0x2e9835a1d0a4d5481cd0591970d9086369ea3a83f3a27c01996b3af9dcef2630",
+        )
+        .unwrap();
+
+        let point = G1Affine::new(point_x, point_y);
+
         let mut points = Vec::new();
         let mut scalars = Vec::new();
-        let mut expected_result = G1Affine::zero();
+        let expected_result = G1Affine::new(result_x, result_y);
 
         for _ in 0..num_points {
-            let point = G1Affine::rand(&mut rng);
-            let scalar = Fr::rand(&mut rng);
-
-            expected_result = (expected_result + point * scalar).into_affine();
-
-            points.push(affine_to_biggroup(&point, builder, driver, true));
-            scalars.push(FieldCT::from(scalar));
+            points.push(affine_to_biggroup(&point, builder, driver, false));
+            scalars.push(FieldCT::from_witness(scalar, builder));
         }
 
         let result = BigGroup::batch_mul(
@@ -1584,6 +1779,7 @@ mod tests {
             driver,
         )
         .unwrap();
+
         let result_affine = biggroup_to_affine(&result, driver, builder);
 
         assert_eq!(result_affine, expected_result);

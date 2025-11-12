@@ -502,7 +502,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<
                 builder,
                 driver,
             )?);
-            offset += 2;
         }
 
         let mut singletons = Vec::new();
@@ -525,40 +524,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<
             twin_tables,
             singletons,
         })
-    }
-
-    pub(crate) fn get_initial_entry<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        &self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> BigGroup<F, T> {
-        let mut add_accumulator = Vec::new();
-        for six_table in &self.six_tables {
-            add_accumulator.push(six_table.element_table[0].clone());
-        }
-        for five_table in &self.five_tables {
-            add_accumulator.push(five_table.element_table[0].clone());
-        }
-        if self.has_quad {
-            add_accumulator.push(self.quad_tables[0].element_table[0].clone());
-        }
-        if self.has_triple {
-            add_accumulator.push(self.triple_tables[0].element_table[0].clone());
-        }
-        if self.has_twin {
-            add_accumulator.push(self.twin_tables[0].element_table[0].clone());
-        }
-        if self.has_singleton {
-            add_accumulator.push(self.singletons[0].clone());
-        }
-
-        add_accumulator
-            .into_iter()
-            .reduce(|mut acc, mut item| {
-                acc.add(&mut item, builder, driver)
-                    .expect("Addition of elements in batch lookup table failed")
-            })
-            .expect("At least one element should be present in batch lookup table")
     }
 
     pub(crate) fn get_chain_initial_entry<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
