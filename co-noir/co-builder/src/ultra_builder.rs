@@ -1,5 +1,6 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::keys::plain_proving_key::PlainPkTrait;
+use crate::transcript_ct::Poseidon2SpongeCT;
 use crate::types::aes128;
 use crate::types::big_field::BigField;
 use crate::types::blake2s::Blake2s;
@@ -8,6 +9,7 @@ use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
 use crate::types::types::{
     AES128Constraint, AddSimple, MemorySelectors, NnfSelectors, NonNativeFieldWitnesses,
+    PairingPoints,
 };
 use crate::types::types::{
     EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
@@ -4332,7 +4334,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
         let is_recursive_circuit = metadata.honk_recursion != HonkRecursion::NotHonk;
-        let _has_pairing_points = has_honk_recursion_constraints
+        let has_pairing_points = has_honk_recursion_constraints
             || has_civc_recursion_constraints
             || has_avm_recursion_constraints;
 
@@ -4355,15 +4357,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         );
 
         // Container for data to be propagated
-        // HonkRecursionConstraintsOutput<Builder> honk_output;
+        // Initialize to default to avoid using an uninitialized value when only CIVC/AVM recursion constraints are present.
+        let mut honk_output: PairingPoints<P, T> = PairingPoints::default();
 
         if has_honk_recursion_constraints {
-            self.process_honk_recursion_constraints(
+            honk_output = self.process_honk_recursion_constraints(
                 constraint_system,
                 has_valid_witness_assignments,
                 crs,
                 driver,
-            );
+            )?;
         }
 
         if has_civc_recursion_constraints {
@@ -4373,40 +4376,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
-        if metadata.honk_recursion == HonkRecursion::UltraRollup {
-            todo!("Implement UltraRollupFlavor recursion handling");
-            // Proving with UltraRollupFlavor
-
-            // // Propagate pairing points
-            // if (has_pairing_points) {
-            //     honk_output.points_accumulator.set_public();
-            // } else {
-            //     PairingPoints::add_default_to_public_inputs(builder);
-            // }
-
-            // // Handle IPA
-            // auto [ipa_claim, ipa_proof] =
-            //     handle_IPA_accumulation(builder, honk_output.nested_ipa_claims, honk_output.nested_ipa_proofs);
-
-            // // Set proof
-            // builder.ipa_proof = ipa_proof;
-
-            // // Propagate IPA claim
-            // ipa_claim.set_public();
+        if has_pairing_points {
+            honk_output.set_public(self, driver);
         } else {
-            // // If it is a recursive circuit, propagate pairing points
-            // if metadata.honk_recursion == HonkRecursion::UltraHonk {
-            //     using IO = bb::stdlib::recursion::honk::DefaultIO<Builder>;
-
-            //     if (has_pairing_points) {
-            //         IO inputs;
-            //         inputs.pairing_inputs = honk_output.points_accumulator;
-            //         inputs.set_public();
-            //     } else {
-
             self.add_default_to_public_inputs(driver)?;
-            //     }
-            // }
         }
 
         Ok(())
@@ -4418,7 +4391,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         has_valid_witness_assignments: bool,
         crs: &ProverCrs<P>,
         driver: &mut T,
-    ) {
+    ) -> eyre::Result<PairingPoints<P, T>> {
+        let mut output = PairingPoints::default();
         // Add recursion constraints
         for constraint in constraint_system.honk_recursion_constraints.iter() {
             let honk_recursion_constraint = self.create_honk_recursion_constraints(
@@ -4426,9 +4400,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 has_valid_witness_assignments,
                 crs,
                 driver,
-            );
+            )?;
+            output.update::<Poseidon2SpongeCT<P>>(honk_recursion_constraint, self, driver)?;
         }
-        todo!("update honk_recursion_constraint");
+        Ok(output)
     }
 
     fn get_table(&mut self, id: BasicTableId) -> &mut PlookupBasicTable<P, T> {

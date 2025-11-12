@@ -520,11 +520,23 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) result: [u32; 32],
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct PairingPoints<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> {
     p0: BigGroup<C::ScalarField, T>,
     p1: BigGroup<C::ScalarField, T>,
     has_data: bool,
+}
+
+impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> Default
+    for PairingPoints<C, T>
+{
+    fn default() -> Self {
+        Self {
+            p0: BigGroup::default(),
+            p1: BigGroup::default(),
+            has_data: false,
+        }
+    }
 }
 // An aggregation state is represented by two G1 affine elements. Each G1 point has
 // two field element coordinates (x, y). Thus, four base field elements
@@ -570,6 +582,19 @@ impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoin
 impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
     PairingPoints<C, T>
 {
+    pub fn update<H: TranscriptHasherCT<C>>(
+        &mut self,
+        other: Self,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        if self.has_data {
+            self.aggregate::<H>(other, builder, driver)
+        } else {
+            *self = other;
+            Ok(())
+        }
+    }
     pub fn aggregate<H: TranscriptHasherCT<C>>(
         &mut self,
         other: PairingPoints<C, T>,

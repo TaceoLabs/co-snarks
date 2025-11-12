@@ -86,7 +86,7 @@ impl<F: PrimeField> BigField<F> {
     ) -> usize {
         let start_index = builder.public_inputs.len();
         for limb in &self.binary_basis_limbs {
-            let wtns_idx = limb.element.normalize(builder, driver).witness_index;
+            let wtns_idx = limb.element.get_witness_index(builder, driver);
             builder.set_public_input(wtns_idx);
         }
         start_index
@@ -1008,7 +1008,7 @@ impl<F: PrimeField> BigField<F> {
         builder.decompose_into_default_range(
             driver,
             quotient_limb_wi,
-            maximum_quotient_bits as u64,
+            maximum_quotient_bits,
             None,
             GenericUltraCircuitBuilder::<P, T>::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
         )?;

@@ -26,7 +26,6 @@ use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
 use co_noir_common::keys::proving_key::ProvingKey;
 use co_noir_common::keys::verification_key::VerifyingKeyBarretenberg;
-use co_noir_common::mpc::NoirUltraHonkProver;
 use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
 use co_noir_common::transcript::{Poseidon2Sponge, Transcript};
@@ -181,7 +180,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             driver,
         )?;
 
-        if (!input.predicate.is_constant) {
+        if !input.predicate.is_constant {
             let predicate_witness = BoolCT::from_witness_index_unsafe(input.predicate.index, self);
 
             let mut result_proof: Vec<FieldCT<C::ScalarField>> =
@@ -385,7 +384,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         }
 
         // Add the default pairing points and IPA claim
-        builder.add_default_to_public_inputs(&mut plain_driver)?; //TODO FLORIN/ TODO CESAR: I think this is not the right one anymore
+        builder.add_default_to_public_inputs(&mut plain_driver)?;
 
         // prove the circuit constructed above
         // Create the decider proving key
