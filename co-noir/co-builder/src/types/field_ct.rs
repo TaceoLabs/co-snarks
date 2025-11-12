@@ -60,8 +60,15 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn get_witness_index(&self) -> u32 {
-        self.witness_index
+    pub(crate) fn get_witness_index<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> u32 {
+        self.normalize(builder, driver).witness_index
     }
 
     /**
@@ -88,19 +95,15 @@ impl<F: PrimeField> FieldCT<F> {
             builder.assert_if_has_witness(left == right);
         }
         if self.is_constant() {
-            let right = other.normalize(builder, driver);
             let left =
                 T::get_public(&self.get_value(builder, driver)).expect("Constant should be public");
-            builder.assert_equal_constant(right.witness_index as usize, left);
+            builder.assert_equal_constant(other.witness_index as usize, left);
         } else if other.is_constant() {
-            let left = self.normalize(builder, driver);
             let right = T::get_public(&other.get_value(builder, driver))
                 .expect("Constant should be public");
-            builder.assert_equal_constant(left.witness_index as usize, right);
+            builder.assert_equal_constant(self.witness_index as usize, right);
         } else if self.is_normalized() || other.is_normalized() {
-            let left = self.normalize(builder, driver);
-            let right = other.normalize(builder, driver);
-            builder.assert_equal(left.witness_index as usize, right.witness_index as usize);
+            builder.assert_equal(self.witness_index as usize, other.witness_index as usize);
         } else {
             // Instead of creating 2 gates for normalizing both witnesses and applying a copy constraint, we use a
             // single `add` gate constraining a - b = 0
@@ -902,7 +905,7 @@ impl<F: PrimeField> FieldCT<F> {
                 .into();
             assert!((val.bits() as usize) < num_bits);
         } else {
-            let index = self.normalize(builder, driver).get_witness_index();
+            let index = self.get_witness_index(builder, driver);
             // We have plookup
             builder.decompose_into_default_range(
                 driver,
@@ -1026,7 +1029,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     // if predicate == true then return lhs, else return rhs
-    fn conditional_assign<
+    fn conditional_assign_internal<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -1045,7 +1048,7 @@ impl<F: PrimeField> FieldCT<F> {
             }
         }
         // if lhs and rhs are the same witness, just return it!
-        if lhs.get_witness_index() == rhs.get_witness_index()
+        if lhs.witness_index == rhs.witness_index
             && (lhs.additive_constant == rhs.additive_constant)
             && (lhs.multiplicative_constant == rhs.multiplicative_constant)
         {
@@ -1054,6 +1057,22 @@ impl<F: PrimeField> FieldCT<F> {
 
         let diff = lhs.sub(rhs, builder, driver);
         diff.madd(&predicate.to_field_ct(driver), rhs, builder, driver)
+    }
+
+    pub(crate) fn conditional_assign<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        predicate: &BoolCT<P, T>,
+        lhs: &Self,
+        rhs: &Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        Ok(
+            Self::conditional_assign_internal(predicate, lhs, rhs, builder, driver)?
+                .normalize(builder, driver),
+        )
     }
 
     pub(crate) fn evaluate_linear_identity<
@@ -1655,6 +1674,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> From<bool> 
 }
 
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T> {
+    pub(crate) fn get_witness_index(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> u32 {
+        self.normalize(builder, driver).witness_index
+    }
+
     pub(crate) fn is_constant(&self) -> bool {
         self.witness_index == FieldCT::<P::ScalarField>::IS_CONSTANT
     }
@@ -1711,7 +1738,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         }
     }
 
-    fn conditional_assign(
+    pub(crate) fn conditional_assign(
         predicate: &Self,
         lhs: &Self,
         rhs: &Self,
@@ -1722,9 +1749,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
             let value = predicate.get_value(driver);
             let value = T::get_public(&value).expect("Constants are public");
             if value.is_zero() {
-                return Ok(rhs.to_owned());
+                return Ok(rhs.normalize(builder, driver).to_owned());
             } else {
-                return Ok(lhs.to_owned());
+                return Ok(lhs.normalize(builder, driver).to_owned());
             }
         }
 
@@ -1736,16 +1763,16 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
         let const_same = same && lhs.is_constant() && (lhs.witness_bool == rhs.witness_bool); // Both lhs and rhs are constants so we can just compare
 
         if witness_same || const_same {
-            return Ok(lhs.to_owned());
+            return Ok(lhs.normalize(builder, driver).to_owned());
         }
 
         // TACEO TODO: is this the correct order?
         let l = predicate.and(lhs, builder, driver)?;
         let r = predicate.not().and(rhs, builder, driver)?;
-        l.or(&r, builder, driver)
+        Ok((l.or(&r, builder, driver)?).normalize(builder, driver))
     }
 
-    fn assert_equal(
+    pub(crate) fn assert_equal(
         &self,
         other: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -2096,14 +2123,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BoolCT<P, T
             witness_index: new_witness,
         }
     }
-
-    pub(crate) fn get_normalized_witness_index(
-        &self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> u32 {
-        self.normalize(builder, driver).witness_index
-    }
 }
 
 #[derive(Debug)]
@@ -2135,11 +2154,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
         x: FieldCT<P::ScalarField>,
         y: FieldCT<P::ScalarField>,
         is_infinity: BoolCT<P, T>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> Self {
-        let x_ = x.normalize(builder, driver);
-        let y_ = y.normalize(builder, driver);
         let is_standard = is_infinity.is_constant();
         let is_constant = x.is_constant() && y.is_constant() && is_standard;
 
@@ -2152,8 +2168,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
         }
 
         Self {
-            x: x_,
-            y: y_,
+            x,
+            y,
             is_infinity,
             is_standard,
             is_constant,
@@ -2202,10 +2218,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
 
         self.is_standard = true;
         let zero = FieldCT::default();
-        self.x = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?
-            .normalize(builder, driver);
-        self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?
-            .normalize(builder, driver);
+        self.x = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?;
+        self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?;
 
         Ok(())
     }
@@ -2288,10 +2302,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
         }
 
         let zero = FieldCT::default();
-        self.x = FieldCT::conditional_assign(&is_infinity, &zero, &self.x, builder, driver)?
-            .normalize(builder, driver);
-        self.y = FieldCT::conditional_assign(&is_infinity, &zero, &self.y, builder, driver)?
-            .normalize(builder, driver);
+        self.x = FieldCT::conditional_assign(&is_infinity, &zero, &self.x, builder, driver)?;
+        self.y = FieldCT::conditional_assign(&is_infinity, &zero, &self.y, builder, driver)?;
 
         // We won't bump into the case where we end up with non constant coordinates
         assert!(!self.x.is_constant() && !self.y.is_constant());
@@ -2330,6 +2342,63 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     CycleGroupCT<P, T>
 {
     const OFFSET_GENERATOR_DOMAIN_SEPARATOR: &[u8] = "cycle_group_offset_generator".as_bytes();
+
+    pub(crate) fn new_with_assert(
+        x: FieldCT<P::ScalarField>,
+        y: FieldCT<P::ScalarField>,
+        is_infinity: BoolCT<P, T>,
+        assert_on_curve: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        let is_standard = is_infinity.is_constant();
+        let is_constant = x.is_constant() && y.is_constant() && is_standard;
+
+        if is_standard
+            && !T::get_public(&is_infinity.get_value(driver))
+                .expect("Constants are public")
+                .is_zero()
+        {
+            return Ok(Self::default());
+        }
+
+        let res = Self {
+            x,
+            y,
+            is_infinity,
+            is_standard,
+            is_constant,
+        };
+
+        if assert_on_curve {
+            res.validate_on_curve(builder, driver)?;
+        }
+        Ok(res)
+    }
+
+    /// Validates that the point is on the curve (short Weierstrass: y^2 = x^3 + b, with a = 0).
+    pub(crate) fn validate_on_curve(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        // This class is for short Weierstrass curves only!
+        // static_assert(Group::curve_a == 0); // In Rust, we assume curve_a == 0
+
+        let xx = self.x.multiply(&self.x, builder, driver)?;
+        let xxx = xx.multiply(&self.x, builder, driver)?;
+        let curve_b = FieldCT::from(P::get_curve_b());
+        let rhs = xxx.add(&curve_b, builder, driver);
+        let mut res = self.y.madd(&self.y, &rhs.neg(), builder, driver)?;
+
+        // If this is the point at infinity, then res is changed to 0, otherwise it remains unchanged
+        let is_not_infinity = self.is_point_at_infinity().not();
+        res = res.multiply(&is_not_infinity.to_field_ct(driver), builder, driver)?;
+
+        res.assert_is_zero(builder);
+
+        Ok(())
+    }
 
     fn from_group_element(value: P::CycleGroup) -> Self {
         match value.into_affine().xy() {
@@ -2404,14 +2473,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let mut fixed_base_scalars = Vec::new();
         let mut fixed_base_points = Vec::new();
 
-        let mut num_bits = 0;
+        let num_bits = scalars[0].num_bits();
         for scalar in scalars.iter() {
-            num_bits = std::cmp::max(num_bits, scalar.num_bits());
-
-            // Note: is this the best place to put `validate_is_in_field`? Should it not be part of the constructor?
-            // Note note: validate_scalar_is_in_field does not apply range checks to the hi/lo slices, this is performed
-            // implicitly via the scalar mul algorithm
-            scalar.validate_scalar_is_in_field(builder, driver)?;
+            assert_eq!(
+                num_bits,
+                scalar.num_bits(),
+                "All scalars must have the same bit length"
+            );
         }
 
         let num_bits_not_full_field_size = num_bits != CycleScalarCT::<P::ScalarField>::NUM_BITS;
@@ -2473,24 +2541,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let has_variable_points = !variable_base_points.is_empty();
         let has_fixed_points = !fixed_base_points.is_empty();
 
-        // Compute all required offset generators.
-        let num_offset_generators = variable_base_points.len()
-            + fixed_base_points.len()
-            + has_variable_points as usize
-            + has_fixed_points as usize;
-        let offset_generators = generators::derive_generators::<P::CycleGroup>(
-            Self::OFFSET_GENERATOR_DOMAIN_SEPARATOR,
-            num_offset_generators,
-            0,
-        );
-
         let mut result = CycleGroupCT::default();
 
         if has_fixed_points {
             let (fixed_accumulator, offset_generator_delta) = Self::fixed_base_batch_mul_internal(
                 &fixed_base_scalars,
                 &fixed_base_points,
-                // &offset_generators,
                 builder,
                 driver,
             )?;
@@ -2499,14 +2555,19 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         if has_variable_points {
-            let offset_generators_for_variable_base_batch_mul =
-                &offset_generators[fixed_base_points.len()..];
+            // Compute all required offset generators.
+            let num_offset_generators = variable_base_points.len() + 1;
+            let offset_generators = generators::derive_generators::<P::CycleGroup>(
+                Self::OFFSET_GENERATOR_DOMAIN_SEPARATOR,
+                num_offset_generators,
+                0,
+            );
 
             let (variable_accumulator, offset_generator_delta) =
                 Self::variable_base_batch_mul_internal(
                     &variable_base_scalars,
                     &variable_base_points,
-                    offset_generators_for_variable_base_batch_mul,
+                    &offset_generators,
                     can_unconditional_add,
                     builder,
                     driver,
@@ -2610,13 +2671,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             for j in 0..lookup_data[ColumnIdx::C2].len() {
                 let x = lookup_data[ColumnIdx::C2][j].to_owned();
                 let y = lookup_data[ColumnIdx::C3][j].to_owned();
-                lookup_points.push(CycleGroupCT::new(
-                    x,
-                    y,
-                    BoolCT::from(false),
-                    builder,
-                    driver,
-                ));
+                lookup_points.push(CycleGroupCT::new(x, y, BoolCT::from(false), driver));
             }
 
             let offset_1 =
@@ -2703,7 +2758,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // Construct native straus lookup table for each point
         let mut native_straus_tables = Vec::with_capacity(num_points);
         for i in 0..num_points {
-            let table_transcript = StrausLookupTable::<P, T>::compute_straus_lookup_table_hints(
+            let table_transcript = StrausLookupTable::<P, T>::compute_native_table(
                 base_points[i].get_value(builder, driver)?,
                 offset_generators[i + 1].to_owned(),
                 Self::TABLE_BITS,
@@ -2885,20 +2940,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        // ensure we use a value of y that is not zero. (only happens if point at infinity)
-        // this costs 0 gates if `is_infinity` is a circuit constant
-        let modified_y = FieldCT::conditional_assign(
-            self.is_point_at_infinity(),
-            &FieldCT::from(P::ScalarField::one()),
-            &self.y,
-            builder,
-            driver,
-        )?
-        .normalize(builder, driver);
-
-        // We have to return the point at infinity immediately
-        // Cause in that very case the `modified_y` is a constant value, with witness_index = -1
-        // Hence the following `create_ecc_dbl_gate` will throw an ASSERTION error
+        // If this is a constant point at infinity, return early
         if self.is_point_at_infinity().is_constant()
             && !T::get_public(&self.is_point_at_infinity().get_value(driver))
                 .expect("Constants are public")
@@ -2906,6 +2948,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         {
             return Ok(self.to_owned());
         }
+
+        // To support the point at infinity, we conditionally modify y to be 1 to avoid division by zero in the
+        // doubling formula
+        let modified_y = FieldCT::conditional_assign(
+            self.is_point_at_infinity(),
+            &FieldCT::from(P::ScalarField::one()),
+            &self.y,
+            builder,
+            driver,
+        )?;
 
         let result;
 
@@ -2918,7 +2970,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     FieldCT::from(x3),
                     FieldCT::from(y3),
                     self.is_point_at_infinity().to_owned(),
-                    builder,
                     driver,
                 );
                 return Ok(result);
@@ -2926,13 +2977,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
             let x = FieldCT::from_witness(x3, builder);
             let y = FieldCT::from_witness(y3, builder);
-            result = CycleGroupCT::new(
-                x,
-                y,
-                self.is_point_at_infinity().to_owned(),
-                builder,
-                driver,
-            );
+            result = CycleGroupCT::new(x, y, self.is_point_at_infinity().to_owned(), driver);
         } else {
             let x1 = self.x.get_value(builder, driver);
             let y1 = modified_y.get_value(builder, driver);
@@ -2971,17 +3016,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 FieldCT::from_witness(x3, builder),
                 FieldCT::from_witness(y3, builder),
                 self.is_point_at_infinity().to_owned(),
-                builder,
                 driver,
             );
         }
-
-        builder.create_ecc_dbl_gate(&EccDblGate {
-            x1: self.x.get_witness_index(),
-            y1: modified_y.get_witness_index(),
-            x3: result.x.get_witness_index(),
-            y3: result.y.get_witness_index(),
-        });
+        let ecc_dbl_gate = EccDblGate {
+            x1: self.x.get_witness_index(builder, driver),
+            y1: modified_y.get_witness_index(builder, driver),
+            x3: result.x.get_witness_index(builder, driver),
+            y3: result.y.get_witness_index(builder, driver),
+        };
+        builder.create_ecc_dbl_gate(&ecc_dbl_gate);
 
         Ok(result)
     }
@@ -3039,7 +3083,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
             let x = FieldCT::from_witness(x3, builder);
             let y = FieldCT::from_witness(y3, builder);
-            result = CycleGroupCT::new(x, y, BoolCT::from(false), builder, driver);
+            result = CycleGroupCT::new(x, y, BoolCT::from(false), driver);
         } else {
             let p1 = self.get_value(builder, driver)?;
             let p2 = other.get_value(builder, driver)?;
@@ -3053,16 +3097,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let (x, y, _) = driver.pointshare_to_field_shares(p3)?;
             let r_x = FieldCT::from_witness(x, builder);
             let r_y = FieldCT::from_witness(y, builder);
-            result = CycleGroupCT::new(r_x, r_y, BoolCT::from(false), builder, driver);
+            result = CycleGroupCT::new(r_x, r_y, BoolCT::from(false), driver);
         }
 
         let add_gate = EccAddGate {
-            x1: self.x.get_witness_index(),
-            y1: self.y.get_witness_index(),
-            x2: other.x.get_witness_index(),
-            y2: other.y.get_witness_index(),
-            x3: result.x.get_witness_index(),
-            y3: result.y.get_witness_index(),
+            x1: self.x.get_witness_index(builder, driver),
+            y1: self.y.get_witness_index(builder, driver),
+            x2: other.x.get_witness_index(builder, driver),
+            y2: other.y.get_witness_index(builder, driver),
+            x3: result.x.get_witness_index(builder, driver),
+            y3: result.y.get_witness_index(builder, driver),
             sign_coefficient: P::ScalarField::one(),
         };
         builder.create_ecc_add_gate(&add_gate);
@@ -3094,9 +3138,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let x_coordinates_match = self.x.equals(&other.x, builder, driver)?;
         let y_coordinates_match = self.y.equals(&other.y, builder, driver)?;
-        let double_predicate = x_coordinates_match.and(&y_coordinates_match, builder, driver)?;
-        let infinity_predicate =
-            x_coordinates_match.and(&y_coordinates_match.not(), builder, driver)?;
 
         let x1 = &self.x;
         let y1 = &self.y;
@@ -3127,44 +3168,50 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             lambda
         };
 
-        let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
-        let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
-        let add_result = CycleGroupCT::new(x3, y3, x_coordinates_match.to_owned(), builder, driver);
+        let add_result_x =
+            lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
+        let add_result_y = lambda.madd(
+            &x1.sub(&add_result_x, builder, driver),
+            &y1.neg(),
+            builder,
+            driver,
+        )?;
 
         let dbl_result = self.dbl(None, builder, driver)?;
 
         // dbl if x_match, y_match
         // infinity if x_match, !y_match
+        let double_predicate = x_coordinates_match.and(&y_coordinates_match, builder, driver)?;
         let mut result_x = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.x,
-            &add_result.x,
+            &add_result_x,
             builder,
             driver,
         )?;
         let mut result_y = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.y,
-            &add_result.y,
+            &add_result_y,
             builder,
             driver,
         )?;
 
-        let lhs_infinity = self.is_point_at_infinity();
-        let rhs_infinity = other.is_point_at_infinity();
         // if lhs infinity, return rhs
+        let lhs_infinity = self.is_point_at_infinity();
         result_x = FieldCT::conditional_assign(lhs_infinity, &other.x, &result_x, builder, driver)?;
         result_y = FieldCT::conditional_assign(lhs_infinity, &other.y, &result_y, builder, driver)?;
 
         // if rhs infinity, return lhs
-        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?
-            .normalize(builder, driver);
-        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?
-            .normalize(builder, driver);
+        let rhs_infinity = other.is_point_at_infinity();
+        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?;
+        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?;
 
         // is result point at infinity?
         // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
         // yes = lhs_infinity && rhs_infinity
+        let infinity_predicate =
+            x_coordinates_match.and(&y_coordinates_match.not(), builder, driver)?;
         let result_is_infinity = infinity_predicate.and(
             &lhs_infinity
                 .not()
@@ -3175,7 +3222,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
         let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
 
-        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, builder, driver);
+        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, driver);
+
         Ok(result)
     }
 
@@ -3203,12 +3251,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let x_coordinates_match = self.x.equals(&other.x, builder, driver)?;
         let y_coordinates_match = self.y.equals(&other.y, builder, driver)?;
-        let double_predicate = x_coordinates_match
-            .and(&y_coordinates_match.not(), builder, driver)?
-            .normalize(builder, driver);
-        let infinity_predicate = x_coordinates_match
-            .and(&y_coordinates_match, builder, driver)?
-            .normalize(builder, driver);
 
         let x1 = &self.x;
         let y1 = &self.y;
@@ -3238,12 +3280,15 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
         let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
-        let add_result = CycleGroupCT::new(x3, y3, x_coordinates_match.to_owned(), builder, driver);
+        let add_result = CycleGroupCT::new(x3, y3, x_coordinates_match.to_owned(), driver);
 
         let dbl_result = self.dbl(None, builder, driver)?;
 
         // dbl if x_match, !y_match
         // infinity if x_match, y_match
+        let double_predicate = x_coordinates_match
+            .and(&y_coordinates_match.not(), builder, driver)?
+            .normalize(builder, driver);
         let mut result_x = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.x,
@@ -3263,24 +3308,20 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let rhs_infinity = other.is_point_at_infinity();
         // if lhs infinity, return -rhs
         result_x = FieldCT::conditional_assign(lhs_infinity, &other.x, &result_x, builder, driver)?;
-        result_y = FieldCT::conditional_assign(
-            lhs_infinity,
-            &other.y.neg().normalize(builder, driver),
-            &result_y,
-            builder,
-            driver,
-        )?;
+        result_y =
+            FieldCT::conditional_assign(lhs_infinity, &other.y.neg(), &result_y, builder, driver)?;
 
         // if rhs infinity, return lhs
-        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?
-            .normalize(builder, driver);
-        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?
-            .normalize(builder, driver);
+        result_x = FieldCT::conditional_assign(rhs_infinity, &self.x, &result_x, builder, driver)?;
+        result_y = FieldCT::conditional_assign(rhs_infinity, &self.y, &result_y, builder, driver)?;
 
         // is result point at infinity?
         // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
         // yes = lhs_infinity && rhs_infinity
         // n.b. can likely optimize this
+        let infinity_predicate = x_coordinates_match
+            .and(&y_coordinates_match, builder, driver)?
+            .normalize(builder, driver);
         let result_is_infinity = infinity_predicate.and(
             &lhs_infinity
                 .not()
@@ -3291,7 +3332,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
         let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
 
-        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, builder, driver);
+        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, driver);
         Ok(result)
     }
 
@@ -3305,17 +3346,15 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(result)
     }
 
-    fn conditional_assign(
+    pub(crate) fn conditional_assign(
         predicate: &BoolCT<P, T>,
         lhs: &Self,
         rhs: &Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let mut x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?
-            .normalize(builder, driver);
-        let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?
-            .normalize(builder, driver);
+        let mut x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
+        let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?;
         let is_infinity = BoolCT::conditional_assign(
             predicate,
             lhs.is_point_at_infinity(),
@@ -3343,10 +3382,25 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             ));
         }
 
-        let mut result = CycleGroupCT::new(x, y, is_infinity, builder, driver);
+        let mut result = CycleGroupCT::new(x, y, is_infinity, driver);
         result.is_standard = is_standard;
 
         Ok(result)
+    }
+
+    pub(crate) fn assert_equal(
+        &mut self,
+        other: &mut Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        self.standardize(builder, driver)?;
+        other.standardize(builder, driver)?;
+        self.x.assert_equal(&other.x, builder, driver);
+        self.y.assert_equal(&other.y, builder, driver);
+        self.is_infinity
+            .assert_equal(&other.is_infinity, builder, driver);
+        Ok(())
     }
 }
 
@@ -3364,8 +3418,22 @@ impl<F: PrimeField> CycleScalarCT<F> {
     pub(crate) const LO_BITS: usize = Self::MAX_BITS_PER_ENDOMORPHISM_SCALAR;
     pub(crate) const HI_BITS: usize = Self::NUM_BITS - Self::LO_BITS;
 
-    pub(crate) fn new(lo: FieldCT<F>, hi: FieldCT<F>) -> Self {
-        Self { lo, hi }
+    pub(crate) fn new<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        lo: FieldCT<F>,
+        hi: FieldCT<F>,
+        skip_validation: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        let res = Self { lo, hi };
+        // Unless explicitly skipped, validate the scalar is in the Grumpkin scalar field
+        if !skip_validation {
+            res.validate_scalar_is_in_field(builder, driver)?;
+        }
+        Ok(res)
     }
 
     #[expect(unused)] // This will be used in the fieldct transcript
@@ -3513,7 +3581,8 @@ impl<F: PrimeField> CycleScalarCT<F> {
         // directly call `create_new_range_constraint` to avoid creating an arithmetic gate
         if !self.lo.is_constant() {
             // We have a ultra builder
-            builder.create_new_range_constraint(borrow.get_witness_index(), 1);
+            let index = borrow.get_witness_index(builder, driver);
+            builder.create_new_range_constraint(index, 1);
         }
 
         // Hi range check = r_hi - y_hi - borrow
@@ -3578,8 +3647,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScala
             0
         };
 
-        let hi_slices = Self::slice_scalar(&scalar.hi, hi_bits, table_bits, builder, driver)?;
-        let lo_slices = Self::slice_scalar(&scalar.lo, lo_bits, table_bits, builder, driver)?;
+        let hi_slices =
+            Self::compute_scalar_slices(&scalar.hi, hi_bits, table_bits, builder, driver)?;
+        let lo_slices =
+            Self::compute_scalar_slices(&scalar.lo, lo_bits, table_bits, builder, driver)?;
 
         let mut slices = lo_slices.0;
         slices.extend(hi_slices.0);
@@ -3597,7 +3668,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScala
     // convert an input cycle_scalar object into a vector of slices, each containing `table_bits` bits.
     // this also performs an implicit range check on the input slices
     #[expect(clippy::type_complexity)]
-    fn slice_scalar(
+    fn compute_scalar_slices(
         scalar: &FieldCT<P::ScalarField>,
         num_bits: usize,
         table_bits: usize,
@@ -3630,18 +3701,19 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScala
             return Ok((result, result_native));
         }
 
-        let scalar_ = scalar.normalize(builder, driver);
+        let index = scalar.get_witness_index(builder, driver);
         let slice_indices = builder.decompose_into_default_range(
             driver,
-            scalar_.get_witness_index(),
+            index,
             num_bits as u64,
             None,
             table_bits as u64,
         )?;
 
-        for slice in slice_indices {
-            result.push(FieldCT::from_witness_index(slice));
-            result_native.push(builder.get_variable(slice as usize));
+        for idx in slice_indices {
+            let slice = FieldCT::from_witness_index(idx);
+            result_native.push(slice.get_value(builder, driver));
+            result.push(slice);
         }
         Ok((result, result_native))
     }
@@ -3702,7 +3774,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             driver,
         )?;
         let mut modded_base_point =
-            CycleGroupCT::new(modded_x, modded_y, BoolCT::from(false), builder, driver);
+            CycleGroupCT::new(modded_x, modded_y, BoolCT::from(false), driver);
 
         // if the input point is constant, it is cheaper to fix the point as a witness and then derive the table, than it is
         // to derive the table and fix its witnesses to be constant! (due to group additions = 1 gate, and fixing x/y coords
@@ -3778,15 +3850,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 let element = point.get_value(builder, driver)?;
                 let element = T::get_public_point(&element).expect("Constants are public");
                 *point = CycleGroupCT::from_constant_witness(element, builder, driver);
-                let (x, y) = element.into_affine().xy().unwrap_or_default();
-                point.x.assert_equal(&FieldCT::from(x), builder, driver);
-                point.y.assert_equal(&FieldCT::from(y), builder, driver);
             }
-            builder.set_rom_element_pair(
-                rom_id,
-                i,
-                [point.x.get_witness_index(), point.y.get_witness_index()],
-            );
+            let coordinate_indices = [
+                point.x.get_witness_index(builder, driver),
+                point.y.get_witness_index(builder, driver),
+            ];
+            builder.set_rom_element_pair(rom_id, i, coordinate_indices);
         }
 
         Ok(Self {
@@ -3796,7 +3865,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         })
     }
 
-    fn compute_straus_lookup_table_hints(
+    fn compute_native_table(
         base_point: T::AcvmPoint<P::CycleGroup>,
         offset_generator: <P::CycleGroup as CurveGroup>::Affine,
         table_bits: usize,
@@ -3832,17 +3901,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             index = FieldCT::from_witness(index_val, builder);
             index.assert_equal(&FieldCT::from(index_val_pub), builder, driver);
         }
-        let output_indices =
-            builder.read_rom_array_pair(self.rom_id, index.get_witness_index(), driver)?;
+        let index = index.get_witness_index(builder, driver);
+        let output_indices = builder.read_rom_array_pair(self.rom_id, index, driver)?;
         let x = FieldCT::from_witness_index(output_indices[0]);
         let y = FieldCT::from_witness_index(output_indices[1]);
-        Ok(CycleGroupCT::new(
-            x,
-            y,
-            BoolCT::from(false),
-            builder,
-            driver,
-        ))
+        Ok(CycleGroupCT::new(x, y, BoolCT::from(false), driver))
     }
 }
 

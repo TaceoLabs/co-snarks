@@ -2,10 +2,13 @@ use super::big_field::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
 use crate::keys::proving_key::ProvingKey;
 use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, ProverWitnessEntities};
+use crate::types::field_ct::BoolCT;
 use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -399,6 +402,10 @@ pub(crate) struct Poseidon2Constraint<F: PrimeField> {
 pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) points: Vec<WitnessOrConstant<F>>,
     pub(crate) scalars: Vec<WitnessOrConstant<F>>,
+    // Predicate indicating whether the constraint should be disabled:
+    // - true: the constraint is valid
+    // - false: the constraint is disabled, i.e it must not fail and can return whatever.
+    pub(crate) predicate: WitnessOrConstant<F>,
     pub(crate) out_point_x: u32,
     pub(crate) out_point_y: u32,
     pub(crate) out_point_is_infinity: u32,
@@ -411,6 +418,10 @@ pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) input2_x: WitnessOrConstant<F>,
     pub(crate) input2_y: WitnessOrConstant<F>,
     pub(crate) input2_infinite: WitnessOrConstant<F>,
+    // Predicate indicating whether the constraint should be disabled:
+    // - true: the constraint is valid
+    // - false: the constraint is disabled, i.e it must not fail and can return whatever.
+    pub(crate) predicate: WitnessOrConstant<F>,
     pub(crate) result_x: u32,
     pub(crate) result_y: u32,
     pub(crate) result_infinite: u32,
@@ -813,7 +824,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
 
     pub(crate) fn from_constant(constant: F) -> Self {
         Self {
-            index: 0,
+            index: u32::MAX,
             value: constant,
             is_constant: true,
         }
@@ -833,38 +844,60 @@ impl<F: PrimeField> WitnessOrConstant<F> {
     }
 
     pub(crate) fn to_grumpkin_point<
-        P: CurveGroup<ScalarField = F>,
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input_x: &Self,
         input_y: &Self,
         input_infinity: &Self,
+        predicate: &BoolCT<P, T>,
         has_valid_witness_assignments: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> CycleGroupCT<P, T> {
-        let point_x = input_x.to_field_ct();
-        let point_y = input_y.to_field_ct();
-        let infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
+    ) -> eyre::Result<CycleGroupCT<P, T>> {
+        let constant_coordinates = input_x.is_constant && input_y.is_constant;
+        let mut point_x = input_x.to_field_ct();
+        let mut point_y = input_y.to_field_ct();
+        let mut infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
 
-        // When we do not have the witness assignments, we set is_infinite value to true if it is not constant
-        // else default values would give a point which is not on the curve and this will fail verification
-        if !has_valid_witness_assignments {
-            if !input_infinity.is_constant {
-                builder.set_variable(input_infinity.index, F::one().into());
-            } else if input_infinity.value.is_zero()
-                && !(input_x.is_constant || input_y.is_constant)
-            {
-                // else, if is_infinite is false, but the coordinates (x, y) are witness (and not constant)
-                // then we set their value to an arbitrary valid curve point (in our case G1).
-                builder.set_variable(input_x.index, F::one().into());
-                let g1_y = F::from(BigUint::new(vec![
-                    2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
-                ]));
-                builder.set_variable(input_y.index, g1_y.into());
-            }
+        // If a witness is not provided (we are in a write_vk scenario) we ensure the coordinates correspond to a valid
+        // point to avoid erroneous failures during circuit construction. We only do this if the coordinates are
+        // non-constant since otherwise no variable indices exist. Note that there is no need to assign the infinite flag
+        // because native on-curve checks will always pass as long x and y coordinates correspond to a valid point on
+        // Grumpkin.
+        let g1_y = F::from(BigUint::new(vec![
+            2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
+        ]));
+        if !has_valid_witness_assignments && !constant_coordinates {
+            builder.set_variable(input_x.index, F::one().into());
+            builder.set_variable(input_y.index, g1_y.into());
         }
-        CycleGroupCT::new(point_x, point_y, infinity, builder, driver)
+
+        if !predicate.is_constant() {
+            point_x = FieldCT::conditional_assign(
+                predicate,
+                &point_x,
+                &FieldCT::from(F::one()),
+                builder,
+                driver,
+            )?;
+            point_y = FieldCT::conditional_assign(
+                predicate,
+                &point_y,
+                &FieldCT::from(g1_y),
+                builder,
+                driver,
+            )?;
+            infinity = BoolCT::conditional_assign(
+                predicate,
+                &infinity,
+                &BoolCT::from(false),
+                builder,
+                driver,
+            )?;
+        }
+
+        CycleGroupCT::new_with_assert(point_x, point_y, infinity, true, builder, driver)
     }
 }
 

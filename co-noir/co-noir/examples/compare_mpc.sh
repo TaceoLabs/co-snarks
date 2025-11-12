@@ -2,8 +2,8 @@ export CARGO_TERM_QUIET=true
 export RAYON_NUM_THREADS=$(($(nproc --all)/3)) # Limit the number of threads to prevent parties stealing from each other
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
-NARGO_VERSION=1.0.0-beta.14 ##specify the desired nargo version here
-BARRETENBERG_VERSION=3.0.0-nightly.20250916 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
+NARGO_VERSION=1.0.0-beta.15 ##specify the desired nargo version here
+BARRETENBERG_VERSION=3.0.0-nightly.20251104 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 
 exit_code=0
 
@@ -77,38 +77,38 @@ run_proof_verification() {
     diff test_vectors/${name}/proof test_vectors/${name}/cosnark_proof
     if [[ $? -ne 0 ]]; then
       exit_code=1
-      echo "::error::$name diff check of proofs failed (with: $algorithm)"
+      echo "::error:: $name diff check of proofs failed (with: $algorithm)"
     fi
   fi
 
     diff test_vectors/${name}/public_inputs test_vectors/${name}/cosnark_public_input
     if [[ $? -ne 0 ]]; then
       exit_code=1
-      echo "::error::$name diff check of public inputs failed (with: $algorithm)"
+      echo "::error:: $name diff check of public inputs failed (with: $algorithm)"
     fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/cosnark_proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/cosnark_vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
-    echo "::error::$name verifying with bb, our proof and our key failed (with: $algorithm)"
+    echo "::error:: $name verifying with bb, our proof and our key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/cosnark_proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
-    echo "::error::$name verifying with bb, our proof and their key failed (with: $algorithm)"
+    echo "::error:: $name verifying with bb, our proof and their key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/cosnark_vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
-    echo "::error::$name verifying with bb, their proof and our key failed (with: $algorithm)"
+    echo "::error:: $name verifying with bb, their proof and our key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
-    echo "::error::$name verifying with bb, their proof and their key failed (with: $algorithm)"
+    echo "::error:: $name verifying with bb, their proof and their key failed (with: $algorithm)"
   fi
   return $exit_code
 }

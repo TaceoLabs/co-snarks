@@ -1,27 +1,23 @@
 # UltraHonk
 
-This crate is a rewrite of Atec's UltraHonk prover and verifier in Rust. It is compatible with Barretenberg v0.86.0. To get Barretenberg with this version, use the following commands:
+This crate is a rewrite of Atec's UltraHonk prover and verifier in Rust. It is compatible with Barretenberg v3.0.0-nightly.20251104. To get Barretenberg with this version, use the following commands:
 
 ```bash
 git clone https://github.com/AztecProtocol/aztec-packages.git
 cd aztec-packages
-git checkout tags/aztec-package-v0.86.0
+git checkout tags/v3.0.0-nightly.20251104
 ```
 
 To compile Barretenberg, one can use:
 
 ```bash
 cd barretenberg/cpp
-bash ./scripts/docker_interactive.sh ubuntu
 mkdir build
-cd build
-cmake --preset clang16 -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
-cmake --build .
+cmake --preset default
+cmake --build --preset default --parallel --target bb
 ```
 
-The prover in this repository, i.e., ``UltraHonk::prove`` in `src/prover.rs`, is compatible with `UltraProver_<UltraFlavor>` in Barretenberg. Similar, the ``UltraHonk::verify`` verifier in `src/verifier.rs` is compatible with `UltraVerifier_<UltraFlavor>` in Barretenberg.
-
-Currently, the circuit builder related code in `src/parse/` is only compatible with basic field arithmetic gates from Noir, stay tuned for more features.
+The prover in this repository, i.e., ``UltraHonk::prove`` in `src/prover.rs`, is compatible with `UltraProver_<UltraFlavor>/UltraProver_<UltraZKFlavor>/UltraProver_<UltraKeccakFlavor>/UltraProver_<UltraKeccakZKFlavor>` in Barretenberg. Similar, the ``UltraHonk::verify`` verifier in `src/verifier.rs` is compatible with `UltraVerifier_<UltraFlavor>/UltraVerifier_<UltraZKFlavor>/UltraVerifier_<UltraKeccakFlavor>/UltraVerifier_<UltraKeccakZKFlavor>` in Barretenberg.
 
 ## Usage
 
