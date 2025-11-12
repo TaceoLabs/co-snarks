@@ -6,10 +6,11 @@ use co_noir_common::{
     honk_proof::TranscriptFieldType,
     transcript::{Poseidon2Sponge, TranscriptHasher},
     types::ZeroKnowledge,
-};use noir_types::HonkProof;
+};
 use co_noir_types::ShamirType;
 use co_ultrahonk::prelude::{ShamirCoUltraHonk, UltraHonk};
 use mpc_net::local::LocalNetwork;
+use noir_types::HonkProof;
 use sha3::Keccak256;
 use std::{fs::File, sync::Arc};
 
