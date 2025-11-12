@@ -2,8 +2,10 @@ use super::univariate::Univariate;
 use crate::{NUM_ALPHAS, types::AllEntities};
 use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_ff::PrimeField;
-use co_builder::prelude::VerifyingKey;
-use co_noir_common::polynomials::polynomial::Polynomials;
+use co_noir_common::{
+    constants::MAX_PARTIAL_RELATION_LENGTH, keys::verification_key::VerifyingKey,
+    polynomials::polynomial::Polynomials,
+};
 use itertools::izip;
 use std::{iter, vec};
 
@@ -21,10 +23,6 @@ pub(crate) struct VerifierMemory<C: CurveGroup> {
     pub(crate) gate_challenges: Vec<C::ScalarField>,
     pub(crate) claimed_evaluations: ClaimedEvaluations<C::ScalarField>,
 }
-
-pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
 pub(crate) type ProverUnivariates<F> = AllEntities<Univariate<F, MAX_PARTIAL_RELATION_LENGTH>>;
 pub(crate) type PartiallyEvaluatePolys<F> = AllEntities<Vec<F>>;

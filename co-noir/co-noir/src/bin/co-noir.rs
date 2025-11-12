@@ -2,6 +2,9 @@ use ark_bn254::Bn254;
 use ark_ff::Zero;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_noir::Bn254G1;
+use co_noir_common::keys::proving_key::ProvingKey;
+use co_noir_common::keys::verification_key::VerifyingKey;
+use co_noir_common::keys::verification_key::VerifyingKeyBarretenberg;
 use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{
     crs::parse::CrsParser,
@@ -9,10 +12,7 @@ use co_noir_common::{
     transcript::Poseidon2Sponge,
 };
 use co_noir_types::{PubPrivate, Rep3SharedInput, Rep3Type};
-use co_ultrahonk::prelude::{
-    ProvingKey, Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk, VerifyingKey,
-    VerifyingKeyBarretenberg,
-};
+use co_ultrahonk::prelude::{Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk};
 use color_eyre::eyre::{self, Context, ContextCompat};
 use figment::{
     Figment,
@@ -404,9 +404,10 @@ pub struct BuildProvingKeyCli {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
-    /// Generate a recursive proof
+    /// The path to the prover crs file
     #[arg(long)]
-    pub recursive: bool,
+    #[serde(skip_serializing_if = "::std::option::Option::is_none")]
+    pub crs: Option<PathBuf>,
 }
 
 /// Config for `build_proving_key`
@@ -424,8 +425,8 @@ pub struct BuildProvingKeyConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfig,
-    /// Generate a recursive proof
-    pub recursive: bool,
+    /// The path to the prover crs file
+    pub crs: PathBuf,
 }
 
 /// Cli arguments for `generate_proof`
@@ -494,8 +495,6 @@ pub struct GenerateProofConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfig,
-    /// Generate a recursive friendly proof
-    pub recursive: bool,
     /// The path to the prover crs file
     pub crs: PathBuf,
     /// Prove with or without the zero knowledge property
@@ -544,9 +543,6 @@ pub struct BuildAndGenerateProofCli {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
-    /// Generate a recursive proof
-    #[arg(long)]
-    pub recursive: bool,
     /// Prove with or without the zero knowledge property
     #[arg(long)]
     pub zk: bool,
@@ -580,8 +576,6 @@ pub struct BuildAndGenerateProofConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfig,
-    /// Generate a recursive proof
-    pub recursive: bool,
     /// Prove with or without the zero knowledge property
     pub zk: bool,
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
@@ -613,9 +607,6 @@ pub struct CreateVKCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub vk: Option<PathBuf>,
-    /// Generate a recursive proof
-    #[arg(long)]
-    pub recursive: bool,
     /// Write the vk as fields to json. If not passed, the vk will only be written as bytes to a file consistent with Barretenberg.
     #[arg(long)]
     pub fields_as_json: bool,
@@ -632,8 +623,6 @@ pub struct CreateVKConfig {
     pub crs: PathBuf,
     /// The path to the verification key file
     pub vk: PathBuf,
-    /// Generate a recursive proof
-    pub recursive: bool,
     /// Write the vk as fields to json. If not passed, the vk will only be written as bytes to a file consistent with Barretenberg.
     pub fields_as_json: bool,
 }
@@ -900,9 +889,8 @@ fn main() -> color_eyre::Result<ExitCode> {
             let program_artifact =
                 co_noir::program_artifact_from_reader(File::open(&config.circuit)?)
                     .context("while parsing program artifact")?;
-            let constraint_system =
-                co_noir::get_constraint_system_from_artifact(&program_artifact, true);
-            let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, true)?;
+            let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
+            let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
             let abi = serde_json::to_string(&program_artifact.abi)?;
             let public_inputs = serde_json::to_string(
                 &program_artifact.bytecode.functions[0]
@@ -1014,24 +1002,18 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let out_dir = config.out_dir;
     let t = config.threshold;
     let n = config.num_parties;
-    let recursive = config.recursive;
     let has_zk = ZeroKnowledge::from(config.zk);
 
     // parse constraint system
-    let constraint_system =
-        co_noir::constraint_system_from_reader(&File::open(&circuit_path)?, true)
-            .context("while parsing constraint system")?;
+    let constraint_system = co_noir::constraint_system_from_reader(&File::open(&circuit_path)?)
+        .context("while parsing constraint system")?;
     // parse witness
     let witness = co_noir::witness_from_reader(File::open(&witness_path)?)
         .context("while parsing witness")?;
-    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, recursive)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
     let prover_crs = CrsParser::<Bn254G1>::get_crs_g1(crs_path, circuit_size, has_zk)?;
-    let proving_key = co_noir::generate_proving_key_plain(
-        &constraint_system,
-        witness,
-        prover_crs.into(),
-        recursive,
-    )?;
+    let proving_key =
+        co_noir::generate_proving_key_plain(&constraint_system, witness, prover_crs.into())?;
 
     tracing::info!("Starting split proving key...");
     match protocol {
@@ -1303,16 +1285,23 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     let out = config.out;
     let n = config.network.parties.len();
     let t = config.threshold;
-    let recursive = config.recursive;
+    let crs_path = config.crs;
 
     // parse witness shares
     let witness_file =
         BufReader::new(File::open(witness).context("trying to open witness share file")?);
 
     // parse constraint system
-    let constraint_system =
-        co_noir::constraint_system_from_reader(&File::open(&circuit_path)?, true)
-            .context("while parsing constraint system")?;
+    let constraint_system = co_noir::constraint_system_from_reader(&File::open(&circuit_path)?)
+        .context("while parsing constraint system")?;
+
+    let circuit_size = constraint_system.get_honk_recursion_public_inputs_size();
+    let prover_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            crs_path,
+            circuit_size,
+            ZeroKnowledge::No,
+        )?;
 
     // connect to network
     let [net0, net1] =
@@ -1331,9 +1320,9 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let proving_key = co_noir::generate_proving_key_rep3(
                 &constraint_system,
                 witness_share,
-                recursive,
                 &net0,
                 &net1,
+                &prover_crs,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
@@ -1353,8 +1342,8 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 t,
                 &constraint_system,
                 witness_share,
-                recursive,
                 &net0,
+                &prover_crs,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
@@ -1574,28 +1563,22 @@ fn run_build_and_generate_proof(
     let public_input_filename = config.public_input;
     let n = config.network.parties.len();
     let t = config.threshold;
-    let recursive = config.recursive;
     let fields_as_json = config.fields_as_json;
     let has_zk = ZeroKnowledge::from(config.zk);
-
-    if hasher == TranscriptHash::KECCAK && recursive {
-        tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
-    }
 
     // parse witness shares
     let witness_file =
         BufReader::new(File::open(witness).context("trying to open witness share file")?);
 
     // parse constraint system
-    let constraint_system =
-        co_noir::constraint_system_from_reader(&File::open(&circuit_path)?, true)
-            .context("while parsing constraint system")?;
+    let constraint_system = co_noir::constraint_system_from_reader(&File::open(&circuit_path)?)
+        .context("while parsing constraint system")?;
 
     // connect to network
     let [net0, net1] =
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
 
-    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, recursive)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
     let prover_crs =
         CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
             crs_path,
@@ -1625,9 +1608,9 @@ fn run_build_and_generate_proof(
             let proving_key = co_noir::generate_proving_key_rep3(
                 &constraint_system,
                 witness_share,
-                recursive,
                 &net0,
                 &net1,
+                &prover_crs,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
@@ -1672,8 +1655,8 @@ fn run_build_and_generate_proof(
                 t,
                 &constraint_system,
                 witness_share,
-                recursive,
                 &net0,
+                &prover_crs,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
@@ -1787,19 +1770,13 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
     let crs_path = config.crs;
     let vk_path = config.vk;
     let hasher = config.hasher;
-    let recursive = config.recursive;
     let fields_as_json = config.fields_as_json;
 
-    if hasher == TranscriptHash::KECCAK && recursive {
-        tracing::warn!("Note that the Poseidon hasher is better suited for recursion");
-    }
-
     // parse constraint system
-    let constraint_system =
-        co_noir::constraint_system_from_reader(&File::open(&circuit_path)?, true)
-            .context("while parsing constraint system")?;
+    let constraint_system = co_noir::constraint_system_from_reader(&File::open(&circuit_path)?)
+        .context("while parsing constraint system")?;
 
-    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, recursive)?;
+    let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
     let prover_crs =
         CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
             crs_path,
@@ -1809,11 +1786,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
 
     tracing::info!("Starting to generate verification key...");
     let start = Instant::now();
-    let vk = co_noir::generate_vk_barretenberg::<Bn254G1>(
-        &constraint_system,
-        prover_crs.into(),
-        recursive,
-    )?;
+    let vk = co_noir::generate_vk_barretenberg::<Bn254G1>(&constraint_system, prover_crs.into())?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Verification key generation took {} ms", duration_ms);
 

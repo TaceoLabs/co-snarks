@@ -8,8 +8,10 @@ use acir::{
     native_types::{Expression, Witness, WitnessMap},
 };
 use ark_ff::{PrimeField, Zero};
+use co_noir_common::constants::MOCK_PROOF_DYADIC_SIZE;
 use std::{
     array,
+    cmp::max,
     collections::{BTreeMap, HashSet},
 };
 
@@ -38,9 +40,6 @@ pub(crate) enum ProofType {
 pub(crate) const _PROOF_TYPE_ROOT_ROLLUP_HONK: u32 = 6; //keep for reference
 #[expect(dead_code)]
 pub struct ProgramMetadata {
-    // An IVC instance; needed to construct a circuit from IVC recursion constraints
-    // ivc: Option<std::sync::Arc<ClientIVC>>,
-    pub(crate) recursive: bool, // Specifies whether a prover that produces SNARK recursion friendly proofs should be used.
     // The proof produced when this flag is true should be friendly for recursive verification
     // inside of another SNARK. For example, a recursive friendly proof may use Blake3Pedersen
     // for hashing in its transcript, while we still want a prove that uses Keccak for its
@@ -129,10 +128,7 @@ impl<F: PrimeField> AcirFormat<F> {
     }
 
     #[expect(clippy::field_reassign_with_default)]
-    pub fn circuit_serde_to_acir_format(
-        circuit: Circuit<GenericFieldElement<F>>,
-        honk_recursion: bool,
-    ) -> Self {
+    pub fn circuit_serde_to_acir_format(circuit: Circuit<GenericFieldElement<F>>) -> Self {
         let mut af = AcirFormat::default();
 
         // `varnum` is the true number of variables, thus we add one to the index which starts at zero
@@ -157,7 +153,7 @@ impl<F: PrimeField> AcirFormat<F> {
                     Self::handle_arithmetic(expression, &mut af, i)
                 }
                 acir::circuit::Opcode::BlackBoxFuncCall(black_box_func_call) => {
-                    Self::handle_blackbox_func_call(black_box_func_call, &mut af, honk_recursion, i)
+                    Self::handle_blackbox_func_call(black_box_func_call, &mut af, i)
                 }
                 acir::circuit::Opcode::MemoryOp { block_id, op } => {
                     let block = block_id_to_block_constraint.get_mut(&block_id.0);
@@ -668,7 +664,6 @@ impl<F: PrimeField> AcirFormat<F> {
     fn handle_blackbox_func_call(
         arg: BlackBoxFuncCall<GenericFieldElement<F>>,
         af: &mut AcirFormat<F>,
-        _honk_recursive: bool,
         opcode_index: usize,
     ) {
         match arg {
@@ -901,5 +896,20 @@ impl<F: PrimeField> AcirFormat<F> {
                 predicate: _,
             } => todo!("BlackBoxFuncCall::RecursiveAggregation"),
         }
+    }
+
+    pub fn get_honk_recursion_public_inputs_size(&self) -> usize {
+        let mut total_size = 0;
+        if !self.honk_recursion_constraints.is_empty() {
+            for constraint in &self.honk_recursion_constraints {
+                total_size += constraint.public_inputs.len();
+            }
+            total_size = max(total_size.next_power_of_two() * 2, MOCK_PROOF_DYADIC_SIZE); // the circuit is at least size 32 (we take 2x to be safe)
+        }
+        total_size
+    }
+
+    pub fn is_recursive_verification_circuit(&self) -> bool {
+        !self.honk_recursion_constraints.is_empty()
     }
 }

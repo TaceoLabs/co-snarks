@@ -1,10 +1,10 @@
-use crate::key::proving_key::ProvingKey;
+use crate::prelude::GenericUltraCircuitBuilder;
+use crate::types::types::{CycleNode, CyclicPermutation};
 use ark_ec::CurveGroup;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_builder::prelude::{
-    ActiveRegionData, CycleNode, CyclicPermutation, GenericUltraCircuitBuilder, NUM_SELECTORS,
-    NUM_WIRES,
-};
+use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES};
+use co_noir_common::keys::proving_key::ProvingKey;
+use co_noir_common::keys::types::ActiveRegionData;
 use co_noir_common::{mpc::NoirUltraHonkProver, polynomials::polynomial::Polynomial};
 use mpc_core::MpcState;
 

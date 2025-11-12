@@ -1,6 +1,7 @@
 use super::univariates::SharedUnivariate;
 use crate::types_batch::AllEntitiesBatch;
 use ark_ec::{CurveGroup, PrimeGroup};
+use co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH;
 use co_noir_common::polynomials::entities::AllEntities;
 use co_noir_common::types::RelationParameters;
 use co_noir_common::{mpc::NoirUltraHonkProver, polynomials::entities::Polynomials};
@@ -14,10 +15,6 @@ pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) alphas: [P::ScalarField; NUM_ALPHAS],
     pub(crate) gate_challenges: Vec<P::ScalarField>,
 }
-
-pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
-pub const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
 pub(crate) type ProverUnivariates<T, P> = AllEntities<
     SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>,

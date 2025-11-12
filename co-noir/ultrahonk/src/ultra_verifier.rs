@@ -1,8 +1,8 @@
 use ark_ec::pairing::Pairing;
-use co_builder::prelude::VerifyingKey;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::TranscriptFieldType,
+    keys::verification_key::VerifyingKey,
     transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
 };

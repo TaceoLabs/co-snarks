@@ -12,15 +12,16 @@ use crate::{
             poseidon2_internal_relation::Poseidon2InternalRelation,
             ultra_arithmetic_relation::UltraArithmeticRelation,
         },
-        types::{
-            BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, ProverUnivariates,
-        },
+        types::ProverUnivariates,
         univariates::SharedUnivariate,
     },
     types_batch::{AllEntitiesBatchRelations, SumCheckDataForRelation},
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;
+use co_noir_common::constants::{
+    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+};
 use co_noir_common::polynomials::entities::AllEntities;
 use co_noir_common::types::RelationParameters;
 use co_noir_common::{

@@ -15,7 +15,6 @@ ark-ff.workspace = true
 ark-bn254.workspace = true
 ark-poly.workspace = true
 co-acvm = { version = "0.7.0", path = "../co-acvm" }
-co-builder = { version = "0.5.0", path = "../co-builder" }
 noir-types = { version = "0.1.1", path = "../noir-types" }
 eyre.workspace = true
 itertools.workspace = true

@@ -5,12 +5,13 @@ use super::{
     },
     zk_data::ZKSumcheckData,
 };
-use crate::decider::{
-    relations::{
-        memory_relation::MemoryRelation, non_native_field_relation::NonNativeFieldRelation,
-    },
-    types::{BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK},
+use crate::decider::relations::{
+    memory_relation::MemoryRelation, non_native_field_relation::NonNativeFieldRelation,
 };
+use co_noir_common::constants::{
+    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+};
+
 use crate::{
     decider::{
         relations::{

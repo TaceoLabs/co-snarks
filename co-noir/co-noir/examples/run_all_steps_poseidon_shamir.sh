@@ -13,9 +13,9 @@ wait $(jobs -p)
 # Create verification key
 cargo run --release --bin co-noir -- create-vk --circuit test_vectors/poseidon/poseidon.json --crs test_vectors/bn254_g1.dat --hasher keccak --vk test_vectors/poseidon/verification_key
 # run building proving key in MPC
-cargo run --release --bin co-noir -- build-proving-key --witness test_vectors/poseidon/shamir_poseidon.gz.0.shared --circuit test_vectors/poseidon/poseidon.json --protocol SHAMIR --config configs/party1.toml --out proving_key.0.shared &
-cargo run --release --bin co-noir -- build-proving-key --witness test_vectors/poseidon/shamir_poseidon.gz.1.shared --circuit test_vectors/poseidon/poseidon.json --protocol SHAMIR --config configs/party2.toml --out proving_key.1.shared &
-cargo run --release --bin co-noir -- build-proving-key --witness test_vectors/poseidon/shamir_poseidon.gz.2.shared --circuit test_vectors/poseidon/poseidon.json --protocol SHAMIR --config configs/party3.toml --out proving_key.2.shared
+cargo run --release --bin co-noir -- build-proving-key --witness test_vectors/poseidon/shamir_poseidon.gz.0.shared --circuit test_vectors/poseidon/poseidon.json --protocol SHAMIR --config configs/party1.toml --out proving_key.0.shared --crs test_vectors/bn254_g1.dat &
+cargo run --release --bin co-noir -- build-proving-key --witness test_vectors/poseidon/shamir_poseidon.gz.1.shared --circuit test_vectors/poseidon/poseidon.json --protocol SHAMIR --config configs/party2.toml --out proving_key.1.shared --crs test_vectors/bn254_g1.dat &
+cargo run --release --bin co-noir -- build-proving-key --witness test_vectors/poseidon/shamir_poseidon.gz.2.shared --circuit test_vectors/poseidon/poseidon.json --protocol SHAMIR --config configs/party3.toml --out proving_key.2.shared --crs test_vectors/bn254_g1.dat
 # run proving in MPC
 cargo run --release --bin co-noir -- generate-proof --proving-key proving_key.0.shared --protocol SHAMIR --hasher keccak --crs test_vectors/bn254_g1.dat --config configs/party1.toml --out proof.0.proof --vk test_vectors/poseidon/verification_key --public-input public_input &
 cargo run --release --bin co-noir -- generate-proof --proving-key proving_key.1.shared --protocol SHAMIR --hasher keccak --crs test_vectors/bn254_g1.dat --config configs/party2.toml --out proof.1.proof --vk test_vectors/poseidon/verification_key &

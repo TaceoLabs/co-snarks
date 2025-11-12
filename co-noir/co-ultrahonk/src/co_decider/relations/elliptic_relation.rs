@@ -1,7 +1,5 @@
 use super::Relation;
-use crate::co_decider::{
-    relations::fold_accumulator, types::MAX_PARTIAL_RELATION_LENGTH, univariates::SharedUnivariate,
-};
+use crate::co_decider::{relations::fold_accumulator, univariates::SharedUnivariate};
 use ark_ec::CurveGroup;
 use ark_ff::Zero;
 use co_noir_common::types::RelationParameters;

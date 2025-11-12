@@ -10,7 +10,7 @@ pub(crate) mod poseidon2_internal_relation;
 pub(crate) mod ultra_arithmetic_relation;
 
 use super::{
-    types::{MAX_PARTIAL_RELATION_LENGTH, ProverUnivariates, ProverUnivariatesBatch},
+    types::{ProverUnivariates, ProverUnivariatesBatch},
     univariates::SharedUnivariate,
 };
 use crate::{
@@ -21,6 +21,7 @@ use crate::{
     types_batch::SumCheckDataForRelation,
 };
 use ark_ec::CurveGroup;
+use co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH;
 use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,
@@ -44,10 +45,11 @@ use ultrahonk::prelude::Univariate;
 macro_rules! fold_accumulator {
     ($acc: expr, $elements: expr) => {
         let evaluations_len = $acc.evaluations.len();
-        let mut acc = [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH];
+        let mut acc =
+            [T::ArithmeticShare::default(); co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH];
         acc[..evaluations_len].clone_from_slice(&$acc.evaluations);
         for (idx, b) in $elements.iter().enumerate() {
-            let a = &mut acc[idx % MAX_PARTIAL_RELATION_LENGTH];
+            let a = &mut acc[idx % co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH];
             T::add_assign(a, *b);
         }
         $acc.evaluations.clone_from_slice(&acc[..evaluations_len]);

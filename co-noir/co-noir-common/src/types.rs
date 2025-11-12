@@ -23,3 +23,5 @@ pub struct RelationParameters<F: Default> {
     pub gamma: F,
     pub public_input_delta: F,
 }
+
+pub type Bn254G1 = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;

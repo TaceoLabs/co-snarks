@@ -2,13 +2,13 @@ use criterion::*;
 
 type B = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;
 use ark_ff::Zero as _;
+use co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH;
 use co_noir_common::mpc::{NoirUltraHonkProver as P, plain::PlainUltraHonkDriver as D};
 use itertools::izip;
 use rand::{RngCore, thread_rng};
 use rayon::prelude::*;
 
 type FieldType = ark_bn254::Fr;
-const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
 
 fn run_add_mul_many(c: &mut Criterion) {
     let num_threads = [8, 16];

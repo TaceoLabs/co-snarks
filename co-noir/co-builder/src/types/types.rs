@@ -1,18 +1,18 @@
 use super::big_group::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
-use crate::keys::proving_key::ProvingKey;
-use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, ProverWitnessEntities};
-use crate::types::field_ct::BoolCT;
+use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT};
 use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE};
 use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::keys::plain_proving_key::PlainProvingKey;
+use co_noir_common::keys::types::ActiveRegionData;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
 use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
-use serde::{Deserialize, Serialize};
 use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -208,8 +208,6 @@ impl<T: Default> UltraTraceBlocks<T> {
     }
 }
 
-pub const NUM_WIRES: usize = 4;
-pub const NUM_SELECTORS: usize = 14;
 pub type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS>;
 
 pub struct ExecutionTraceBlock<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> {
@@ -529,7 +527,7 @@ pub struct PairingPoints<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::Scala
 // An aggregation state is represented by two G1 affine elements. Each G1 point has
 // two field element coordinates (x, y). Thus, four base field elements
 // Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
-pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
+
 impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoints<C, T> {
     pub fn new(p0: BigGroup<C::ScalarField, T>, p1: BigGroup<C::ScalarField, T>) -> Self {
         Self {
@@ -750,7 +748,7 @@ pub(crate) struct TraceData<'a, P: CurveGroup> {
 impl<'a, P: CurveGroup> TraceData<'a, P> {
     pub(crate) fn new(
         builder: &UltraCircuitBuilder<P>,
-        proving_key: &'a mut ProvingKey<P>,
+        proving_key: &'a mut PlainProvingKey<P>,
     ) -> Self {
         let copy_cycles = vec![vec![]; builder.variables.len()];
 
@@ -972,53 +970,6 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         }
 
         CycleGroupCT::new_with_assert(point_x, point_y, infinity, true, builder, driver)
-    }
-}
-
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
-pub struct ActiveRegionData {
-    pub ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
-    pub idxs: Vec<usize>,            // full set of poly indices corresposponding to active ranges
-    pub current_end: usize,          // end of last range; for ensuring monotonicity of ranges
-}
-impl ActiveRegionData {
-    pub fn new() -> Self {
-        Self {
-            ranges: Vec::new(),
-            idxs: Vec::new(),
-            current_end: 0,
-        }
-    }
-
-    pub fn add_range(&mut self, start: usize, end: usize) {
-        assert!(
-            start >= self.current_end,
-            "Ranges should be non-overlapping and increasing"
-        );
-
-        self.ranges.push((start, end));
-        self.idxs.extend(start..end);
-        self.current_end = end;
-    }
-
-    pub fn get_ranges(&self) -> &Vec<(usize, usize)> {
-        &self.ranges
-    }
-
-    pub fn get_idx(&self, idx: usize) -> usize {
-        self.idxs[idx]
-    }
-
-    pub fn get_range(&self, idx: usize) -> (usize, usize) {
-        self.ranges[idx]
-    }
-
-    pub fn size(&self) -> usize {
-        self.idxs.len()
-    }
-
-    pub fn num_ranges(&self) -> usize {
-        self.ranges.len()
     }
 }
 

@@ -1,5 +1,5 @@
 use super::{ProverUnivariatesBatch, Relation, fold_accumulator};
-use crate::co_decider::{types::MAX_PARTIAL_RELATION_LENGTH, univariates::SharedUnivariate};
+use crate::co_decider::univariates::SharedUnivariate;
 use ark_ec::CurveGroup;
 use co_noir_common::types::RelationParameters;
 use co_noir_common::{

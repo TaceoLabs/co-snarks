@@ -6,7 +6,7 @@ use co_noir_common::{
     honk_proof::TranscriptFieldType,
     transcript::{Poseidon2Sponge, TranscriptHasher},
     types::ZeroKnowledge,
-};
+};use noir_types::HonkProof;
 use co_noir_types::ShamirType;
 use co_ultrahonk::prelude::{ShamirCoUltraHonk, UltraHonk};
 use mpc_net::local::LocalNetwork;
@@ -18,6 +18,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     num_parties: usize,
     threshold: usize,
     has_zk: ZeroKnowledge,
+    proof_file: &str,
 ) {
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let witness_file = format!("../test_vectors/noir/{name}/kat/{name}.gz");
@@ -36,8 +37,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 
     let nets = LocalNetwork::new(num_parties);
     let mut threads = Vec::with_capacity(num_parties);
-    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact, true);
-    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false).unwrap();
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
+    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system).unwrap();
     let prover_crs = Arc::new(
         CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
             CRS_PATH_G1,
@@ -52,15 +53,13 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
             Bn254,
         >(CRS_PATH_G2)
         .unwrap();
-    let vk =
-        co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs.clone(), verifier_crs, false)
-            .unwrap();
+    let vk = co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs.clone(), verifier_crs)
+        .unwrap();
     for net in nets {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
         let vk = vk.clone();
-        let constraint_system =
-            co_noir::get_constraint_system_from_artifact(&program_artifact, true);
+        let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
         threads.push(std::thread::spawn(move || {
             // generate proving key and vk
             let pk = co_noir::generate_proving_key_shamir(
@@ -68,8 +67,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 threshold,
                 &constraint_system,
                 witness,
-                false,
                 &net,
+                &prover_crs,
             )
             .unwrap();
             let (proof, public_inputs) = ShamirCoUltraHonk::<_, H>::prove(
@@ -106,18 +105,43 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(public_input, p);
     }
 
+    if has_zk == ZeroKnowledge::No {
+        let proof_u8 = H::to_buffer(proof.inner_as_ref());
+        let read_proof_u8 = std::fs::read(proof_file).unwrap();
+        assert_eq!(proof_u8, read_proof_u8);
+
+        let read_proof = HonkProof::new(H::from_buffer(&read_proof_u8));
+        assert_eq!(proof, read_proof);
+    }
+
     let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);
 }
 
 #[test]
 fn poseidon_proof_test_poseidon2sponge() {
-    proof_test::<Poseidon2Sponge>("poseidon", 3, 1, ZeroKnowledge::No);
-    proof_test::<Poseidon2Sponge>("poseidon", 3, 1, ZeroKnowledge::Yes);
+    const PROOF_FILE: &str = "../test_vectors/noir/poseidon/kat/pos_proof_with_pos";
+    proof_test::<Poseidon2Sponge>("poseidon", 3, 1, ZeroKnowledge::No, PROOF_FILE);
+    proof_test::<Poseidon2Sponge>("poseidon", 3, 1, ZeroKnowledge::Yes, PROOF_FILE);
 }
 
 #[test]
 fn poseidon_proof_test_keccak256() {
-    proof_test::<Keccak256>("poseidon", 3, 1, ZeroKnowledge::No);
-    proof_test::<Keccak256>("poseidon", 3, 1, ZeroKnowledge::Yes);
+    const PROOF_FILE: &str = "../test_vectors/noir/poseidon/kat/pos_proof_with_kec";
+    proof_test::<Keccak256>("poseidon", 3, 1, ZeroKnowledge::No, PROOF_FILE);
+    proof_test::<Keccak256>("poseidon", 3, 1, ZeroKnowledge::Yes, PROOF_FILE);
+}
+
+#[test]
+fn add3u64_proof_test_poseidon2sponge() {
+    const PROOF_FILE: &str = "../test_vectors/noir/add3u64/kat/add3u64_proof_with_pos";
+    proof_test::<Poseidon2Sponge>("add3u64", 3, 1, ZeroKnowledge::No, PROOF_FILE);
+    proof_test::<Poseidon2Sponge>("add3u64", 3, 1, ZeroKnowledge::Yes, PROOF_FILE);
+}
+
+#[test]
+fn add3u64_proof_test_keccak256() {
+    const PROOF_FILE: &str = "../test_vectors/noir/add3u64/kat/add3u64_proof_with_kec";
+    proof_test::<Keccak256>("add3u64", 3, 1, ZeroKnowledge::No, PROOF_FILE);
+    proof_test::<Keccak256>("add3u64", 3, 1, ZeroKnowledge::Yes, PROOF_FILE);
 }

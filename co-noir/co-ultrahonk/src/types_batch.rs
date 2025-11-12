@@ -23,9 +23,9 @@ use crate::co_decider::{
         poseidon2_internal_relation::Poseidon2InternalRelation,
         ultra_arithmetic_relation::UltraArithmeticRelation,
     },
-    types::MAX_PARTIAL_RELATION_LENGTH,
     univariates::SharedUnivariate,
 };
+use co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH;
 
 type Shared<T, P> = SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>;
 type Public<P> = Univariate<<P as PrimeGroup>::ScalarField, MAX_PARTIAL_RELATION_LENGTH>;

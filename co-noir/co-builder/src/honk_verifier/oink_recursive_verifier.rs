@@ -1,4 +1,3 @@
-use crate::PERMUTATION_ARGUMENT_VALUE_SEPARATOR;
 use crate::honk_verifier::recursive_decider_verification_key::RecursiveDeciderVerificationKey;
 use crate::honk_verifier::recursive_decider_verification_key::WitnessCommitments;
 use crate::honk_verifier::verifier_relations::NUM_SUBRELATIONS;
@@ -10,6 +9,7 @@ use crate::{
 use ark_ff::Field;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 
+use co_noir_common::constants::PERMUTATION_ARGUMENT_VALUE_SEPARATOR;
 use co_noir_common::types::RelationParameters;
 use co_noir_common::{
     honk_curve::HonkCurve,

@@ -22,6 +22,7 @@ pub mod crs;
 pub mod honk_curve;
 pub mod honk_proof;
 pub mod keccak_hash;
+pub mod keys;
 pub mod mpc;
 pub mod polynomials;
 pub mod serialize;

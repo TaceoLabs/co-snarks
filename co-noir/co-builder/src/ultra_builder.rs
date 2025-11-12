@@ -1,4 +1,5 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
+use crate::keys::plain_proving_key::PlainPkTrait;
 use crate::types::aes128;
 use crate::types::big_field::BigField;
 use crate::types::blake2s::Blake2s;
@@ -13,10 +14,6 @@ use crate::types::types::{
 };
 use crate::{
     acir_format::AcirFormat,
-    keys::{
-        proving_key::ProvingKey,
-        verification_key::{VerifyingKey, VerifyingKeyBarretenberg},
-    },
     types::{
         field_ct::{ByteArray, FieldCT},
         plookup::{BasicTableId, ColumnIdx, MultiTableId, Plookup, PlookupBasicTable, ReadData},
@@ -27,18 +24,23 @@ use crate::{
         types::{
             AddQuad, AddTriple, Blake2sConstraint, Blake3Constraint, BlockConstraint, BlockType,
             CachedPartialNonNativeFieldMultiplication, EccDblGate, LogicConstraint, MulQuad,
-            NUM_WIRES, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate,
-            Poseidon2InternalGate, RangeList, UltraTraceBlock, UltraTraceBlocks,
+            PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
+            RangeList, UltraTraceBlock, UltraTraceBlocks,
         },
     },
 };
 use ark_ec::pairing::Pairing;
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::{Field, One, PrimeField, Zero};
+use co_acvm::Rep3AcvmSolver;
+use co_acvm::ShamirAcvmSolver;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
+use co_noir_common::constants::NUM_WIRES;
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::keys::plain_proving_key::PlainProvingKey;
+use co_noir_common::keys::verification_key::{VerifyingKey, VerifyingKeyBarretenberg};
 use co_noir_common::polynomials::entities::PrecomputedEntities;
 use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::utils::Utils;
@@ -55,6 +57,10 @@ type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
 pub type UltraCircuitBuilder<P> =
     GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as PrimeGroup>::ScalarField>>;
+pub type Rep3CoBuilder<'a, P, N> =
+    GenericUltraCircuitBuilder<P, Rep3AcvmSolver<'a, <P as PrimeGroup>::ScalarField, N>>;
+pub type ShamirCoBuilder<'a, P, N> =
+    GenericUltraCircuitBuilder<P, ShamirAcvmSolver<'a, <P as PrimeGroup>::ScalarField, N>>;
 
 impl<C: CurveGroup> UltraCircuitBuilder<C> {
     pub fn create_vk_barretenberg(
@@ -62,7 +68,8 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         crs: Arc<ProverCrs<C>>,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
     ) -> HonkProofResult<VerifyingKeyBarretenberg<C>> {
-        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
+        let pk: PlainProvingKey<C> =
+            PlainProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -89,8 +96,9 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         prover_crs: Arc<ProverCrs<C>>,
         verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(ProvingKey<C>, VerifyingKey<P>)> {
-        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
+    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKey<P>)> {
+        let pk: PlainProvingKey<C> =
+            PlainProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -120,8 +128,9 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         self,
         crs: Arc<ProverCrs<C>>,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(ProvingKey<C>, VerifyingKeyBarretenberg<C>)> {
-        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
+    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKeyBarretenberg<C>)> {
+        let pk: PlainProvingKey<C> =
+            PlainProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -157,7 +166,6 @@ pub struct GenericUltraCircuitBuilder<
     pub(crate) real_variable_tags: Vec<u32>,
     pub(crate) current_tag: u32,
     pub public_inputs: Vec<u32>,
-    is_recursive_circuit: bool,
     pub(crate) tau: BTreeMap<u32, u32>,
     constant_variable_indices: BTreeMap<P::ScalarField, u32>,
     pub(crate) zero_idx: u32,
@@ -221,6 +229,16 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.prev_var_index.push(Self::FIRST_VARIABLE_IN_CLASS);
         self.real_variable_tags.push(Self::DUMMY_TAG);
         idx
+    }
+
+    pub(crate) fn add_public_variable(&mut self, value: T::AcvmType) -> u32 {
+        let index = self.add_variable(value);
+        assert!(
+            !self.circuit_finalized,
+            "Cannot add to public inputs after they have been finalized."
+        );
+        self.public_inputs.push(index);
+        index
     }
 
     pub(crate) fn set_variable(&mut self, index: u32, value: T::AcvmType) {
@@ -3955,7 +3973,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         witness_values: Vec<T::AcvmType>,
         public_inputs: Vec<u32>,
         varnum: usize,
-        recursive: bool,
     ) -> Self {
         tracing::trace!("Builder init");
         let mut builder = Self::new(size_hint);
@@ -3982,14 +3999,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder.zero_idx = builder.put_constant_variable(P::ScalarField::zero());
         builder.tau.insert(Self::DUMMY_TAG, Self::DUMMY_TAG); // AZTEC TODO(luke): explain this
 
-        builder.is_recursive_circuit = recursive;
         builder
     }
 
     pub fn new(size_hint: usize) -> Self {
         tracing::trace!("Builder new");
         let variables = Vec::with_capacity(size_hint * 3);
-        // let _variable_names = BTreeMap::with_capacity(size_hint * 3);
+
         let next_var_index = Vec::with_capacity(size_hint * 3);
         let prev_var_index = Vec::with_capacity(size_hint * 3);
         let real_variable_index = Vec::with_capacity(size_hint * 3);
@@ -4003,7 +4019,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             real_variable_index,
             real_variable_tags,
             public_inputs: Vec::new(),
-            is_recursive_circuit: false,
             tau: BTreeMap::new(),
             constant_variable_indices: BTreeMap::new(),
             zero_idx: 0,
@@ -4025,12 +4040,19 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
     }
 
+    pub(crate) fn new_minimal(size_hint: usize) -> Self {
+        let mut builder = Self::new(size_hint);
+        builder.zero_idx = builder.put_constant_variable(P::ScalarField::zero());
+        builder.tau.insert(Self::DUMMY_TAG, Self::DUMMY_TAG); // AZTEC TODO(luke): explain this
+        builder
+    }
+
     pub fn create_circuit(
         constraint_system: &AcirFormat<P::ScalarField>,
-        recursive: bool,
         size_hint: usize,
         witness: Vec<T::AcvmType>,
         honk_recursion: HonkRecursion, // 1 for ultrahonk
+        crs: &ProverCrs<P>, // We need the CRS because in recursive verification, we need to generate a placeholder proof
         driver: &mut T,
     ) -> eyre::Result<Self> {
         tracing::trace!("Builder create circuit");
@@ -4042,10 +4064,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             witness,
             constraint_system.public_inputs.to_owned(),
             constraint_system.varnum as usize,
-            recursive,
         );
         let metadata = ProgramMetadata {
-            recursive,
             honk_recursion,
             size_hint,
         };
@@ -4053,6 +4073,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             driver,
             constraint_system,
             has_valid_witness_assignments,
+            crs,
             &metadata,
         )?;
 
@@ -4063,9 +4084,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
     pub fn circuit_size(
         constraint_system: &AcirFormat<P::ScalarField>,
-        recursive: bool,
         size_hint: usize,
         honk_recursion: HonkRecursion, // 1 for ultrahonk
+        crs: &ProverCrs<P>,
         driver: &mut T,
     ) -> eyre::Result<usize> {
         tracing::trace!("Builder create circuit");
@@ -4075,14 +4096,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             vec![],
             constraint_system.public_inputs.to_owned(),
             constraint_system.varnum as usize,
-            recursive,
         );
         let metadata = ProgramMetadata {
-            recursive,
             honk_recursion,
             size_hint,
         };
-        builder.build_constraints(driver, constraint_system, false, &metadata)?;
+        builder.build_constraints(driver, constraint_system, false, crs, &metadata)?;
 
         builder.finalize_circuit(true, driver)?;
 
@@ -4138,6 +4157,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         driver: &mut T,
         constraint_system: &AcirFormat<P::ScalarField>,
         has_valid_witness_assignments: bool,
+        crs: &ProverCrs<P>,
         metadata: &ProgramMetadata,
     ) -> eyre::Result<()> {
         tracing::trace!("Builder build constraints");
@@ -4341,6 +4361,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.process_honk_recursion_constraints(
                 constraint_system,
                 has_valid_witness_assignments,
+                crs,
                 driver,
             );
         }
@@ -4395,6 +4416,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
         has_valid_witness_assignments: bool,
+        crs: &ProverCrs<P>,
         driver: &mut T,
     ) {
         // Add recursion constraints
@@ -4402,6 +4424,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let honk_recursion_constraint = self.create_honk_recursion_constraints(
                 constraint,
                 has_valid_witness_assignments,
+                crs,
                 driver,
             );
         }

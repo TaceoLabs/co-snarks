@@ -1689,6 +1689,43 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
     ) -> u32 {
         self.normalize(builder, driver).witness_index
     }
+    /**
+     * @brief Create a `bool_t` from a witness index that is **known** to contain a constrained bool value.
+     * @warning The witness value **is not** constrained to be boolean. We simply perform an out-of-circuit sanity check.
+     */
+    pub fn from_witness_index_unsafe<P: CurveGroup<ScalarField = F>>(
+        witness_index: u32,
+        builder: &GenericUltraCircuitBuilder<P, T>,
+    ) -> Self {
+        assert!(
+            witness_index != FieldCT::<F>::IS_CONSTANT,
+            "BoolCT: constant index passed to unsafe constructor"
+        );
+
+        let value = builder.get_variable(witness_index as usize);
+
+        // It does not create a constraint.
+        if let Some(public) = T::get_public(&value) {
+            assert!(
+                public.is_zero() || public.is_one(),
+                "BoolCT: creating a witness bool from a non-boolean value"
+            );
+        }
+
+        // Normalize to 0/1 AcvmType (for public case we recreate it, else keep as-is)
+        let witness_bool = if let Some(public) = T::get_public(&value) {
+            public.into()
+        } else {
+            value
+        };
+
+        Self {
+            witness_bool,
+            witness_inverted: false,
+            witness_index,
+        }
+    }
+
     pub(crate) fn is_constant(&self) -> bool {
         self.witness_index == FieldCT::<F>::IS_CONSTANT
     }

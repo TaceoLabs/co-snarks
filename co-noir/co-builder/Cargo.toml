@@ -23,6 +23,7 @@ noir-types = { version = "0.1.1", path = "../noir-types" }
 mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
 mpc-net = { version = "0.5.0", path = "../../mpc-net" }
+co-ultrahonk = { version = "0.5.0", path = "../co-ultrahonk" }
 eyre.workspace = true
 itertools.workspace = true
 num-bigint.workspace = true

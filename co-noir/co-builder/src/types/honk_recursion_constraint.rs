@@ -1,18 +1,20 @@
 use std::array;
+use std::sync::Arc;
 
 use crate::acir_format::ProofType;
 use crate::honk_verifier::recursive_decider_verification_key::{
     RecursiveDeciderVerificationKey, VKAndHash,
 };
 use crate::honk_verifier::ultra_recursive_verifier::UltraRecursiveVerifier;
-use crate::prelude::{GenericUltraCircuitBuilder, VerifyingKeyBarretenberg};
+use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{Poseidon2SpongeCT, TranscriptCT, TranscriptHasherCT};
 use crate::types::big_field::BigField;
 use crate::types::big_group::BigGroup;
-use crate::types::types::{PairingPoints, RecursionConstraint};
+use crate::types::types::{AddQuad, PairingPoints, RecursionConstraint};
 use crate::{transcript_ct::TranscriptFieldType, types::field_ct::FieldCT};
-use ark_ec::AffineRepr;
-use ark_ff::Zero;
+use ark_ec::{AffineRepr, PrimeGroup};
+use ark_ff::{One, UniformRand, Zero};
+use co_acvm::PlainAcvmSolver;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::constants::{
     BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, CONST_PROOF_SIZE_LOG_N,
@@ -20,10 +22,14 @@ use co_noir_common::constants::{
     OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS, PUBLIC_INPUTS_SIZE,
     ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS,
 };
+use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::keys::verification_key::VerifyingKeyBarretenberg;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
+use co_noir_common::transcript::{Poseidon2Sponge, Transcript};
 use co_noir_common::types::ZeroKnowledge;
+use rand::thread_rng;
 
 pub type PrecomputedCommitments<C, T> = PrecomputedEntities<BigGroup<C, T>>;
 
@@ -107,6 +113,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         &mut self,
         input: &RecursionConstraint,
         has_valid_witness_assignments: bool,
+        crs: &ProverCrs<C>,
         driver: &mut T,
     ) -> eyre::Result<PairingPoints<C, T>> {
         assert!(
@@ -187,6 +194,149 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         )
     }
 
+    /**
+     * @brief Creates a vkey and proof object.
+     * @details if has_valid_witness_assignments is false, generates a dummy proof and vkey matching the given sizes.
+     * the data is not meaningful but its structure is correct.
+     * if has_valid_witness_assignments is true, generates a valid proof and vkey for a simple circuit, matching the given
+     * sizes. This simple proof will be used if the recursion is done under a false predicate. In that case, the recursive
+     * verification must not fail so that's why a valid proof is needed.
+     * @param builder
+     * @param proof_size Size of proof with NO public inputs
+     * @param public_inputs_size Total size of public inputs including aggregation object
+     * @param key_fields
+     * @param proof_fields
+     */
+    #[allow(clippy::too_many_arguments)]
+    pub fn place_holder_proof_and_vk(
+        &mut self,
+        place_holder_vk_fields: &mut Vec<C::ScalarField>,
+        place_holder_proof: &mut Vec<T::AcvmType>,
+        place_holder_vk_hash: &mut FieldCT<C::ScalarField>,
+        has_valid_witness_assignments: bool,
+        proof_size: usize,
+        public_inputs_size: usize,
+        vk_fields: &mut [FieldCT<C::ScalarField>],
+        proof_fields: &mut [FieldCT<C::ScalarField>],
+        has_zk: ZeroKnowledge,
+        crs: &ProverCrs<C>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        let mut transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+        // Populate the key fields and proof fields with dummy values to prevent issues (e.g. points must be on curve).
+        if !has_valid_witness_assignments {
+            // proof_size here includes the aggregation object; remove it to get raw proof size (without pub inputs)
+            let size_of_proof_with_no_pub_inputs = proof_size - PUBLIC_INPUTS_SIZE;
+            // Add aggregation object public inputs to inner public inputs
+            let total_num_public_inputs = public_inputs_size + PUBLIC_INPUTS_SIZE;
+
+            // Set a dummy vk and proof in the circuit so structure constraints exist even without a witness
+            self.create_dummy_vkey_and_proof(
+                size_of_proof_with_no_pub_inputs,
+                total_num_public_inputs,
+                vk_fields,
+                proof_fields,
+                has_zk,
+                driver,
+            )?;
+
+            // Generate a mock place holder proof, vk and vk hash, to keep the circuit the same independent of whether a
+            // witness is provided or not.
+            let pub_inputs_offset = 1; // Ultra flavors always have a zero row
+
+            let honk_vk = Self::create_mock_honk_vk(
+                1 << CONST_PROOF_SIZE_LOG_N,
+                pub_inputs_offset,
+                public_inputs_size,
+            );
+            *place_holder_vk_fields = honk_vk.to_field_elements();
+
+            let mock_proof = self.create_mock_honk_proof(public_inputs_size, has_zk, driver)?;
+            *place_holder_proof = mock_proof;
+
+            // Assume a function exists to compute hash of vk (returns scalar field element)
+            let vk_hash_scalar = honk_vk.hash_through_transcript("", &mut transcript);
+        } else {
+            // Generate an actually verifiable honk proof & vk for a trivial circuit.
+            // Assume this helper exists and returns (proof, vk, vk_hash_scalar).
+            let (place_holder_honk_proof, place_holder_vk) = self
+                .construct_honk_proof_for_simple_circuit(public_inputs_size, crs, has_zk, driver)?;
+            *place_holder_proof = place_holder_honk_proof;
+            *place_holder_vk_fields = place_holder_vk.to_field_elements();
+            *place_holder_vk_hash =
+                FieldCT::from(place_holder_vk.hash_through_transcript("", &mut transcript));
+        }
+
+        Ok(())
+    }
+
+    /**
+     * @brief Create a verifiable honk proof for a circuit with a single big add gate. Adds random public inputs to match
+     * num_public_inputs provided
+     *
+     * @param inner_public_inputs_size Number of public inputs coming from the ACIR constraints
+     */
+    pub fn construct_honk_proof_for_simple_circuit(
+        &mut self,
+        num_inner_public_inputs: usize,
+        crs: &ProverCrs<C>,
+        has_zk: ZeroKnowledge,
+        driver: &mut T,
+    ) -> eyre::Result<(Vec<T::AcvmType>, VerifyingKeyBarretenberg<C>)> {
+        let mut random_fields = Vec::with_capacity(3 + num_inner_public_inputs);
+        for _ in 0..num_inner_public_inputs + 3 {
+            let pi = driver.rand()?;
+            random_fields.push(pi);
+        }
+        let opened = driver.open_many(&random_fields)?;
+        let a = opened[0];
+        let b = opened[1];
+        let c = opened[2];
+        let public_inputs = &opened[3..];
+        let d = a + b + c;
+
+        // TACEO TODO: I think this is fine?
+        let mut builder =
+            GenericUltraCircuitBuilder::<C, PlainAcvmSolver<C::ScalarField>>::new_minimal(0);
+        let mut plain_driver = PlainAcvmSolver::<C::ScalarField>::new();
+
+        let a_idx = builder.add_variable(a);
+        let b_idx = builder.add_variable(b);
+        let c_idx = builder.add_variable(c);
+        let d_idx = builder.add_variable(d);
+
+        builder.create_big_add_gate(
+            &AddQuad {
+                a: a_idx,
+                b: b_idx,
+                c: c_idx,
+                d: d_idx,
+                a_scaling: C::ScalarField::one(),
+                b_scaling: C::ScalarField::one(),
+                c_scaling: C::ScalarField::one(),
+                d_scaling: -C::ScalarField::one(),
+                const_scaling: C::ScalarField::zero(),
+            },
+            false,
+        );
+
+        // Add the public inputs
+        for pi in public_inputs.iter() {
+            builder.add_public_variable(*pi);
+        }
+
+        // Add the default pairing points and IPA claim
+        builder.add_default_to_public_inputs(&mut plain_driver)?; //TODO FLORIN/ TODO CESAR: I think this is not the right one anymore
+
+        // prove the circuit constructed above
+        // Create the decider proving key
+        // let decider_pk = ProvingKey::create::<PlainAcvmSolver<_>>(builder, crs, &mut plain_driver)?;
+
+        let proof = self.create_mock_honk_proof(num_inner_public_inputs, has_zk, driver)?;
+        todo!()
+        // Ok((proof, vk))
+    }
+
     /// Creates a dummy vkey and proof object.
     /// Populates the key and proof vectors with dummy values in the write_vk case when we don't have a valid witness. The bulk of the logic is setting up certain values correctly like the circuit size, number of public inputs, aggregation object, and commitments.
     fn create_dummy_vkey_and_proof(
@@ -215,7 +365,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         // Set honk vk in builder
         for vk_element in honk_vk.to_field_elements() {
             self.set_variable(
-                key_fields[offset].witness_index,
+                key_fields[offset].witness_index, //TODO FLORIN AFTER REBASE:    key_fields[offset].get_witness_index(builder, driver)?,
                 T::AcvmType::from(vk_element),
             );
             offset += 1;
@@ -431,4 +581,67 @@ fn populate_field_elements_for_mock_commitments<
     for _ in 0..num_commitments {
         fields.clone_from_slice(&mock_commitment_frs);
     }
+}
+
+#[test]
+fn test() {
+    type C = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1;
+    let mut rng = thread_rng();
+    let mut random_fields = Vec::with_capacity(3);
+    for _ in 0..3 {
+        let pi = ark_bn254::Fr::rand(&mut rng);
+        random_fields.push(pi);
+    }
+    let size = 32;
+    let mut public_inputs = Vec::with_capacity(size);
+    for _ in 0..size {
+        let pi = ark_bn254::Fr::rand(&mut rng);
+        public_inputs.push(pi);
+    }
+
+    let a = random_fields[0];
+    let b = random_fields[1];
+    let c = random_fields[2];
+    let d = a + b + c;
+
+    // TACEO TODO: I think this is fine?
+    let mut builder = GenericUltraCircuitBuilder::<
+        C,
+        PlainAcvmSolver<<C as PrimeGroup>::ScalarField>,
+    >::new_minimal(0);
+    let mut plain_driver = PlainAcvmSolver::<<C as PrimeGroup>::ScalarField>::new();
+
+    let a_idx = builder.add_variable(a);
+    let b_idx = builder.add_variable(b);
+    let c_idx = builder.add_variable(c);
+    let d_idx = builder.add_variable(d);
+
+    builder.create_big_add_gate(
+        &AddQuad {
+            a: a_idx,
+            b: b_idx,
+            c: c_idx,
+            d: d_idx,
+            a_scaling: <C as PrimeGroup>::ScalarField::one(),
+            b_scaling: <C as PrimeGroup>::ScalarField::one(),
+            c_scaling: <C as PrimeGroup>::ScalarField::one(),
+            d_scaling: -<C as PrimeGroup>::ScalarField::one(),
+            const_scaling: <C as PrimeGroup>::ScalarField::zero(),
+        },
+        false,
+    );
+
+    // Add the public inputs
+    for pi in public_inputs.iter() {
+        builder.add_public_variable(*pi);
+    }
+
+    // Add the default pairing points and IPA claim
+    builder
+        .add_default_to_public_inputs(&mut plain_driver)
+        .unwrap(); //TODO FLORIN/ TODO CESAR: I think this is not the right one anymore
+
+    builder.finalize_circuit(true, &mut plain_driver).unwrap();
+
+    println!("size: {}", builder.compute_dyadic_size());
 }

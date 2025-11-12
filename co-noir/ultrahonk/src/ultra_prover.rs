@@ -1,7 +1,8 @@
-use co_builder::prelude::{PAIRING_POINT_ACCUMULATOR_SIZE, ProvingKey, VerifyingKeyBarretenberg};
 use co_noir_common::{
+    constants::PAIRING_POINT_ACCUMULATOR_SIZE,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
+    keys::{plain_proving_key::PlainProvingKey, verification_key::VerifyingKeyBarretenberg},
     transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
 };
@@ -29,7 +30,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     #[expect(clippy::type_complexity)]
     pub fn prove(
-        mut proving_key: ProvingKey<C>,
+        mut proving_key: PlainProvingKey<C>,
         has_zk: ZeroKnowledge,
         verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> HonkProofResult<(HonkProof<H::DataType>, Vec<H::DataType>)> {

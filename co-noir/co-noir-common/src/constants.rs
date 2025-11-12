@@ -1,4 +1,10 @@
-use crate::polynomials::entities::{PRECOMPUTED_ENTITIES_SIZE, WITNESS_ENTITIES_SIZE};
+use crate::{
+    mpc::{NoirUltraHonkProver, plain::PlainUltraHonkDriver},
+    polynomials::entities::{
+        PRECOMPUTED_ENTITIES_SIZE, ProverWitnessEntities, WITNESS_ENTITIES_SIZE,
+    },
+    types::Bn254G1,
+};
 
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 /// AZTEC TODO(<https://github.com/AztecProtocol/barretenberg/issues/1046>): Remove the need for const sized proofs
@@ -36,3 +42,18 @@ pub const DECIDER_PROOF_LENGTH: usize = (CONST_PROOF_SIZE_LOG_N * BATCHED_RELATI
             /* 6. Shplonk Q commitment */ (4) +
             /* 7. KZG W commitment */ (4);
 pub const OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS: usize = WITNESS_ENTITIES_SIZE * 4;
+
+pub const MOCK_PROOF_DYADIC_SIZE: usize = 1 << 5;
+
+pub const NUM_WIRES: usize = 4;
+pub const NUM_SELECTORS: usize = 14;
+
+// Arbitrarily large constant (> size of the BN254 srs) used to ensure that the evaluations on the hypercube of the
+// permutation argument polynomials (sigmas, ids) are unique, e.g. id[i][j] == id[m][n] iff (i == m && j == n)
+pub const PERMUTATION_ARGUMENT_VALUE_SEPARATOR: u32 = 1 << 28;
+
+pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
+
+pub const PUBLIC_INPUT_WIRE_INDEX: usize = ProverWitnessEntities::<
+    <PlainUltraHonkDriver as NoirUltraHonkProver<Bn254G1>>::ArithmeticShare,
+>::W_R;
