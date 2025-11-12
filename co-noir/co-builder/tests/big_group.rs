@@ -109,6 +109,16 @@ impl<T: NoirWitnessExtensionProtocol<Fr>> TestData<T> {
             .map(|entry| Self::from_test_entry(entry, builder, driver))
             .collect()
     }
+
+    fn get_from_file(
+        test_file: &str,
+        builder: &mut GenericUltraCircuitBuilder<Bn254G1, T>,
+        driver: &mut T,
+    ) -> Vec<Self> {
+        let test_entries: Vec<TestEntry> =
+            serde_json::from_str(std::fs::read_to_string(test_file).unwrap().as_str()).unwrap();
+        Self::from_test_entries(test_entries, builder, driver)
+    }
 }
 
 fn run_test<T: NoirWitnessExtensionProtocol<Fr>>(
@@ -147,9 +157,7 @@ fn run_test<T: NoirWitnessExtensionProtocol<Fr>>(
 fn run_tests<T: NoirWitnessExtensionProtocol<Fr>>(test_file: &str, driver: &mut T) {
     // TODO CESAR: size hint?
     let mut builder = GenericUltraCircuitBuilder::<Bn254G1, T>::new(100);
-    let test_entries: Vec<TestEntry> =
-        serde_json::from_str(std::fs::read_to_string(test_file).unwrap().as_str()).unwrap();
-    let test_data_list = TestData::from_test_entries(test_entries, &mut builder, driver);
+    let test_data_list = TestData::get_from_file(test_file, &mut builder, driver);
 
     for test_data in test_data_list {
         run_test(test_data, &mut builder, driver);
@@ -162,4 +170,18 @@ fn test_big_group_consistency_plaindriver() {
     tracing_subscriber::fmt().init();
     let mut driver = PlainAcvmSolver::<Fr>::new();
     run_tests(TEST_FILE, &mut driver);
+}
+
+#[test]
+fn test_big_group_edge_case_equivalence_plaindriver() {
+    const TEST_FILE: &str = "tests/test_data/big_group_consistency";
+    tracing_subscriber::fmt().init();
+    let mut driver = PlainAcvmSolver::<Fr>::new();
+    let mut builder = GenericUltraCircuitBuilder::<Bn254G1, _>::new(10);
+    let test_data = TestData::get_from_file(TEST_FILE, &mut builder, &mut driver);
+    test_data.into_iter().for_each(|mut data| {
+        data.with_edge_cases = true;
+        data.masking_scalar = FieldCT::from(Fr::one());
+        run_test(data, &mut builder, &mut driver);
+    });
 }

@@ -333,10 +333,6 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
         }
 
         let index = FieldCT::accumulate(&accumulators, builder, driver)?;
-        println!(
-            "LookupTablePlookup::get: index = {:?}",
-            index.get_value(builder, driver)
-        );
         Self::read_group_element_rom_tables(
             &mut self.coordinates,
             &index,
@@ -382,11 +378,11 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<
             // last 6 points to be added as one 6-table
             num_fives -= 1;
             num_sixes = 1;
-        } else if num_fives * 5 == (num_points - 2) && num_fives >= 2 {
+        } else if num_fives >= 2 && num_fives * 5 == (num_points - 2) {
             // last 12 points to be added as two 6-tables
             num_fives -= 2;
             num_sixes = 2;
-        } else if num_fives * 5 == (num_points - 3) && num_fives >= 3 {
+        } else if num_fives >= 3 && num_fives * 5 == (num_points - 3) {
             // last 18 points to be added as three 6-tables
             num_fives -= 3;
             num_sixes = 3;

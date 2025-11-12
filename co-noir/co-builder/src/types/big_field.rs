@@ -135,7 +135,10 @@ impl<F: PrimeField> BigField<F> {
     }
 
     pub(crate) fn is_constant(&self) -> bool {
-        self.prime_basis_limb.is_constant()
+        self.binary_basis_limbs
+            .iter()
+            .all(|limb| limb.element.is_constant())
+            && self.prime_basis_limb.is_constant()
     }
 
     pub(crate) fn from_witness<
@@ -1208,18 +1211,26 @@ impl<F: PrimeField> BigField<F> {
                 &other.binary_basis_limbs[i].maximum_value;
         }
 
-        // UltraFlavor has plookup
-        if self.prime_basis_limb.multiplicative_constant == F::one()
-            && other.prime_basis_limb.multiplicative_constant == F::one()
-            && !self.is_constant()
-            && !other.is_constant()
-        {
+        // If both the elements are witnesses, we use an optimized addition trick that uses 4 gates instead of 5.
+        //
+        // Naively, we would need 5 gates to add two bigfield elements: 4 gates to add the binary basis limbs and
+        // 1 gate to add the prime basis limbs.
+        //
+        // In the optimized version, we fit 15 witnesses into 4 gates (4 + 4 + 4 + 3 = 15), and we add the prime basis limbs
+        // and one of the binary basis limbs in the first gate.
+        // gate 1: z.limb_0 = x.limb_0 + y.limb_0  &&  z.prime_limb = x.prime_limb + y.prime_limb
+        // gate 2: z.limb_1 = x.limb_1 + y.limb_1
+        // gate 3: z.limb_2 = x.limb_2 + y.limb_2
+        // gate 4: z.limb_3 = x.limb_3 + y.limb_3
+        //
+        let both_witnesses = !self.is_constant() && !other.is_constant();
+        let both_prime_limb_multiplicative_constants_one =
+            self.prime_basis_limb.multiplicative_constant == F::one()
+                && other.prime_basis_limb.multiplicative_constant == F::one();
+        if both_witnesses && both_prime_limb_multiplicative_constants_one {
             // We are checking if this is and identical element, so we need to compare the actual indices, not normalized ones
-            let limbconst = (0..NUM_LIMBS).any(|i| {
-                result.binary_basis_limbs[i].element.is_constant()
-                    || other.binary_basis_limbs[i].element.is_constant()
-            }) || self.prime_basis_limb.is_constant()
-                || other.prime_basis_limb.is_constant()
+            let limbconst = self.is_constant()
+                || other.is_constant()
                 || (self.prime_basis_limb.witness_index == other.prime_basis_limb.witness_index);
             if !limbconst {
                 let [x0, x1, x2, x3] = result
@@ -1249,7 +1260,7 @@ impl<F: PrimeField> BigField<F> {
                 let [c0, c1, c2, c3] = (0..4)
                     .map(|i| {
                         result.binary_basis_limbs[i].element.additive_constant
-                            - other.binary_basis_limbs[i].element.additive_constant
+                            + other.binary_basis_limbs[i].element.additive_constant
                     })
                     .collect::<Vec<_>>()
                     .try_into()
@@ -1274,6 +1285,9 @@ impl<F: PrimeField> BigField<F> {
                 return Ok(result);
             }
         }
+        // If one of the elements is a constant or its prime limb does not have a multiplicative constant of 1, we
+        // use the standard addition method. This will not use additional gates because field addition with one constant
+        // does not require any additional gates.
         for i in 0..NUM_LIMBS {
             result.binary_basis_limbs[i].element.add_assign(
                 &other.binary_basis_limbs[i].element,
@@ -1403,8 +1417,17 @@ impl<F: PrimeField> BigField<F> {
         // Step 3: Compute offset terms t0, t1, t2, t3 that we add to our result to ensure each limb is positive
         //
         // t3 represents the value we are BORROWING from constant_to_add.limb[3]
-        // t2, t1, t0 are the terms we will ADD to constant_to_add.limb[2], constant_to_add.limb[1],
-        // constant_to_add.limb[0]
+        // t2, t1, t0 are the terms we will ADD to constant_to_add.limb[2], constant_to_add.limb[1], constant_to_add.limb[0]
+        //
+        // Borrow propagation table:
+        // ┌───────┬─────────────────────────────────┬──────────────────────────────────┐
+        // │ Limb  │ Value received FROM next limb   │ Value given TO previous limb     │
+        // ├───────┼─────────────────────────────────┼──────────────────────────────────┤
+        // │   0   │ 2^limb_0_borrow_shift           │ 0                                │
+        // │   1   │ 2^limb_1_borrow_shift           │ 2^(limb_0_borrow_shift - L)      │
+        // │   2   │ 2^limb_2_borrow_shift           │ 2^(limb_1_borrow_shift - L)      │
+        // │   3   │ 0                               │ 2^(limb_2_borrow_shift - L)      │
+        // └───────┴─────────────────────────────────┴──────────────────────────────────┘
         //
         // i.e. The net value we add to `constant_to_add` is 0. We must ensure that:
         // t3 = t0 + (t1 << NUM_LIMB_BITS) + (t2 << NUM_LIMB_BITS * 2)
@@ -1459,72 +1482,52 @@ impl<F: PrimeField> BigField<F> {
             .element
             .add(&to_add_3, builder, driver);
 
-        // UltraFlavor has plookup
-        if self.prime_basis_limb.multiplicative_constant == F::one()
-            && other.prime_basis_limb.multiplicative_constant == F::one()
-            && !self.is_constant()
-            && !other.is_constant()
-        {
+        let both_witnesses = !self.is_constant() && !other.is_constant();
+        let both_prime_limb_multiplicative_constants_one =
+            self.prime_basis_limb.multiplicative_constant == F::one()
+                && other.prime_basis_limb.multiplicative_constant == F::one();
+        if both_witnesses && both_prime_limb_multiplicative_constants_one {
             // We are checking if this is and identical element, so we need to compare the actual indices, not normalized ones
-            let limbconst = result.binary_basis_limbs[0].element.is_constant()
-                || result.binary_basis_limbs[1].element.is_constant()
-                || result.binary_basis_limbs[2].element.is_constant()
-                || result.binary_basis_limbs[3].element.is_constant()
-                || self.prime_basis_limb.is_constant()
-                || other.binary_basis_limbs[0].element.is_constant()
-                || other.binary_basis_limbs[1].element.is_constant()
-                || other.binary_basis_limbs[2].element.is_constant()
-                || other.binary_basis_limbs[3].element.is_constant()
-                || other.prime_basis_limb.is_constant()
+            let limbconst = self.is_constant()
+                || other.is_constant()
                 || (self.prime_basis_limb.witness_index == other.prime_basis_limb.witness_index);
             if !limbconst {
-                let x0 = (
-                    result.binary_basis_limbs[0].element.witness_index,
-                    result.binary_basis_limbs[0].element.multiplicative_constant,
-                );
-                let x1 = (
-                    result.binary_basis_limbs[1].element.witness_index,
-                    result.binary_basis_limbs[1].element.multiplicative_constant,
-                );
-                let x2 = (
-                    result.binary_basis_limbs[2].element.witness_index,
-                    result.binary_basis_limbs[2].element.multiplicative_constant,
-                );
-                let x3 = (
-                    result.binary_basis_limbs[3].element.witness_index,
-                    result.binary_basis_limbs[3].element.multiplicative_constant,
-                );
-
-                let y0 = (
-                    other.binary_basis_limbs[0].element.witness_index,
-                    other.binary_basis_limbs[0].element.multiplicative_constant,
-                );
-                let y1 = (
-                    other.binary_basis_limbs[1].element.witness_index,
-                    other.binary_basis_limbs[1].element.multiplicative_constant,
-                );
-                let y2 = (
-                    other.binary_basis_limbs[2].element.witness_index,
-                    other.binary_basis_limbs[2].element.multiplicative_constant,
-                );
-                let y3 = (
-                    other.binary_basis_limbs[3].element.witness_index,
-                    other.binary_basis_limbs[3].element.multiplicative_constant,
-                );
-
-                let c0 = result.binary_basis_limbs[0].element.additive_constant
-                    - other.binary_basis_limbs[0].element.additive_constant;
-                let c1 = result.binary_basis_limbs[1].element.additive_constant
-                    - other.binary_basis_limbs[1].element.additive_constant;
-                let c2 = result.binary_basis_limbs[2].element.additive_constant
-                    - other.binary_basis_limbs[2].element.additive_constant;
-                let c3 = result.binary_basis_limbs[3].element.additive_constant
-                    - other.binary_basis_limbs[3].element.additive_constant;
+                let [x0, x1, x2, x3] = result
+                    .binary_basis_limbs
+                    .iter()
+                    .map(|limb| {
+                        (
+                            limb.element.witness_index,
+                            limb.element.multiplicative_constant,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .expect("We have 4 limbs");
+                let [y0, y1, y2, y3] = other
+                    .binary_basis_limbs
+                    .iter()
+                    .map(|limb| {
+                        (
+                            limb.element.witness_index,
+                            limb.element.multiplicative_constant,
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .expect("We have 4 limbs");
+                let [c0, c1, c2, c3] = (0..4)
+                    .map(|i| {
+                        result.binary_basis_limbs[i].element.additive_constant
+                            - other.binary_basis_limbs[i].element.additive_constant
+                    })
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .expect("We have 4 limbs");
 
                 let xp = self.prime_basis_limb.witness_index;
                 let yp = other.prime_basis_limb.witness_index;
 
-                // TODO CESAR: Is this even correct?
                 let constant_to_add_mod_p = constant_to_add % F::MODULUS.into();
                 let cp = self.prime_basis_limb.additive_constant
                     - other.prime_basis_limb.additive_constant
@@ -1539,14 +1542,11 @@ impl<F: PrimeField> BigField<F> {
                     driver,
                 )?;
 
-                result.binary_basis_limbs[0].element =
-                    FieldCT::from_witness_index(output_witness[0]);
-                result.binary_basis_limbs[1].element =
-                    FieldCT::from_witness_index(output_witness[1]);
-                result.binary_basis_limbs[2].element =
-                    FieldCT::from_witness_index(output_witness[2]);
-                result.binary_basis_limbs[3].element =
-                    FieldCT::from_witness_index(output_witness[3]);
+                for i in 0..NUM_LIMBS {
+                    result.binary_basis_limbs[i].element =
+                        FieldCT::from_witness_index(output_witness[i]);
+                }
+
                 result.prime_basis_limb = FieldCT::from_witness_index(output_witness[4]);
                 return Ok(result);
             }
@@ -1638,9 +1638,9 @@ impl<F: PrimeField> BigField<F> {
 
         if reduction_required {
             if self.get_maximum_value() > other.get_maximum_value() {
-                self.self_reduce(builder, driver);
+                self.self_reduce(builder, driver)?;
             } else {
-                other.self_reduce(builder, driver);
+                other.self_reduce(builder, driver)?;
             }
             return self.mul(other, builder, driver);
         }
@@ -1761,7 +1761,7 @@ impl<F: PrimeField> BigField<F> {
         );
 
         if reduction_required {
-            denominator.self_reduce(builder, driver);
+            denominator.self_reduce(builder, driver)?;
             return Self::internal_div(numerators, denominator, check_for_zero, builder, driver);
         }
 

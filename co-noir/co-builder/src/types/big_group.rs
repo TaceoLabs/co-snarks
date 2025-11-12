@@ -348,15 +348,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // Compute NAF representation of scalars
         let mut naf_entries = Vec::with_capacity(msm_size);
         for i in 0..msm_size {
-            let naf = Self::compute_naf(&scalars[i], num_rounds, builder, driver)?;
-            print!("NAF for scalar {}: ", i);
-            for j in 0..naf.len() {
-                let naf_bit = naf[j].get_value(driver);
-                print!("{:?} ", naf_bit);
-            }
-            naf_entries.push(naf);
+            naf_entries.push(Self::compute_naf(&scalars[i], num_rounds, builder, driver)?);
         }
-        println!("");
 
         // We choose a deterministic offset generator based on the number of rounds.
         // We compute both the initial and final offset generators: G_offset, 2ⁿ⁻¹ * G_offset.
@@ -366,8 +359,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // Initialize accumulator with initial offset generator + first NAF column
         let mut inital_entry: ChainAddAccumulator<F> =
             point_table.get_chain_initial_entry(builder, driver)?;
-        println!("Initial chain entry: ");
-        println!("{}", inital_entry.debug_print(builder, driver));
 
         let tmp = Self::chain_add(
             &mut offset_generator_start,
@@ -375,16 +366,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             builder,
             driver,
         )?;
-        println!(
-            "Point table initial entry added to offset generator: {}",
-            tmp.debug_print(builder, driver)
-        );
 
         let mut accumulator = Self::chain_add_end(tmp, builder, driver)?;
-        // println!(
-        //     "Initial accumulator: {}",
-        //     accumulator.debug_print(builder, driver)
-        // );
 
         // Process 4 NAF entries per iteration (for the remaining (num_rounds - 1) rounds)
         let num_rounds_per_iteration = 4;
@@ -393,10 +376,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let num_rounds_per_final_iteration =
             (num_rounds - 1) - ((num_iterations - 1) * num_rounds_per_iteration);
 
-        println!(
-            "Processing {} iterations of {} rounds each (final iteration has {} rounds)",
-            num_iterations, num_rounds_per_iteration, num_rounds_per_final_iteration
-        );
         for i in 0..num_iterations {
             let mut to_add = Vec::with_capacity(msm_size);
             let inner_num_rounds = if i != num_iterations - 1 {
@@ -410,21 +389,13 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 for k in 0..msm_size {
                     nafs[k] = naf_entries[k][i * num_rounds_per_iteration + j + 1].clone();
                 }
-                let tmp = point_table.get_chain_add_accumulator(&nafs, builder, driver)?;
-                to_add.push(tmp);
+                to_add.push(point_table.get_chain_add_accumulator(&nafs, builder, driver)?);
             }
 
             // Once we have looked-up all points from the four NAF columns, we update the accumulator as:
             // accumulator = 2.(2.(2.(2.accumulator + to_add[0]) + to_add[1]) + to_add[2]) + to_add[3]
             //             = 2⁴.accumulator + 2³.to_add[0] + 2².to_add[1] + 2¹.to_add[2] + to_add[3]
             accumulator = accumulator.multiple_montgomery_ladder(&mut to_add, builder, driver)?;
-            // if i % 10 == 0 {
-            //     println!(
-            //         "Accumulator after iteration {}: {}",
-            //         i,
-            //         accumulator.debug_print(builder, driver)
-            //     );
-            // }
         }
 
         // Subtract the skew factors (if any)
@@ -751,9 +722,35 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         Ok(BigGroup::new(x_out, y_out))
     }
 
-    pub fn precomputed_offset_generators<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn precomputed_native_table_offset_generator<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >() -> eyre::Result<P::Affine> {
+        let offset_generator = if TypeId::of::<P::Affine>() == TypeId::of::<G1Affine>() {
+            let offset_generator_bn254 = G1Affine::new(
+                field_from_hex_string(
+                    "0x240d420bc60418af2206bdf32238eee77a8c46772f2679881a1858aab7b8927f",
+                )
+                .expect("Invalid hex string for offset generator"),
+                field_from_hex_string(
+                    "0x04ffcf276f8bc77315c2674207a3f55861b09acebd1ea9623883613f538e3822",
+                )
+                .expect("Invalid hex string for offset generator"),
+            );
+
+            // TACEO TODO: This will only work for BN254, hence the unsafe cast to P::Affine
+            *unsafe { std::mem::transmute::<&G1Affine, &P::Affine>(&offset_generator_bn254) }
+        } else {
+            eyre::bail!("Precomputed offset generators not available for this curve");
+        };
+
+        Ok(offset_generator)
+    }
+
+    fn precomputed_offset_generators_native<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         num_rounds: usize,
-    ) -> eyre::Result<(Self, Self)> {
+    ) -> eyre::Result<(P::Affine, P::Affine)> {
         let offset_generator = if TypeId::of::<P::Affine>() == TypeId::of::<G1Affine>() {
             let offset_generator_bn254 = G1Affine::new(
                 field_from_hex_string(
@@ -774,9 +771,17 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
         let offset_multiplier = F::from(BigUint::one() << (num_rounds - 1));
         let offset_generator_end = offset_generator * offset_multiplier;
+        Ok((offset_generator, offset_generator_end.into_affine()))
+    }
+
+    fn precomputed_offset_generators<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        num_rounds: usize,
+    ) -> eyre::Result<(Self, Self)> {
+        let (offset_generator, offset_generator_end) =
+            Self::precomputed_offset_generators_native::<P>(num_rounds)?;
         Ok((
             BigGroup::from_constant_affine::<P>(&offset_generator)?,
-            BigGroup::from_constant_affine::<P>(&offset_generator_end.into_affine())?,
+            BigGroup::from_constant_affine::<P>(&offset_generator_end)?,
         ))
     }
 
@@ -921,8 +926,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         )?;
         let mut x_4 = lambda2.sqradd(&mut [x2x1], builder, driver)?;
         let y_4 = lambda2.madd(
-            &mut other.x.sub(&mut x_4, builder, driver)?,
-            &mut [other.y.neg(builder, driver)?],
+            &mut self.x.sub(&mut x_4, builder, driver)?,
+            &mut [self.y.neg(builder, driver)?],
             builder,
             driver,
         )?;
@@ -1207,6 +1212,50 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         Ok(BigGroup::new(self.x.clone(), negated_y))
     }
 
+    /// Doubles the point (i.e., computes 2P).
+    /// This is the elliptic curve point doubling operation.
+    /// Handles the point at infinity case.
+    pub fn dbl<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        // two_x = x + x
+        let mut two_x = self.x.clone().add(&mut self.x.clone(), builder, driver)?;
+
+        // TODO(): handle y = 0 case.
+
+        // neg_lambda = -((x * (two_x + x)) / (y + y))
+        let three_x = two_x.clone().add(&mut self.x.clone(), builder, driver)?;
+        let mut denominator = self.y.clone().add(&mut self.y.clone(), builder, driver)?;
+        let mut neg_lambda = BigField::msub_div(
+            &mut [self.x.clone()],
+            &mut [three_x],
+            &mut denominator,
+            &mut [],
+            false,
+            builder,
+            driver,
+        )?;
+
+        // x_3 = neg_lambda^2 - two_x
+        let x_3 = neg_lambda.sqradd(&mut [two_x.neg(builder, driver)?], builder, driver)?;
+
+        // y_3 = neg_lambda * (x_3 - x) - y
+        let mut x_3_minus_x = x_3.clone().sub(&mut self.x.clone(), builder, driver)?;
+        let y_3 = neg_lambda.madd(
+            &mut x_3_minus_x,
+            &mut [self.y.neg(builder, driver)?],
+            builder,
+            driver,
+        )?;
+
+        let mut result = BigGroup::new(x_3, y_3);
+        // Set point at infinity flag if input is at infinity
+        result.set_is_infinity(self.is_infinity.clone());
+        Ok(result)
+    }
+
     pub(crate) fn conditional_negate<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         cond: &BoolCT<F, T>,
@@ -1237,7 +1286,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         debug_assert!(points.len() == scalars.len());
 
         // Get the offset generator G_offset in native and in-circuit form
-        let native_offset_generator = offset_generator::<P>("biggroup table offset generator");
+        let native_offset_generator = Self::precomputed_native_table_offset_generator::<P>()?;
         let offset_generator_element =
             BigGroup::from_witness(&native_offset_generator, driver, builder)?;
 
@@ -1258,13 +1307,13 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
             // Add 2ⁱ⋅scalar_i to the last scalar
             let tmp = scalar.multiply(&running_scalar, builder, driver)?;
-            last_scalar = last_scalar.add(&tmp, builder, driver);
+            last_scalar.add_assign(&tmp, builder, driver);
 
             // Double the running scalar and point for next iteration
             running_scalar.add_assign(&running_scalar.clone(), builder, driver);
 
-            // TODO CESAR: Optimize this to use point.dbl()
-            running_point = running_point.add(&mut running_point.clone(), builder, driver)?;
+            // Double the running point
+            running_point = running_point.dbl(builder, driver)?;
         }
 
         // Add a scalar -(<(1,2,4,...,2ⁿ⁻¹ ),(scalar₀,...,scalarₙ₋₁)> / 2ⁿ)
@@ -1533,7 +1582,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         })
     }
 
-    #[cfg(test)]
     pub fn debug_print<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
