@@ -98,11 +98,15 @@ where
     pub fn new_verifier(proof: Vec<FieldCT<P::ScalarField>>) -> Self {
         Self {
             proof_data: proof,
+            manifest: Default::default(),
             num_frs_written: 0,
             num_frs_read: 0,
             round_number: 0,
             is_first_challenge: true,
-            ..Default::default()
+            current_round_data: Default::default(),
+            previous_challenge: Default::default(),
+            phantom_data: Default::default(),
+            independent_hash_buffer: Vec::new(),
         }
     }
 
