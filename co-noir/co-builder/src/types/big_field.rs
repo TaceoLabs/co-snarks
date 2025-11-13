@@ -2802,7 +2802,7 @@ impl<F: PrimeField> BigField<F> {
             "to_add size exceeds MAXIMUM_SUMMAND_COUNT"
         );
         assert!(
-            remainders.len() <= Self::MAXIMUM_SUMMAND_COUNT,
+            input_remainders.len() <= Self::MAXIMUM_SUMMAND_COUNT,
             "remainders size exceeds MAXIMUM_SUMMAND_COUNT"
         );
 
