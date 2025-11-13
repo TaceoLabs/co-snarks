@@ -965,7 +965,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 total_size += constraint.public_inputs.len();
             }
             //TACEO TODO: Investigate the proper size needed for the recursion proof a bit more
-            total_size = (total_size + MOCK_PROOF_DYADIC_SIZE).next_power_of_two(); // the circuit is at least size 64 (we take 2x to be safe)
+            total_size = (total_size + MOCK_PROOF_DYADIC_SIZE).next_power_of_two(); // the circuit is at least size 64 (we take next power of 2 to be safe)
         }
         total_size
     }
