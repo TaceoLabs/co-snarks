@@ -2165,6 +2165,60 @@ impl<F: PrimeField> BigField<F> {
         Ok(())
     }
 
+    pub(crate) fn sqr<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        self.reduction_check(builder, driver)?;
+
+        let self_value = self.get_limb_values(builder, driver)?;
+        let (quotient_value, remainder_value) =
+            driver.madd_div_mod_acvm_limbs::<P>(&self_value, &self_value, &[])?;
+
+        if self.is_constant() {
+            return Ok(BigField::from_constant(
+                &T::get_public_other_acvm_type::<P>(&remainder_value)
+                    .expect("Constants are public")
+                    .into_bigint()
+                    .into(),
+            ));
+        } else {
+            // Check the quotient fits the range proof
+            let (reduction_required, num_quotient_bits) = Self::get_quotient_reduction_info(
+                &[self.get_maximum_value()],
+                &[self.get_maximum_value()],
+                &[],
+                &[Self::default_maximum_remainder()],
+            );
+            if reduction_required {
+                self.self_reduce(builder, driver)?;
+                return self.sqr(builder, driver);
+            }
+
+            let quotient = BigField::from_acvm_limbs(
+                &quotient_value,
+                false,
+                num_quotient_bits,
+                builder,
+                driver,
+            )?;
+
+            let remainder_limbs = driver
+                .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, _>(
+                    &remainder_value,
+                )?;
+            let remainder = BigField::from_acvm_limbs(&remainder_limbs, false, 0, builder, driver)?;
+
+            Self::unsafe_evaluate_square_add(self, &[], &quotient, &remainder, builder, driver)?;
+
+            Ok(remainder)
+        }
+    }
+
     /**
      * Compute a * a + ...to_add = b mod p
      *
@@ -3440,7 +3494,11 @@ impl<F: PrimeField> BigField<F> {
         base /= &modulus_u512;
         // Return msb - 1
         let msb_plus_one = base.bits();
-        if msb_plus_one > 1 { (msb_plus_one - 2) as usize } else { 0 }
+        if msb_plus_one > 1 {
+            (msb_plus_one - 2) as usize
+        } else {
+            0
+        }
     }
 
     /// Computes the partial schoolbook multiplication of two arrays of limbs.
