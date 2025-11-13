@@ -71,20 +71,20 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             .iter_mut()
             .zip(elements[3..].chunks(BigGroup::<C::ScalarField, T>::NUM_BN254_FRS))
         {
+            let is_zero = FieldCT::check_point_at_infinity::<C, T>(src, builder, driver)?;
             let [x_lo, x_hi] = [&src[0], &src[1]];
             let [y_lo, y_hi] = [&src[2], &src[3]];
-
-            let sum = FieldCT::default()
-                .add_two(x_lo, x_hi, builder, driver)
-                .add_two(y_lo, y_hi, builder, driver);
 
             let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
             let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
 
             let mut result = BigGroup::new(x, y);
 
-            let is_zero = sum.is_zero(builder, driver)?;
             result.set_is_infinity(is_zero);
+
+            // Note that in the case of bn254 with Mega arithmetization, the check is delegated to ECCVM, see
+            // `on_curve_check` in `ECCVMTranscriptRelationImpl`.
+            // result.validate_on_curve(); //TODO CESAR
             *des = result;
         }
 

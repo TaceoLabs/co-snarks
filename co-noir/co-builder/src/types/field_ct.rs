@@ -60,6 +60,17 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
+    pub(crate) fn check_point_at_infinity<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        inp: &[Self],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BoolCT<P::ScalarField, T>> {
+        Self::accumulate(inp, builder, driver)?.is_zero(builder, driver)
+    }
+
     pub(crate) fn get_witness_index<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
