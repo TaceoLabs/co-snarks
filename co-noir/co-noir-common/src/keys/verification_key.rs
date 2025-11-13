@@ -73,7 +73,7 @@ impl<P: Pairing> VerifyingKey<P> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct VerifyingKeyBarretenberg<P: CurveGroup> {
     pub log_circuit_size: u64,
     pub num_public_inputs: u64,

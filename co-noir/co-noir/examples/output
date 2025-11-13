@@ -1,0 +1,12 @@
+Using nargo version 1.0.0-beta.15
+Using bb version 3.0.0-nightly.20251104
+
+running ultrahonk example recursion
+computing witnesses with nargo
+::error:: recursion failed
+comparing recursion with bb and poseidon transcript
+::error::recursion diff check of proofs failed (with: poseidon)
+::error::recursion diff check of public_inputs failed (with: poseidon)
+::error::recursion verifying with bb, our proof and our key failed (with: poseidon)
+::error::recursion verifying with bb, our proof and their key failed (with: poseidon)
+::error::recursion verifying with bb, their proof and our key failed (with: poseidon)
