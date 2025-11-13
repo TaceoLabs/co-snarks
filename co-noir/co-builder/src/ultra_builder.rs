@@ -195,11 +195,12 @@ pub struct GenericUltraCircuitBuilder<
 // This workaround is required due to mutability issues
 macro_rules! create_unconstrained_gate {
     ($builder:expr, $block:expr, $ixd_1:expr, $ixd_2:expr, $ixd_3:expr, $ixd_4:expr) => {
-        Self::create_unconstrained_gate($block, $ixd_1, $ixd_2, $ixd_3, $ixd_4);
+    GenericUltraCircuitBuilder::<P, T>::create_unconstrained_gate($block, $ixd_1, $ixd_2, $ixd_3, $ixd_4);
         $builder.check_selector_length_consistency();
         $builder.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
     };
 }
+pub(crate) use create_unconstrained_gate;
 
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     GenericUltraCircuitBuilder<P, T>

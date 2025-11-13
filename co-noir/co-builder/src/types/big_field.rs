@@ -995,7 +995,7 @@ impl<F: PrimeField> BigField<F> {
 
         // TODO CESAR: Is this even correct?
         let modulus: BigUint = Fq::MODULUS.into();
-        let prime_basis = FieldCT::from_witness(F::from(modulus).into(), builder);
+        let prime_basis = FieldCT::from(F::from(modulus));
         let mut prime_basis_accumulator = prime_basis.clone();
 
         // Each loop iteration adds 1 gate
@@ -1526,10 +1526,10 @@ impl<F: PrimeField> BigField<F> {
             self.binary_basis_limbs[3].maximum_value.clone() + &to_add_3;
 
         // Convert to_add_i to FieldCT and add to each limb
-        let to_add_0 = FieldCT::from_witness(F::from(to_add_0).into(), builder);
-        let to_add_1 = FieldCT::from_witness(F::from(to_add_1).into(), builder);
-        let to_add_2 = FieldCT::from_witness(F::from(to_add_2).into(), builder);
-        let to_add_3 = FieldCT::from_witness(F::from(to_add_3).into(), builder);
+        let to_add_0 = FieldCT::from(F::from(to_add_0));
+        let to_add_1 = FieldCT::from(F::from(to_add_1));
+        let to_add_2 = FieldCT::from(F::from(to_add_2));
+        let to_add_3 = FieldCT::from(F::from(to_add_3));
 
         // Compute the binary basis limbs of our result
         result.binary_basis_limbs[0].element = self.binary_basis_limbs[0]
@@ -1639,8 +1639,7 @@ impl<F: PrimeField> BigField<F> {
 
         // Compute the prime basis limb of the result
         let constant_to_add_mod_p = &constant_to_add % F::MODULUS.into();
-        let prime_basis_to_add =
-            FieldCT::from_witness(F::from(constant_to_add_mod_p).into(), builder);
+        let prime_basis_to_add = FieldCT::from(F::from(constant_to_add_mod_p));
         result.prime_basis_limb = result
             .prime_basis_limb
             .add(&prime_basis_to_add, builder, driver);
@@ -2025,8 +2024,7 @@ impl<F: PrimeField> BigField<F> {
         let mut limb_0_accumulator = vec![remainders[0].binary_basis_limbs[0].element.clone()];
         let mut limb_2_accumulator = vec![remainders[0].binary_basis_limbs[2].element.clone()];
         let mut prime_limb_accumulator = vec![remainders[0].prime_basis_limb.clone()];
-        let shift_1 =
-            FieldCT::from_witness(F::from(BigUint::one() << NUM_LIMB_BITS).into(), builder);
+        let shift_1 = FieldCT::from(F::from(BigUint::one() << NUM_LIMB_BITS));
         for i in 1..remainders.len() {
             limb_0_accumulator.push(remainders[i].binary_basis_limbs[0].element.clone());
             limb_0_accumulator.push(
@@ -2922,7 +2920,7 @@ impl<F: PrimeField> BigField<F> {
         let two_pow_2l = BigUint::one() << (2 * NUM_LIMB_BITS);
         let borrow_lo_value =
             (&max_remainders_lo + (&two_pow_2l - BigUint::one())) >> (2 * NUM_LIMB_BITS);
-        let borrow_lo = FieldCT::from_witness(F::from(borrow_lo_value).into(), builder);
+        let borrow_lo = FieldCT::from(F::from(borrow_lo_value));
 
         let neg_modulus_mod_binary_basis_limbs: [BigUint; NUM_LIMBS] = {
             let modulus_bin = BigUint::one() << (NUM_LIMBS * Self::NUM_LIMB_BITS);
