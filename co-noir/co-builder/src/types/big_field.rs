@@ -2131,9 +2131,9 @@ impl<F: PrimeField> BigField<F> {
         // if both the hi and lo output limbs have less than 70 bits, we can use our custom
         // limb accumulation gate (accumulates 2 field elements, each composed of 5 14-bit limbs, in 3 gates)
 
-        let hi_nwi = hi.get_witness_index(builder, driver);
-        let lo_nwi = lo.get_witness_index(builder, driver);
         if (carry_lo_msb <= 70) && (carry_hi_msb <= 70) {
+            let hi_nwi = hi.get_witness_index(builder, driver);
+            let lo_nwi = lo.get_witness_index(builder, driver);
             builder.range_constrain_two_limbs(hi_nwi, lo_nwi, carry_hi_msb, carry_lo_msb)?;
         } else {
             //TACEO TODO: We can batch the two decompositions into a single one here for more efficiency
