@@ -150,7 +150,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) multi_scalar_mul_constraints: Vec<usize>,
     pub(crate) ec_add_constraints: Vec<usize>,
     // pub(crate) recursion_constraints: Vec<usize>,
-    // pub(crate) honk_recursion_constraints: Vec<usize>,
+    pub(crate) honk_recursion_constraints: Vec<usize>,
     // pub(crate) avm_recursion_constraints: Vec<usize>,
     // pub(crate) ivc_recursion_constraints: Vec<usize>,
     // pub(crate) bigint_from_le_bytes_constraints: Vec<usize>,
@@ -908,7 +908,7 @@ impl PermutationMapping {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WitnessOrConstant<F: PrimeField> {
     pub(crate) index: u32,
-    value: F,
+    pub(crate) value: F,
     pub(crate) is_constant: bool,
 }
 

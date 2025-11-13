@@ -22,7 +22,6 @@ use crate::types::types::{
     Sha256Compression, WitnessOrConstant,
 };
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[expect(unused)]
 pub(crate) enum ProofType {
     Plonk,
     Honk,
@@ -35,6 +34,25 @@ pub(crate) enum ProofType {
     PgFinal,
     PgTail,
     Chonk,
+}
+
+impl From<u32> for ProofType {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => ProofType::Plonk,
+            1 => ProofType::Honk,
+            2 => ProofType::Oink,
+            3 => ProofType::PG,
+            4 => ProofType::Avm,
+            5 => ProofType::RollupHonk,
+            6 => ProofType::RootRollupHonk,
+            7 => ProofType::HonkZk,
+            8 => ProofType::PgFinal,
+            9 => ProofType::PgTail,
+            10 => ProofType::Chonk,
+            _ => panic!("Invalid proof type"),
+        }
+    }
 }
 
 pub(crate) const _PROOF_TYPE_ROOT_ROLLUP_HONK: u32 = 6; //keep for reference
@@ -888,13 +906,55 @@ impl<F: PrimeField> AcirFormat<F> {
                     .push(opcode_index);
             }
             BlackBoxFuncCall::RecursiveAggregation {
-                verification_key: _,
-                proof: _,
-                public_inputs: _,
-                key_hash: _,
-                proof_type: _,
-                predicate: _,
-            } => todo!("BlackBoxFuncCall::RecursiveAggregation"),
+                verification_key,
+                proof,
+                public_inputs,
+                key_hash,
+                proof_type,
+                predicate,
+            } => {
+                let input_key = key_hash.to_witness().witness_index();
+
+                let predicate = Self::parse_input(predicate);
+                if predicate.is_constant && predicate.value.is_zero() {
+                    // No constraint if the recursion is disabled
+                    return;
+                }
+                let c = RecursionConstraint {
+                    key: verification_key
+                        .into_iter()
+                        .map(|e| e.to_witness().witness_index())
+                        .collect(),
+                    proof: proof
+                        .into_iter()
+                        .map(|e| e.to_witness().witness_index())
+                        .collect(),
+                    public_inputs: public_inputs
+                        .into_iter()
+                        .map(|e| e.to_witness().witness_index())
+                        .collect(),
+                    key_hash: input_key,
+                    proof_type,
+                    predicate,
+                };
+                let proof_type = ProofType::from(proof_type);
+                // Add the recursion constraint to the appropriate container based on proof type
+                let push_honk_recursion =
+                    |af: &mut AcirFormat<F>, constraint: RecursionConstraint<F>, idx: usize| {
+                        af.honk_recursion_constraints.push(constraint);
+                        af.original_opcode_indices
+                            .honk_recursion_constraints
+                            .push(idx);
+                    };
+                match proof_type {
+                    ProofType::HonkZk => push_honk_recursion(af, c, opcode_index),
+                    ProofType::Honk => push_honk_recursion(af, c, opcode_index),
+                    e => panic!(
+                        "Proof type {:?} not implemented for recursion constraints",
+                        e
+                    ),
+                }
+            }
         }
     }
 
