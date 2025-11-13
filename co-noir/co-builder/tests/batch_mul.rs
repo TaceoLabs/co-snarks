@@ -1,5 +1,3 @@
-use std::os::unix::thread;
-
 use ark_bn254::{Fq, Fr, G1Affine};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{Field, UniformRand};

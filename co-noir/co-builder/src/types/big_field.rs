@@ -1,6 +1,5 @@
 use crate::types::field_ct::WitnessCT;
 use crate::types::types::{AddQuad, NonNativeMultiplicationFieldWitnesses};
-use crate::ultra_builder::create_unconstrained_gate;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use ark_bn254::Fq;
 use ark_ec::CurveGroup;
@@ -256,7 +255,6 @@ impl<F: PrimeField> BigField<F> {
                     && (maximum_bitlength == 0 || maximum_bitlength > (3 * NUM_LIMB_BITS)))
         );
 
-        // UltraFlavor has plookup
         let limbs_ct = limbs
             .iter()
             .map(|limb| {
@@ -307,25 +305,25 @@ impl<F: PrimeField> BigField<F> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy necessary for preceeding big add
         // gate
 
-        create_unconstrained_gate!(
-            builder,
+        GenericUltraCircuitBuilder::<P, T>::create_unconstrained_gate(
             &mut builder.blocks.arithmetic,
             builder.zero_idx,
             builder.zero_idx,
             builder.zero_idx,
-            limb_0_nwi
+            limb_0_nwi,
         );
 
-        let num_last_limb_bits = if can_overflow {
+        builder.check_selector_length_consistency();
+        builder.num_gates += 1;
+
+        let mut num_last_limb_bits = if can_overflow {
             NUM_LIMB_BITS
         } else {
-            (F::MODULUS_BIT_SIZE - (NUM_LIMB_BITS * 3) as u32) as usize
+            (Fq::MODULUS_BIT_SIZE - (NUM_LIMB_BITS * 3) as u32) as usize
         };
 
         let mut result = BigField::default();
         for i in 0..(NUM_LIMBS - 1) {
-            result.binary_basis_limbs[i] =
-                Limb::new(limbs_ct[i].clone(), BigUint::from(DEFAULT_MAXIMUM_LIMB));
             result.binary_basis_limbs[i] =
                 Limb::new(limbs_ct[i].clone(), BigUint::from(DEFAULT_MAXIMUM_LIMB));
         }
@@ -341,7 +339,7 @@ impl<F: PrimeField> BigField<F> {
 
         // if maximum_bitlength is set, this supercedes can_overflow
         if maximum_bitlength > 0 {
-            let num_last_limb_bits = maximum_bitlength - (NUM_LIMB_BITS * 3);
+            num_last_limb_bits = maximum_bitlength - (NUM_LIMB_BITS * 3);
             let max_limb_value = (BigUint::one() << num_last_limb_bits) - BigUint::one();
             result.binary_basis_limbs[NUM_LIMBS - 1].maximum_value = max_limb_value;
         }
@@ -773,7 +771,7 @@ impl<F: PrimeField> BigField<F> {
         //
         // Note: We use a further safer bound of 2^((t + m - 1) / 2). We use -1 to stay safer,
         // because it provides additional space to avoid the overflow, but get_msb() by itself should be enough.
-        let maximum_product_bits = maximum_product.bits() - 2;
+        let maximum_product_bits = maximum_product.bits() - 2; // maximum_product.get_msb() - 1;
         (BigUint::one() << (maximum_product_bits >> 1)) - BigUint::one()
     }
 
@@ -805,7 +803,7 @@ impl<F: PrimeField> BigField<F> {
         let max_unreduced_value = Self::get_maximum_unreduced_value();
         let multiple_of_modulus =
             ((&max_unreduced_value / &modulus_u512) + BigUint::one()) * &modulus_u512;
-        let msb = multiple_of_modulus.bits() as usize - 1;
+        let msb = multiple_of_modulus.bits() as usize - 1; // get_msb() returns 0-based index
 
         // Slice the multiple_of_modulus into limbs
         let limb_0 = (&multiple_of_modulus) & ((BigUint::one() << NUM_LIMB_BITS) - BigUint::one());
@@ -1045,7 +1043,7 @@ impl<F: PrimeField> BigField<F> {
         let (quotient_value, remainder_value) = driver.div_mod_acvm_limbs::<P>(&limb_values)?;
 
         let maximum_quotient_size = self.get_maximum_value() / P::BaseField::MODULUS.into();
-        let mut maximum_quotient_bits = maximum_quotient_size.bits();
+        let mut maximum_quotient_bits = maximum_quotient_size.bits(); // get_msb() returns 0-based index
         if maximum_quotient_bits & 1 == 1 {
             maximum_quotient_bits += 1;
         }
@@ -1968,9 +1966,8 @@ impl<F: PrimeField> BigField<F> {
         let max_lo_carry = &max_lo >> (2 * NUM_LIMB_BITS);
         let max_h1 = max_r2 + (max_r3 << NUM_LIMB_BITS) + max_a1 + &max_lo_carry;
 
-        // TODO CESAR: Maybe this is not the same as msb() + 1
-        let mut max_lo_bits = max_lo.bits() as usize;
-        let mut max_h1_bits = max_h1.bits() as usize;
+        let mut max_lo_bits = max_lo.bits() as usize; // get_msb() + 1
+        let mut max_h1_bits = max_h1.bits() as usize; // get_msb() + 1
         if max_lo_bits & 1 == 1 {
             max_lo_bits += 1;
         }
@@ -2977,8 +2974,8 @@ impl<F: PrimeField> BigField<F> {
 
         // Compute the maximum number of bits in `max_lo` and `max_hi` - this defines the range constraint values we
         // will need to apply to validate our product
-        let max_lo_bits = max_lo.bits() as u64;
-        let max_hi_bits = max_hi.bits() as u64;
+        let max_lo_bits = max_lo.bits() as u64; // max_lo.get_msb() + 1
+        let max_hi_bits = max_hi.bits() as u64; // max_hi.get_msb() + 1
 
         // The custom bigfield multiplication gate requires inputs are witnesses.
         // If we're using constant values, instantiate them as circuit variables
@@ -3497,11 +3494,12 @@ impl<F: PrimeField> BigField<F> {
         let modulus_u512: BigUint = Fq::MODULUS.into();
         base /= &modulus_u512;
         // Return msb - 1
-        let msb_plus_one = base.bits();
+        let msb_plus_one = base.bits(); // static_cast<size_t>(base.get_msb() - 1);
         if msb_plus_one > 1 {
             (msb_plus_one - 2) as usize
         } else {
-            0
+            // TODO CESAR: Check if this is correct
+            usize::MAX
         }
     }
 

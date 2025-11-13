@@ -114,7 +114,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             builder,
             driver,
         )?;
-        let adjusted_x = BigField::conditional_assign(
+        let mut adjusted_x = BigField::conditional_assign(
             &self.is_infinity,
             &mut BigField::default(),
             &mut self.x.clone(),
@@ -129,10 +129,13 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             driver,
         )?;
 
+        let x_sqr = adjusted_x.sqr(builder, driver)?;
+        let y_neg = adjusted_y.neg(builder, driver)?;
+
         // Bn254G1::has_a == false
         BigField::mult_madd(
-            &mut [adjusted_x.clone().sqr(builder, driver)?, adjusted_y.clone()],
-            &mut [adjusted_x.clone(), adjusted_y.neg(builder, driver)?],
+            &mut [x_sqr, adjusted_y.clone()],
+            &mut [adjusted_x.clone(), y_neg],
             &mut [adjusted_b],
             true,
             builder,
