@@ -10,6 +10,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 use itertools::{Itertools, izip};
 use num_bigint::BigUint;
+use num_traits::cast::ToPrimitive;
 use std::fmt::Debug;
 
 #[derive(Clone, Debug)]
@@ -571,6 +572,51 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     /**
+     * @brief Raise this field element to the power of the provided uint32_t exponent.
+     *
+     */
+    pub fn pow_const<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        exponent: u32,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        if exponent == 0 {
+            return Ok(FieldCT::from(F::one()));
+        }
+        if self.is_constant() {
+            let val = self.get_value(builder, driver);
+            let val = T::get_public(&val).expect("Constants are public");
+            return Ok(FieldCT::from(val.pow([exponent as u64])));
+        }
+        let mut shifted_exponent = exponent;
+        let mut accumulator_initialized = false;
+        let mut accumulator = FieldCT::default();
+        let mut running_power = self.clone();
+
+        while shifted_exponent != 0 {
+            if (shifted_exponent & 1) == 1 {
+                if !accumulator_initialized {
+                    accumulator = running_power.clone();
+                    accumulator_initialized = true;
+                } else {
+                    accumulator = accumulator.multiply(&running_power, builder, driver)?;
+                }
+            }
+            if shifted_exponent >= 2 {
+                // Don't update `running_power` if `shifted_exponent` = 1, as it won't be used anywhere.
+                running_power = running_power.multiply(&running_power, builder, driver)?;
+            }
+            shifted_exponent >>= 1;
+        }
+
+        Ok(accumulator)
+    }
+
+    /**
      * @brief raise a field_t to a power of an exponent (field_t). Note that the exponent must not exceed 32 bits and is
      * implicitly range constrained.
      *
@@ -582,45 +628,82 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let mut exponent_value = exponent.get_value(builder, driver);
+        let exponent_value = exponent.get_value(builder, driver);
         let exponent_constant = exponent.is_constant();
 
-        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/446): optimize by allowing smaller exponent
-        // TACEO TODO: Also optimize this for the mpc case
-        let mut exponent_bits = vec![BoolCT::default(); 32];
-        for i in 0..32 {
-            let value_bit = driver
-                .integer_bitwise_and(exponent_value.clone(), P::ScalarField::ONE.into(), 32)
-                .unwrap();
-            let bit =
-                BoolCT::from_witness_ct(WitnessCT::from_acvm_type(value_bit, builder), builder);
-            exponent_bits[31 - i] = bit;
-            exponent_value = driver.right_shift(exponent_value, 1)?;
+        if self.is_constant() && exponent_constant {
+            let exponent_value: BigUint = T::get_public(&exponent_value)
+                .expect("Constant should be public")
+                .into();
+            assert!(exponent_value.bits() <= 32, "exponent exceeds 32 bits");
+            let base_value = self.get_value(builder, driver);
+            let base_value = T::get_public(&base_value).expect("Constant should be public");
+            let result_value = base_value.pow([exponent_value.to_u64().expect("we checked bits")]);
+            return Ok(FieldCT::from(result_value));
+        }
+        // Use the constant version that perfoms only the necessary multiplications if the exponent is constant
+        if exponent_constant {
+            let exponent_value: BigUint = T::get_public(&exponent_value)
+                .expect("Constant should be public")
+                .into();
+            assert!(exponent_value.bits() <= 32, "exponent exceeds 32 bits");
+            let exponent_u32 = exponent_value.to_u32().expect("we checked bits");
+            return self.pow_const(exponent_u32, builder, driver);
         }
 
-        if !exponent_constant {
-            let mut exponent_accumulator = FieldCT::from(F::zero());
-            for bit in &exponent_bits {
-                exponent_accumulator.add_assign(&exponent_accumulator.clone(), builder, driver);
-                exponent_accumulator.add_assign(&bit.to_field_ct(driver), builder, driver);
+        // TACEO TODO: Also optimize this for the mpc case
+        let exponent_bits = if T::is_shared(&exponent_value) {
+            let res = driver.decompose_arithmetic(
+                T::get_shared(&exponent_value).expect("We checked it is shared"),
+                1,
+                32,
+            )?;
+            let mut exponent_bits = vec![BoolCT::default(); 32];
+            for (i, val) in res.into_iter().take(32).enumerate() {
+                let bit = BoolCT::from_witness_ct(
+                    WitnessCT::from_acvm_type(val.into(), builder),
+                    builder,
+                );
+                exponent_bits[31 - i] = bit;
             }
-            exponent.assert_equal(&exponent_accumulator, builder, driver);
+            exponent_bits
+        } else {
+            let mut val: BigUint = T::get_public(&exponent_value)
+                .expect("We checked it is public")
+                .into();
+            let mut exponent_bits = vec![BoolCT::default(); 32];
+            for i in 0..32 {
+                let value_bit: F = (&val & BigUint::from(1u32)).into();
+                let bit = BoolCT::from_witness_ct(
+                    WitnessCT::from_acvm_type(value_bit.into(), builder),
+                    builder,
+                );
+                exponent_bits[31 - i] = bit;
+                val >>= 1;
+            }
+            exponent_bits
+        };
+
+        let mut exponent_accumulator = FieldCT::from(F::one());
+        for bit in exponent_bits.iter() {
+            exponent_accumulator = exponent_accumulator.add(&exponent_accumulator, builder, driver);
+            exponent_accumulator =
+                exponent_accumulator.add(&bit.to_field_ct(driver), builder, driver);
         }
+
+        // Constrain the sum of bool_t bits to be equal to the original exponent value.
+        exponent.assert_equal(&exponent_accumulator, builder, driver);
 
         let mut accumulator = FieldCT::from(F::one());
-        let mul_coefficient = self.sub(&FieldCT::from(F::one()), builder, driver);
+        let one = FieldCT::from(F::one());
         for bit in exponent_bits.iter().take(32) {
-            accumulator
-                .mul_assign(&accumulator.clone(), builder, driver)
-                .unwrap();
-            let bit = bit.to_field_ct(driver);
-            let rhs = mul_coefficient
-                .madd(&bit, &FieldCT::from(F::one()), builder, driver)
-                .unwrap();
-            accumulator.mul_assign(&rhs, builder, driver)?;
+            accumulator.mul_assign(&accumulator.clone(), builder, driver)?;
+            // If current bit == 1, multiply by the base, else propagate the accumulator
+            let multiplier =
+                FieldCT::conditional_assign_internal(bit, self, &one, builder, driver)?;
+            accumulator.mul_assign(&multiplier, builder, driver)?;
         }
 
-        // TACEO TODO: Origin Tags
         Ok(accumulator.normalize(builder, driver))
     }
 

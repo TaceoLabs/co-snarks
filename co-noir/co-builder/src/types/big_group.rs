@@ -1437,7 +1437,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             // don't bother adding constraints
         }
 
-        return Ok((new_points, new_scalars));
+        Ok((new_points, new_scalars))
     }
 
     /// Implements scalar multiplication that supports short scalars.
@@ -1459,8 +1459,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
         // Use batch_mul for single scalar multiplication
         let mut result = Self::batch_mul(
-            &[self.clone()],
-            &[scalar.clone()],
+            std::slice::from_ref(self),
+            std::slice::from_ref(scalar),
             max_num_bits,
             false,
             &FieldCT::from(F::ONE),
