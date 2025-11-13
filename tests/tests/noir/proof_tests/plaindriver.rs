@@ -242,3 +242,17 @@ fn add3u64_proof_test_keccak256() {
     proof_test::<Keccak256>("add3u64", ZeroKnowledge::No, PROOF_FILE);
     proof_test::<Keccak256>("add3u64", ZeroKnowledge::Yes, PROOF_FILE);
 }
+
+#[test]
+fn recursion_witness_and_proof_test_poseidon2sponge() {
+    const PROOF_FILE: &str = "../test_vectors/noir/recursion/kat/recursion_proof_with_pos";
+    witness_and_proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::No, PROOF_FILE);
+    witness_and_proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::Yes, PROOF_FILE);
+}
+
+#[test]
+fn recursion_proof_test_poseidon2sponge() {
+    const PROOF_FILE: &str = "../test_vectors/noir/recursion/kat/recursion_proof_with_pos";
+    proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::No, PROOF_FILE);
+    proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::Yes, PROOF_FILE);
+}
