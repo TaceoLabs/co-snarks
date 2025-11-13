@@ -349,7 +349,7 @@ impl<F: PrimeField> BigField<F> {
         let limb_1_index = limbs_ct[1].get_witness_index(builder, driver);
         let limb_2_index = limbs_ct[2].get_witness_index(builder, driver);
         let limb_3_index = limbs_ct[3].get_witness_index(builder, driver);
-        println!("range constraining bigfield limbs");
+
         builder.range_constrain_two_limbs(
             limb_0_index,
             limb_1_index,
