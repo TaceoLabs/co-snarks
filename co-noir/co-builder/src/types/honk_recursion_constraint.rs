@@ -386,6 +386,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         // Add the default pairing points and IPA claim
         builder.add_default_to_public_inputs(&mut plain_driver)?;
 
+        builder.finalize_circuit(true, &mut plain_driver)?;
+
         // prove the circuit constructed above
         // Create the decider proving key
         let (pk, vk) = ProvingKey::create_keys_barretenberg::<PlainAcvmSolver<_>>(

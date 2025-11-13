@@ -964,7 +964,8 @@ impl<F: PrimeField> AcirFormat<F> {
             for constraint in &self.honk_recursion_constraints {
                 total_size += constraint.public_inputs.len();
             }
-            total_size = max(total_size.next_power_of_two() * 2, MOCK_PROOF_DYADIC_SIZE); // the circuit is at least size 32 (we take 2x to be safe)
+            //TACEO TODO: Investigate the proper size needed for the recursion proof a bit more
+            total_size = (total_size + MOCK_PROOF_DYADIC_SIZE).next_power_of_two(); // the circuit is at least size 64 (we take 2x to be safe)
         }
         total_size
     }

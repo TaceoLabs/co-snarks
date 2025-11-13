@@ -45,7 +45,7 @@ pub const DECIDER_PROOF_LENGTH: usize = (CONST_PROOF_SIZE_LOG_N * BATCHED_RELATI
             /* 7. KZG W commitment */ (4);
 pub const OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS: usize = WITNESS_ENTITIES_SIZE * 4;
 
-pub const MOCK_PROOF_DYADIC_SIZE: usize = 1 << 5;
+pub const MOCK_PROOF_DYADIC_SIZE: usize = 1 << 6;
 
 pub const NUM_WIRES: usize = 4;
 pub const NUM_SELECTORS: usize = 14;
