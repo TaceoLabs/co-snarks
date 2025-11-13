@@ -107,8 +107,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // TACEO TODO: Has circuit failed
 
         // Get curve parameters
-        let b = P::BaseField::from(3u64); // TACEO TODO: Magic constant BN254 curve b coefficient
-
+        let b = P::BaseField::from(3u64); // TACEO TODO: Magic constant BN254 curve b coefficient I think we have this in HonkCurve @Cesar199999
         let adjusted_b = BigField::conditional_assign(
             &self.is_infinity,
             &mut BigField::default(),

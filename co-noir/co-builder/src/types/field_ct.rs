@@ -732,7 +732,7 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        if to_mul.is_constant() && to_add.is_constant() && self.is_constant() {
+        if to_mul.is_constant() || self.is_constant() {
             let mut mul = self.multiply(to_mul, builder, driver)?;
             mul.add_assign(to_add, builder, driver);
             return Ok(mul);
@@ -1049,7 +1049,7 @@ impl<F: PrimeField> FieldCT<F> {
     }
 
     // if predicate == true then return lhs, else return rhs
-    fn conditional_assign_internal<
+    pub(crate) fn conditional_assign_internal<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(

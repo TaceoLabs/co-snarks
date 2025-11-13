@@ -710,15 +710,20 @@ impl<F: PrimeField> BigField<F> {
     ) -> BigUint {
         let limb_values: [T::AcvmType; NUM_LIMBS] = self.get_limb_values(builder, driver).unwrap();
         let limbs_values = if T::is_shared(&limb_values[0]) {
-            driver.open_many(&limb_values.map(|limb| {
-                T::get_shared(&limb).expect("Already checked it is shared")
-            })).unwrap()
+            driver
+                .open_many(
+                    &limb_values
+                        .map(|limb| T::get_shared(&limb).expect("Already checked it is shared")),
+                )
+                .unwrap()
         } else {
-              limb_values.map(|limb| {
-                  T::get_public(&limb)
-                      .expect("Already checked it is public")
-                      .into()
-              }).to_vec()   
+            limb_values
+                .map(|limb| {
+                    T::get_public(&limb)
+                        .expect("Already checked it is public")
+                        .into()
+                })
+                .to_vec()
         };
 
         let mut result = BigUint::zero();
@@ -1122,7 +1127,6 @@ impl<F: PrimeField> BigField<F> {
         Ok(())
     }
 
-
     /// Performs a sanity check on the BigField element.
     /// Ensures that no limb exceeds the prohibited value and that the overall value is within allowed bounds.
     /// This is a debug assertion and is not checked at runtime in release builds.
@@ -1199,7 +1203,7 @@ impl<F: PrimeField> BigField<F> {
 
         let product = diff.mul(&mut multiplicand, builder, driver)?;
 
-        let result = FieldCT::conditional_assign(
+        let result = FieldCT::conditional_assign_internal(
             &is_equal,
             &FieldCT::from(F::zero()),
             &FieldCT::from(F::one()),
@@ -2417,7 +2421,14 @@ impl<F: PrimeField> BigField<F> {
             eval_right.push(e.clone());
         }
 
-        BigField::mult_madd(&mut eval_left, &mut eval_right, &mut to_sub.to_vec(), true, builder, driver)?;
+        BigField::mult_madd(
+            &mut eval_left,
+            &mut eval_right,
+            &mut to_sub.to_vec(),
+            true,
+            builder,
+            driver,
+        )?;
         Ok(result)
     }
 
@@ -2759,9 +2770,18 @@ impl<F: PrimeField> BigField<F> {
         driver: &mut T,
     ) -> eyre::Result<()> {
         assert_eq!(input_left.len(), input_right.len(), "input size mismatch");
-        assert!(input_left.len() <= Self::MAXIMUM_SUMMAND_COUNT, "input size exceeds MAXIMUM_SUMMAND_COUNT");
-        assert!(to_add.len() <= Self::MAXIMUM_SUMMAND_COUNT, "to_add size exceeds MAXIMUM_SUMMAND_COUNT");
-        assert!(remainders.len() <= Self::MAXIMUM_SUMMAND_COUNT, "remainders size exceeds MAXIMUM_SUMMAND_COUNT");
+        assert!(
+            input_left.len() <= Self::MAXIMUM_SUMMAND_COUNT,
+            "input size exceeds MAXIMUM_SUMMAND_COUNT"
+        );
+        assert!(
+            to_add.len() <= Self::MAXIMUM_SUMMAND_COUNT,
+            "to_add size exceeds MAXIMUM_SUMMAND_COUNT"
+        );
+        assert!(
+            remainders.len() <= Self::MAXIMUM_SUMMAND_COUNT,
+            "remainders size exceeds MAXIMUM_SUMMAND_COUNT"
+        );
 
         let left_is_constant = input_left.iter().all(|a| {
             a.sanity_check::<P, T>();
@@ -2856,7 +2876,7 @@ impl<F: PrimeField> BigField<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        if predicate.is_constant() && other.is_constant() && self.is_constant() {
+        if predicate.is_constant() {
             if predicate.get_value(driver) == P::ScalarField::ONE.into() {
                 return Ok(other.clone());
             } else {

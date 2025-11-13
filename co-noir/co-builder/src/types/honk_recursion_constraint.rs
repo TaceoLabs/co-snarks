@@ -65,7 +65,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         let pub_inputs_offset = elements[2].clone();
         let mut precomputed_commitments = PrecomputedCommitments::default();
 
-        // TACEO TODO: We could batch the is_zero checks here
+        // TACEO TODO: Maybe we could batch the is_zero checks here
         for (des, src) in precomputed_commitments
             .elements
             .iter_mut()
