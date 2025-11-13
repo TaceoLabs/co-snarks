@@ -2137,8 +2137,8 @@ impl<F: PrimeField> BigField<F> {
             builder.range_constrain_two_limbs(hi_nwi, lo_nwi, carry_hi_msb, carry_lo_msb)?;
         } else {
             //TACEO TODO: We can batch the two decompositions into a single one here for more efficiency
-            builder.create_range_constraint(driver, hi_nwi, carry_hi_msb as u32)?;
-            builder.create_range_constraint(driver, lo_nwi, carry_lo_msb as u32)?;
+            hi.create_range_constraint(carry_hi_msb, builder, driver)?;
+            lo.create_range_constraint(carry_lo_msb, builder, driver)?;
         }
         Ok(())
     }
