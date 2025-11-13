@@ -1,5 +1,6 @@
 use crate::types::field_ct::WitnessCT;
 use crate::types::types::{AddQuad, NonNativeMultiplicationFieldWitnesses};
+use crate::ultra_builder::create_unconstrained_gate;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use ark_bn254::Fq;
 use ark_ec::CurveGroup;
@@ -294,9 +295,9 @@ impl<F: PrimeField> BigField<F> {
                 b: limb_2_nwi,
                 c: limb_3_nwi,
                 d: prime_limb_nwi,
-                a_scaling: F::from(shifts[1].clone()),
-                b_scaling: F::from(shifts[2].clone()),
-                c_scaling: F::from(shifts[3].clone()),
+                a_scaling: shifts[1],
+                b_scaling: shifts[2],
+                c_scaling: shifts[3],
                 d_scaling: -F::one(),
                 const_scaling: F::zero(),
             },
@@ -306,13 +307,13 @@ impl<F: PrimeField> BigField<F> {
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy necessary for preceeding big add
         // gate
 
-        GenericUltraCircuitBuilder::<P, T>::create_unconstrained_gate(
-            //TODO CESAR: Is this the right one? (as it does not increment the gate count)
+        create_unconstrained_gate!(
+            builder,
             &mut builder.blocks.arithmetic,
             builder.zero_idx,
             builder.zero_idx,
             builder.zero_idx,
-            limb_0_nwi,
+            limb_0_nwi
         );
 
         let num_last_limb_bits = if can_overflow {
@@ -346,17 +347,21 @@ impl<F: PrimeField> BigField<F> {
         }
 
         result.prime_basis_limb = prime_limb_ct;
+        let limb_0_index = limbs_ct[0].get_witness_index(builder, driver);
+        let limb_1_index = limbs_ct[1].get_witness_index(builder, driver);
+        let limb_2_index = limbs_ct[2].get_witness_index(builder, driver);
+        let limb_3_index = limbs_ct[3].get_witness_index(builder, driver);
         builder.range_constrain_two_limbs(
-            limb_0_nwi,
-            limb_1_nwi,
-            NUM_LIMB_BITS as usize,
-            NUM_LIMB_BITS as usize,
+            limb_0_index,
+            limb_1_index,
+            NUM_LIMB_BITS,
+            NUM_LIMB_BITS,
         )?;
 
         builder.range_constrain_two_limbs(
-            limb_2_nwi,
-            limb_3_nwi,
-            NUM_LIMB_BITS as usize,
+            limb_2_index,
+            limb_3_index,
+            NUM_LIMB_BITS,
             num_last_limb_bits,
         )?;
 
@@ -2180,12 +2185,12 @@ impl<F: PrimeField> BigField<F> {
             driver.madd_div_mod_acvm_limbs::<P>(&self_value, &self_value, &[])?;
 
         if self.is_constant() {
-            return Ok(BigField::from_constant(
+            Ok(BigField::from_constant(
                 &T::get_public_other_acvm_type::<P>(&remainder_value)
                     .expect("Constants are public")
                     .into_bigint()
                     .into(),
-            ));
+            ))
         } else {
             // Check the quotient fits the range proof
             let (reduction_required, num_quotient_bits) = Self::get_quotient_reduction_info(
@@ -2206,7 +2211,6 @@ impl<F: PrimeField> BigField<F> {
                 builder,
                 driver,
             )?;
-
             let remainder_limbs = driver
                 .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, _>(
                     &remainder_value,
