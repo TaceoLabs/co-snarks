@@ -102,7 +102,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         &self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-        msg: &str,
+        // msg: &str, @Cesar199999 I removed this, isnt this only there for error reporting?
     ) -> eyre::Result<()> {
         // TACEO TODO: Has circuit failed
 
@@ -133,16 +133,19 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
         // Bn254G1::has_a == false
         BigField::mult_madd(
-            &mut [adjusted_x.clone().mul(&mut adjusted_x, builder, driver)?, adjusted_y.clone()],
+            &mut [
+                adjusted_x.clone().mul(&mut adjusted_x, builder, driver)?,
+                adjusted_y.clone(),
+            ],
             &mut [adjusted_x.clone(), adjusted_y.neg(builder, driver)?],
             &mut [adjusted_b],
-            true, 
+            true,
             builder,
             driver,
         )?;
 
         // TACEO TODO: has circuit_failed?
-        Ok(())   
+        Ok(())
     }
 
     /// Set the witness indices for the x and y coordinates to public

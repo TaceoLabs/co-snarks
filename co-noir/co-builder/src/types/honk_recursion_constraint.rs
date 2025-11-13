@@ -84,7 +84,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
             // Note that in the case of bn254 with Mega arithmetization, the check is delegated to ECCVM, see
             // `on_curve_check` in `ECCVMTranscriptRelationImpl`.
-            // result.validate_on_curve(); //TODO CESAR
+            result.validate_on_curve(builder, driver)?;
             *des = result;
         }
 
