@@ -111,7 +111,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let adjusted_b = BigField::conditional_assign(
             &self.is_infinity,
             &mut BigField::default(),
-            &mut BigField::from_constant(&b.into()),
+            &mut BigField::from_witness_other_acvm_type(&b.into(), driver, builder)?,
             builder,
             driver,
         )?;

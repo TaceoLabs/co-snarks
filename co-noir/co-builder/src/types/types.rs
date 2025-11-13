@@ -685,15 +685,15 @@ pub(crate) struct RangeList {
 }
 
 #[derive(Clone)]
-pub(crate) struct CachedPartialNonNativeFieldMultiplication<F: PrimeField> {
-    pub(crate) a: [u32; 5],
-    pub(crate) b: [u32; 5],
-    pub(crate) lo_0: F,
-    pub(crate) hi_0: F,
-    pub(crate) hi_1: F,
+pub(crate) struct CachedPartialNonNativeFieldMultiplication {
+    pub(crate) a: [u32; 4],
+    pub(crate) b: [u32; 4],
+    pub(crate) lo_0: u32,
+    pub(crate) hi_0: u32,
+    pub(crate) hi_1: u32,
 }
 
-impl<F: PrimeField> CachedPartialNonNativeFieldMultiplication<F> {
+impl CachedPartialNonNativeFieldMultiplication {
     fn equal(&self, other: &Self) -> bool {
         self.a == other.a && self.b == other.b
     }
@@ -711,26 +711,41 @@ impl<F: PrimeField> CachedPartialNonNativeFieldMultiplication<F> {
         other.b < self.b
     }
 
-    pub(crate) fn deduplicate(inp: &[Self]) -> Vec<Self> {
+    pub(crate) fn deduplicate<
+        F: PrimeField,
+        C: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+    ) -> Vec<Self> {
         let mut hash_set = HashSet::new();
         let mut unique_vec = Vec::new();
 
-        for element in inp.iter() {
+        for element in builder
+            .cached_partial_non_native_field_multiplications
+            .clone()
+            .iter()
+        {
             if hash_set.insert(element.clone()) {
                 unique_vec.push(element.clone());
+            } else {
+                let existing_entry = hash_set.get(element).unwrap();
+                builder.assert_equal(element.lo_0 as usize, existing_entry.lo_0 as usize);
+                builder.assert_equal(element.hi_0 as usize, existing_entry.hi_0 as usize);
+                builder.assert_equal(element.hi_1 as usize, existing_entry.hi_1 as usize);
             }
         }
         unique_vec
     }
 }
 
-impl<F: PrimeField> PartialOrd for CachedPartialNonNativeFieldMultiplication<F> {
+impl PartialOrd for CachedPartialNonNativeFieldMultiplication {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<F: PrimeField> Ord for CachedPartialNonNativeFieldMultiplication<F> {
+impl Ord for CachedPartialNonNativeFieldMultiplication {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.eq(other) {
             Ordering::Equal
@@ -742,15 +757,15 @@ impl<F: PrimeField> Ord for CachedPartialNonNativeFieldMultiplication<F> {
     }
 }
 
-impl<F: PrimeField> PartialEq for CachedPartialNonNativeFieldMultiplication<F> {
+impl PartialEq for CachedPartialNonNativeFieldMultiplication {
     fn eq(&self, other: &Self) -> bool {
         self.equal(other)
     }
 }
 
-impl<F: PrimeField> Eq for CachedPartialNonNativeFieldMultiplication<F> {}
+impl Eq for CachedPartialNonNativeFieldMultiplication {}
 
-impl<F: PrimeField> Hash for CachedPartialNonNativeFieldMultiplication<F> {
+impl Hash for CachedPartialNonNativeFieldMultiplication {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.a.hash(state);
         self.b.hash(state);
@@ -1006,11 +1021,10 @@ pub(crate) type AddSimple<F> = (
     F,
 );
 
-pub(crate) struct NonNativeFieldWitnesses<F: PrimeField> {
+pub(crate) struct NonNativeMultiplicationFieldWitnesses<F: PrimeField> {
     pub(crate) a: [u32; 4],
     pub(crate) b: [u32; 4],
     pub(crate) q: [u32; 4],
     pub(crate) r: [u32; 4],
     pub(crate) neg_modulus: [F; 4],
-    pub(crate) modulus: F,
 }

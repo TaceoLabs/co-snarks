@@ -8,8 +8,8 @@ use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
 use crate::types::types::{
-    AES128Constraint, AddSimple, MemorySelectors, NnfSelectors, NonNativeFieldWitnesses,
-    PairingPoints,
+    AES128Constraint, AddSimple, MemorySelectors, NnfSelectors,
+    NonNativeMultiplicationFieldWitnesses, PairingPoints,
 };
 use crate::types::types::{
     EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
@@ -49,6 +49,7 @@ use co_noir_common::utils::Utils;
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
+use std::arch::x86_64::_MM_HINT_ET0;
 use std::{
     array,
     collections::{BTreeMap, HashMap},
@@ -180,8 +181,8 @@ pub struct GenericUltraCircuitBuilder<
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P, T>>,
     pub(crate) plookup: Plookup<P::ScalarField>,
     range_lists: BTreeMap<u64, RangeList>,
-    cached_partial_non_native_field_multiplications:
-        Vec<CachedPartialNonNativeFieldMultiplication<P::ScalarField>>,
+    pub(crate) cached_partial_non_native_field_multiplications:
+        Vec<CachedPartialNonNativeFieldMultiplication>,
     // Stores gate index of ROM and RAM reads (required by proving key)
     pub(crate) memory_read_records: Vec<u32>,
     // Stores gate index of RAM writes (required by proving key)
@@ -2665,9 +2666,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 c.b[i] = self.real_variable_index[c.b[i] as usize];
             }
         }
-        let mut dedup = CachedPartialNonNativeFieldMultiplication::deduplicate(
-            &self.cached_partial_non_native_field_multiplications,
-        );
+
+        let mut dedup = CachedPartialNonNativeFieldMultiplication::deduplicate(self);
 
         // iterate over the cached items and create constraints
         for input in dedup.iter() {
@@ -3475,6 +3475,89 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.num_gates += 1;
     }
 
+    /// Compute the limb-multiplication part of a non native field mul
+    ///
+    /// i.e. compute the low 204 and high 204 bit components of `a * b` where `a, b` are nnf elements composed of 4
+    /// limbs with size DEFAULT_NON_NATIVE_FIELD_LIMB_BITS
+    pub(crate) fn queue_partial_non_native_field_multiplication(
+        &mut self,
+        input: ([u32; 4], [u32; 4]), // a, b
+        driver: &mut T,
+    ) -> eyre::Result<[u32; 2]> {
+        let (a_in, b_in) = input;
+
+        let a = [
+            self.get_variable(a_in[0] as usize),
+            self.get_variable(a_in[1] as usize),
+            self.get_variable(a_in[2] as usize),
+            self.get_variable(a_in[3] as usize),
+        ];
+        let b = [
+            self.get_variable(b_in[0] as usize),
+            self.get_variable(b_in[1] as usize),
+            self.get_variable(b_in[2] as usize),
+            self.get_variable(b_in[3] as usize),
+        ];
+
+        let limb_shift = P::ScalarField::from(1u128 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+
+        let lhs = a
+            .into_iter()
+            .flat_map(|limb| vec![limb; 4])
+            .collect::<Vec<_>>();
+        let rhs = b.into_iter().cycle().take(16).collect::<Vec<_>>();
+
+        // TODO CESAR: Do not include unused values
+        let [
+            a0b0,
+            a0b1,
+            a0b2,
+            a0b3,
+            a1b0,
+            a1b1,
+            a1b2,
+            _,
+            a2b0,
+            a2b1,
+            _,
+            _,
+            a3b0,
+            _,
+            _,
+            _,
+        ]: [_; 16] = driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
+
+        let tmp = driver.add(a1b0, a0b1);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        let lo_0 = driver.add(a0b0, tmp);
+
+        let tmp = driver.add(a0b3, a3b0);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        let tmp2 = driver.add(a2b0, a0b2);
+        let hi_0 = driver.add(tmp, tmp2);
+
+        let tmp = driver.add(a1b2, a2b1);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        let tmp2 = driver.add(a1b1, hi_0.clone());
+        let hi_1 = driver.add(tmp, tmp2);
+
+        let lo_0 = self.add_variable(lo_0);
+        let hi_0 = self.add_variable(hi_0);
+        let hi_1 = self.add_variable(hi_1);
+
+        // Add witnesses into the multiplication cache
+        // (when finalising the circuit, we will remove duplicates; several dups produced by biggroup methods)
+        let mut cache_entry = CachedPartialNonNativeFieldMultiplication {
+            a: a_in,
+            b: b_in,
+            lo_0,
+            hi_0,
+            hi_1,
+        };
+
+        Ok([lo_0, hi_1])
+    }
+
     pub(crate) fn evaluate_non_native_field_addition(
         &mut self,
         limb0: AddSimple<P::ScalarField>,
@@ -3747,10 +3830,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
      **/
     pub(crate) fn evaluate_non_native_field_multiplication(
         &mut self,
-        input: &NonNativeFieldWitnesses<P::ScalarField>,
+        input: &NonNativeMultiplicationFieldWitnesses<P::ScalarField>,
         driver: &mut T,
     ) -> eyre::Result<[u32; 2]> {
-        let a = input.a.map(|limb| self.get_variable(limb as usize));
+        let a: [<T as NoirWitnessExtensionProtocol<<P as PrimeGroup>::ScalarField>>::AcvmType; 4] =
+            input.a.map(|limb| self.get_variable(limb as usize));
         let b = input.b.map(|limb| self.get_variable(limb as usize));
         let q = input.q.map(|limb| self.get_variable(limb as usize));
         let r = input.r.map(|limb| self.get_variable(limb as usize));
