@@ -2417,8 +2417,7 @@ impl<F: PrimeField> BigField<F> {
             eval_right.push(e.clone());
         }
 
-        // TODO CESAR: Implement mult_madd
-        // BigField::mult_madd(&eval_left, &eval_right, to_sub, true, builder, driver)?;
+        BigField::mult_madd(&mut eval_left, &mut eval_right, &mut to_sub.to_vec(), true, builder, driver)?;
         Ok(result)
     }
 
@@ -2581,15 +2580,16 @@ impl<F: PrimeField> BigField<F> {
 
         let (left, right): (Vec<BigField<F>>, Vec<BigField<F>>) = new_mul.into_iter().unzip();
 
-        Self::unsafe_evaluate_multiple_multiply_add(
-            &left,
-            &right,
-            &new_to_add,
-            &quotient,
-            std::slice::from_ref(&remainder),
-            builder,
-            driver,
-        )?;
+        // TODO CESAR: Reintroduce
+        // Self::unsafe_evaluate_multiple_multiply_add(
+        //     &left,
+        //     &right,
+        //     &new_to_add,
+        //     &quotient,
+        //     std::slice::from_ref(&remainder),
+        //     builder,
+        //     driver,
+        // )?;
 
         Ok(remainder)
     }
