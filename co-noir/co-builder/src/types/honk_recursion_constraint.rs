@@ -71,12 +71,12 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             .iter_mut()
             .zip(elements[3..].chunks(BigGroup::<C::ScalarField, T>::NUM_BN254_FRS))
         {
-            let is_zero = FieldCT::check_point_at_infinity::<C, T>(src, builder, driver)?;
             let [x_lo, x_hi] = [&src[0], &src[1]];
             let [y_lo, y_hi] = [&src[2], &src[3]];
 
             let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
             let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
+            let is_zero = FieldCT::check_point_at_infinity::<C, T>(src, builder, driver)?;
 
             let mut result = BigGroup::new(x, y);
 

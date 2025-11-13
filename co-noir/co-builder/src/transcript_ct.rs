@@ -195,19 +195,12 @@ where
         let mut elements = self.receive_n_from_prover(label, C::NUM_BASEFIELD_ELEMENTS * 2)?;
         debug_assert!(elements.len() == C::NUM_BASEFIELD_ELEMENTS * 2);
 
+        let [x_lo, x_hi] = [&elements[0], &elements[1]];
+        let [y_lo, y_hi] = [&elements[2], &elements[3]];
+
+        let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
+        let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
         let is_zero = FieldCT::check_point_at_infinity::<C, WT>(&elements, builder, driver)?;
-        let y = elements.split_off(C::NUM_BASEFIELD_ELEMENTS);
-        let x = elements;
-
-        debug_assert!(
-            x.len() == 2 && y.len() == 2,
-            "Expected 2 field elements per coordinate"
-        );
-        let [x_lo, x_hi] = x.try_into().unwrap();
-        let [y_lo, y_hi] = y.try_into().unwrap();
-
-        let x = BigField::from_slices(&x_lo, &x_hi, driver, builder)?;
-        let y = BigField::from_slices(&y_lo, &y_hi, driver, builder)?;
 
         let mut result = BigGroup::new(x, y);
 
