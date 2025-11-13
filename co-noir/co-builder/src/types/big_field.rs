@@ -349,6 +349,7 @@ impl<F: PrimeField> BigField<F> {
         let limb_1_index = limbs_ct[1].get_witness_index(builder, driver);
         let limb_2_index = limbs_ct[2].get_witness_index(builder, driver);
         let limb_3_index = limbs_ct[3].get_witness_index(builder, driver);
+        println!("range constraining bigfield limbs");
         builder.range_constrain_two_limbs(
             limb_0_index,
             limb_1_index,
@@ -1948,7 +1949,7 @@ impl<F: PrimeField> BigField<F> {
         }
 
         borrow_lo_value >>= 2 * NUM_LIMB_BITS;
-        let borrow_lo = FieldCT::from_witness(F::from(borrow_lo_value).into(), builder);
+        let borrow_lo = FieldCT::from(F::from(borrow_lo_value));
 
         let max_r2 = max_c0 + max_c1 + max_c2;
         let max_r3 = max_d0 + max_d1 + max_d2 + max_d3;
