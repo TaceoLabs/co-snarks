@@ -1,2 +1,2 @@
 #![cfg(test)]
-mod big_group;
+mod batch_mul;

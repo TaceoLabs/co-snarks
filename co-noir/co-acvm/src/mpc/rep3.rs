@@ -2367,4 +2367,35 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         Ok(naf_entries.into_iter().map(Rep3AcvmType::Shared).collect())
     }
+
+    fn other_acvm_type_to_acvm_type_limbs<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]> {
+        match input.clone() {
+            Rep3AcvmType::Public(public) => {
+                let limbs = PlainAcvmSolver::new().other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, LIMB_BITS, C>(&public.into())?;
+                let limbs = limbs
+                    .into_iter()
+                    .map(|x| Rep3AcvmType::Public(x))
+                    .collect::<Vec<_>>();
+                Ok(limbs.try_into().expect("We have NUM_LIMBS elements"))
+            }
+            Rep3AcvmType::Shared(shared) => {
+                let limbs = yao::decompose_arithmetic(shared, self.net0, &mut self.state0, F::MODULUS_BIT_SIZE as usize, LIMB_BITS)?;
+                let limbs = conversion::a2b_many(&limbs, self.net0, &mut self.state0)?;
+                let limbs: Vec<Rep3BigUintShare<F>> = limbs.into_iter().map(|x| Rep3BigUintShare::new(x.a.clone(), x.b.clone())).collect();
+                let limbs = conversion::b2a_many(&limbs, self.net0, &mut self.state0)?;
+                let limbs = limbs
+                    .into_iter()
+                    .map(|x| Rep3AcvmType::Shared(x))
+                    .collect::<Vec<_>>();
+                Ok(limbs.try_into().expect("We have NUM_LIMBS elements"))
+            }
+        }
+    }
 }

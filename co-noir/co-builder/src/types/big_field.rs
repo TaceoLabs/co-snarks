@@ -71,6 +71,10 @@ impl<F: PrimeField> BigField<F> {
     pub(crate) const MAX_UNREDUCED_LIMB_BITS: usize = NUM_LIMB_BITS + 10;
     pub(crate) const NUM_BN254_SCALARS: u32 = 2;
 
+    // If we reach this size of a limb, we stop execution (as safety measure). This should never reach during addition
+    // as we would reduce the limbs before they reach this size.
+    pub(crate) const PROHIBITED_LIMB_BITS: usize = Self::MAX_UNREDUCED_LIMB_BITS + 5;
+
     #[inline]
     fn default_maximum_remainder() -> BigUint {
         (BigUint::one() << (Self::NUM_LIMB_BITS * 3 + Self::NUM_LAST_LIMB_BITS)) - BigUint::one()
@@ -705,13 +709,22 @@ impl<F: PrimeField> BigField<F> {
         driver: &mut T,
     ) -> BigUint {
         let limb_values: [T::AcvmType; NUM_LIMBS] = self.get_limb_values(builder, driver).unwrap();
+        let limbs_values = if T::is_shared(&limb_values[0]) {
+            driver.open_many(&limb_values.map(|limb| {
+                T::get_shared(&limb).expect("Already checked it is shared")
+            })).unwrap()
+        } else {
+              limb_values.map(|limb| {
+                  T::get_public(&limb)
+                      .expect("Already checked it is public")
+                      .into()
+              }).to_vec()   
+        };
 
-        let field_limbs =
-            unsafe { *mem::transmute::<&[T::AcvmType; NUM_LIMBS], &[F; NUM_LIMBS]>(&limb_values) };
         let mut result = BigUint::zero();
         let mut shift = BigUint::one();
         for i in 0..NUM_LIMBS {
-            let limb_value: BigUint = field_limbs[i].into();
+            let limb_value: BigUint = limbs_values[i].into();
             result += limb_value * &shift;
             shift <<= Self::NUM_LIMB_BITS;
         }
@@ -753,6 +766,10 @@ impl<F: PrimeField> BigField<F> {
         // because it provides additional space to avoid the overflow, but get_msb() by itself should be enough.
         let maximum_product_bits = maximum_product.bits();
         (BigUint::one() << (maximum_product_bits >> 1)) - BigUint::one()
+    }
+
+    fn get_prohibited_limb_value() -> BigUint {
+        BigUint::one() << Self::PROHIBITED_LIMB_BITS
     }
 
     /**
@@ -1103,6 +1120,33 @@ impl<F: PrimeField> BigField<F> {
             self.self_reduce(builder, driver)?;
         }
         Ok(())
+    }
+
+
+    /// Performs a sanity check on the BigField element.
+    /// Ensures that no limb exceeds the prohibited value and that the overall value is within allowed bounds.
+    /// This is a debug assertion and is not checked at runtime in release builds.
+    pub(crate) fn sanity_check<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        &self,
+    ) {
+        // max_val < sqrt(2^T * n)
+        // Note this is a static assertion, so it is not checked at runtime
+        let prohibited_limb_value = Self::get_prohibited_limb_value();
+        let limb_overflow_test_0 = self.binary_basis_limbs[0].maximum_value > prohibited_limb_value;
+        let limb_overflow_test_1 = self.binary_basis_limbs[1].maximum_value > prohibited_limb_value;
+        let limb_overflow_test_2 = self.binary_basis_limbs[2].maximum_value > prohibited_limb_value;
+        let limb_overflow_test_3 = self.binary_basis_limbs[3].maximum_value > prohibited_limb_value;
+        assert!(
+            !(self.get_maximum_value() > Self::get_prohibited_limb_value()
+                || limb_overflow_test_0
+                || limb_overflow_test_1
+                || limb_overflow_test_2
+                || limb_overflow_test_3),
+            "BigField sanity check failed: value or limb exceeds allowed maximum"
+        );
     }
 
     // Validate whether two bigfield elements are equal to each other.
@@ -2535,8 +2579,11 @@ impl<F: PrimeField> BigField<F> {
             BigField::from_witness_other_acvm_type(&remainder, driver, builder)?
         };
 
+        let (left, right): (Vec<BigField<F>>, Vec<BigField<F>>) = new_mul.into_iter().unzip();
+
         Self::unsafe_evaluate_multiple_multiply_add(
-            &new_mul,
+            &left,
+            &right,
             &new_to_add,
             &quotient,
             std::slice::from_ref(&remainder),
@@ -2699,19 +2746,55 @@ impl<F: PrimeField> BigField<F> {
         Ok(())
     }
 
-    // TODO CESAR
     fn unsafe_evaluate_multiple_multiply_add<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<F>,
     >(
-        mul_pairs: &[(Self, Self)],
+        input_left: &[Self],
+        input_right: &[Self],
         to_add: &[Self],
         quotient: &Self,
         remainders: &[Self],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        Ok(())
+        assert_eq!(input_left.len(), input_right.len(), "input size mismatch");
+        assert!(input_left.len() <= Self::MAXIMUM_SUMMAND_COUNT, "input size exceeds MAXIMUM_SUMMAND_COUNT");
+        assert!(to_add.len() <= Self::MAXIMUM_SUMMAND_COUNT, "to_add size exceeds MAXIMUM_SUMMAND_COUNT");
+        assert!(remainders.len() <= Self::MAXIMUM_SUMMAND_COUNT, "remainders size exceeds MAXIMUM_SUMMAND_COUNT");
+
+        let left_is_constant = input_left.iter().all(|a| {
+            a.sanity_check::<P, T>();
+            a.is_constant()
+        });
+        let right_is_constant = input_right.iter().all(|a| {
+            a.sanity_check::<P, T>();
+            a.is_constant()
+        });
+        to_add.iter().for_each(|a| {
+            a.sanity_check::<P, T>();
+        });
+        quotient.sanity_check::<P, T>();
+        remainders.iter().for_each(|a| {
+            a.sanity_check::<P, T>();
+        });
+
+        // We must have at least one left or right multiplicand as witnesses.
+        debug_assert!(
+            !left_is_constant || !right_is_constant,
+            "bigfield: At least one multiplicand must be non-constant"
+        );
+
+        // Step 1: Compute the maximum potential value of our product limbs
+        //
+        // max_lo = maximum value of limb products that span the range 0 - 2^{3L}
+        // max_hi = maximum value of limb products that span the range 2^{2L} - 2^{5L}
+        let mut max_lo = BigUint::zero();
+        let mut max_hi = BigUint::zero();
+
+        // Compute the maximum value that needs to be borrowed from the hi limbs to the lo limb.
+        // Check the README for the explanation of the borrow.
+        todo!()
     }
 
     pub(crate) fn conditional_assign<

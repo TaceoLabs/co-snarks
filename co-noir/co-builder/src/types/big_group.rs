@@ -95,6 +95,56 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         })
     }
 
+    /// Checks that the point is on the curve.
+    /// If the point is at infinity, the check is skipped.
+    /// Returns an error if the point is not on the curve.
+    pub fn validate_on_curve<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+        msg: &str,
+    ) -> eyre::Result<()> {
+        // TACEO TODO: Has circuit failed
+
+        // Get curve parameters
+        let b = P::BaseField::from(3u64); // TACEO TODO: Magic constant BN254 curve b coefficient
+
+        let adjusted_b = BigField::conditional_assign(
+            &self.is_infinity,
+            &mut BigField::default(),
+            &mut BigField::from_constant(&b.into()),
+            builder,
+            driver,
+        )?;
+        let mut adjusted_x = BigField::conditional_assign(
+            &self.is_infinity,
+            &mut BigField::default(),
+            &mut self.x.clone(),
+            builder,
+            driver,
+        )?;
+        let mut adjusted_y = BigField::conditional_assign(
+            &self.is_infinity,
+            &mut BigField::default(),
+            &mut self.y.clone(),
+            builder,
+            driver,
+        )?;
+
+        // Bn254G1::has_a == false
+        BigField::mult_madd(
+            &mut [adjusted_x.clone().mul(&mut adjusted_x, builder, driver)?, adjusted_y.clone()],
+            &mut [adjusted_x.clone(), adjusted_y.neg(builder, driver)?],
+            &mut [adjusted_b],
+            true, 
+            builder,
+            driver,
+        )?;
+
+        // TACEO TODO: has circuit_failed?
+        Ok(())   
+    }
+
     /// Set the witness indices for the x and y coordinates to public
     ///
     /// Returns the index at which the representation is stored in the public inputs.
