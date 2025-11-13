@@ -282,11 +282,11 @@ impl<F: PrimeField> BigField<F> {
         prime_limb_ct.witness_index = builder.add_variable(prime_limb);
 
         // evaluate prime basis limb with addition gate that taps into the 4th wire in the next gate
-        let limb_0_nwi = limbs_ct[0].get_normalized_witness_index(builder, driver);
-        let limb_1_nwi = limbs_ct[1].get_normalized_witness_index(builder, driver);
-        let limb_2_nwi = limbs_ct[2].get_normalized_witness_index(builder, driver);
-        let limb_3_nwi = limbs_ct[3].get_normalized_witness_index(builder, driver);
-        let prime_limb_nwi = prime_limb_ct.get_normalized_witness_index(builder, driver);
+        let limb_0_nwi = limbs_ct[0].get_witness_index(builder, driver);
+        let limb_1_nwi = limbs_ct[1].get_witness_index(builder, driver);
+        let limb_2_nwi = limbs_ct[2].get_witness_index(builder, driver);
+        let limb_3_nwi = limbs_ct[3].get_witness_index(builder, driver);
+        let prime_limb_nwi = prime_limb_ct.get_witness_index(builder, driver);
 
         builder.create_big_add_gate(
             &AddQuad {
@@ -390,7 +390,7 @@ impl<F: PrimeField> BigField<F> {
 
         if !low_bits_in.is_constant() {
             // MERGE NOTE: this was the if constexpr block introduced in ecebe7643
-            let low_bits_in_normalized = low_bits_in.get_normalized_witness_index(builder, driver);
+            let low_bits_in_normalized = low_bits_in.get_witness_index(builder, driver);
             let limb_witnesses = builder.decompose_non_native_field_double_width_limb(
                 low_bits_in_normalized,
                 (2 * Self::NUM_LIMB_BITS) as usize,
@@ -440,8 +440,7 @@ impl<F: PrimeField> BigField<F> {
         // We create the high limb values similar to the low limb ones above
         let num_high_limb_bits = Self::NUM_LIMB_BITS + Self::NUM_LAST_LIMB_BITS;
         if !high_bits_in.is_constant() {
-            let high_bits_in_normalized =
-                high_bits_in.get_normalized_witness_index(builder, driver);
+            let high_bits_in_normalized = high_bits_in.get_witness_index(builder, driver);
             let limb_witnesses = builder.decompose_non_native_field_double_width_limb(
                 high_bits_in_normalized,
                 num_high_limb_bits as usize,
@@ -612,10 +611,10 @@ impl<F: PrimeField> BigField<F> {
         // Range constrain the first two limbs each to NUM_LIMB_BITS
         let first_index = result.binary_basis_limbs[0]
             .element
-            .get_normalized_witness_index(builder, driver);
+            .get_witness_index(builder, driver);
         let second_index = result.binary_basis_limbs[1]
             .element
-            .get_normalized_witness_index(builder, driver);
+            .get_witness_index(builder, driver);
         builder.range_constrain_two_limbs(
             first_index,
             second_index,
@@ -632,10 +631,10 @@ impl<F: PrimeField> BigField<F> {
 
         let first_index = result.binary_basis_limbs[2]
             .element
-            .get_normalized_witness_index(builder, driver);
+            .get_witness_index(builder, driver);
         let second_index = result.binary_basis_limbs[3]
             .element
-            .get_normalized_witness_index(builder, driver);
+            .get_witness_index(builder, driver);
         builder.range_constrain_two_limbs(
             first_index,
             second_index,
@@ -2058,14 +2057,14 @@ impl<F: PrimeField> BigField<F> {
         let witnesses = NonNativeFieldWitnesses {
             a: left
                 .binary_basis_limbs
-                .map(|limb| limb.element.get_normalized_witness_index(builder, driver)),
+                .map(|limb| limb.element.get_witness_index(builder, driver)),
             b: to_mul
                 .binary_basis_limbs
-                .map(|limb| limb.element.get_normalized_witness_index(builder, driver)),
+                .map(|limb| limb.element.get_witness_index(builder, driver)),
             q: quotient
                 .binary_basis_limbs
-                .map(|limb| limb.element.get_normalized_witness_index(builder, driver)),
-            r: remainder_limbs.map(|limb| limb.get_normalized_witness_index(builder, driver)),
+                .map(|limb| limb.element.get_witness_index(builder, driver)),
+            r: remainder_limbs.map(|limb| limb.get_witness_index(builder, driver)),
             neg_modulus: neg_modulus_limbs.map(|limb| F::from(limb)),
 
             // TODO CESAR: Clarify this, modulus represents Fq::MODULUS and it is a u256, but here it is implicitly casted to Fr.
@@ -2095,26 +2094,14 @@ impl<F: PrimeField> BigField<F> {
         // if both the hi and lo output limbs have less than 70 bits, we can use our custom
         // limb accumulation gate (accumulates 2 field elements, each composed of 5 14-bit limbs, in 3 gates)
 
-        let hi_nwi = hi.get_normalized_witness_index(builder, driver);
-        let lo_nwi = lo.get_normalized_witness_index(builder, driver);
+        let hi_nwi = hi.get_witness_index(builder, driver);
+        let lo_nwi = lo.get_witness_index(builder, driver);
         if (carry_lo_msb <= 70) && (carry_hi_msb <= 70) {
             builder.range_constrain_two_limbs(hi_nwi, lo_nwi, carry_hi_msb, carry_lo_msb)?;
         } else {
             //TACEO TODO: We can batch the two decompositions into a single one here for more efficiency
-            builder.decompose_into_default_range(
-                driver,
-                hi_nwi,
-                carry_hi_msb as u64,
-                None,
-                GenericUltraCircuitBuilder::<P, T>::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
-            )?;
-            builder.decompose_into_default_range(
-                driver,
-                lo_nwi,
-                carry_lo_msb as u64,
-                None,
-                GenericUltraCircuitBuilder::<P, T>::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
-            )?;
+            builder.create_range_constraint(driver, hi_nwi, carry_hi_msb as u32)?;
+            builder.create_range_constraint(driver, lo_nwi, carry_lo_msb as u32)?;
         }
         Ok(())
     }

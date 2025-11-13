@@ -168,7 +168,7 @@ impl<F: PrimeField> FieldCT<F> {
             result_inverted = inverted_check;
         } else {
             // In general, the witness has to be normalized.
-            witness_idx = self.get_normalized_witness_index(builder, driver);
+            witness_idx = self.get_witness_index(builder, driver);
         }
         // Get the normalized value of the witness
         let witness = builder.get_variable(witness_idx as usize);
@@ -222,17 +222,6 @@ impl<F: PrimeField> FieldCT<F> {
             const_scaling: self.additive_constant,
         });
         result
-    }
-
-    pub(crate) fn get_normalized_witness_index<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        &self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> u32 {
-        self.normalize(builder, driver).witness_index
     }
 
     pub fn multiply<

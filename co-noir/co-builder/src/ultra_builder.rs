@@ -2743,7 +2743,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         }
     }
 
-    fn create_range_constraint(
+    pub(crate) fn create_range_constraint(
         &mut self,
         driver: &mut T,
         variable_index: u32,

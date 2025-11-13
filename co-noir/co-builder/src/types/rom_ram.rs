@@ -165,7 +165,7 @@ impl<F: PrimeField> RamTable<F> {
             index.to_owned()
         };
 
-        let wit_index = index_wire.get_normalized_witness_index(builder, driver);
+        let wit_index = index_wire.get_witness_index(builder, driver);
         let output_idx = builder.read_ram_array(self.ram_id, wit_index, driver)?;
         Ok(FieldCT::from_witness_index(output_idx))
     }
@@ -219,8 +219,8 @@ impl<F: PrimeField> RamTable<F> {
         }
 
         // else
-        let index_ = index_wire.get_normalized_witness_index(builder, driver);
-        let value_ = value_wire.get_normalized_witness_index(builder, driver);
+        let index_ = index_wire.get_witness_index(builder, driver);
+        let value_ = value_wire.get_witness_index(builder, driver);
         builder.write_ram_array(driver, self.ram_id, index_, value_)?;
         Ok(())
     }
