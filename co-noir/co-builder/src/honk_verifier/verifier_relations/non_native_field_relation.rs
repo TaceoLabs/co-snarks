@@ -135,10 +135,11 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for NonNativeFieldRelation {
             .add(&limb_accumulator_2, builder, driver)
             .multiply(q_3, builder, driver)?;
 
+        let q_nnf_by_scaling = q_nnf.multiply(scaling_factor, builder, driver)?;
+
         let nnf_identity = non_native_field_identity
             .add(&limb_accumulator_identity, builder, driver)
-            .multiply(q_nnf, builder, driver)?
-            .multiply(scaling_factor, builder, driver)?;
+            .multiply(&q_nnf_by_scaling, builder, driver)?;
 
         accumulator.r0 = accumulator.r0.add(&nnf_identity, builder, driver);
 
