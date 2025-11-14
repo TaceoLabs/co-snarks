@@ -65,35 +65,27 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for NonNativeFieldRelation {
          *            \_                                                                               _/
          *
          */
-        let lhs = vec![
-            w_1.clone(),
-            w_2.clone(),
-            w_4.clone(),
-            w_3.clone(),
-            w_1_shift.clone(),
-        ];
-        let rhs = vec![
-            w_2_shift.clone(),
-            w_1_shift.clone(),
-            w_1.clone(),
-            w_2.clone(),
-            w_2_shift.clone(),
-        ];
-        let mul = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
 
         // Non native field arithmetic gate 2
-        let mut limb_subproduct = mul[0].add(&mul[1], builder, driver);
-        let non_native_field_gate_2 = mul[2]
-            .add(&mul[3], builder, driver)
+        let mut limb_subproduct = w_1.multiply(w_2_shift, builder, driver)?.add(
+            &w_2.multiply(w_1_shift, builder, driver)?,
+            builder,
+            driver,
+        );
+        let non_native_field_gate_2 = w_1
+            .multiply(w_4, builder, driver)?
+            .add(&w_2.multiply(w_3, builder, driver)?, builder, driver)
             .sub(w_3_shift, builder, driver)
             .multiply(&limb_size, builder, driver)?
             .sub(w_4_shift, builder, driver)
             .add(&limb_subproduct, builder, driver)
             .multiply(q_4, builder, driver)?;
 
-        limb_subproduct = limb_subproduct
-            .multiply(&limb_size, builder, driver)?
-            .add(&mul[4], builder, driver);
+        limb_subproduct = limb_subproduct.multiply(&limb_size, builder, driver)?.add(
+            &w_1_shift.multiply(w_2_shift, builder, driver)?,
+            builder,
+            driver,
+        );
 
         let non_native_field_gate_1 = limb_subproduct
             .sub(w_3, builder, driver)
