@@ -87,7 +87,7 @@ impl SumcheckVerifier {
             let lhs = one
                 .sub(padding_indicator, builder, driver)
                 .multiply(target_sum, builder, driver)?;
-            let rhs = evaluate_with_domain_start::<{ SIZE }, _, _>(
+            let rhs = FieldCT::evaluate_with_domain_start::<{ SIZE }, _, _>(
                 &round_univariate.try_into().unwrap(),
                 &round_challenge,
                 0,
@@ -186,53 +186,4 @@ impl SumcheckVerifier {
         target_sum.assert_equal(&total_sum, builder, driver);
         Ok(())
     }
-}
-
-pub fn evaluate_with_domain_start<
-    const SIZE: usize,
-    C: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<C::ScalarField>,
->(
-    evals: &[FieldCT<C::ScalarField>; SIZE],
-    u: &FieldCT<C::ScalarField>,
-    domain_start: usize,
-    builder: &mut GenericUltraCircuitBuilder<C, T>,
-    driver: &mut T,
-) -> HonkProofResult<FieldCT<C::ScalarField>> {
-    let one = FieldCT::from(C::ScalarField::ONE);
-    let mut full_numerator_value = one.clone();
-    for i in domain_start..SIZE + domain_start {
-        let coeff = FieldCT::from(C::ScalarField::from(i as u64));
-        let tmp = u.sub(&coeff, builder, driver);
-        full_numerator_value = full_numerator_value.multiply(&tmp, builder, driver)?;
-    }
-
-    let big_domain = (domain_start..domain_start + SIZE)
-        .map(|i| C::ScalarField::from(i as u64))
-        .collect::<Vec<_>>();
-    let lagrange_denominators = Barycentric::construct_lagrange_denominators(SIZE, &big_domain);
-
-    let mut denominator_inverses = vec![FieldCT::default(); SIZE];
-
-    let lhs = (0..SIZE)
-        .map(|i| FieldCT::from(lagrange_denominators[i]))
-        .collect::<Vec<_>>();
-    let rhs = (0..SIZE)
-        .map(|i| u.sub(&big_domain[i].into(), builder, driver))
-        .collect::<Vec<_>>();
-
-    let denominators = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
-    for i in 0..SIZE {
-        denominator_inverses[i] = one.divide(&denominators[i], builder, driver)?;
-    }
-
-    // Compute each term v_j / (d_j*(x-x_j)) of the sum
-    let result = FieldCT::multiply_many(evals, &denominator_inverses, builder, driver)?
-        .iter()
-        .fold(FieldCT::from(C::ScalarField::zero()), |acc, x| {
-            acc.add(x, builder, driver)
-        });
-
-    // Scale the sum by the value of B(x)
-    Ok(result.multiply(&full_numerator_value, builder, driver)?)
 }

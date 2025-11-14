@@ -7,6 +7,7 @@ use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::barycentric::Barycentric;
 use co_noir_common::utils::Utils;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 use itertools::{Itertools, izip};
@@ -417,6 +418,102 @@ impl<F: PrimeField> FieldCT<F> {
 
         let result = constant_operand
             .into_iter()
+            .chain(variable_operands)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, res)| res)
+            .collect::<Vec<_>>();
+
+        Ok(result)
+    }
+
+    fn multiply_many_raw<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        lhs: &[Self],
+        rhs: &[Self],
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Vec<(Option<(PolyTriple<F>, T::AcvmType)>, Option<Self>)>> {
+        let (constant_operand, variable_operands): (Vec<_>, Vec<_>) = lhs
+            .iter()
+            .zip(rhs.iter())
+            .enumerate()
+            .partition(|(_, (l, r))| l.is_constant() || r.is_constant());
+
+        // These won't create any gates, so we can just process them now.
+        let constant_operand = constant_operand
+            .into_iter()
+            .map(|(i, (l, r))| l.multiply(r, builder, driver).map(|res| (i, res)))
+            .collect::<eyre::Result<Vec<_>>>()?;
+
+        // Both inputs map to circuit varaibles: create a `*` constraint.
+
+        // /**
+        //  * Value of this   = a.v * a.mul + a.add;
+        //  * Value of other  = b.v * b.mul + b.add;
+        //  * Value of result = a * b
+        //  *            = [a.v * b.v] * [a.mul * b.mul] + a.v * [a.mul * b.add] + b.v * [a.add * b.mul] + [a.ac * b.add]
+        //  *            = [a.v * b.v] * [     q_m     ] + a.v * [     q_l     ] + b.v * [     q_r     ] + [    q_c     ]
+        //  *            ^               ^Notice the add/mul_constants form selectors when a gate is created.
+        //  *            |                Only the witnesses (pointed-to by the witness_indexes) form the wires in/out of
+        //  *            |                the gate.
+        //  *            ^This entire value is pushed to ctx->variables as a new witness. The
+        //  *             implied additive & multiplicative constants of the new witness are 0 & 1 resp.
+        //  * Left wire value: a.v
+        //  * Right wire value: b.v
+        //  * Output wire value: result.v (with q_o = -1)
+        //  */
+        let variables = variable_operands
+            .iter()
+            .map(|(_, (l, r))| {
+                (
+                    builder.get_variable(l.witness_index as usize),
+                    builder.get_variable(r.witness_index as usize),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let (left_vals, right_vals) = variables
+            .clone()
+            .into_iter()
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+
+        let point_wise_products = driver.mul_many(&left_vals, &right_vals)?;
+
+        let variable_operands = izip!(variable_operands, variables, point_wise_products)
+            .map(|((i, (l, r)), (l_var, r_var), p)| {
+                let q_c = l.additive_constant * r.additive_constant;
+                let q_r = l.additive_constant * r.multiplicative_constant;
+                let q_l = l.multiplicative_constant * r.additive_constant;
+                let q_m = l.multiplicative_constant * r.multiplicative_constant;
+
+                let mut out = driver.mul_with_public(q_m, p);
+
+                let t0 = driver.mul_with_public(q_l, l_var);
+                driver.add_assign(&mut out, t0);
+
+                let t0 = driver.mul_with_public(q_r, r_var);
+                driver.add_assign(&mut out, t0);
+                driver.add_assign_with_public(q_c, &mut out);
+
+                let poly_triple = PolyTriple {
+                    a: l.witness_index,
+                    b: r.witness_index,
+                    c: 0, // Placeholder, as we don't create the variable in this function
+                    q_m,
+                    q_l,
+                    q_r,
+                    q_o: -P::ScalarField::one(),
+                    q_c,
+                };
+                (i, (Some((poly_triple, out)), None))
+            })
+            .collect::<Vec<_>>();
+
+        let result = constant_operand
+            .into_iter()
+            .map(|(i, res)| (i, (None, Some(res))))
             .chain(variable_operands)
             .sorted_by_key(|(i, _)| *i)
             .map(|(_, res)| res)
@@ -1795,6 +1892,82 @@ impl<F: PrimeField> FieldCT<F> {
         lo_diff.create_range_constraint(lo_bits, builder, driver)?;
 
         Ok(())
+    }
+
+    pub fn evaluate_with_domain_start<
+        const SIZE: usize,
+        C: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        evals: &[Self; SIZE],
+        u: &Self,
+        domain_start: usize,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<FieldCT<C::ScalarField>> {
+        let one = Self::from(C::ScalarField::one());
+        let mut full_numerator_value = one.clone();
+        for i in domain_start..SIZE + domain_start {
+            let coeff = Self::from(C::ScalarField::from(i as u64));
+            let tmp = u.sub(&coeff, builder, driver);
+            full_numerator_value = full_numerator_value.multiply(&tmp, builder, driver)?;
+        }
+
+        let big_domain = (domain_start..domain_start + SIZE)
+            .map(|i| C::ScalarField::from(i as u64))
+            .collect::<Vec<_>>();
+        let lagrange_denominators = Barycentric::construct_lagrange_denominators(SIZE, &big_domain);
+
+        let mut denominator_inverses = vec![FieldCT::default(); SIZE];
+
+        let lhs = (0..SIZE)
+            .map(|i| FieldCT::from(lagrange_denominators[i]))
+            .collect::<Vec<_>>();
+
+        // Fine to do these sequentially since big_domain is constant
+        let rhs = (0..SIZE)
+            .map(|i| u.sub(&big_domain[i].into(), builder, driver))
+            .collect::<Vec<_>>();
+
+        let mut denominator_data = FieldCT::multiply_many_raw(&lhs, &rhs, builder, driver)?;
+        for i in 0..SIZE {
+            let denominator = match &mut denominator_data[i] {
+                (Some((poly_triple, val)), None) => {
+                    // Both lhs and rhs are non-constant, add the variable to the circuit
+                    let mut result = FieldCT::default();
+                    result.witness_index = builder.add_variable(val.to_owned());
+                    poly_triple.c = result.witness_index;
+                    builder.create_poly_gate(poly_triple);
+                    result
+                }
+                (None, Some(val)) => val.to_owned(),
+                _ => unreachable!(),
+            };
+            denominator_inverses[i] = one.divide(&denominator, builder, driver)?;
+        }
+
+        // Compute each term v_j / (d_j*(x-x_j)) of the sum
+        let mut terms_data =
+            Self::multiply_many_raw(evals, &denominator_inverses, builder, driver)?;
+        let mut result = FieldCT::from(F::zero());
+        for i in 0..SIZE {
+            let term = match &mut terms_data[i] {
+                (Some((poly_triple, val)), None) => {
+                    // Both evals and denominator_inverses are non-constant, add the variable to the circuit
+                    let mut result = FieldCT::default();
+                    result.witness_index = builder.add_variable(val.to_owned());
+                    poly_triple.c = result.witness_index;
+                    builder.create_poly_gate(poly_triple);
+                    result
+                }
+                (None, Some(val)) => val.to_owned(),
+                _ => unreachable!(),
+            };
+            result = result.add(&term, builder, driver);
+        }
+
+        // Scale the sum by the value of B(x)
+        Ok(result.multiply(&full_numerator_value, builder, driver)?)
     }
 }
 
