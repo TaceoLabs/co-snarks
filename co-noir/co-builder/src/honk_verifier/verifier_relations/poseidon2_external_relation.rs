@@ -39,18 +39,18 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2ExternalRelatio
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let w_l = input.witness.w_l().to_owned();
-        let w_r = input.witness.w_r().to_owned();
-        let w_o = input.witness.w_o().to_owned();
+        let w_1 = input.witness.w_l().to_owned();
+        let w_2 = input.witness.w_r().to_owned();
+        let w_3 = input.witness.w_o().to_owned();
         let w_4 = input.witness.w_4().to_owned();
-        let w_l_shift = input.shifted_witness.w_l().to_owned();
-        let w_r_shift = input.shifted_witness.w_r().to_owned();
-        let w_o_shift = input.shifted_witness.w_o().to_owned();
+        let w_1_shift = input.shifted_witness.w_l().to_owned();
+        let w_2_shift = input.shifted_witness.w_r().to_owned();
+        let w_3_shift = input.shifted_witness.w_o().to_owned();
         let w_4_shift = input.shifted_witness.w_4().to_owned();
-        let q_l = input.precomputed.q_l().to_owned();
-        let q_r = input.precomputed.q_r().to_owned();
-        let q_o = input.precomputed.q_o().to_owned();
-        let q_4 = input.precomputed.q_4().to_owned();
+        let c_1 = input.precomputed.q_l().to_owned();
+        let c_2 = input.precomputed.q_r().to_owned();
+        let c_3 = input.precomputed.q_o().to_owned();
+        let c_4 = input.precomputed.q_4().to_owned();
         let q_poseidon2_external = input.precomputed.q_poseidon2_external().to_owned();
 
         let sbox = |x: &FieldCT<C::ScalarField>,
@@ -65,10 +65,10 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2ExternalRelatio
 
         // add round constants which are loaded in selectors
         // TACEO TODO: Batch somehow
-        let u1 = sbox(&q_l.add(&w_l, builder, driver), builder, driver)?;
-        let u2 = sbox(&q_r.add(&w_r, builder, driver), builder, driver)?;
-        let u3 = sbox(&q_o.add(&w_o, builder, driver), builder, driver)?;
-        let u4 = sbox(&q_4.add(&w_4, builder, driver), builder, driver)?;
+        let u1 = sbox(&c_1.add(&w_1, builder, driver), builder, driver)?;
+        let u2 = sbox(&c_2.add(&w_2, builder, driver), builder, driver)?;
+        let u3 = sbox(&c_3.add(&w_3, builder, driver), builder, driver)?;
+        let u4 = sbox(&c_4.add(&w_4, builder, driver), builder, driver)?;
 
         // matrix mul v = M_E * u with 14 additions
         let t0 = u1.add(&u2, builder, driver); // u_1 + u_2
@@ -87,18 +87,17 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2ExternalRelatio
 
         let q_pos_by_scaling = q_poseidon2_external.multiply(scaling_factor, builder, driver)?;
         let tmp =
-            q_pos_by_scaling.multiply(&v1.sub(&w_l_shift, builder, driver), builder, driver)?;
-
+            q_pos_by_scaling.multiply(&v1.sub(&w_1_shift, builder, driver), builder, driver)?;
         accumulator.r0.add_assign(&tmp, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
         let tmp =
-            q_pos_by_scaling.multiply(&v2.sub(&w_r_shift, builder, driver), builder, driver)?;
+            q_pos_by_scaling.multiply(&v2.sub(&w_2_shift, builder, driver), builder, driver)?;
         accumulator.r1.add_assign(&tmp, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
         let tmp =
-            q_pos_by_scaling.multiply(&v3.sub(&w_o_shift, builder, driver), builder, driver)?;
+            q_pos_by_scaling.multiply(&v3.sub(&w_3_shift, builder, driver), builder, driver)?;
         accumulator.r2.add_assign(&tmp, builder, driver);
 
         //////////////////////////////////////////////////////////////////////

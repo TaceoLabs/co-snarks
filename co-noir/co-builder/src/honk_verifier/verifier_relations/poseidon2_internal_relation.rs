@@ -40,19 +40,19 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let w_l = input.witness.w_l().to_owned();
-        let w_r = input.witness.w_r().to_owned();
-        let w_o = input.witness.w_o().to_owned();
+        let w_1 = input.witness.w_l().to_owned();
+        let w_2 = input.witness.w_r().to_owned();
+        let w_3 = input.witness.w_o().to_owned();
         let w_4 = input.witness.w_4().to_owned();
-        let w_l_shift = input.shifted_witness.w_l().to_owned();
-        let w_r_shift = input.shifted_witness.w_r().to_owned();
-        let w_o_shift = input.shifted_witness.w_o().to_owned();
+        let w_1_shift = input.shifted_witness.w_l().to_owned();
+        let w_2_shift = input.shifted_witness.w_r().to_owned();
+        let w_3_shift = input.shifted_witness.w_o().to_owned();
         let w_4_shift = input.shifted_witness.w_4().to_owned();
-        let q_l = input.precomputed.q_l().to_owned();
+        let c_0_int = input.precomputed.q_l().to_owned();
         let q_poseidon2_internal = input.precomputed.q_poseidon2_internal().to_owned();
 
         // add round constants
-        let s1 = w_l.add(&q_l, builder, driver);
+        let s1 = w_1.add(&c_0_int, builder, driver);
 
         // apply s-box round
         // 0xThemis TODO again can we do something better for x^5?
@@ -62,7 +62,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
 
         let q_pos_by_scaling = q_poseidon2_internal.multiply(scaling_factor, builder, driver)?;
 
-        let partial_sum = w_r.add(&w_o, builder, driver).add(&w_4, builder, driver);
+        let partial_sum = w_2.add(&w_3, builder, driver).add(&w_4, builder, driver);
         let scaled_u1 = u1.multiply(&q_pos_by_scaling, builder, driver)?;
 
         // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
@@ -80,7 +80,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
         )));
 
         let mut barycentric_term = scaled_u1.multiply(&internal_matrix_diag_0, builder, driver)?;
-        let monomial_term = partial_sum.sub(&w_l_shift, builder, driver);
+        let monomial_term = partial_sum.sub(&w_1_shift, builder, driver);
         barycentric_term.add_assign(
             &monomial_term.multiply(&q_pos_by_scaling, builder, driver)?,
             builder,
@@ -91,10 +91,10 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
             .add_assign(&barycentric_term, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
-        let v2_m = w_r
+        let v2_m = w_2
             .multiply(&internal_matrix_diag_1, builder, driver)?
             .add(&partial_sum, builder, driver)
-            .sub(&w_r_shift, builder, driver);
+            .sub(&w_2_shift, builder, driver);
         let barycentric_term = v2_m
             .multiply(&q_pos_by_scaling, builder, driver)?
             .add(&scaled_u1, builder, driver);
@@ -103,10 +103,10 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
             .add_assign(&barycentric_term, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
-        let v3_m = w_o
+        let v3_m = w_3
             .multiply(&internal_matrix_diag_2, builder, driver)?
             .add(&partial_sum, builder, driver)
-            .sub(&w_o_shift, builder, driver);
+            .sub(&w_3_shift, builder, driver);
         let barycentric_term = v3_m
             .multiply(&q_pos_by_scaling, builder, driver)?
             .add(&scaled_u1, builder, driver);
