@@ -164,7 +164,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         self.is_infinity = is_infinity;
     }
 
-    // TODO CESAR: Should be constant
     pub fn one<P: CurveGroup<ScalarField = F>>() -> Self {
         BigGroup {
             x: BigField::from_constant(&BigUint::one()),
@@ -887,7 +886,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // TODO CESAR: Range constraint
 
         // Validate correctness of NAF
-        // TODO CESAR: Fr is composite?
         let mut accumulators = Vec::with_capacity(num_rounds + 1);
         let minus_two = FieldCT::from(F::from(2u64));
         let one = FieldCT::from(F::one());

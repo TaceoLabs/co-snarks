@@ -907,20 +907,24 @@ impl<F: PrimeField> BigField<F> {
             other.assert_equal(self, builder, driver, msg)
         } else {
             // Catch the error if the reduced value of the two elements are not equal
-            let lhs_reduced_value = self.get_value_fq(builder, driver)?;
-            let rhs_reduced_value = other.get_value_fq(builder, driver)?;
+            // let lhs_reduced_value = self.get_value_fq(builder, driver)?;
+            // let rhs_reduced_value = other.get_value_fq(builder, driver)?;
 
-            // TODO CESAR: Do we open the equality check on these two reduced values?
+            // if ((lhs_reduced_value != rhs_reduced_value) && !get_context()->failed()) {
+            //     get_context()->failure(msg);
+            // }
 
             // Remove tags, we don't want to cause violations on assert_equal
             // (Tags are not implemented in Rust version, so we skip this.)
 
             let diff = self.clone().sub(&mut other.clone(), builder, driver)?;
             let diff_val = diff.get_limb_values(builder, driver)?;
-            let modulus = modulus_u512.clone();
+            // let modulus = modulus_u512.clone();
 
-            let (quotient_value, remainder_value) = driver.div_mod_acvm_limbs::<P>(&diff_val)?;
-            // TODO CESAR: How do we check whether the remainder is zero?
+            let (quotient_value, _) = driver.div_mod_acvm_limbs::<P>(&diff_val)?;
+            // if (remainder_512 != 0) {
+            //     std::cerr << "bigfield: remainder not zero!" << std::endl;
+            // }
 
             let num_quotient_bits = BigField::<F>::get_quotient_max_bits(&[BigUint::zero()]);
 
@@ -994,7 +998,6 @@ impl<F: PrimeField> BigField<F> {
         );
         let mut diff = base_diff.clone();
 
-        // TODO CESAR: Is this even correct?
         let modulus: BigUint = Fq::MODULUS.into();
         let prime_basis = FieldCT::from(F::from(modulus));
         let mut prime_basis_accumulator = prime_basis.clone();
@@ -1381,6 +1384,60 @@ impl<F: PrimeField> BigField<F> {
         result.prime_basis_limb =
             self.prime_basis_limb
                 .add(&other.prime_basis_limb, builder, driver);
+        Ok(result)
+    }
+
+    /// Adds three BigField elements together: self + add_a + add_b.
+    /// This is more efficient than chaining .add() calls, as it can batch constraints.
+    fn add_two<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        &mut self,
+        add_a: &mut BigField<F>,
+        add_b: &mut BigField<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BigField<F>> {
+        self.reduction_check(builder, driver)?;
+        add_a.reduction_check(builder, driver)?;
+        add_b.reduction_check(builder, driver)?;
+
+        if self.is_constant() && add_a.is_constant() && add_b.is_constant() {
+            let (lhs, mid, rhs) = (
+                self.get_value_fq(builder, driver)?,
+                add_a.get_value_fq(builder, driver)?,
+                add_b.get_value_fq(builder, driver)?,
+            );
+            let result_value = driver.add_other_acvm_types(lhs, mid);
+            let result_value = driver.add_other_acvm_types(result_value, rhs);
+            return Ok(BigField::from_constant(
+                &T::get_public_other_acvm_type(&result_value)
+                    .expect("Constants are public")
+                    .into_bigint()
+                    .into(),
+            ));
+        }
+
+        let mut result = BigField::default();
+        for i in 0..NUM_LIMBS {
+            result.binary_basis_limbs[i].maximum_value = &self.binary_basis_limbs[i].maximum_value
+                + &add_a.binary_basis_limbs[i].maximum_value
+                + &add_b.binary_basis_limbs[i].maximum_value;
+
+            result.binary_basis_limbs[i].element = self.binary_basis_limbs[i].element.add_two(
+                &add_a.binary_basis_limbs[i].element,
+                &add_b.binary_basis_limbs[i].element,
+                builder,
+                driver,
+            );
+        }
+        result.prime_basis_limb = self.prime_basis_limb.add_two(
+            &add_a.prime_basis_limb,
+            &add_b.prime_basis_limb,
+            builder,
+            driver,
+        );
         Ok(result)
     }
 
@@ -2319,14 +2376,8 @@ impl<F: PrimeField> BigField<F> {
         Ok(remainder)
     }
 
-    /**
-     * @brief Create constraints for summing these terms
-     *
-     * @tparam Builder
-     * @tparam T
-     * @param terms
-     * @return The sum of terms
-     */
+    /// Sums a slice of BigField elements efficiently.
+    /// Uses add_two for batching constraints.
     pub(crate) fn sum<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
         T: NoirWitnessExtensionProtocol<F>,
@@ -2334,26 +2385,36 @@ impl<F: PrimeField> BigField<F> {
         terms: &mut [Self],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> eyre::Result<BigField<F>> {
-        assert!(terms.len() > 0);
+    ) -> eyre::Result<Self> {
+        debug_assert!(!terms.is_empty(), "terms must not be empty");
 
-        // TODO CESAR: Implement using add_two
-        let mut acc = terms[0].clone();
-        for i in 1..terms.len() {
-            acc = acc.add(&mut terms[i], builder, driver)?;
+        if terms.len() == 1 {
+            return Ok(terms[0].clone());
         }
 
+        let mut acc = terms[0].clone();
+        let mut i = 1;
+        while i + 1 < terms.len() {
+            acc = acc.add_two(
+                &mut terms[i].clone(),
+                &mut terms[i + 1].clone(),
+                builder,
+                driver,
+            )?;
+            i += 2;
+        }
+        if terms.len() % 2 == 0 {
+            acc = acc.add(&mut terms[terms.len() - 1].clone(), builder, driver)?;
+        }
         Ok(acc)
     }
 
-    /**
-     * Compute a * b + ...to_add = c mod p
-     *
-     * @param to_mul Bigfield element to multiply by
-     * @param to_add Vector of elements to add
-     *
-     * @return New bigfield elment c
-     **/
+    // Compute a * b + ...to_add = c mod p
+    //
+    // to_mul: Bigfield element to multiply by
+    // to_add: Vector of elements to add
+    //
+    // Returns: New bigfield element c
     pub(crate) fn madd<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
         T: NoirWitnessExtensionProtocol<F>,
@@ -2422,24 +2483,22 @@ impl<F: PrimeField> BigField<F> {
         Ok(remainder)
     }
 
-    /**
-     * multiply, subtract, divide.
-     * This method computes:
-     *
-     * result = -(\sum{mul_left[i] * mul_right[i]} + ...to_add) / divisor
-     *
-     * Algorithm is constructed in this way to ensure that all computed terms are positive
-     *
-     * i.e. we evaluate:
-     * result * divisor + (\sum{mul_left[i] * mul_right[i]) + ...to_add) = 0
-     *
-     * It is critical that ALL the terms on the LHS are positive to eliminate the possiblity of underflows
-     * when calling `evaluate_multiple_multiply_add`
-     *
-     * only requires one quotient and remainder + overflow limbs
-     *
-     * We proxy this to mult_madd, so it only requires one quotient and remainder + overflow limbs
-     **/
+    // multiply, subtract, divide.
+    // This method computes:
+    //
+    // result = -(\sum{mul_left[i] * mul_right[i]} + ...to_add) / divisor
+    //
+    // Algorithm is constructed in this way to ensure that all computed terms are positive
+    //
+    // i.e. we evaluate:
+    // result * divisor + (\sum{mul_left[i] * mul_right[i]) + ...to_add) = 0
+    //
+    // It is critical that ALL the terms on the LHS are positive to eliminate the possiblity of underflows
+    // when calling `evaluate_multiple_multiply_add`
+    //
+    // only requires one quotient and remainder + overflow limbs
+    //
+    // We proxy this to mult_madd, so it only requires one quotient and remainder + overflow limbs
     pub(crate) fn msub_div<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
         T: NoirWitnessExtensionProtocol<F>,
@@ -2527,15 +2586,13 @@ impl<F: PrimeField> BigField<F> {
         Ok(result)
     }
 
-    /**
-     * Evaluate the sum of products and additional values safely.
-     *
-     * @param mul_left Vector of bigfield multiplicands
-     * @param mul_right Vector of bigfield multipliers
-     * @param to_add Vector of bigfield elements to add to the sum of products
-     *
-     * @return A reduced value that is the sum of all products and to_add values
-     * */
+    // Evaluate the sum of products and additional values safely.
+    //
+    // mul_left: Vector of bigfield multiplicands
+    // mul_right: Vector of bigfield multipliers
+    // to_add: Vector of bigfield elements to add to the sum of products
+    //
+    // Returns: A reduced value that is the sum of all products and to_add values
     pub(crate) fn mult_madd<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
         T: NoirWitnessExtensionProtocol<F>,
@@ -2706,17 +2763,8 @@ impl<F: PrimeField> BigField<F> {
         Ok(remainder)
     }
 
-    /**
-     * @brief Performs individual reductions on the supplied elements as well as more complex reductions to prevent CRT
-     * modulus overflow and to fit the quotient inside the range proof
-     *
-     *
-     * @tparam Builder builder
-     * @tparam T basefield
-     * @param mul_left
-     * @param mul_right
-     * @param to_add
-     */
+    // Performs individual reductions on the supplied elements as well as more complex reductions
+    // to prevent CRT modulus overflow and to fit the quotient inside the range proof.
     fn perform_reductions_for_mult_madd<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
         T: NoirWitnessExtensionProtocol<F>,
