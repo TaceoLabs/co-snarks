@@ -238,19 +238,8 @@ where
         builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<C::ScalarField>; 2]> {
-        // use existing field-splitting code in cycle_scalar
-        let scalar = CycleScalarCT::from_field_ct(challenge, builder, driver)?;
-        scalar.lo.create_range_constraint::<C, WT>(
-            CycleScalarCT::<C::ScalarField>::LO_BITS,
-            builder,
-            driver,
-        )?;
-        scalar.hi.create_range_constraint(
-            CycleScalarCT::<C::ScalarField>::HI_BITS,
-            builder,
-            driver,
-        )?;
-        Ok([scalar.lo, scalar.hi])
+        let lo = CycleScalarCT::<C::ScalarField>::MAX_BITS_PER_ENDOMORPHISM_SCALAR;
+        challenge.split_unique(lo, builder, driver)
     }
 
     fn get_next_duplex_challenge_buffer<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(

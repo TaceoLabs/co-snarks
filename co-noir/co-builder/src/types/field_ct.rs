@@ -7,6 +7,7 @@ use ark_ec::{AffineRepr, CurveConfig, CurveGroup, PrimeGroup};
 use ark_ff::PrimeField;
 use ark_ff::{One, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::utils::Utils;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 use itertools::{Itertools, izip};
 use num_bigint::BigUint;
@@ -1663,6 +1664,137 @@ impl<F: PrimeField> FieldCT<F> {
             false, // use_next_gate_w_4 = false
         );
         Ok(total.normalize(builder, driver))
+    }
+
+    pub(crate) fn split_unique<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        lo_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<[FieldCT<F>; 2]> {
+        let max_bits = F::MODULUS_BIT_SIZE as usize;
+        assert!(lo_bits < max_bits);
+        let value = self.get_value(builder, driver);
+        // If `self` is constant, decompose natively and return constants.
+        if self.is_constant() {
+            let value: BigUint = T::get_public(&value)
+                .expect("Already checked it is public")
+                .into();
+            let lo_val = Utils::slice_u256(&value, 0, lo_bits as u64);
+            let hi_val = Utils::slice_u256(&value, lo_bits as u64, max_bits as u64);
+
+            let lo_ct = FieldCT::from(F::from(lo_val));
+            let hi_ct = FieldCT::from(F::from(hi_val));
+            return Ok([lo_ct, hi_ct]);
+        }
+
+        let (lo_val, hi_val) = if T::is_shared(&value) {
+            let value = T::get_shared(&value).expect("Already checked it is shared");
+            let [lo, _, hi] = driver.slice(value, (max_bits - 1) as u8, lo_bits as u8, max_bits)?;
+            //TODO FLORIN / TODO CESAR Is the slicing still correct?
+            (T::AcvmType::from(hi), T::AcvmType::from(lo))
+        } else {
+            let value: BigUint = T::get_public(&value)
+                .expect("Already checked it is public")
+                .into();
+            let lo_val = Utils::slice_u256(&value, 0, lo_bits as u64);
+            let hi_val = Utils::slice_u256(&value, lo_bits as u64, max_bits as u64);
+
+            (
+                T::AcvmType::from(F::from(lo_val)),
+                T::AcvmType::from(F::from(hi_val)),
+            )
+        };
+        // Create hi/lo witnesses
+        let lo = FieldCT::from_witness(lo_val, builder);
+        let hi = FieldCT::from_witness(hi_val, builder);
+
+        // Component 1: Reconstruction constraint lo + hi * 2^lo_bits - field == 0
+        let shift = BigUint::from(1u64) << lo_bits;
+        let zero = FieldCT::from_witness_index(builder.zero_idx);
+        Self::evaluate_linear_identity(
+            &lo,
+            &hi.multiply(&FieldCT::from(F::from(shift)), builder, driver)?,
+            &self.neg(),
+            &zero,
+            builder,
+            driver,
+        );
+
+        // Component 2: Field validation against bn254 scalar field modulus
+        Self::validate_split_in_field(&lo, &hi, lo_bits, &F::MODULUS.into(), builder, driver)?;
+
+        // Component 3: Range constraints (unless skipped)
+        lo.create_range_constraint(lo_bits, builder, driver)?;
+        hi.create_range_constraint(254 - lo_bits, builder, driver)?;
+
+        Ok([lo, hi])
+    }
+
+    pub(crate) fn validate_split_in_field<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        lo: &FieldCT<F>,
+        hi: &FieldCT<F>,
+        lo_bits: usize,
+        field_modulus: &BigUint,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        assert!(lo_bits < F::MODULUS_BIT_SIZE as usize);
+        let modulus_bits = field_modulus.bits() as usize;
+        let hi_bits = modulus_bits - lo_bits;
+
+        // Split the field modulus at the same position
+        let r_lo = Utils::slice_u256(field_modulus, 0, lo_bits as u64);
+        let r_hi = Utils::slice_u256(field_modulus, lo_bits as u64, modulus_bits as u64);
+
+        // Check if we need to borrow
+        let lo_value = lo.get_value(builder, driver);
+        let borrow = if lo.is_constant() {
+            let lo_value: BigUint = T::get_public(&lo_value)
+                .expect("Constants are public")
+                .into();
+            let need_borrow = lo_value > r_lo;
+            FieldCT::from(F::from(need_borrow as u64))
+        } else {
+            let need_borrow = if T::is_shared(&lo_value) {
+                driver.gt(lo_value.to_owned(), F::from(r_lo.clone()).into())?
+            } else {
+                let lo_big: BigUint = T::get_public(&lo_value)
+                    .expect("Already checked it is public")
+                    .into();
+                F::from((lo_big > r_lo) as u64).into()
+            };
+            FieldCT::from_witness(need_borrow, builder)
+        };
+
+        // directly call `create_new_range_constraint` to avoid creating an arithmetic gate
+        if !lo.is_constant() {
+            let idx = borrow.get_witness_index(builder, driver);
+            builder.create_new_range_constraint(idx, 1);
+        }
+
+        // Hi range check = r_hi - hi - borrow
+        // Lo range check = r_lo - lo + borrow * 2^lo_bits
+        let hi_diff = hi
+            .neg()
+            .add(&FieldCT::from(F::from(r_hi.clone())), builder, driver)
+            .sub(&borrow, builder, driver);
+        let shift = FieldCT::from(F::from(BigUint::one() << lo_bits));
+        let lo_diff = lo
+            .neg()
+            .add(&FieldCT::from(F::from(r_lo.clone())), builder, driver)
+            .add(&borrow.multiply(&shift, builder, driver)?, builder, driver);
+
+        hi_diff.create_range_constraint(hi_bits, builder, driver)?;
+        lo_diff.create_range_constraint(lo_bits, builder, driver)?;
+
+        Ok(())
     }
 }
 
@@ -3540,7 +3672,7 @@ impl<F: PrimeField> CycleScalarCT<F> {
     const NUM_BITS: usize = F::MODULUS_BIT_SIZE as usize;
     const SKIP_PRIMALITY_TEST: bool = false;
     const USE_BN254_SCALAR_FIELD_FOR_PRIMALITY_TEST: bool = false;
-    const MAX_BITS_PER_ENDOMORPHISM_SCALAR: usize = 128;
+    pub(crate) const MAX_BITS_PER_ENDOMORPHISM_SCALAR: usize = 128;
     pub(crate) const LO_BITS: usize = Self::MAX_BITS_PER_ENDOMORPHISM_SCALAR;
     pub(crate) const HI_BITS: usize = Self::NUM_BITS - Self::LO_BITS;
 
