@@ -902,18 +902,14 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             accumulators.push(entry);
         }
 
-        let minus_one = FieldCT::from_witness((-F::from(1)).into(), builder);
+        let minus_one = FieldCT::from(-F::one());
         accumulators.push(
             naf_entries[num_rounds]
                 .to_field_ct(driver)
                 .multiply(&minus_one, builder, driver)?,
         );
 
-        // TODO CESAR: FieldCT::accumulate
-        let mut total = FieldCT::from_witness(F::ZERO.into(), builder);
-        for acc in accumulators.iter() {
-            total = total.add(acc, builder, driver);
-        }
+        let total = FieldCT::accumulate(&mut accumulators, builder, driver)?;
         scalar.assert_equal(&total, builder, driver);
 
         // TACEO TODO: Origin tags?
@@ -1423,7 +1419,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
             let updated_scalar = FieldCT::conditional_assign(
                 is_infinity,
-                &FieldCT::from_witness(F::ZERO.into(), builder),
+                &FieldCT::from(F::ZERO),
                 &scalar,
                 builder,
                 driver,
