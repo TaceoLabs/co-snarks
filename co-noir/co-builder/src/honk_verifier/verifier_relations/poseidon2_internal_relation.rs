@@ -3,6 +3,7 @@ use crate::honk_verifier::verifier_relations::VerifyAccGetter;
 use crate::impl_relation_evals;
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::types::field_ct::FieldCT;
+use ark_ff::One;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::polynomials::entities::AllEntities;
@@ -78,8 +79,10 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
         let internal_matrix_diag_3 = FieldCT::from(C::ScalarField::from(BigUint::from(
             POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
         )));
+        let d1_plus_1 =
+            FieldCT::from(C::ScalarField::one()).add(&internal_matrix_diag_0, builder, driver);
 
-        let mut barycentric_term = scaled_u1.multiply(&internal_matrix_diag_0, builder, driver)?;
+        let mut barycentric_term = scaled_u1.multiply(&d1_plus_1, builder, driver)?;
         let monomial_term = partial_sum.sub(&w_1_shift, builder, driver);
         barycentric_term.add_assign(
             &monomial_term.multiply(&q_pos_by_scaling, builder, driver)?,

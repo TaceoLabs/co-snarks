@@ -71,7 +71,14 @@ pub(crate) trait VerifyAccGetter<C: HonkCurve<TranscriptFieldType>> {
         driver: &mut T,
     ) -> HonkProofResult<()> {
         for (entry, challenge) in self.get_accumulators().iter().zip(challenges) {
-            *result = entry.madd(challenge, result, builder, driver)?;
+            if challenge.is_constant()
+                && challenge.get_value(builder, driver) == C::ScalarField::ONE.into()
+            {
+                *result = entry.clone();
+                continue;
+            }
+            let tmp = entry.multiply(challenge, builder, driver)?;
+            result.add_assign(&tmp, builder, driver);
         }
         Ok(())
     }
