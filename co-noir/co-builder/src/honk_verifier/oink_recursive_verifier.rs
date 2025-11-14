@@ -1,6 +1,5 @@
 use crate::honk_verifier::recursive_decider_verification_key::RecursiveDeciderVerificationKey;
 use crate::honk_verifier::recursive_decider_verification_key::WitnessCommitments;
-use crate::honk_verifier::verifier_relations::NUM_SUBRELATIONS;
 use crate::{
     prelude::GenericUltraCircuitBuilder,
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
@@ -118,13 +117,7 @@ impl OinkRecursiveVerifier {
         *commitments.z_perm_mut() =
             transcript.receive_point_from_prover("Z_PERM".to_owned(), builder, driver)?;
 
-        let mut alphas = Vec::with_capacity(NUM_SUBRELATIONS - 1);
         let alpha = transcript.get_challenge("alpha".to_string(), builder, driver)?;
-        alphas.push(alpha);
-        for i in 1..(NUM_SUBRELATIONS - 1) {
-            let next_alpha = alphas[i - 1].multiply(&alphas[0], builder, driver)?;
-            alphas.push(next_alpha);
-        }
 
         verification_key.relation_parameters = RelationParameters {
             beta,
@@ -135,7 +128,7 @@ impl OinkRecursiveVerifier {
             public_input_delta,
         };
         verification_key.witness_commitments = commitments;
-        verification_key.alphas = alphas.try_into().expect("Should fit into NUM_ALPHAS");
+        verification_key.alphas[0] = alpha;
         verification_key.public_inputs = public_inputs;
         Ok(())
     }

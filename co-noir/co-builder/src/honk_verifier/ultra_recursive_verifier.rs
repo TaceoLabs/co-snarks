@@ -8,6 +8,7 @@ use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{constants::CONST_PROOF_SIZE_LOG_N, honk_curve::HonkCurve};
 
 use crate::honk_verifier::padding_indicator_array::padding_indicator_array;
+use crate::honk_verifier::verifier_relations::NUM_SUBRELATIONS;
 use crate::types::types::PairingPoints;
 use crate::{
     honk_verifier::{
@@ -64,6 +65,11 @@ impl UltraRecursiveVerifier {
         // Receive commitments to Libra masking polynomials
         let mut libra_commitments: [BigGroup<C::ScalarField, T>; NUM_LIBRA_COMMITMENTS] =
             array::from_fn(|_| BigGroup::<C::ScalarField, T>::default());
+
+        for i in 1..(NUM_SUBRELATIONS - 1) {
+            let next_alpha = key.alphas[i - 1].multiply(&key.alphas[0], builder, driver)?;
+            key.alphas[i] = next_alpha;
+        }
 
         if has_zk == ZeroKnowledge::Yes {
             libra_commitments[0] = transcript.receive_point_from_prover(
