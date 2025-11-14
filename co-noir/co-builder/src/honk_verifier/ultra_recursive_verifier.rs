@@ -3,7 +3,9 @@ use std::array;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 
 use ark_ff::Field;
-use co_noir_common::constants::NUM_LIBRA_COMMITMENTS;
+use co_noir_common::constants::{
+    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, NUM_LIBRA_COMMITMENTS,
+};
 use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{constants::CONST_PROOF_SIZE_LOG_N, honk_curve::HonkCurve};
 
@@ -79,17 +81,31 @@ impl UltraRecursiveVerifier {
             )?;
         }
 
-        let sumcheck_output = SumcheckVerifier::verify::<C, T, H>(
-            &mut transcript,
-            &mut key.target_sum,
-            &key.relation_parameters,
-            &key.alphas,
-            &key.gate_challenges,
-            &padding_indicator_array,
-            builder,
-            has_zk,
-            driver,
-        )?;
+        let sumcheck_output = if has_zk == ZeroKnowledge::Yes {
+            SumcheckVerifier::verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK, C, T, H>(
+                &mut transcript,
+                &mut key.target_sum,
+                &key.relation_parameters,
+                &key.alphas,
+                &key.gate_challenges,
+                &padding_indicator_array,
+                builder,
+                has_zk,
+                driver,
+            )?
+        } else {
+            SumcheckVerifier::verify::<BATCHED_RELATION_PARTIAL_LENGTH, C, T, H>(
+                &mut transcript,
+                &mut key.target_sum,
+                &key.relation_parameters,
+                &key.alphas,
+                &key.gate_challenges,
+                &padding_indicator_array,
+                builder,
+                has_zk,
+                driver,
+            )?
+        };
 
         if has_zk == ZeroKnowledge::Yes {
             libra_commitments[1] = transcript.receive_point_from_prover(

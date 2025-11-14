@@ -32,6 +32,7 @@ pub struct SumcheckVerifier;
 impl SumcheckVerifier {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn verify<
+        const SIZE: usize,
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
@@ -66,10 +67,8 @@ impl SumcheckVerifier {
         // MegaRecursiveFlavor does not have ZK
         let mut multivariate_challenge = Vec::with_capacity(padding_indicator_array.len());
         for (round_idx, padding_indicator) in padding_indicator_array.iter().enumerate() {
-            let round_univariate = transcript.receive_n_from_prover(
-                format!("Sumcheck:univariate_{round_idx}"),
-                BATCHED_RELATION_PARTIAL_LENGTH,
-            )?;
+            let round_univariate = transcript
+                .receive_n_from_prover(format!("Sumcheck:univariate_{round_idx}"), SIZE)?;
 
             let round_challenge =
                 transcript.get_challenge(format!("Sumcheck:u_{round_idx}"), builder, driver)?;
@@ -88,7 +87,7 @@ impl SumcheckVerifier {
             let lhs = one
                 .sub(padding_indicator, builder, driver)
                 .multiply(target_sum, builder, driver)?;
-            let rhs = evaluate_with_domain_start::<{ BATCHED_RELATION_PARTIAL_LENGTH }, _, _>(
+            let rhs = evaluate_with_domain_start::<{ SIZE }, _, _>(
                 &round_univariate.try_into().unwrap(),
                 &round_challenge,
                 0,
