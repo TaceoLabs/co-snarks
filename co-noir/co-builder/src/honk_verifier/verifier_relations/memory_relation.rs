@@ -41,6 +41,8 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
+        //TACEO TODO: Batch the multiplications here
+
         let eta = &relation_parameters.eta_1;
         let eta_two = &relation_parameters.eta_2;
         let eta_three = &relation_parameters.eta_3;
@@ -104,17 +106,13 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
          * Here, informally, w4 is the "record" (a.k.a. fingerprint) of the access gate.
          */
 
-        // memory_record_check and partial_record_check_m have either deg 1 or 2 (the latter refers to the
-        // functional univariate degree when we use PG as opposed to sumcheck.)
-        let tmp1 = w_2.to_owned().multiply(eta_two, builder, driver)?;
-        let tmp2 = w_1.to_owned().multiply(eta, builder, driver)?;
-        let partial_record_check = w_3
-            .to_owned()
-            .multiply(eta_three, builder, driver)?
-            .add(&tmp1, builder, driver)
-            .add(&tmp2, builder, driver)
+        let mut memory_record_check_m = w_3.multiply(eta_three, builder, driver)?; // degree 1
+        memory_record_check_m = memory_record_check_m
+            .add(&w_2.multiply(eta_two, builder, driver)?, builder, driver)
+            .add(&w_1.multiply(eta, builder, driver)?, builder, driver)
             .add(q_c, builder, driver);
-        let memory_record_check = partial_record_check.sub(w_4, builder, driver);
+        let partial_record_check = memory_record_check_m.clone(); // degree 1. used later in RAM consistency check
+        let memory_record_check = memory_record_check_m.sub(w_4, builder, driver);
 
         /*
          * ROM Consistency Check
@@ -138,16 +136,36 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
         let index_delta_is_zero = neg_index_delta.add(&one, builder, driver);
         let record_delta = w_4_shift.to_owned().sub(w_4, builder, driver);
 
+        let neg_index_delta_sqr = neg_index_delta.multiply(&neg_index_delta, builder, driver)?;
+        let index_increases_by_zero_or_one =
+            neg_index_delta_sqr.add(&neg_index_delta, builder, driver); // check if next index minus current index is
+        // boolean. applies to both ROM and RAM. deg 2
+
+        let adjacent_values_match_if_adjacent_indices_match =
+            index_delta_is_zero.multiply(&record_delta, builder, driver)?;
+
         let q_memory_by_scaling = q_memory
             .to_owned()
             .multiply(scaling_factor, builder, driver)?;
 
-        let q_one_by_two = q_1.to_owned().multiply(q_2, builder, driver)?;
+        let q_one_by_two = q_1.multiply(q_2, builder, driver)?;
         let q_one_by_two_by_memory_by_scaling =
             q_one_by_two.multiply(&q_memory_by_scaling, builder, driver)?;
-        let q_3_by_memory_by_scaling =
-            q_3.to_owned()
-                .multiply(&q_memory_by_scaling, builder, driver)?;
+        // witnesses that for consecutive ROM gates, values match if indices match.
+        let tmp = adjacent_values_match_if_adjacent_indices_match.multiply(
+            &q_one_by_two_by_memory_by_scaling,
+            builder,
+            driver,
+        )?;
+        accumulator.r1 = accumulator.r1.add(&tmp, builder, driver);
+        // witnesses that index increases by {0, 1} for sorted ROM gates.
+        let tmp = index_increases_by_zero_or_one.multiply(
+            &q_one_by_two_by_memory_by_scaling,
+            builder,
+            driver,
+        )?;
+        accumulator.r2 = accumulator.r2.add(&tmp, builder, driver);
+
         let rom_consistency_check_identity =
             memory_record_check.multiply(&q_one_by_two, builder, driver)?;
 
@@ -171,14 +189,12 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
          */
 
         let neg_access_type = partial_record_check.to_owned().sub(w_4, builder, driver);
+        let neg_access_type_sqr = neg_access_type.multiply(&neg_access_type, builder, driver)?;
+        let access_check = neg_access_type_sqr.add(&neg_access_type, builder, driver);
 
-        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/757): If we sorted in
-        // reverse order we could re-use `partial_record_check`  1 -  (w3' * eta_three + w2' * eta_two + w1' *
-        // eta)
-        let tmp1 = w_2_shift.to_owned().multiply(eta_two, builder, driver)?;
-        let tmp2 = w_1_shift.to_owned().multiply(eta, builder, driver)?;
-        let mut neg_next_gate_access_type =
-            w_3_shift.to_owned().multiply(eta_three, builder, driver)?;
+        let mut neg_next_gate_access_type = w_3_shift.multiply(eta_three, builder, driver)?;
+        let tmp1 = w_2_shift.multiply(eta_two, builder, driver)?;
+        let tmp2 = w_1_shift.multiply(eta, builder, driver)?;
         neg_next_gate_access_type = neg_next_gate_access_type
             .add(&tmp1, builder, driver)
             .add(&tmp2, builder, driver);
@@ -186,98 +202,43 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
             .to_owned()
             .sub(w_4_shift, builder, driver);
         let value_delta = w_3_shift.to_owned().sub(w_3, builder, driver);
-        /*
-         * RAM Timestamp Consistency Check
-         *
-         * | w1 | w2 | w3 | w4 |
-         * | index | timestamp | timestamp_check | -- |
-         *
-         * Let delta_index = index_{i + 1} - index_{i}
-         *
-         * Iff delta_index == 0, timestamp_check = timestamp_{i + 1} - timestamp_i
-         * Else timestamp_check = 0
-         */
-        let timestamp_delta = w_2_shift.to_owned().sub(w_2, builder, driver);
-        let lhs = vec![
-            neg_index_delta.to_owned(),
-            index_delta_is_zero.to_owned(),
-            neg_access_type.to_owned(),
-            index_delta_is_zero.to_owned(),
-            neg_next_gate_access_type.to_owned(),
-            index_delta_is_zero.to_owned(),
-        ];
-        let rhs = vec![
-            neg_index_delta.to_owned(),
-            record_delta.to_owned(),
-            neg_access_type.to_owned(),
-            value_delta.to_owned(),
-            neg_next_gate_access_type.to_owned(),
-            timestamp_delta,
-        ];
-
-        let mul = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
-        let neg_index_delta_sqr = &mul[0];
-        let adjacent_values_match_if_adjacent_indices_match = &mul[1]; // index_delta_is_zero * record_delta 
-        let neg_access_type_sqr = &mul[2];
-        let index_delta_is_zero_by_value_delta = &mul[3];
-        let neg_next_gate_access_type_sqr = &mul[4];
-        let index_delta_is_zero_by_timestamp_delta = &mul[5];
-
-        let access_check = neg_access_type_sqr.add(&neg_access_type, builder, driver);
-
-        let index_is_monotonically_increasing =
-            neg_index_delta_sqr.add(&neg_index_delta, builder, driver); // check if next index minus current index is
-        // 0 or 1. deg 2
-
-        let tmp = adjacent_values_match_if_adjacent_indices_match.multiply(
-            &q_one_by_two_by_memory_by_scaling,
-            builder,
-            driver,
-        )?;
-        accumulator.r1 = accumulator.r1.add(&tmp, builder, driver);
-
-        let tmp = index_is_monotonically_increasing.multiply(
-            &q_one_by_two_by_memory_by_scaling,
-            builder,
-            driver,
-        )?;
-        accumulator.r2 = accumulator.r2.add(&tmp, builder, driver);
-
-        let tmp = index_is_monotonically_increasing.multiply(
-            &q_3_by_memory_by_scaling,
-            builder,
-            driver,
-        )?;
-        accumulator.r4 = accumulator.r4.add(&tmp, builder, driver);
-
-        let ram_timestamp_check_identity =
-            index_delta_is_zero_by_timestamp_delta.sub(w_3, builder, driver);
-
+        let index_delta_is_zero_by_value_delta =
+            index_delta_is_zero.multiply(&value_delta, builder, driver)?;
         let adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation =
             index_delta_is_zero_by_value_delta.multiply(
                 &neg_next_gate_access_type.add(&one, builder, driver),
                 builder,
                 driver,
-            )?; // deg 3 or 4
+            )?;
 
-        // We can't apply the RAM consistency check identity on the final entry in the sorted list (the wires in the
-        // next gate would make the identity fail).  We need to validate that its 'access type' bool is correct. Can't
-        // do  with an arithmetic gate because of the  `eta` factors. We need to check that the *next* gate's access
-        // type is  correct, to cover this edge case
-        // deg 2 or 4
+        // We can't apply the RAM consistency check identity on the final entry in the sorted list: the wires in the
+        // next gate would make the identity fail.  We need to validate that its 'access type' bool is correct. Can't
+        // do with an arithmetic gate because of the  `eta` factors.
+        // Our solution is that we have the final sorted RAM record be unconstrained (i.e., none of the
+        // `MEMORY_SELECTORS` are turned on); then, we may _uniformly_ check that the *next* gate's access type is
+        // correct, to cover this edge case.
+        let neg_next_gate_access_type_sqr =
+            neg_next_gate_access_type.multiply(&neg_next_gate_access_type, builder, driver)?;
         let next_gate_access_type_is_boolean = neg_next_gate_access_type_sqr.to_owned().add(
             &neg_next_gate_access_type,
             builder,
             driver,
         );
-
-        // Putting it all together...
+        let q_3_by_memory_by_scaling =
+            q_3.to_owned()
+                .multiply(&q_memory_by_scaling, builder, driver)?;
+        // For RAM entries, if adjacent indices match and the next access is a read, then
+        // values must be equal.
         let tmp = q_3_by_memory_by_scaling.multiply(
             &adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation,
             builder,
             driver,
         )?;
         accumulator.r3 = accumulator.r3.add(&tmp, builder, driver);
+
+        let tmp =
+            index_increases_by_zero_or_one.multiply(&q_3_by_memory_by_scaling, builder, driver)?;
+        accumulator.r4 = accumulator.r4.add(&tmp, builder, driver);
 
         let tmp = q_3_by_memory_by_scaling.multiply(
             &next_gate_access_type_is_boolean,
@@ -290,24 +251,50 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
             q_3_by_memory_by_scaling.multiply(&access_check, builder, driver)?;
 
         /*
-         * The complete RAM/ROM memory identity
-         * Partial degree:
+         * RAM Timestamp Consistency Check
+         *
+         * The gates constructed to witness the consistency of the jumps in the timestamp have the following form. They
+         * are constructed to be sorted, first with respect to `index`, then with respect to `timestamp`. (This is the
+         * same structure as the sorted RAM gates.) This is enforced by copy constraints (the witness indices of the
+         * gates are _the same_ as those of the sorted RAM gates, so we _do not_ need to explicitly check the
+         * lexicographic ordering again.)
+         *
+         * | w1    | w2        | w3              | w4 |
+         * | index | timestamp | timestamp_check | -- |
+         *
+         * Let delta_index = index_{i + 1} - index_{i}
+         *
+         * Iff delta_index == 0, timestamp_check = timestamp_{i + 1} - timestamp_i
+         * Else timestamp_check = 0.
+         *
+         * @note the timestamp_deltas are range-constrained elsewhere.
          */
-        let q_4_by_q_1 = q_4.to_owned().multiply(q_1, builder, driver)?;
-        let q_m_by_q_1 = q_m.to_owned().multiply(q_1, builder, driver)?;
-        let memory_identity = rom_consistency_check_identity
-            .add(
-                &q_4_by_q_1.multiply(&ram_timestamp_check_identity, builder, driver)?,
-                builder,
-                driver,
-            )
-            .add(
-                &q_m_by_q_1.multiply(&memory_record_check, builder, driver)?,
-                builder,
-                driver,
-            )
-            .multiply(&q_memory_by_scaling, builder, driver)?
-            .add(&ram_consistency_check_identity, builder, driver);
+        let timestamp_delta = w_2_shift.to_owned().sub(w_2, builder, driver);
+        let index_delta_is_zero_by_timestamp_delta =
+            index_delta_is_zero.multiply(&timestamp_delta, builder, driver)?;
+        let ram_timestamp_check_identity =
+            index_delta_is_zero_by_timestamp_delta.sub(w_3, builder, driver);
+
+        // let index_is_monotonically_increasing =
+        //     neg_index_delta_sqr.add(&neg_index_delta, builder, driver);
+        /*
+         * The complete RAM/ROM memory identity
+         * Degree: 5
+         */
+        // degree 5
+        let mut memory_identity = rom_consistency_check_identity;
+
+        let q_4_by_q_1 = q_4.multiply(q_1, builder, driver)?;
+        let tmp = ram_timestamp_check_identity.multiply(&q_4_by_q_1, builder, driver)?;
+        memory_identity = memory_identity.add(&tmp, builder, driver);
+
+        let q_m_by_q_1 = q_m.multiply(q_1, builder, driver)?;
+        let tmp = memory_record_check.multiply(&q_m_by_q_1, builder, driver)?;
+        memory_identity = memory_identity.add(&tmp, builder, driver);
+
+        memory_identity = memory_identity.multiply(&q_memory_by_scaling, builder, driver)?;
+        memory_identity = memory_identity.add(&ram_consistency_check_identity, builder, driver);
+
         accumulator.r0 = accumulator.r0.add(&memory_identity, builder, driver);
 
         Ok(())
