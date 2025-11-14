@@ -118,10 +118,13 @@ impl OinkRecursiveVerifier {
         *commitments.z_perm_mut() =
             transcript.receive_point_from_prover("Z_PERM".to_owned(), builder, driver)?;
 
-        let labels = (0..NUM_SUBRELATIONS)
-            .map(|i| format!("alpha_{i}"))
-            .collect::<Vec<_>>();
-        let alphas = transcript.get_challenges(&labels, builder, driver)?;
+        let mut alphas = Vec::with_capacity(NUM_SUBRELATIONS - 1);
+        let alpha = transcript.get_challenge("alpha".to_string(), builder, driver)?;
+        alphas.push(alpha);
+        for i in 1..(NUM_SUBRELATIONS - 1) {
+            let next_alpha = alphas[i - 1].multiply(&alphas[0], builder, driver)?;
+            alphas.push(next_alpha);
+        }
 
         verification_key.relation_parameters = RelationParameters {
             beta,
