@@ -23,7 +23,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         let pow_size = 1 << log_num_mononmials;
         let current_element_idx = 0;
         let periodicity = 2;
-        let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(P::ScalarField::ONE);
 
         // Barretenberg uses multithreading here and a simpler algorithm with worse complexity
         let mut beta_products = vec![one.clone(); pow_size];
@@ -44,13 +44,10 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         })
     }
 
-    pub fn new_without_products<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        betas: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> Self {
+    pub fn new_without_products(betas: Vec<FieldCT<P::ScalarField>>) -> Self {
         let current_element_idx = 0;
         let periodicity = 2;
-        let partial_evaluation_result = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let partial_evaluation_result = FieldCT::from(P::ScalarField::ONE);
 
         Self {
             betas,
@@ -71,7 +68,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(P::ScalarField::ONE);
 
         let current_univariate_eval = self
             .current_element()
@@ -94,7 +91,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(P::ScalarField::ONE);
 
         let lhs = [
             self.current_element().sub(&one, builder, driver),

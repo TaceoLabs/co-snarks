@@ -49,7 +49,7 @@ impl SumcheckVerifier {
         let one = FieldCT::from(C::ScalarField::ONE);
 
         let mut gate_separators =
-            GateSeparatorPolynomial::new_without_products(gate_challenges.to_vec(), builder);
+            GateSeparatorPolynomial::new_without_products(gate_challenges.to_vec());
 
         let libra_challenge = if has_zk == ZeroKnowledge::Yes {
             // If running zero-knowledge sumcheck the target total sum is corrected by the claimed sum of libra masking
