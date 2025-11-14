@@ -1887,107 +1887,129 @@ impl<F: PrimeField> BigField<F> {
             remainder.sanity_check();
         }
 
-        let neg_modulus_limbs: [BigUint; 4] = {
-            let modulus: BigUint = Fq::MODULUS.into();
-            let neg_modulus: BigUint =
-                (&BigUint::one() << (4 * BigField::<F>::NUM_LIMB_BITS)) - modulus;
-            let mut limbs = Vec::new();
-            let limb_mask = (BigUint::one() << BigField::<F>::NUM_LIMB_BITS) - BigUint::one();
-            for i in 0..4 {
-                let limb = (neg_modulus.clone() >> (i * BigField::<F>::NUM_LIMB_BITS)) & &limb_mask;
-                limbs.push(limb);
-            }
-            limbs.try_into().expect("Length is correct")
-        };
-
         let mut remainders = input_remainders.to_vec();
-
         let mut left = input_left.clone();
         let mut to_mul = input_to_mul.clone();
         let mut quotient = input_quotient.clone();
 
-        let max_b0 = &left.binary_basis_limbs[1].maximum_value
-            * &to_mul.binary_basis_limbs[0].maximum_value
-            + &neg_modulus_limbs[1] * &quotient.binary_basis_limbs[0].maximum_value;
-        let max_b1 = &left.binary_basis_limbs[0].maximum_value
-            * &to_mul.binary_basis_limbs[1].maximum_value
-            + &neg_modulus_limbs[0] * &quotient.binary_basis_limbs[1].maximum_value;
-        let max_c0 = &left.binary_basis_limbs[1].maximum_value
-            * &to_mul.binary_basis_limbs[1].maximum_value
-            + &neg_modulus_limbs[1] * &quotient.binary_basis_limbs[1].maximum_value;
-        let max_c1 = &left.binary_basis_limbs[2].maximum_value
-            * &to_mul.binary_basis_limbs[0].maximum_value
-            + &neg_modulus_limbs[2] * &quotient.binary_basis_limbs[0].maximum_value;
-        let max_c2 = &left.binary_basis_limbs[0].maximum_value
-            * &to_mul.binary_basis_limbs[2].maximum_value
-            + &neg_modulus_limbs[0] * &quotient.binary_basis_limbs[2].maximum_value;
-        let max_d0 = &left.binary_basis_limbs[3].maximum_value
-            * &to_mul.binary_basis_limbs[0].maximum_value
-            + &neg_modulus_limbs[3] * &quotient.binary_basis_limbs[0].maximum_value;
-        let max_d1 = &left.binary_basis_limbs[2].maximum_value
-            * &to_mul.binary_basis_limbs[1].maximum_value
-            + &neg_modulus_limbs[2] * &quotient.binary_basis_limbs[1].maximum_value;
-        let max_d2 = &left.binary_basis_limbs[1].maximum_value
-            * &to_mul.binary_basis_limbs[2].maximum_value
-            + &neg_modulus_limbs[1] * &quotient.binary_basis_limbs[2].maximum_value;
-        let max_d3 = &left.binary_basis_limbs[0].maximum_value
-            * &to_mul.binary_basis_limbs[3].maximum_value
-            + &neg_modulus_limbs[0] * &quotient.binary_basis_limbs[3].maximum_value;
+        // Either of the multiplicand must be a witness
+        debug_assert!(
+            !left.is_constant() || !to_mul.is_constant(),
+            "At least one multiplicand must be a witness"
+        );
 
-        let mut max_r0 = &left.binary_basis_limbs[0].maximum_value
-            * &to_mul.binary_basis_limbs[0].maximum_value
-            + &neg_modulus_limbs[0] * &quotient.binary_basis_limbs[0].maximum_value;
-        let mut max_r1 = max_b0 + max_b1;
+        // Compute the maximum value of the product of the two inputs: max(a * b)
+        let (max_ab_lo, max_ab_hi) = Self::compute_partial_schoolbook_multiplication(
+            &left.get_binary_basis_limb_maximums(),
+            &to_mul.get_binary_basis_limb_maximums(),
+        );
 
-        let mut borrow_lo_value = BigUint::zero();
+        let neg_modulus_mod_binary_basis_limbs: [BigUint; NUM_LIMBS] = {
+            let modulus_bin = BigUint::one() << (NUM_LIMBS * Self::NUM_LIMB_BITS);
+            let modulus_fq: BigUint = Fq::MODULUS.into();
+            let negative_prime_modulus_mod_binary_basis = modulus_bin - &modulus_fq;
+            let mask = (BigUint::one() << Self::NUM_LIMB_BITS) - BigUint::one();
+            (0..NUM_LIMBS)
+                .map(|i| {
+                    (&negative_prime_modulus_mod_binary_basis >> (i * Self::NUM_LIMB_BITS)) & &mask
+                })
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("We provided NUM_LIMBS elements")
+        };
+
+        // Compute the maximum value of the product of the quotient and neg_modulus: max(q * p')
+        let (max_q_neg_p_lo, max_q_neg_p_hi) = Self::compute_partial_schoolbook_multiplication(
+            &neg_modulus_mod_binary_basis_limbs,
+            &quotient.get_binary_basis_limb_maximums(),
+        );
+
+        // Compute the maximum value that needs to be borrowed from the hi limbs to the lo limb.
+        // Check the README for the explanation of the borrow.
+        let mut max_remainders_lo = BigUint::zero();
         for remainder in input_remainders {
-            max_r0 += &remainder.binary_basis_limbs[0].maximum_value;
-            max_r1 += &remainder.binary_basis_limbs[1].maximum_value;
-            borrow_lo_value += &remainder.binary_basis_limbs[0].maximum_value
+            max_remainders_lo += &remainder.binary_basis_limbs[0].maximum_value
                 + (&remainder.binary_basis_limbs[1].maximum_value << NUM_LIMB_BITS);
         }
 
-        borrow_lo_value >>= 2 * NUM_LIMB_BITS;
+        // While performing the subtraction of remainder r as:
+        //
+        // (a * b + q * p') - (r)
+        //
+        // we want to ensure that the lower limbs do not underflow. So we add a borrow value
+        // to the lower limbs and subtract it from the higher limbs. Naturally, such a borrow value
+        // must be a multiple of 2^2L (where L = NUM_LIMB_BITS). Let borrow_lo_value be the value
+        // borrowed from the hi limbs, then we must have:
+        //
+        // borrow_lo_value * 2^(2L) >= max_remainders_lo
+        //
+        // Thus, we can compute the minimum borrow_lo_value as:
+        //
+        // borrow_lo_value = ⌈ max_remainders_lo / 2^(2L) ⌉
+        //
+        let two_pow_2l = BigUint::one() << (2 * NUM_LIMB_BITS);
+        let borrow_lo_value =
+            (&max_remainders_lo + (&two_pow_2l - BigUint::one())) >> (2 * NUM_LIMB_BITS);
         let borrow_lo = FieldCT::from(F::from(borrow_lo_value));
 
-        let max_r2 = max_c0 + max_c1 + max_c2;
-        let max_r3 = max_d0 + max_d1 + max_d2 + max_d3;
-
+        // Compute max_a0 and max_a1
         let mut max_a0 = BigUint::zero();
         let mut max_a1 = BigUint::zero();
-        for i in 0..to_add.len() {
-            max_a0 += &to_add[i].binary_basis_limbs[0].maximum_value
-                + (&to_add[i].binary_basis_limbs[1].maximum_value << NUM_LIMB_BITS);
-            max_a1 += &to_add[i].binary_basis_limbs[2].maximum_value
-                + (&to_add[i].binary_basis_limbs[3].maximum_value << NUM_LIMB_BITS);
+        for add in to_add {
+            max_a0 += &add.binary_basis_limbs[0].maximum_value
+                + (&add.binary_basis_limbs[1].maximum_value << NUM_LIMB_BITS);
+            max_a1 += &add.binary_basis_limbs[2].maximum_value
+                + (&add.binary_basis_limbs[3].maximum_value << NUM_LIMB_BITS);
         }
 
-        let max_lo = max_r0 + (max_r1 << NUM_LIMB_BITS) + max_a0;
+        let max_lo = &max_ab_lo + &max_q_neg_p_lo + &max_remainders_lo + &max_a0;
         let max_lo_carry = &max_lo >> (2 * NUM_LIMB_BITS);
-        let max_h1 = max_r2 + (max_r3 << NUM_LIMB_BITS) + max_a1 + &max_lo_carry;
+        let max_hi = &max_ab_hi + &max_q_neg_p_hi + &max_a1 + &max_lo_carry;
 
-        let mut max_lo_bits = max_lo.bits() as usize; // get_msb() + 1
-        let mut max_h1_bits = max_h1.bits() as usize; // get_msb() + 1
-        if max_lo_bits & 1 == 1 {
-            max_lo_bits += 1;
-        }
-        if max_h1_bits & 1 == 1 {
-            max_h1_bits += 1;
-        }
+        let max_lo_bits = max_lo.bits() as usize; // get_msb() + 1
+        let max_hi_bits = max_hi.bits() as usize; // get_msb() + 1
+
+        debug_assert!(max_lo_bits > (2 * NUM_LIMB_BITS));
+        debug_assert!(max_hi_bits > (2 * NUM_LIMB_BITS));
 
         let mut carry_lo_msb = max_lo_bits - (2 * NUM_LIMB_BITS);
-        let mut carry_hi_msb = max_h1_bits - (2 * NUM_LIMB_BITS);
+        let mut carry_hi_msb = max_hi_bits - (2 * NUM_LIMB_BITS);
 
-        if max_lo_bits < NUM_LIMB_BITS * 2 {
+        if max_lo_bits < 2 * NUM_LIMB_BITS {
             carry_lo_msb = 0;
         }
-        if max_h1_bits < NUM_LIMB_BITS * 2 {
+        if max_hi_bits < 2 * NUM_LIMB_BITS {
             carry_hi_msb = 0;
         }
 
-        // UltraFlavor has plookup
-        // The plookup custom bigfield gate requires inputs are witnesses.
+        // The custom bigfield multiplication gate requires inputs are witnesses.
         // If we're using constant values, instantiate them as circuit variables
+        //
+        // Explanation:
+        // The bigfield multiplication gate expects witnesses and disallows circuit constants
+        // because allowing circuit constants would lead to complex circuit logic to support
+        // different combinations of constant and witness inputs. Particularly, bigfield multiplication
+        // gate enforces constraints of the form: a * b - q * p + r = 0, where:
+        //
+        // input left  a = (a3 || a2 || a1 || a0)
+        // input right b = (b3 || b2 || b1 || b0)
+        // quotient    q = (q3 || q2 || q1 || q0)
+        // remainder   r = (r3 || r2 || r1 || r0)
+        //
+        // | a1 | b1 | r0 | lo_0 | <-- product gate 1: check lo_0
+        // | a0 | b0 | a3 | b3   |
+        // | a2 | b2 | r3 | hi_0 |
+        // | a1 | b1 | r2 | hi_1 |
+        //
+        // Example constaint: lo_0 = (a1 * b0 + a0 * b1) * 2^b   + (a0 * b0)   - r0
+        //                 ==>  w4 = (w1 * w'2 + w'1 * w2) * 2^b + (w'1 * w'2) - w3
+        //
+        // If a, b both are witnesses, this special gate performs 3 field multiplications per gate.
+        // If b was a constant, then we would need to no field multiplications, but instead update the
+        // the limbs of a with multiplicative and additive constants. This just makes the circuit logic
+        // more complex, so we disallow constants. If there are constants, we convert them to fixed witnesses (at the
+        // expense of 1 extra gate per constant).
+        //
         let mut convert_constant_to_fixed_witness =
             |bf: &BigField<F>| -> eyre::Result<BigField<F>> {
                 let mut output = BigField::default();
@@ -2095,30 +2117,26 @@ impl<F: PrimeField> BigField<F> {
 
         let modulus: BigUint = Fq::MODULUS.into();
         let witnesses = NonNativeMultiplicationFieldWitnesses {
-            a: left
-                .binary_basis_limbs
-                .map(|limb| limb.element.get_witness_index(builder, driver)),
-            b: to_mul
-                .binary_basis_limbs
-                .map(|limb| limb.element.get_witness_index(builder, driver)),
-            q: quotient
-                .binary_basis_limbs
-                .map(|limb| limb.element.get_witness_index(builder, driver)),
+            a: left.get_binary_basis_limb_witness_indices(builder, driver)?,
+            b: to_mul.get_binary_basis_limb_witness_indices(builder, driver)?,
+            q: quotient.get_binary_basis_limb_witness_indices(builder, driver)?,
             r: remainder_limbs.map(|limb| limb.get_witness_index(builder, driver)),
-            neg_modulus: neg_modulus_limbs.map(|limb| F::from(limb)),
+            neg_modulus: neg_modulus_mod_binary_basis_limbs.map(|limb| F::from(limb)),
         };
 
         // N.B. this method also evaluates the prime field component of the non-native field mul
         let [lo_idx, hi_idx] =
             builder.evaluate_non_native_field_multiplication(&witnesses, driver)?;
 
-        let neg_prime = -F::from(modulus);
+        let negative_prime_modulus_mod_native_basis = -F::from(modulus);
         FieldCT::evaluate_polynomial_identity(
             &left.prime_basis_limb,
             &to_mul.prime_basis_limb,
-            &quotient
-                .prime_basis_limb
-                .multiply(&FieldCT::from(neg_prime), builder, driver)?,
+            &quotient.prime_basis_limb.multiply(
+                &FieldCT::from(negative_prime_modulus_mod_native_basis),
+                builder,
+                driver,
+            )?,
             &remainder_prime_limb.neg(),
             builder,
             driver,
