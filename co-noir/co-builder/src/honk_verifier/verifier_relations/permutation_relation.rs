@@ -1,3 +1,5 @@
+use std::iter;
+
 use super::Relation;
 use crate::honk_verifier::verifier_relations::VerifyAccGetter;
 use crate::impl_relation_evals;
@@ -63,68 +65,98 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for UltraPermutationRelation
         let w_3_plus_gamma = w_3.add(gamma, builder, driver);
         let w_4_plus_gamma = w_4.add(gamma, builder, driver);
 
-        let t1 = id_1
-            .multiply(beta, builder, driver)?
+        let lhs = [id_1, id_2, id_3, id_4, sigma_1, sigma_2, sigma_3, sigma_4];
+
+        let rhs = iter::repeat_n(beta.clone(), 8).collect::<Vec<_>>();
+
+        let mut raw_mul_data = FieldCT::multiply_many_raw(&lhs, &rhs, builder, driver)?;
+
+        let t1 = FieldCT::commit_mul(&mut raw_mul_data[0], builder)?
             .add(&w_1_plus_gamma, builder, driver)
             .multiply(scaling_factor, builder, driver)?;
-        let t2 = id_2
-            .multiply(beta, builder, driver)?
-            .add(&w_2_plus_gamma, builder, driver);
-        let t3 = id_3
-            .multiply(beta, builder, driver)?
-            .add(&w_3_plus_gamma, builder, driver);
-        let t4 = id_4
-            .multiply(beta, builder, driver)?
-            .add(&w_4_plus_gamma, builder, driver);
-
-        let t5 = sigma_1
-            .multiply(beta, builder, driver)?
-            .add(&w_1_plus_gamma, builder, driver)
-            .multiply(scaling_factor, builder, driver)?;
-        let t6 = sigma_2
-            .multiply(beta, builder, driver)?
-            .add(&w_2_plus_gamma, builder, driver);
-        let t7 = sigma_3
-            .multiply(beta, builder, driver)?
-            .add(&w_3_plus_gamma, builder, driver);
-        let t8 = sigma_4
-            .multiply(beta, builder, driver)?
-            .add(&w_4_plus_gamma, builder, driver);
-
-        let num_den =
-            FieldCT::multiply_many(&[t1, t2, t5, t6], &[t3, t4, t7, t8], builder, driver)?;
-        let [numerator, denominator] = FieldCT::multiply_many(
-            &[num_den[0].clone(), num_den[2].clone()],
-            &[num_den[1].clone(), num_den[3].clone()],
+        let t2 = FieldCT::commit_mul(&mut raw_mul_data[1], builder)?.add(
+            &w_2_plus_gamma,
             builder,
             driver,
-        )?
-        .try_into()
-        .unwrap();
-
-        let public_input_term = public_input_delta
-            .multiply(&lagrange_last, builder, driver)?
-            .add(&z_perm_shift, builder, driver);
-
-        let public_input_term_by_denominator =
-            public_input_term.multiply(&denominator, builder, driver)?;
-        let z_perm_plus_lagrange_first_by_numerator = lagrange_first
-            .add(z_perm, builder, driver)
-            .multiply(&numerator, builder, driver)?;
-
-        let tmp = z_perm_plus_lagrange_first_by_numerator.sub(
-            &public_input_term_by_denominator,
+        );
+        let t3 = FieldCT::commit_mul(&mut raw_mul_data[2], builder)?.add(
+            &w_3_plus_gamma,
+            builder,
+            driver,
+        );
+        let t4 = FieldCT::commit_mul(&mut raw_mul_data[3], builder)?.add(
+            &w_4_plus_gamma,
             builder,
             driver,
         );
 
-        accumulator.r0 = accumulator.r0.add(&tmp, builder, driver);
+        let t5 = FieldCT::commit_mul(&mut raw_mul_data[4], builder)?
+            .add(&w_1_plus_gamma, builder, driver)
+            .multiply(scaling_factor, builder, driver)?;
+        let t6 = FieldCT::commit_mul(&mut raw_mul_data[5], builder)?.add(
+            &w_2_plus_gamma,
+            builder,
+            driver,
+        );
+        let t7 = FieldCT::commit_mul(&mut raw_mul_data[6], builder)?.add(
+            &w_3_plus_gamma,
+            builder,
+            driver,
+        );
+        let t8 = FieldCT::commit_mul(&mut raw_mul_data[7], builder)?.add(
+            &w_4_plus_gamma,
+            builder,
+            driver,
+        );
 
-        let lagrange_last_by_z_perm_shift =
-            lagrange_last.multiply(&z_perm_shift, builder, driver)?;
-        let tmp = lagrange_last_by_z_perm_shift.multiply(scaling_factor, builder, driver)?;
+        let mut mul_raw_data = FieldCT::multiply_many_raw(
+            &[t1, t5, lagrange_last.clone(), lagrange_last.clone()],
+            &[t2, t6, public_input_delta.clone(), z_perm_shift.clone()],
+            builder,
+            driver,
+        )?;
 
-        accumulator.r1 = accumulator.r1.add(&tmp, builder, driver);
+        let t1_t2 = FieldCT::commit_mul(&mut mul_raw_data[0], builder)?;
+        let numerator = t1_t2
+            .multiply(&t3, builder, driver)?
+            .multiply(&t4, builder, driver)?;
+
+        let t5_t6 = FieldCT::commit_mul(&mut mul_raw_data[1], builder)?;
+        let denominator = t5_t6
+            .multiply(&t7, builder, driver)?
+            .multiply(&t8, builder, driver)?;
+
+        let lagrange_last_public_input_delta = FieldCT::commit_mul(&mut mul_raw_data[2], builder)?;
+        let public_input_term =
+            lagrange_last_public_input_delta.add(&z_perm_shift, builder, driver);
+
+        let z_perm_plus_lagrange_first = z_perm.add(&lagrange_first, builder, driver);
+
+        let mut raw_mul_data_2 = FieldCT::multiply_many_raw(
+            &[z_perm_plus_lagrange_first, public_input_term],
+            &[numerator, denominator],
+            builder,
+            driver,
+        )?;
+
+        let z_perm_lagrange_first_numerator = FieldCT::commit_mul(&mut raw_mul_data_2[0], builder)?;
+
+        let public_input_term_by_denominator =
+            FieldCT::commit_mul(&mut raw_mul_data_2[1], builder)?;
+
+        let tmp =
+            z_perm_lagrange_first_numerator.sub(&public_input_term_by_denominator, builder, driver);
+
+        accumulator.r0.add_assign(&tmp, builder, driver);
+
+        let lagrange_last_z_perm_shift = FieldCT::commit_mul(&mut mul_raw_data[3], builder)?;
+
+        let lagrange_last_by_z_perm_shift_scaled =
+            lagrange_last_z_perm_shift.multiply(scaling_factor, builder, driver)?;
+
+        accumulator
+            .r1
+            .add_assign(&lagrange_last_by_z_perm_shift_scaled, builder, driver);
 
         Ok(())
     }
