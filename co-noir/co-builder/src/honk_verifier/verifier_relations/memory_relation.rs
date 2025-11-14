@@ -194,10 +194,9 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
 
         let mut neg_next_gate_access_type = w_3_shift.multiply(eta_three, builder, driver)?;
         let tmp1 = w_2_shift.multiply(eta_two, builder, driver)?;
+        neg_next_gate_access_type.add_assign(&tmp1, builder, driver);
         let tmp2 = w_1_shift.multiply(eta, builder, driver)?;
-        neg_next_gate_access_type = neg_next_gate_access_type
-            .add(&tmp1, builder, driver)
-            .add(&tmp2, builder, driver);
+        neg_next_gate_access_type.add_assign(&tmp2, builder, driver);
         neg_next_gate_access_type = neg_next_gate_access_type
             .to_owned()
             .sub(w_4_shift, builder, driver);
