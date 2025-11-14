@@ -496,22 +496,6 @@ impl<F: PrimeField> BigField<F> {
         })
     }
 
-    pub(crate) fn convert_constant_to_fixed_witness<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) {
-        for limb in &mut self.binary_basis_limbs {
-            limb.element
-                .convert_constant_to_fixed_witness(builder, driver);
-        }
-        self.prime_basis_limb
-            .convert_constant_to_fixed_witness(builder, driver);
-    }
-
     /**
      * @brief Construct a bigfield element from binary limbs and a prime basis limb that are already reduced
      *
@@ -822,6 +806,23 @@ impl<F: PrimeField> BigField<F> {
         result.binary_basis_limbs[3].element = FieldCT::from(F::from(limb_3));
         result.prime_basis_limb = FieldCT::from(F::from(multiple_of_modulus % F::MODULUS.into()));
         result
+    }
+
+    // Create a witness form a constant. This way the value of the witness is fixed and public.
+    pub(crate) fn convert_constant_to_fixed_witness<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        for limb in &mut self.binary_basis_limbs {
+            limb.element
+                .convert_constant_to_fixed_witness(builder, driver);
+        }
+        self.prime_basis_limb
+            .convert_constant_to_fixed_witness(builder, driver);
     }
 
     fn get_binary_basis_limb_witness_indices<
@@ -2683,10 +2684,11 @@ impl<F: PrimeField> BigField<F> {
             BigField::from_acvm_limbs(&quotient, false, num_quotient_bits, builder, driver)?;
 
         let remainder = if fix_remainder_to_zero {
-            BigField::default()
+            let mut remainder = BigField::default();
             // remainder needs to be defined as wire value and not selector values to satisfy
             // Ultra's bigfield custom gates
-            // TODO CESAR: remainder.convert_constant_to_fixed_witness(ctx);
+            remainder.convert_constant_to_fixed_witness::<P, T>(builder, driver);
+            remainder
         } else {
             BigField::from_witness_other_acvm_type(&remainder, driver, builder)?
         };
@@ -3021,33 +3023,32 @@ impl<F: PrimeField> BigField<F> {
         // more complex, so we disallow constants. If there are constants, we convert them to fixed witnesses (at the
         // expense of 1 extra gate per constant).
         //
-        let mut convert_constant_to_fixed_witness =
-            |input: &BigField<F>,
-             builder: &mut GenericUltraCircuitBuilder<P, T>,
-             driver: &mut T|
-             -> eyre::Result<BigField<F>> {
-                assert!(input.is_constant());
-                let mut output = input.clone();
-                output.prime_basis_limb = FieldCT::from_witness_index(
+        let convert_constant_to_fixed_witness = |input: &BigField<F>,
+                                                 builder: &mut GenericUltraCircuitBuilder<P, T>,
+                                                 driver: &mut T|
+         -> eyre::Result<BigField<F>> {
+            assert!(input.is_constant());
+            let mut output = input.clone();
+            output.prime_basis_limb = FieldCT::from_witness_index(
+                builder.put_constant_variable(
+                    T::get_public(&input.prime_basis_limb.get_value(builder, driver))
+                        .expect("Constant values are public"),
+                ),
+            );
+            for i in 0..NUM_LIMBS {
+                output.binary_basis_limbs[i].element = FieldCT::from_witness_index(
                     builder.put_constant_variable(
-                        T::get_public(&input.prime_basis_limb.get_value(builder, driver))
-                            .expect("Constant values are public"),
+                        T::get_public(
+                            &input.binary_basis_limbs[i]
+                                .element
+                                .get_value(builder, driver),
+                        )
+                        .expect("Constant values are public"),
                     ),
                 );
-                for i in 0..NUM_LIMBS {
-                    output.binary_basis_limbs[i].element = FieldCT::from_witness_index(
-                        builder.put_constant_variable(
-                            T::get_public(
-                                &input.binary_basis_limbs[i]
-                                    .element
-                                    .get_value(builder, driver),
-                            )
-                            .expect("Constant values are public"),
-                        ),
-                    );
-                }
-                Ok(output)
-            };
+            }
+            Ok(output)
+        };
 
         // evalaute a nnf mul and add into existing lohi output for our extra product terms
         // we need to add the result of (left_b * right_b) into lo_1_idx and hi_1_idx
