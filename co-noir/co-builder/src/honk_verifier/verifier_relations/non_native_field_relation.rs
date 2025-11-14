@@ -88,14 +88,12 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for NonNativeFieldRelation {
         );
 
         let non_native_field_gate_1 = limb_subproduct
-            .sub(w_3, builder, driver)
-            .sub(w_4, builder, driver)
+            .sub(&w_3.add(w_4, builder, driver), builder, driver)
             .multiply(q_3, builder, driver)?;
 
         let non_native_field_gate_3 = limb_subproduct
             .add(w_4, builder, driver)
-            .sub(w_3_shift, builder, driver)
-            .sub(w_4_shift, builder, driver)
+            .sub(&w_3_shift.add(w_4_shift, builder, driver), builder, driver)
             .multiply(q_m, builder, driver)?;
 
         let non_native_field_identity = non_native_field_gate_1
