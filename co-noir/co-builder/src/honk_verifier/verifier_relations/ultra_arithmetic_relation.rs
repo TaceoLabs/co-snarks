@@ -33,7 +33,7 @@ impl UltraArithmeticRelation {
         scaling_factor: &FieldCT<C::ScalarField>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> HonkProofResult<()> {
+    ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let w_l = input.witness.w_l().to_owned();
         let w_r = input.witness.w_r().to_owned();
         let w_o = input.witness.w_o().to_owned();
@@ -103,7 +103,7 @@ impl UltraArithmeticRelation {
             .multiply(&scaled_q_arith, builder, driver)?;
         *r0 = r0.add(&tmp, builder, driver);
 
-        Ok(())
+        Ok(scaled_q_arith)
     }
 
     fn compute_r1_verifier<
@@ -112,7 +112,7 @@ impl UltraArithmeticRelation {
     >(
         r1: &mut FieldCT<C::ScalarField>,
         input: &AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
-        scaling_factor: &FieldCT<C::ScalarField>,
+        scaled_q_arith: &FieldCT<C::ScalarField>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
@@ -125,22 +125,17 @@ impl UltraArithmeticRelation {
         let one = FieldCT::from(C::ScalarField::ONE);
         let two = FieldCT::from(C::ScalarField::from(2_u64));
 
-        let [q_arith_sub_1_q_arith_sub_2, q_arith_scaling] = FieldCT::multiply_many(
-            &[q_arith.sub(&one, builder, driver), q_arith.clone()],
-            &[q_arith.sub(&two, builder, driver), scaling_factor.clone()],
-            builder,
-            driver,
-        )?
-        .try_into()
-        .expect("We checked lengths match");
+        let q_arith_sub_1 = q_arith.sub(&one, builder, driver);
 
         let tmp = w_l
             .add(&w_4, builder, driver)
             .sub(&w_l_shift, builder, driver)
             .add(&q_m, builder, driver)
-            .multiply(&q_arith_sub_1_q_arith_sub_2, builder, driver)?
-            .multiply(&q_arith_scaling, builder, driver)?;
+            .multiply(&q_arith.sub(&two, builder, driver), builder, driver)?;
 
+        let tmp2 = q_arith_sub_1.multiply(scaled_q_arith, builder, driver)?;
+
+        let tmp = tmp.multiply(&tmp2, builder, driver)?;
         *r1 = r1.add(&tmp, builder, driver);
         Ok(())
     }
@@ -157,8 +152,9 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for UltraArithmeticRelation 
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        Self::compute_r0_verifier(&mut accumulator.r0, input, scaling_factor, builder, driver)?;
-        Self::compute_r1_verifier(&mut accumulator.r1, input, scaling_factor, builder, driver)?;
+        let scaled_q_arith =
+            Self::compute_r0_verifier(&mut accumulator.r0, input, scaling_factor, builder, driver)?;
+        Self::compute_r1_verifier(&mut accumulator.r1, input, &scaled_q_arith, builder, driver)?;
         Ok(())
     }
 }
