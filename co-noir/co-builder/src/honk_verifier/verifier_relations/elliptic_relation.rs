@@ -65,8 +65,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for EllipticRelation {
         let x2_sub_x1_sqr = x2_sub_x1.multiply(&x2_sub_x1, builder, driver)?;
         let mut x_add_identity = x3_plus_x2_plus_x1.multiply(&x2_sub_x1_sqr, builder, driver)?;
         x_add_identity = x_add_identity
-            .sub(&y2_sqr, builder, driver)
-            .sub(&y1_sqr, builder, driver)
+            .sub(&y2_sqr.add(&y1_sqr, builder, driver), builder, driver)
             .add(
                 &y2_mul_q_sign
                     .add(&y2_mul_q_sign, builder, driver)
@@ -122,8 +121,8 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for EllipticRelation {
             .multiply(&y1_sqr_mul_4, builder, driver)?
             .sub(&x1_pow_4_mul_9, builder, driver);
 
-        let tmp_0 = x_double_identity.multiply(scaling_factor, builder, driver)?;
-        accumulator.r0 = accumulator.r0.add(&tmp_0, builder, driver);
+        let tmp_0 = x_double_identity.multiply(&q_elliptic_q_double_scaling, builder, driver)?;
+        accumulator.r0.add_assign(&tmp_0, builder, driver);
 
         // Contribution (4) point doubling, y-coordinate check
         // (y1 + y3) (2*y1) - (3 * x1 * x1)(x1 - x3) = 0
@@ -134,7 +133,8 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for EllipticRelation {
             builder,
             driver,
         );
-        let tmp_1 = neg_y_double_identity.multiply(scaling_factor, builder, driver)?;
+        let tmp_1 =
+            neg_y_double_identity.multiply(&q_elliptic_q_double_scaling, builder, driver)?;
         accumulator.r1 = accumulator.r1.sub(&tmp_1, builder, driver);
 
         Ok(())
