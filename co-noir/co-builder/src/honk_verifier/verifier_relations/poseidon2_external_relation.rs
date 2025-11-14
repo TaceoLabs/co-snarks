@@ -53,24 +53,28 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2ExternalRelatio
         let q_4 = input.precomputed.q_4().to_owned();
         let q_poseidon2_external = input.precomputed.q_poseidon2_external().to_owned();
 
-        // add round constants which are loaded in selectors
-        let s1 = q_l.add(&w_l, builder, driver);
-        let s2 = q_r.add(&w_r, builder, driver);
-        let s3 = q_o.add(&w_o, builder, driver);
-        let s4 = q_4.add(&w_4, builder, driver);
+        let sbox = |x: &FieldCT<C::ScalarField>,
+                    builder: &mut GenericUltraCircuitBuilder<C, T>,
+                    driver: &mut T|
+         -> HonkProofResult<FieldCT<C::ScalarField>> {
+            let x2 = x.multiply(x, builder, driver)?;
+            let x4 = x2.multiply(&x2, builder, driver)?;
+            let result = x4.multiply(x, builder, driver)?;
+            Ok(result)
+        };
 
-        let s = vec![s1, s2, s3, s4];
-        // apply s-box round
-        // 0xThemis TODO better mul depth for x^5?
-        let u = FieldCT::multiply_many(&s, &s, builder, driver)?;
-        let u = FieldCT::multiply_many(&u, &u, builder, driver)?;
-        let u = FieldCT::multiply_many(&u, &s, builder, driver)?;
+        // add round constants which are loaded in selectors
+        // TACEO TODO: Batch somehow
+        let u1 = sbox(&q_l.add(&w_l, builder, driver), builder, driver)?;
+        let u2 = sbox(&q_r.add(&w_r, builder, driver), builder, driver)?;
+        let u3 = sbox(&q_o.add(&w_o, builder, driver), builder, driver)?;
+        let u4 = sbox(&q_4.add(&w_4, builder, driver), builder, driver)?;
 
         // matrix mul v = M_E * u with 14 additions
-        let t0 = u[0].add(&u[1], builder, driver); // u_1 + u_2
-        let t1 = u[2].add(&u[3], builder, driver); // u_3 + u_4
-        let t2 = u[1].add(&u[1], builder, driver).add(&t1, builder, driver); // 2u_2 + u_3 + u_4
-        let t3 = u[3].add(&u[3], builder, driver).add(&t0, builder, driver); // u_1 + u_2 + 2u_4
+        let t0 = u1.add(&u2, builder, driver); // u_1 + u_2
+        let t1 = u3.add(&u4, builder, driver); // u_3 + u_4
+        let t2 = u2.add(&u2, builder, driver).add(&t1, builder, driver); // 2u_2 + u_3 + u_4
+        let t3 = u4.add(&u4, builder, driver).add(&t0, builder, driver); // u_1 + u_2 + 2u_4
 
         let mut v4 = t1.add(&t1, builder, driver);
         v4 = v4.add(&v4, builder, driver).add(&t3, builder, driver); // u_1 + u_2 + 4u_3 + 8u_4
@@ -83,29 +87,25 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2ExternalRelatio
 
         let q_pos_by_scaling = q_poseidon2_external.multiply(scaling_factor, builder, driver)?;
         let tmp =
-            v1.sub(&w_l_shift, builder, driver)
-                .multiply(&q_pos_by_scaling, builder, driver)?;
+            q_pos_by_scaling.multiply(&v1.sub(&w_l_shift, builder, driver), builder, driver)?;
 
-        accumulator.r0 = accumulator.r0.add(&tmp, builder, driver);
-
-        ///////////////////////////////////////////////////////////////////////
-
-        let tmp =
-            v2.sub(&w_r_shift, builder, driver)
-                .multiply(&q_pos_by_scaling, builder, driver)?;
-        accumulator.r1 = accumulator.r1.add(&tmp, builder, driver);
+        accumulator.r0.add_assign(&tmp, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
         let tmp =
-            v3.sub(&w_o_shift, builder, driver)
-                .multiply(&q_pos_by_scaling, builder, driver)?;
-        accumulator.r2 = accumulator.r2.add(&tmp, builder, driver);
+            q_pos_by_scaling.multiply(&v2.sub(&w_r_shift, builder, driver), builder, driver)?;
+        accumulator.r1.add_assign(&tmp, builder, driver);
+
+        ///////////////////////////////////////////////////////////////////////
+        let tmp =
+            q_pos_by_scaling.multiply(&v3.sub(&w_o_shift, builder, driver), builder, driver)?;
+        accumulator.r2.add_assign(&tmp, builder, driver);
 
         //////////////////////////////////////////////////////////////////////
         let tmp =
             v4.sub(&w_4_shift, builder, driver)
                 .multiply(&q_pos_by_scaling, builder, driver)?;
-        accumulator.r3 = accumulator.r3.add(&tmp, builder, driver);
+        accumulator.r3.add_assign(&tmp, builder, driver);
 
         Ok(())
     }

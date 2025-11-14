@@ -52,25 +52,18 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
         let q_poseidon2_internal = input.precomputed.q_poseidon2_internal().to_owned();
 
         // add round constants
-        let s1 = q_l.add(&w_l, builder, driver);
+        let s1 = w_l.add(&q_l, builder, driver);
 
         // apply s-box round
         // 0xThemis TODO again can we do something better for x^5?
         let u1 = s1.multiply(&s1, builder, driver)?;
         let u1 = u1.multiply(&u1, builder, driver)?;
-        let mut u1 = u1.multiply(&s1, builder, driver)?;
-
-        let mut u2 = w_r.to_owned();
-        let mut u3 = w_o.to_owned();
-        let mut u4 = w_4.to_owned();
-
-        // matrix mul with v = M_I * u 4 muls and 7 additions
-        let sum = u1
-            .add(&u2, builder, driver)
-            .add(&u3, builder, driver)
-            .add(&u4, builder, driver);
+        let u1 = u1.multiply(&s1, builder, driver)?;
 
         let q_pos_by_scaling = q_poseidon2_internal.multiply(scaling_factor, builder, driver)?;
+
+        let partial_sum = w_r.add(&w_o, builder, driver).add(&w_4, builder, driver);
+        let scaled_u1 = u1.multiply(&q_pos_by_scaling, builder, driver)?;
 
         // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
         let internal_matrix_diag_0 = FieldCT::from(C::ScalarField::from(BigUint::from(
@@ -86,36 +79,52 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
             POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
         )));
 
-        u1 = u1
-            .multiply(&internal_matrix_diag_0, builder, driver)?
-            .add(&sum, builder, driver)
-            .sub(&w_l_shift, builder, driver)
-            .multiply(&q_pos_by_scaling, builder, driver)?;
-        accumulator.r0 = accumulator.r0.add(&u1, builder, driver);
+        let mut barycentric_term = scaled_u1.multiply(&internal_matrix_diag_0, builder, driver)?;
+        let monomial_term = partial_sum.sub(&w_l_shift, builder, driver);
+        barycentric_term.add_assign(
+            &monomial_term.multiply(&q_pos_by_scaling, builder, driver)?,
+            builder,
+            driver,
+        );
+        accumulator
+            .r0
+            .add_assign(&barycentric_term, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
-        u2 = u2
+        let v2_m = w_r
             .multiply(&internal_matrix_diag_1, builder, driver)?
-            .add(&sum, builder, driver)
-            .sub(&w_r_shift, builder, driver)
-            .multiply(&q_pos_by_scaling, builder, driver)?;
-        accumulator.r1 = accumulator.r1.add(&u2, builder, driver);
-        ///////////////////////////////////////////////////////////////////////
+            .add(&partial_sum, builder, driver)
+            .sub(&w_r_shift, builder, driver);
+        let barycentric_term = v2_m
+            .multiply(&q_pos_by_scaling, builder, driver)?
+            .add(&scaled_u1, builder, driver);
+        accumulator
+            .r1
+            .add_assign(&barycentric_term, builder, driver);
 
-        u3 = u3
+        ///////////////////////////////////////////////////////////////////////
+        let v3_m = w_o
             .multiply(&internal_matrix_diag_2, builder, driver)?
-            .add(&sum, builder, driver)
-            .sub(&w_o_shift, builder, driver)
-            .multiply(&q_pos_by_scaling, builder, driver)?;
-        accumulator.r2 = accumulator.r2.add(&u3, builder, driver);
+            .add(&partial_sum, builder, driver)
+            .sub(&w_o_shift, builder, driver);
+        let barycentric_term = v3_m
+            .multiply(&q_pos_by_scaling, builder, driver)?
+            .add(&scaled_u1, builder, driver);
+        accumulator
+            .r2
+            .add_assign(&barycentric_term, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
-        u4 = u4
+        let v4_m = w_4
             .multiply(&internal_matrix_diag_3, builder, driver)?
-            .add(&sum, builder, driver)
-            .sub(&w_4_shift, builder, driver)
-            .multiply(&q_pos_by_scaling, builder, driver)?;
-        accumulator.r3 = accumulator.r3.add(&u4, builder, driver);
+            .add(&partial_sum, builder, driver)
+            .sub(&w_4_shift, builder, driver);
+        let barycentric_term = v4_m
+            .multiply(&q_pos_by_scaling, builder, driver)?
+            .add(&scaled_u1, builder, driver);
+        accumulator
+            .r3
+            .add_assign(&barycentric_term, builder, driver);
 
         ///////////////////////////////////////////////////////////////////////
         Ok(())
