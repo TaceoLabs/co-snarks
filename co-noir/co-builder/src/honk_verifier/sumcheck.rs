@@ -39,7 +39,7 @@ impl SumcheckVerifier {
         transcript: &mut TranscriptCT<C, H>,
         target_sum: &mut FieldCT<C::ScalarField>,
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
-        alphas: &[FieldCT<C::ScalarField>; NUM_SUBRELATIONS],
+        alphas: &[FieldCT<C::ScalarField>; NUM_SUBRELATIONS - 1],
         gate_challenges: &[FieldCT<C::ScalarField>],
         padding_indicator_array: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
