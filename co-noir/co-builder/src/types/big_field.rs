@@ -411,7 +411,7 @@ impl<F: PrimeField> BigField<F> {
                 driver,
             );
 
-            // // Enforce that low_bits_in indeed only contains 2*NUM_LIMB_BITS bits
+            // Enforce that low_bits_in indeed only contains 2*NUM_LIMB_BITS bits
             // low_accumulator = context->decompose_into_default_range(low_bits_in.witness_index,
             //                                                         static_cast<size_t>(NUM_LIMB_BITS * 2));
             // // If this doesn't hold we're using a default plookup range size that doesn't work well with the limb
@@ -1639,8 +1639,7 @@ impl<F: PrimeField> BigField<F> {
 
         // Compute the prime basis limb of the result
         let constant_to_add_mod_p = &constant_to_add % F::MODULUS.into();
-        let prime_basis_to_add =
-            FieldCT::from(F::from(constant_to_add_mod_p));
+        let prime_basis_to_add = FieldCT::from(F::from(constant_to_add_mod_p));
         result.prime_basis_limb = result
             .prime_basis_limb
             .add(&prime_basis_to_add, builder, driver);
@@ -2024,8 +2023,7 @@ impl<F: PrimeField> BigField<F> {
         let mut limb_0_accumulator = vec![remainders[0].binary_basis_limbs[0].element.clone()];
         let mut limb_2_accumulator = vec![remainders[0].binary_basis_limbs[2].element.clone()];
         let mut prime_limb_accumulator = vec![remainders[0].prime_basis_limb.clone()];
-        let shift_1 =
-            FieldCT::from(F::from(BigUint::one() << NUM_LIMB_BITS));
+        let shift_1 = FieldCT::from(F::from(BigUint::one() << NUM_LIMB_BITS));
         for i in 1..remainders.len() {
             limb_0_accumulator.push(remainders[i].binary_basis_limbs[0].element.clone());
             limb_0_accumulator.push(

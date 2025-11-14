@@ -149,7 +149,7 @@ impl UltraRecursiveVerifier {
             &padding_indicator_array,
             &mut claim_batcher,
             &sumcheck_output.challenges,
-            &BigGroup::one(builder, driver)?,
+            &BigGroup::one::<C>(),
             &mut transcript,
             &mut consistency_checked,
             libra_commitments,

@@ -165,15 +165,12 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
     }
 
     // TODO CESAR: Should be constant
-    pub fn one<P: CurveGroup<ScalarField = F>>(
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<Self> {
-        Ok(BigGroup {
-            x: BigField::from_witness(&F::ONE.into(), driver, builder)?,
-            y: BigField::from_witness(&F::from(2).into(), driver, builder)?,
+    pub fn one<P: CurveGroup<ScalarField = F>>() -> Self {
+        BigGroup {
+            x: BigField::from_constant(&BigUint::one()),
+            y: BigField::from_constant(&BigUint::from(2u32)),
             is_infinity: BoolCT::from(false),
-        })
+        }
     }
 
     pub(crate) fn from_constant_coordinates<P: CurveGroup<ScalarField = F>>(
@@ -1392,7 +1389,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<(Vec<Self>, Vec<FieldCT<F>>)> {
-        let mut one = Self::one(builder, driver)?;
+        let mut one = Self::one::<P>();
         let mut new_points = Vec::new();
         let mut new_scalars = Vec::new();
 
