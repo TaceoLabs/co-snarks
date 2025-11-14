@@ -66,25 +66,25 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for DeltaRangeConstraintRela
         let mut tmp_1 = delta_1_minus_3.multiply(&delta_1, builder, driver)?;
         tmp_1 = tmp_1.multiply(&tmp_1.add(&two, builder, driver), builder, driver)?;
         tmp_1 = tmp_1.multiply(&q_delta_range_scaled, builder, driver)?;
-        accumulator.r0 = accumulator.r0.add(&tmp_1, builder, driver);
+        accumulator.r0.add_assign(&tmp_1, builder, driver);
 
         // Contribution (2)
         let mut tmp_2 = delta_2_minus_3.multiply(&delta_2, builder, driver)?;
         tmp_2 = tmp_2.multiply(&tmp_2.add(&two, builder, driver), builder, driver)?;
         tmp_2 = tmp_2.multiply(&q_delta_range_scaled, builder, driver)?;
-        accumulator.r1 = accumulator.r1.add(&tmp_2, builder, driver);
+        accumulator.r1.add_assign(&tmp_2, builder, driver);
 
         // Contribution (3)
         let mut tmp_3 = delta_3_minus_3.multiply(&delta_3, builder, driver)?;
         tmp_3 = tmp_3.multiply(&tmp_3.add(&two, builder, driver), builder, driver)?;
         tmp_3 = tmp_3.multiply(&q_delta_range_scaled, builder, driver)?;
-        accumulator.r2 = accumulator.r1.add(&tmp_3, builder, driver);
+        accumulator.r2.add_assign(&tmp_3, builder, driver);
 
         // Contribution (4)
         let mut tmp_4 = delta_4_minus_3.multiply(&delta_4, builder, driver)?;
         tmp_4 = tmp_4.multiply(&tmp_4.add(&two, builder, driver), builder, driver)?;
         tmp_4 = tmp_4.multiply(&q_delta_range_scaled, builder, driver)?;
-        accumulator.r3 = accumulator.r3.add(&tmp_4, builder, driver);
+        accumulator.r3.add_assign(&tmp_4, builder, driver);
         Ok(())
     }
 }
