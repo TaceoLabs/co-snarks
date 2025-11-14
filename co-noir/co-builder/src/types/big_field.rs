@@ -433,8 +433,8 @@ impl<F: PrimeField> BigField<F> {
 
             let lo = F::from(&x & lo_mask);
             let slice = F::from((x >> lsb) & slice_mask);
-            limb_0 = FieldCT::from_witness(lo.into(), builder);
-            limb_1 = FieldCT::from_witness(slice.into(), builder);
+            limb_0 = FieldCT::from(lo);
+            limb_1 = FieldCT::from(slice);
         }
 
         // If we wish to continue working with this element with lazy reductions - i.e. not moding out again after each
@@ -472,8 +472,8 @@ impl<F: PrimeField> BigField<F> {
 
             let lo = F::from(&x & lo_mask);
             let slice = F::from((x >> lsb) & slice_mask);
-            limb_2 = FieldCT::from_witness(lo.into(), builder);
-            limb_3 = FieldCT::from_witness(slice.into(), builder);
+            limb_2 = FieldCT::from(lo);
+            limb_3 = FieldCT::from(slice);
         }
 
         let binary_basis_limbs = [
@@ -1639,7 +1639,8 @@ impl<F: PrimeField> BigField<F> {
 
         // Compute the prime basis limb of the result
         let constant_to_add_mod_p = &constant_to_add % F::MODULUS.into();
-        let prime_basis_to_add = FieldCT::from(F::from(constant_to_add_mod_p));
+        let prime_basis_to_add =
+            FieldCT::from(F::from(constant_to_add_mod_p));
         result.prime_basis_limb = result
             .prime_basis_limb
             .add(&prime_basis_to_add, builder, driver);
@@ -2018,13 +2019,13 @@ impl<F: PrimeField> BigField<F> {
         }
         if remainders[0].is_constant() {
             remainders[0] = convert_constant_to_fixed_witness(&remainders[0])?;
-            remainders[0] = convert_constant_to_fixed_witness(&remainders[0])?;
         }
 
         let mut limb_0_accumulator = vec![remainders[0].binary_basis_limbs[0].element.clone()];
         let mut limb_2_accumulator = vec![remainders[0].binary_basis_limbs[2].element.clone()];
         let mut prime_limb_accumulator = vec![remainders[0].prime_basis_limb.clone()];
-        let shift_1 = FieldCT::from(F::from(BigUint::one() << NUM_LIMB_BITS));
+        let shift_1 =
+            FieldCT::from(F::from(BigUint::one() << NUM_LIMB_BITS));
         for i in 1..remainders.len() {
             limb_0_accumulator.push(remainders[i].binary_basis_limbs[0].element.clone());
             limb_0_accumulator.push(

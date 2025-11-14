@@ -164,6 +164,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         self.is_infinity = is_infinity;
     }
 
+    // TODO CESAR: Should be constant
     pub fn one<P: CurveGroup<ScalarField = F>>(
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
