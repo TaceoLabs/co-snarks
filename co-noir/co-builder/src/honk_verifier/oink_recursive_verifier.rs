@@ -192,9 +192,9 @@ impl OinkRecursiveVerifier {
 
         let beta_mul_n_plus_i =
             beta.multiply(&separator.add(offset, builder, driver), builder, driver)?;
+        let mut numerator_acc = gamma.add(&beta_mul_n_plus_i, builder, driver);
         let beta_mul_one_plus_i =
             beta.multiply(&offset.add(&one, builder, driver), builder, driver)?;
-        let mut numerator_acc = gamma.add(&beta_mul_n_plus_i, builder, driver);
         let mut denominator_acc = gamma.sub(&beta_mul_one_plus_i, builder, driver);
 
         // TACEO TODO: Is there a more efficient way to do this?
