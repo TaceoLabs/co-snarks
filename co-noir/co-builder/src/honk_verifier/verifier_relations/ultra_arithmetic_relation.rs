@@ -51,39 +51,56 @@ impl UltraArithmeticRelation {
         let neg_half = FieldCT::from(-C::ScalarField::from(2u64).inverse().unwrap());
         let three = FieldCT::from(C::ScalarField::from(3_u64));
 
-        let lhs = [w_l.clone(), q_l, q_r, q_o, q_4];
-        let rhs = [w_r.clone(), w_l, w_r, w_o, w_4];
+        let q_arith_sub_1 = q_arith.sub(&one, builder, driver);
+        let q_arith_sub_3 = q_arith.sub(&three, builder, driver);
 
-        let [w_l_w_r, tmp_l, tmp_r, tmp_o, tmp_4] =
-            FieldCT::multiply_many(&lhs, &rhs, builder, driver)?
-                .try_into()
-                .expect("We checked lengths match");
+        let lhs = [
+            q_arith,
+            w_r.clone(),
+            q_arith_sub_3,
+            q_l,
+            q_r,
+            q_o,
+            q_4,
+            q_arith_sub_1,
+        ];
+        let rhs = [
+            scaling_factor.clone(),
+            w_l.clone(),
+            q_m,
+            w_l.clone(),
+            w_r.clone(),
+            w_o.clone(),
+            w_4.clone(),
+            w_4_shift,
+        ];
 
-        let [q_m_w_l_w_r, q_arith_sub_1_w_4_shift, q_arith_scaling] = FieldCT::multiply_many(
-            &[
-                q_m.clone(),
-                q_arith.sub(&one, builder, driver),
-                q_arith.clone(),
-            ],
-            &[w_l_w_r, w_4_shift, scaling_factor.clone()],
-            builder,
-            driver,
-        )?
-        .try_into()
-        .expect("We checked lengths match");
+        let mut mul_raw_data = FieldCT::multiply_many_raw(&lhs, &rhs, builder, driver)?;
 
-        let tmp = q_m_w_l_w_r
-            .multiply(&q_arith.sub(&three, builder, driver), builder, driver)?
-            .multiply(&neg_half, builder, driver)?;
+        let scaled_q_arith = FieldCT::commit_mul(&mut mul_raw_data[0], builder)?;
 
-        let mut tmp = [tmp, tmp_l, tmp_r, tmp_o, tmp_4, q_c]
-            .into_iter()
-            .reduce(|acc, x| acc.add(&x, builder, driver))
-            .unwrap();
+        let w_r_w_l = FieldCT::commit_mul(&mut mul_raw_data[1], builder)?;
 
-        tmp = tmp
-            .add(&q_arith_sub_1_w_4_shift, builder, driver)
-            .multiply(&q_arith_scaling, builder, driver)?;
+        let w_r_w_l_half = w_r_w_l.multiply(&neg_half, builder, driver)?;
+
+        let q_arith_sub_3_q_m = FieldCT::commit_mul(&mut mul_raw_data[2], builder)?;
+
+        let tmp_0 = w_r_w_l_half.multiply(&q_arith_sub_3_q_m, builder, driver)?;
+
+        let q_l_w_l = FieldCT::commit_mul(&mut mul_raw_data[3], builder)?;
+        let q_r_w_r = FieldCT::commit_mul(&mut mul_raw_data[4], builder)?;
+        let mut tmp_1 = q_l_w_l.add(&q_r_w_r, builder, driver);
+        let q_o_w_o = FieldCT::commit_mul(&mut mul_raw_data[5], builder)?;
+        tmp_1.add_assign(&q_o_w_o, builder, driver);
+        let q_4_w_4 = FieldCT::commit_mul(&mut mul_raw_data[6], builder)?;
+        tmp_1.add_assign(&q_4_w_4, builder, driver);
+        tmp_1.add_assign(&q_c, builder, driver);
+        let q_arith_sub_1_w_4_shift = FieldCT::commit_mul(&mut mul_raw_data[7], builder)?;
+        tmp_1.add_assign(&q_arith_sub_1_w_4_shift, builder, driver);
+
+        let tmp = tmp_0
+            .add(&tmp_1, builder, driver)
+            .multiply(&scaled_q_arith, builder, driver)?;
         *r0 = r0.add(&tmp, builder, driver);
 
         Ok(())

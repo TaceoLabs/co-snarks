@@ -426,7 +426,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
-    fn multiply_many_raw<
+    pub(crate) fn multiply_many_raw<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -520,6 +520,26 @@ impl<F: PrimeField> FieldCT<F> {
             .collect::<Vec<_>>();
 
         Ok(result)
+    }
+
+    pub(crate) fn commit_mul<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        mul_raw_data: &mut (Option<(PolyTriple<F>, T::AcvmType)>, Option<Self>),
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+    ) -> eyre::Result<Self> {
+        if let Some((poly_triple, out_value)) = &mut mul_raw_data.0 {
+            let mut result = Self::default();
+            result.witness_index = builder.add_variable(out_value.clone());
+            poly_triple.c = result.witness_index;
+            builder.create_poly_gate(&poly_triple);
+            Ok(result)
+        } else if let Some(res) = &mut mul_raw_data.1 {
+            Ok(res.clone())
+        } else {
+            eyre::bail!("Invalid mul_raw_data: both fields are None");
+        }
     }
 
     pub fn mul_assign<
@@ -1931,18 +1951,7 @@ impl<F: PrimeField> FieldCT<F> {
 
         let mut denominator_data = FieldCT::multiply_many_raw(&lhs, &rhs, builder, driver)?;
         for i in 0..SIZE {
-            let denominator = match &mut denominator_data[i] {
-                (Some((poly_triple, val)), None) => {
-                    // Both lhs and rhs are non-constant, add the variable to the circuit
-                    let mut result = FieldCT::default();
-                    result.witness_index = builder.add_variable(val.to_owned());
-                    poly_triple.c = result.witness_index;
-                    builder.create_poly_gate(poly_triple);
-                    result
-                }
-                (None, Some(val)) => val.to_owned(),
-                _ => unreachable!(),
-            };
+            let denominator = Self::commit_mul(&mut denominator_data[i], builder)?;
             denominator_inverses[i] = one.divide(&denominator, builder, driver)?;
         }
 
@@ -1951,18 +1960,7 @@ impl<F: PrimeField> FieldCT<F> {
             Self::multiply_many_raw(evals, &denominator_inverses, builder, driver)?;
         let mut result = FieldCT::from(F::zero());
         for i in 0..SIZE {
-            let term = match &mut terms_data[i] {
-                (Some((poly_triple, val)), None) => {
-                    // Both evals and denominator_inverses are non-constant, add the variable to the circuit
-                    let mut result = FieldCT::default();
-                    result.witness_index = builder.add_variable(val.to_owned());
-                    poly_triple.c = result.witness_index;
-                    builder.create_poly_gate(poly_triple);
-                    result
-                }
-                (None, Some(val)) => val.to_owned(),
-                _ => unreachable!(),
-            };
+            let term = Self::commit_mul(&mut terms_data[i], builder)?;
             result = result.add(&term, builder, driver);
         }
 
