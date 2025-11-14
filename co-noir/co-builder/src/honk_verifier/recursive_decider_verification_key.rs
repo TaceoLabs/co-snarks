@@ -18,7 +18,7 @@ pub(crate) struct RecursiveDeciderVerificationKey<
     pub(crate) vk_and_hash: VKAndHash<C, T>,
     pub(crate) is_complete: bool,
     pub(crate) public_inputs: Vec<FieldCT<C::ScalarField>>,
-    pub(crate) alphas: [FieldCT<C::ScalarField>; NUM_SUBRELATIONS],
+    pub(crate) alphas: [FieldCT<C::ScalarField>; NUM_SUBRELATIONS - 1],
     pub(crate) gate_challenges: Vec<FieldCT<C::ScalarField>>,
     pub(crate) relation_parameters: RelationParameters<FieldCT<C::ScalarField>>,
     pub(crate) target_sum: FieldCT<C::ScalarField>,
