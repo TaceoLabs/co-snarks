@@ -580,7 +580,7 @@ impl<F: PrimeField> FieldCT<F> {
         one.divide(self, builder, driver)
     }
 
-    fn divide_no_zero_check<
+    pub(crate) fn divide_no_zero_check<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
@@ -1683,7 +1683,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
         // Add the accumulated constant term to the first witness. It does not create any gates - only the additive
         // constant of `accumulator[0]` is updated.
-        accumulator[0] = accumulator[0].add(&constant_term, builder, driver);
+        accumulator[0].add_assign(&constant_term, builder, driver);
 
         // Step 2: compute output value
         let num_elements = accumulator.len();

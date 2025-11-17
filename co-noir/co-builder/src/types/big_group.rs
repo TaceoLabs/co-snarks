@@ -2,7 +2,6 @@ use std::any::TypeId;
 use std::mem;
 
 use super::field_ct::BoolCT;
-use crate::prelude::offset_generator;
 use crate::transcript_ct::Bn254G1;
 use crate::types::big_field::BigField;
 use crate::types::big_group_tables::BatchLookupTablePlookup;
@@ -13,6 +12,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::Zero;
 use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use itertools::izip;
 use mpc_core::gadgets::field_from_hex_string;
 use num_bigint::BigUint;
 
@@ -66,6 +66,14 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         }
     }
 
+    pub fn is_constant(&self) -> bool {
+        debug_assert!(
+            self.x.is_constant() == self.y.is_constant(),
+            "biggroup is_constant: x and y coordinate constant status mismatch"
+        );
+        self.x.is_constant() && self.y.is_constant()
+    }
+
     pub fn point_at_infinity() -> Self {
         BigGroup {
             x: BigField::default(),
@@ -85,14 +93,18 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         };
 
         // TODO CESAR: Use affine one when point is infinity
-        Ok(BigGroup {
+        let out = BigGroup {
             x: BigField::from_witness_other_acvm_type(&x.into(), driver, builder)?,
             y: BigField::from_witness_other_acvm_type(&y.into(), driver, builder)?,
             is_infinity: BoolCT::from_witness_ct(
                 WitnessCT::from_acvm_type(F::from(i as u64).into(), builder),
                 builder,
             ),
-        })
+        };
+
+        out.validate_on_curve(builder, driver)?;
+
+        Ok(out)
     }
 
     /// Checks that the point is on the curve.
@@ -248,8 +260,26 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         );
 
         // Replace (∞, scalar) pairs by the pair (G, 0).
-        let (mut points, mut scalars) =
+        let (points, scalars) =
             BigGroup::handle_points_at_infinity(points, scalars, builder, driver)?;
+
+        // Accumulate constant-constant pairs out of circuit
+        let (constant, variable): (Vec<_>, Vec<_>) = izip!(points.into_iter(), scalars.into_iter())
+            .partition(|(point, scalar)| point.is_constant() && scalar.is_constant());
+
+        let constant_accumulator =
+            constant
+                .into_iter()
+                .fold(P::Affine::zero(), |acc, (point, scalar)| {
+                    let scalar_value = T::get_public(&scalar.get_value(builder, driver))
+                        .expect("Constants should have public values");
+                    let point_value = point
+                        .public_to_affine(builder, driver)
+                        .expect("Constants should have public values");
+                    (acc + point_value * scalar_value).into_affine()
+                });
+
+        let (mut points, mut scalars): (Vec<_>, Vec<_>) = variable.into_iter().unzip();
 
         // If with_edgecases is false, masking_scalar must be constant and equal to 1 (as it is unused).
         if !with_edgecases {
@@ -317,17 +347,18 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         );
 
         let max_num_bits_in_field = F::MODULUS_BIT_SIZE as usize;
-        let mut accumulator = BigGroup::default();
+        let mut accumulator = BigGroup::from_constant_affine::<P>(&constant_accumulator)?;
+
         if !big_points.is_empty() {
             // Process big scalars separately
-            let big_result = BigGroup::process_strauss_msm_rounds(
+            let mut big_result = BigGroup::process_strauss_msm_rounds(
                 &mut big_points,
                 &big_scalars,
                 max_num_bits_in_field,
                 builder,
                 driver,
             )?;
-            accumulator = big_result;
+            accumulator.add_assign(&mut big_result, builder, driver)?;
         }
 
         if !small_points.is_empty() {
@@ -344,11 +375,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 builder,
                 driver,
             )?;
-            accumulator = if big_points.len() > 0 {
-                accumulator.add(&mut small_result, builder, driver)?
-            } else {
-                small_result
-            };
+            accumulator.add_assign(&mut small_result, builder, driver)?;
         }
 
         Ok(accumulator)
@@ -857,17 +884,17 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // If naf_i = 0, then the i-th NAF entry is +1, otherwise it is -1. See the README for more details.
         //
         let mut naf_entries = vec![BoolCT::from(false); num_rounds + 1];
-        // TODO CESAR: Use range constraint
+
         naf_entries[num_rounds] = BoolCT::from_witness_ct(
             WitnessCT::from_acvm_type(naf_entries_acvm_type[0].clone(), builder),
             builder,
         );
+        builder.create_new_range_constraint(naf_entries[num_rounds].witness_index, 1);
 
         for i in 0..num_rounds - 1 {
             // if the next entry is false, we need to flip the sign of the current entry. i.e. make negative
             // This is a VERY hacky workaround to ensure that UltraPlonkBuilder will apply a basic
             // range constraint per bool, and not a full 1-bit range gate
-            // TODO CESAR: Check if this is correct
             let bit = BoolCT::from_witness_ct(
                 WitnessCT::from_acvm_type(naf_entries_acvm_type[i + 1].clone(), builder),
                 builder,
@@ -883,11 +910,12 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             WitnessCT::from_acvm_type(F::zero().into(), builder),
             builder,
         );
-        // TODO CESAR: Range constraint
+
+        builder.create_new_range_constraint(naf_entries[0].witness_index, 1);
 
         // Validate correctness of NAF
         let mut accumulators = Vec::with_capacity(num_rounds + 1);
-        let minus_two = FieldCT::from(F::from(2u64));
+        let minus_two = FieldCT::from(-F::from(2u64));
         let one = FieldCT::from(F::one());
         for i in 0..num_rounds {
             // bit = 1 - 2 * naf
@@ -902,14 +930,9 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             accumulators.push(entry);
         }
 
-        let minus_one = FieldCT::from(-F::one());
-        accumulators.push(
-            naf_entries[num_rounds]
-                .to_field_ct(driver)
-                .multiply(&minus_one, builder, driver)?,
-        );
+        accumulators.push(naf_entries[num_rounds].to_field_ct(driver).neg());
 
-        let total = FieldCT::accumulate(&mut accumulators, builder, driver)?;
+        let total = FieldCT::accumulate(&accumulators, builder, driver)?;
         scalar.assert_equal(&total, builder, driver);
 
         // TACEO TODO: Origin tags?
@@ -1107,6 +1130,16 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         result.is_infinity = result_is_infinity;
 
         Ok(result)
+    }
+
+    fn add_assign<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        other: &mut Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        *self = self.add(other, builder, driver)?;
+        Ok(())
     }
 
     fn sub<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
@@ -1417,7 +1450,17 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 driver,
             )?;
 
-            let updated_scalar = FieldCT::conditional_assign(
+            // TODO CESAR / TODO FLORIN: Need this call for consistency
+            let _ = BoolCT::conditional_assign(
+                is_infinity,
+                &one.is_infinity,
+                &point.is_infinity,
+                builder,
+                driver,
+            )?;
+
+            // No normalize
+            let updated_scalar = FieldCT::conditional_assign_internal(
                 is_infinity,
                 &FieldCT::from(F::ZERO),
                 &scalar,
@@ -1446,43 +1489,27 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        // Ensure max_num_bits is even
-        assert!(max_num_bits % 2 == 0);
-
-        // Check if the point is at infinity
-        let is_point_at_infinity = self.is_infinity.clone();
-
-        // Use batch_mul for single scalar multiplication
-        let mut result = Self::batch_mul(
-            std::slice::from_ref(self),
-            std::slice::from_ref(scalar),
+        // Let's say we have some curve E defined over a field Fq. The order of E is p, which is prime.
+        // Now lets say we are constructing a SNARK circuit over another curve E2, whose order is r.
+        // All of our addition / multiplication / custom gates are going to be evaluating low degree multivariate
+        // polynomials modulo r.
+        // E.g. our addition/mul gate (for wires a, b, c and selectors q_m, q_l, q_r, q_o, q_c) is:
+        //   q_m * a * b + q_l * a + q_r * b + q_o * c + q_c = 0 mod r
+        // We want to construct a circuit that evaluates scalar multiplications of curve E. Where q > r and p > r.
+        // i.e. we need to perform arithmetic in one prime field, using prime field arithmetic in a completely
+        // different prime field.
+        // To do this, we need to emulate a binary (or in our case quaternary) number system in Fr, so that we can
+        // use the binary/quaternary basis to emulate arithmetic in Fq. Which is very messy. See bigfield.hpp for
+        // the specifics.
+        Self::batch_mul(
+            &[self.clone()],
+            &[scalar.clone()],
             max_num_bits,
             false,
             &FieldCT::from(F::ONE),
             builder,
             driver,
-        )?;
-
-        // If the input point is at infinity, propagate its coordinates and infinity flag
-        let x = BigField::conditional_assign(
-            &is_point_at_infinity,
-            &mut self.x.clone(),
-            &mut result.x,
-            builder,
-            driver,
-        )?;
-        let y = BigField::conditional_assign(
-            &is_point_at_infinity,
-            &mut self.y.clone(),
-            &mut result.y,
-            builder,
-            driver,
-        )?;
-
-        let mut out = Self::new(x, y);
-        out.is_infinity = is_point_at_infinity;
-
-        Ok(out)
+        )
     }
 
     /*
@@ -1634,6 +1661,40 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let y_hex = self.y.debug_print(builder, driver);
 
         format!("({},{})", x_hex, y_hex)
+    }
+
+    pub fn public_to_affine<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<P::Affine> {
+        let is_infinity = self.is_infinity.get_value(driver);
+        let pub_is_infinity = T::get_public(&is_infinity).expect("Could not get public value");
+        if pub_is_infinity == F::ONE.into() {
+            return Ok(P::Affine::zero());
+        }
+
+        let x_value = self.x.get_value_fq(builder, driver)?;
+        let y_value = self.y.get_value_fq(builder, driver)?;
+
+        let x_pub = T::get_public_other_acvm_type(&x_value).expect("Could not get public value");
+        let y_pub = T::get_public_other_acvm_type(&y_value).expect("Could not get public value");
+
+        // TODO CESAR / TODO FLORIN: Handle unsafeness properly
+        if TypeId::of::<P>() == TypeId::of::<Bn254G1>() {
+            let (x_bn254, y_bn254) = unsafe {
+                (
+                    *mem::transmute::<&P::BaseField, &ark_bn254::Fq>(&x_pub),
+                    *mem::transmute::<&P::BaseField, &ark_bn254::Fq>(&y_pub),
+                )
+            };
+            let point_bn254 = ark_bn254::G1Affine::new(x_bn254, y_bn254);
+            let point: P::Affine =
+                unsafe { *mem::transmute::<&ark_bn254::G1Affine, &P::Affine>(&point_bn254) };
+            return Ok(point);
+        }
+
+        eyre::bail!("public_to_affine not implemented for this curve")
     }
 
     pub fn to_affine<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(

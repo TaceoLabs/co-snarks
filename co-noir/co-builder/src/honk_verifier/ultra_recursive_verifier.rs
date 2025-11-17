@@ -166,7 +166,6 @@ impl UltraRecursiveVerifier {
             None
         };
 
-        // TODO CESAR: Check if REPEATED_COMMITMENTS is correct
         let mut opening_claim = ShpleminiVerifier::compute_batch_opening_claim(
             &padding_indicator_array,
             &mut claim_batcher,

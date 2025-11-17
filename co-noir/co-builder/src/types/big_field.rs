@@ -1893,7 +1893,7 @@ impl<F: PrimeField> BigField<F> {
 
         let quotient =
             BigField::from_acvm_limbs(&quotient, false, num_quotient_bits, builder, driver)?;
-        let result = BigField::from_acvm_limbs(&result_value, true, 0, builder, driver)?;
+        let result = BigField::from_acvm_limbs(&result_value, false, 0, builder, driver)?;
         Self::unsafe_evaluate_multiply_add(
             &denominator,
             &result,
@@ -2369,7 +2369,9 @@ impl<F: PrimeField> BigField<F> {
 
         let quotient =
             BigField::from_acvm_limbs(&quotient, false, num_quotient_bits, builder, driver)?;
-        let remainder = BigField::from_witness_other_acvm_type(&remainder, driver, builder)?;
+        let remainder_limbs =
+            driver.other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, _>(&remainder)?;
+        let remainder = BigField::from_acvm_limbs(&remainder_limbs, false, 0, builder, driver)?;
 
         Self::unsafe_evaluate_square_add(self, to_add, &quotient, &remainder, builder, driver)?;
 
@@ -2468,7 +2470,10 @@ impl<F: PrimeField> BigField<F> {
 
         let quotient =
             BigField::from_acvm_limbs(&quotient, false, num_quotient_bits, builder, driver)?;
-        let remainder = BigField::from_witness_other_acvm_type(&remainder, driver, builder)?;
+
+        let remainder_limbs =
+            driver.other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, _>(&remainder)?;
+        let remainder = BigField::from_acvm_limbs(&remainder_limbs, false, 0, builder, driver)?;
 
         Self::unsafe_evaluate_multiply_add(
             self,

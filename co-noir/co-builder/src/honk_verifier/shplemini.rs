@@ -1,4 +1,4 @@
-use std::array;
+use std::{array, vec};
 
 use crate::{
     honk_verifier::claim_batcher::ClaimBatcher,
@@ -21,7 +21,6 @@ use co_noir_common::{
     polynomials::entities::PRECOMPUTED_ENTITIES_SIZE,
     types::ZeroKnowledge,
 };
-use itertools::{interleave, izip};
 pub struct BatchOpeningClaim<
     C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
@@ -90,18 +89,17 @@ impl ShpleminiVerifier {
         // - Get evaluations (A₀(−r), A₁(−r²), ... , Aₙ₋₁(−r²⁽ⁿ⁻¹⁾))1
         let gemini_fold_neg_evaluations = (1..=virtual_log_n)
             .map(|i| transcript.receive_fr_from_prover(format!("Gemini:a_{}", i + 1)))
-            .collect::<HonkProofResult<Vec<FieldCT<C::ScalarField>>>>()?;
+            .collect::<HonkProofResult<Vec<_>>>()?;
 
         // - Compute vector (r, r², ... , r^{2^{d-1}}), where d = log_n
-        let gemini_eval_challenge_powers =
-            std::iter::successors(Some(gemini_evaluation_challenge.clone()), |last| {
-                Some(
-                    last.multiply(last, builder, driver)
-                        .expect("failed to compute squares of gemini evaluation challenge"),
-                )
-            })
-            .take(virtual_log_n)
-            .collect::<Vec<_>>();
+        let mut gemini_eval_challenge_powers = vec![gemini_evaluation_challenge.clone()];
+        for i in 1..virtual_log_n {
+            gemini_eval_challenge_powers.push(
+                gemini_eval_challenge_powers[i - 1]
+                    .multiply(&gemini_eval_challenge_powers[i - 1], builder, driver)
+                    .expect("failed to compute squares of gemini evaluation challenge"),
+            );
+        }
 
         let mut libra_evaluations: [FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS] =
             array::from_fn(|_| FieldCT::default());
@@ -123,16 +121,15 @@ impl ShpleminiVerifier {
 
         // Compute the powers of ν that are required for batching Gemini, SmallSubgroupIPA, and committed sumcheck
         // univariate opening claims.
-        let num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
-        let shplonk_batching_challenge_powers =
-            std::iter::successors(Some(FieldCT::from(C::ScalarField::ONE)), |last| {
-                Some(
-                    last.multiply(&shplonk_batching_challenge, builder, driver)
-                        .expect("failed to compute powers of shplonk batching challenge"),
-                )
-            })
-            .take(num_powers)
-            .collect::<Vec<_>>();
+        let shplonk_batching_challenge_powers = Self::compute_shplonk_batching_challenge_powers(
+            &shplonk_batching_challenge,
+            virtual_log_n,
+            has_zk == ZeroKnowledge::Yes,
+            // TODO CESAR / TODO FLORIN
+            false,
+            builder,
+            driver,
+        )?;
 
         // - Get the quotient commitment for the Shplonk batching of Gemini opening claims
         let q_commitment =
@@ -233,15 +230,20 @@ impl ShpleminiVerifier {
 
         // Add contributions from A₀₊(r) and  A₀₋(-r) to constant_term_accumulator:
         //  Add  A₀₊(r)/(z−r) to the constant term accumulator
-        constant_term_accumulator = a_0_pos
-            .multiply(&inverse_vanishing_evals[0], builder, driver)?
-            .add(&constant_term_accumulator, builder, driver);
+        constant_term_accumulator.add_assign(
+            &a_0_pos.multiply(&inverse_vanishing_evals[0], builder, driver)?,
+            builder,
+            driver,
+        );
 
         // Add  A₀₋(-r)/(z+r) to the constant term accumulator
-        constant_term_accumulator = gemini_fold_neg_evaluations[0]
-            .multiply(&shplonk_batching_challenge, builder, driver)?
-            .multiply(&inverse_vanishing_evals[1], builder, driver)?
-            .add(&constant_term_accumulator, builder, driver);
+        constant_term_accumulator.add_assign(
+            &gemini_fold_neg_evaluations[0]
+                .multiply(&shplonk_batching_challenge, builder, driver)?
+                .multiply(&inverse_vanishing_evals[1], builder, driver)?,
+            builder,
+            driver,
+        );
 
         Self::remove_repeated_commitments(&mut commitments, &mut scalars, builder, driver);
 
@@ -327,9 +329,9 @@ impl ShpleminiVerifier {
 
         let one = FieldCT::from(C::ScalarField::ONE);
 
-        // TACEO TODO: Batch invert
+        // TACEO TODO: Batch invert / no zero check
         for denom in denominators.iter_mut() {
-            *denom = one.divide(denom, builder, driver)?;
+            *denom = one.divide_no_zero_check(denom, builder, driver)?;
         }
 
         Ok(denominators)
@@ -383,26 +385,24 @@ impl ShpleminiVerifier {
         let evals = fold_neg_evals.to_vec();
         let mut eval_pos_prev = batched_evaluation.clone();
         let one = FieldCT::from(C::ScalarField::ONE);
+        // TODO CESAR: But why?
+        let mut zero = FieldCT::from(C::ScalarField::ZERO);
+        zero.convert_constant_to_fixed_witness(builder, driver);
 
         let mut fold_pos_evaluations = Vec::with_capacity(virtual_log_n);
 
         // Add the contribution of P-((-r)ˢ) to get A_0(-r), which is 0 if there are no interleaved polynomials
         // evals[0] += p_neg
 
+        // TODO CESAR / TODO FLORIN: Batch these
+
         // Solve the sequence of linear equations
         let one_sub_u = evaluation_point
             .iter()
             .map(|u| one.sub(u, builder, driver))
             .collect::<Vec<_>>();
-        let challs_by_one_sub_u =
-            FieldCT::multiply_many(challenge_powers, &one_sub_u, builder, driver)?;
-        let challs_by_one_sub_u_sub_u = challs_by_one_sub_u
-            .iter()
-            .zip(evaluation_point)
-            .map(|(a, u)| a.sub(u, builder, driver))
-            .collect::<Vec<_>>();
-        let challs_by_one_sub_u_add_u_by_eval_neg =
-            FieldCT::multiply_many(&challs_by_one_sub_u_sub_u, &evals, builder, driver)?;
+        let mut challs_by_one_sub_u =
+            FieldCT::multiply_many_raw(challenge_powers, &one_sub_u, builder, driver)?;
 
         for l in (1..=virtual_log_n).rev() {
             // Get r²⁽ˡ⁻¹⁾
@@ -410,23 +410,26 @@ impl ShpleminiVerifier {
 
             // Get uₗ₋₁
             let u = evaluation_point[l - 1].clone();
+            let eval_neg = evals[l - 1].clone();
 
             // Get A₍ₗ₋₁₎(−r²⁽ˡ⁻¹⁾)
             // Compute the numerator
             let lhs = challenge_power
                 .multiply(&eval_pos_prev, builder, driver)?
                 .multiply(&FieldCT::from(C::ScalarField::from(2u64)), builder, driver)?;
-            let rhs = &challs_by_one_sub_u_add_u_by_eval_neg[l - 1];
-            let mut eval_pos = lhs.sub(rhs, builder, driver);
+            let tmp = FieldCT::commit_mul(&mut challs_by_one_sub_u[l - 1], builder)?
+                .sub(&u, builder, driver);
+            let rhs = eval_neg.multiply(&tmp, builder, driver)?;
+            let mut eval_pos = lhs.sub(&rhs, builder, driver);
 
             // Divide by the denominator
-            eval_pos = one
-                .divide(
-                    &challs_by_one_sub_u[l - 1].add(&u, builder, driver),
-                    builder,
-                    driver,
-                )?
-                .multiply(&eval_pos, builder, driver)?;
+            let tmp = one.divide_no_zero_check(
+                &FieldCT::commit_mul(&mut challs_by_one_sub_u[l - 1], builder)?
+                    .add(&u, builder, driver),
+                builder,
+                driver,
+            )?;
+            eval_pos = eval_pos.multiply(&tmp, builder, driver)?;
 
             // If current index is bigger than log_n, we propagate `batched_evaluation` to the next
             // round.  Otherwise, current `eval_pos` A₍ₗ₋₁₎(−r²⁽ˡ⁻¹⁾) becomes `eval_pos_prev` in the round l-2.
@@ -534,34 +537,34 @@ impl ShpleminiVerifier {
             })
             .collect::<Vec<_>>();
 
-        let scaling_factors = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
+        let mut scaling_factors_raw = FieldCT::multiply_many_raw(&lhs, &rhs, builder, driver)?;
 
-        let gemini_evaluations = interleave(
-            gemini_pos_evaluations[1..].iter().cloned(),
-            gemini_neg_evaluations[1..].iter().cloned(),
-        )
-        .collect::<Vec<_>>();
+        for j in 1..virtual_log_n {
+            // The index of 1/ (z - r^{2^{j}}) in the vector of inverted Gemini denominators
+            let pos_index = 2 * (j - 1);
+            // The index of 1/ (z + r^{2^{j}}) in the vector of inverted Gemini denominators
+            let neg_index = 2 * (j - 1) + 1;
 
-        // Accumulate the const term contribution given by
-        // v^{2j} * A_j(r^{2^j}) /(z - r^{2^j}) + v^{2j+1} * A_j(-r^{2^j}) /(z+ r^{2^j})
-        let gemini_evals_by_scaling =
-            FieldCT::multiply_many(&scaling_factors, &gemini_evaluations, builder, driver)?;
+            // Compute the "positive" scaling factor  (ν^{2j}) / (z - r^{2^{j}})
+            let scaling_factor_pos =
+                FieldCT::commit_mul(&mut scaling_factors_raw[pos_index], builder)?;
 
-        let lhs = (1..virtual_log_n)
-            .map(|i| padding_indicator_array[i].neg())
-            .collect::<Vec<_>>();
-        let rhs = scaling_factors
-            .chunks(2)
-            .map(|pair| pair[0].add(&pair[1], builder, driver))
-            .collect::<Vec<_>>();
+            // Compute the "negative" scaling factor  (ν^{2j+1}) / (z + r^{2^{j}})
+            let scaling_factor_neg =
+                FieldCT::commit_mul(&mut scaling_factors_raw[neg_index], builder)?;
 
-        // Place the scaling factors into the 'scalars' vector
-        scalars.extend(FieldCT::multiply_many(&lhs, &rhs, builder, driver)?);
+            // Accumulate the const term contribution given by
+            // v^{2j} * A_j(r^{2^j}) /(z - r^{2^j}) + v^{2j+1} * A_j(-r^{2^j}) /(z+ r^{2^j})
+            let lhs = scaling_factor_neg.multiply(&gemini_neg_evaluations[j], builder, driver)?;
+            let rhs = scaling_factor_pos.multiply(&gemini_pos_evaluations[j], builder, driver)?;
+            constant_term_accumulator.add_assign(&lhs.add(&rhs, builder, driver), builder, driver);
 
-        for (j, eval_pair) in izip!(1..virtual_log_n, gemini_evals_by_scaling.chunks(2)) {
-            *constant_term_accumulator = constant_term_accumulator
-                .add(&eval_pair[0], builder, driver)
-                .add(&eval_pair[1], builder, driver);
+            // Place the scaling factor to the 'scalars' vector
+            scalars.push(padding_indicator_array[j].neg().multiply(
+                &scaling_factor_neg.add(&scaling_factor_pos, builder, driver),
+                builder,
+                driver,
+            )?);
 
             // Move com(Aᵢ) to the 'commitments' vector
             commitments.push(fold_commitments[j - 1].clone());
@@ -933,6 +936,38 @@ impl ShpleminiVerifier {
         result[1] = denominators[0].multiply(&numerator, builder, driver)?; // Lagrange first evaluated at r
         result[2] = denominators[C::SUBGROUP_SIZE - 1].multiply(&numerator, builder, driver)?; // Lagrange last evaluated at r
 
+        Ok(result)
+    }
+
+    /// Precomputes a vector of the powers of `shplonk_batching_challenge` needed to batch all univariate claims.
+    fn compute_shplonk_batching_challenge_powers<
+        C: HonkCurve<TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        shplonk_batching_challenge: &FieldCT<C::ScalarField>,
+        virtual_log_n: usize,
+        has_zk: bool,
+        committed_sumcheck: bool,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
+        // Minimum size of denominators
+        let mut num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
+        const NUM_COMMITTED_SUMCHECK_CLAIMS_PER_ROUND: usize = 3;
+
+        if has_zk {
+            num_powers += NUM_SMALL_IPA_EVALUATIONS;
+        }
+        if committed_sumcheck {
+            num_powers += NUM_COMMITTED_SUMCHECK_CLAIMS_PER_ROUND * virtual_log_n;
+        }
+
+        let mut result = Vec::with_capacity(num_powers);
+        result.push(FieldCT::from(C::ScalarField::ONE));
+        for idx in 1..num_powers {
+            let prev = &result[idx - 1];
+            result.push(prev.multiply(shplonk_batching_challenge, builder, driver)?);
+        }
         Ok(result)
     }
 }

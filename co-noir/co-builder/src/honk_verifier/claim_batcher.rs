@@ -69,16 +69,26 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         let inverse_vanishing_eval_pos = &inverted_vanishing_evals[0];
         let inverse_vanishing_eval_neg = &inverted_vanishing_evals[1];
 
-        let mul_expr = inverse_vanishing_eval_neg.multiply(nu_challenge, builder, driver)?;
+        // TODO CESAR / TODO FLORIN: Do not recompute inverse_vanishing_eval_neg * nu_challenge twice
 
         // (1/(z−r) + ν/(z+r))
-        self.unshifted.scalar = mul_expr.add(inverse_vanishing_eval_pos, builder, driver);
+        self.unshifted.scalar = inverse_vanishing_eval_pos.add(
+            &nu_challenge.multiply(inverse_vanishing_eval_neg, builder, driver)?,
+            builder,
+            driver,
+        );
 
         // r⁻¹ ⋅ (1/(z−r) − ν/(z+r))
-        let inverse_r = one.divide(r_challenge, builder, driver)?;
-        self.shifted.scalar = inverse_vanishing_eval_pos
-            .sub(&mul_expr, builder, driver)
-            .multiply(&inverse_r, builder, driver)?;
+        let inverse_r = one.divide_no_zero_check(r_challenge, builder, driver)?;
+        self.shifted.scalar = inverse_r.multiply(
+            &inverse_vanishing_eval_pos.sub(
+                &nu_challenge.multiply(inverse_vanishing_eval_neg, builder, driver)?,
+                builder,
+                driver,
+            ),
+            builder,
+            driver,
+        )?;
 
         Ok(())
     }
@@ -109,45 +119,20 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     ) -> HonkProofResult<()> {
         // Append the commitments/scalars from a given batch to the corresponding containers; update the batched
         // evaluation and the running batching challenge in place
-        let rho_powers = std::iter::successors(Some(rho_power.clone()), |acc| {
-            Some(
-                rho.multiply(acc, builder, driver)
-                    .expect("failed to compute rho powers"),
-            )
-        })
-        .take(self.unshifted.commitments.len() + self.shifted.commitments.len())
-        .collect::<Vec<_>>();
-
-        let (unshifted_len, shifted_len) = (
-            self.unshifted.commitments.len(),
-            self.shifted.commitments.len(),
-        );
-
-        let unshifted_scalars_neg =
-            std::iter::repeat_n(self.unshifted.scalar.neg(), unshifted_len).collect::<Vec<_>>();
-        let shifted_scalars_neg =
-            std::iter::repeat_n(self.shifted.scalar.neg(), shifted_len).collect::<Vec<_>>();
-
-        let unshifted_data = interleave(unshifted_scalars_neg, self.unshifted.evaluations.clone())
-            .collect::<Vec<_>>();
-        let shifted_data =
-            interleave(shifted_scalars_neg, self.shifted.evaluations.clone()).collect::<Vec<_>>();
-
-        let lhs = [unshifted_data, shifted_data].concat();
-        let rhs = interleave(rho_powers.clone(), rho_powers).collect::<Vec<_>>();
-        let tmp = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?;
-        let (unshifted_data, shifted_data) = tmp.split_at(unshifted_len * 2);
-
+        // TODO CESAR / TODO FLORIN Batch again
         let mut aggregate_claim_data_and_update_batched_evaluation =
-            |batch: &mut Batch<C, T>,
-             batch_data: &[FieldCT<C::ScalarField>]|
-             -> HonkProofResult<()> {
-                for (commitment, data) in izip!(batch.commitments.iter_mut(), batch_data.chunks(2))
+            |batch: &Batch<C, T>, rho_power: &mut FieldCT<C::ScalarField>| -> HonkProofResult<()> {
+                for (commitment, evaluation) in
+                    izip!(batch.commitments.iter(), batch.evaluations.iter())
                 {
                     commitments.push(commitment.clone());
-                    scalars.push(data[0].clone());
-
-                    *batched_evaluation = batched_evaluation.add(&data[1], builder, driver);
+                    scalars.push(batch.scalar.neg().multiply(rho_power, builder, driver)?);
+                    batched_evaluation.add_assign(
+                        &evaluation.multiply(&rho_power, builder, driver)?,
+                        builder,
+                        driver,
+                    );
+                    *rho_power = rho_power.multiply(rho, builder, driver)?;
                 }
                 HonkProofResult::Ok(())
             };
@@ -156,10 +141,10 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         // scalars for the batch mul
 
         // i-th Unshifted commitment will be multiplied by ρ^i and (1/(z−r) + ν/(z+r))
-        aggregate_claim_data_and_update_batched_evaluation(&mut self.unshifted, unshifted_data)?;
+        aggregate_claim_data_and_update_batched_evaluation(&mut self.unshifted, rho_power)?;
 
         // i-th shifted commitments will be multiplied by p^{k+i} and r⁻¹ ⋅ (1/(z−r) − ν/(z+r))
-        aggregate_claim_data_and_update_batched_evaluation(&mut self.shifted, shifted_data)?;
+        aggregate_claim_data_and_update_batched_evaluation(&mut self.shifted, rho_power)?;
 
         Ok(())
     }
