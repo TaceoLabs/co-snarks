@@ -117,7 +117,9 @@ impl<F: PrimeField> FieldCT<F> {
                 .expect("Constant should be public");
             builder.assert_equal_constant(self.witness_index as usize, right);
         } else if self.is_normalized() || other.is_normalized() {
-            builder.assert_equal(self.witness_index as usize, other.witness_index as usize);
+            let self_wi = self.get_witness_index(builder, driver) as usize;
+            let other_wi = other.get_witness_index(builder, driver) as usize;
+            builder.assert_equal(self_wi, other_wi);
         } else {
             // Instead of creating 2 gates for normalizing both witnesses and applying a copy constraint, we use a
             // single `add` gate constraining a - b = 0

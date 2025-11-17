@@ -1215,18 +1215,24 @@ impl<F: PrimeField> BigField<F> {
         let lhs = self.get_value_fq(builder, driver)?;
         let rhs = other.get_value_fq(builder, driver)?;
         let is_equal_raw = driver.equals_other_acvm_type(&lhs, &rhs)?;
-        let is_equal =
-            BoolCT::from_witness_ct(WitnessCT::from_acvm_type(is_equal_raw, builder), builder);
+        let is_equal = BoolCT::from_witness_ct(
+            WitnessCT::from_acvm_type(is_equal_raw.clone(), builder),
+            builder,
+        );
 
         if self.is_constant() && other.is_constant() {
             return Ok(is_equal);
         }
-
         let mut diff = self.sub(other, builder, driver)?;
         let diff_native = diff.get_value_fq(builder, driver)?;
 
         // TODO CESAR: Handle zero case
         let inverse_native = driver.inverse_other_acvm_type(diff_native)?;
+        let inverse_native = driver.cmux_other_acvm_type(
+            is_equal_raw,
+            T::OtherAcvmType::<P>::default(),
+            inverse_native,
+        )?;
 
         let mut inverse =
             BigField::from_witness_other_acvm_type::<P, T>(&inverse_native, driver, builder)?;
@@ -1698,7 +1704,7 @@ impl<F: PrimeField> BigField<F> {
         // Compute the prime basis limb of the result
         let constant_to_add_mod_p = &constant_to_add % F::MODULUS.into();
         let prime_basis_to_add = FieldCT::from(F::from(constant_to_add_mod_p));
-        result.prime_basis_limb = result
+        result.prime_basis_limb = self
             .prime_basis_limb
             .add(&prime_basis_to_add, builder, driver);
         result.prime_basis_limb =
@@ -2569,7 +2575,9 @@ impl<F: PrimeField> BigField<F> {
         }
 
         // Create the result witness
-        let result = BigField::from_witness_other_acvm_type(&result_value, driver, builder)?;
+        let result_limbs = driver
+            .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, _>(&result_value)?;
+        let result = BigField::from_acvm_limbs(&result_limbs, false, 0, builder, driver)?;
 
         let mut eval_left = vec![result.clone()];
         let mut eval_right = vec![divisor.clone()];
@@ -2752,7 +2760,9 @@ impl<F: PrimeField> BigField<F> {
             remainder.convert_constant_to_fixed_witness::<P, T>(builder, driver);
             remainder
         } else {
-            BigField::from_witness_other_acvm_type(&remainder, driver, builder)?
+            let remainder_limbs = driver
+                .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, P>(&remainder)?;
+            BigField::from_acvm_limbs(&remainder_limbs, false, 0, builder, driver)?
         };
 
         Self::unsafe_evaluate_multiple_multiply_add(
@@ -3387,6 +3397,25 @@ impl<F: PrimeField> BigField<F> {
             }
         }
 
+        // If both elements are the same, we can just return one of them
+        let is_limb_same = |a: &FieldCT<F>, b: &FieldCT<F>| -> bool {
+            let is_witness_index_same = a.witness_index == b.witness_index;
+            let is_add_const_same = a.additive_constant == b.additive_constant;
+            let is_mul_const_same = a.multiplicative_constant == b.multiplicative_constant;
+            is_witness_index_same && is_add_const_same && is_mul_const_same
+        };
+
+        if is_limb_same(&self.prime_basis_limb, &other.prime_basis_limb)
+            && (0..NUM_LIMBS).all(|i| {
+                is_limb_same(
+                    &self.binary_basis_limbs[i].element,
+                    &other.binary_basis_limbs[i].element,
+                )
+            })
+        {
+            return Ok(self.clone());
+        }
+
         // AZTEC TODO: use field_t::conditional_assign method
         let binary_limbs = (0..NUM_LIMBS)
             .map(|i| {
@@ -3531,7 +3560,7 @@ impl<F: PrimeField> BigField<F> {
 
         // check that the add terms alone cannot overflow the crt modulus. v. unlikely so just forbid circuits that
         // trigger this case
-        assert!(
+        debug_assert!(
             add_term.clone() + maximum_default_bigint.clone() < Self::get_maximum_crt_product()
         );
 

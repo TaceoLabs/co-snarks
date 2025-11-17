@@ -74,6 +74,15 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         falsy: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmType>;
 
+    fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: Self::AcvmType,
+        truthy: Self::OtherAcvmType<C>,
+        falsy: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
 

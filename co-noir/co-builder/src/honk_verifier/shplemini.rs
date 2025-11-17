@@ -385,7 +385,7 @@ impl ShpleminiVerifier {
         let evals = fold_neg_evals.to_vec();
         let mut eval_pos_prev = batched_evaluation.clone();
         let one = FieldCT::from(C::ScalarField::ONE);
-        // TODO CESAR: But why?
+        // TODO CESAR / TODO FLORIN: But why is this here?
         let mut zero = FieldCT::from(C::ScalarField::ZERO);
         zero.convert_constant_to_fixed_witness(builder, driver);
 
