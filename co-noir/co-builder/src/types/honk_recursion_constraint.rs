@@ -633,7 +633,7 @@ fn populate_field_elements_for_mock_commitments<
     C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 >(
-    fields: &mut [T::AcvmType],
+    fields: &mut Vec<T::AcvmType>,
     num_commitments: usize,
 ) {
     let mock_commitment = C::Affine::generator();
@@ -656,6 +656,6 @@ fn populate_field_elements_for_mock_commitments<
     };
 
     for _ in 0..num_commitments {
-        fields.clone_from_slice(&mock_commitment_frs);
+        fields.extend_from_slice(&mock_commitment_frs);
     }
 }
