@@ -2662,7 +2662,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .cached_partial_non_native_field_multiplications
             .iter_mut()
         {
-            for i in 0..5 {
+            for i in 0..c.a.len() {
                 c.a[i] = self.real_variable_index[c.a[i] as usize];
                 c.b[i] = self.real_variable_index[c.b[i] as usize];
             }
@@ -3548,13 +3548,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         // Add witnesses into the multiplication cache
         // (when finalising the circuit, we will remove duplicates; several dups produced by biggroup methods)
-        let mut cache_entry = CachedPartialNonNativeFieldMultiplication {
+        let cache_entry = CachedPartialNonNativeFieldMultiplication {
             a: a_in,
             b: b_in,
             lo_0,
             hi_0,
             hi_1,
         };
+        self.cached_partial_non_native_field_multiplications.push(cache_entry);
 
         Ok([lo_0, hi_1])
     }
@@ -3802,10 +3803,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             block.q_nnf().push(P::ScalarField::zero());
             block.q_poseidon2_external().push(P::ScalarField::zero());
             block.q_poseidon2_internal().push(P::ScalarField::zero());
-            // If you have additional selectors, pad them here
-            // if HasAdditionalSelectors<ExecutionTrace> {
-            //     block.pad_additional();
-            // }
         }
         self.check_selector_length_consistency();
 
