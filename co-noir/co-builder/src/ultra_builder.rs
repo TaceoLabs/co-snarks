@@ -3635,8 +3635,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/896): descrepency between above comment and the actual
         // implementation below.
         let block = &mut self.blocks.arithmetic;
-        block.populate_wires(y_p, x_0, y_0, z_p);
-        block.populate_wires(x_p, x_1, y_1, z_0);
+        block.populate_wires(y_p, x_0, y_0, x_p);
+        block.populate_wires(z_p, x_1, y_1, z_0);
         block.populate_wires(x_2, y_2, z_2, z_1);
         block.populate_wires(x_3, y_3, z_3, self.zero_idx);
 

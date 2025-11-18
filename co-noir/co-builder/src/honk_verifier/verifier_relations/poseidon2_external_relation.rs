@@ -65,10 +65,10 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2ExternalRelatio
 
         // add round constants which are loaded in selectors
         // TACEO TODO: Batch somehow
-        let u1 = sbox(&c_1.add(&w_1, builder, driver), builder, driver)?;
-        let u2 = sbox(&c_2.add(&w_2, builder, driver), builder, driver)?;
-        let u3 = sbox(&c_3.add(&w_3, builder, driver), builder, driver)?;
-        let u4 = sbox(&c_4.add(&w_4, builder, driver), builder, driver)?;
+        let u1 = sbox(&w_1.add(&c_1, builder, driver), builder, driver)?;
+        let u2 = sbox(&w_2.add(&c_2, builder, driver), builder, driver)?;
+        let u3 = sbox(&w_3.add(&c_3, builder, driver), builder, driver)?;
+        let u4 = sbox(&w_4.add(&c_4, builder, driver), builder, driver)?;
 
         // matrix mul v = M_E * u with 14 additions
         let t0 = u1.add(&u2, builder, driver); // u_1 + u_2
@@ -102,8 +102,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2ExternalRelatio
 
         //////////////////////////////////////////////////////////////////////
         let tmp =
-            v4.sub(&w_4_shift, builder, driver)
-                .multiply(&q_pos_by_scaling, builder, driver)?;
+            q_pos_by_scaling.multiply(&v4.sub(&w_4_shift, builder, driver), builder, driver)?;
         accumulator.r3.add_assign(&tmp, builder, driver);
 
         Ok(())
