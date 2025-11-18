@@ -49,12 +49,10 @@ impl UltraArithmeticRelation {
         let q_arith = input.precomputed.q_arith().to_owned();
         let w_4_shift = input.shifted_witness.w_4().to_owned();
 
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
-        let neg_half = FieldCT::from_witness(
-            T::AcvmType::from(-C::ScalarField::from(2u64).inverse().unwrap()),
-            builder,
-        );
-        let three = FieldCT::from_witness(C::ScalarField::from(3_u64).into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
+        let neg_half_val = -C::ScalarField::from(2u64).inverse().unwrap();
+        let neg_half = FieldCT::from(neg_half_val);
+        let three = FieldCT::from(C::ScalarField::from(3_u64));
 
         let lhs = [w_l.clone(), q_l, q_r, q_o, q_4];
         let rhs = [w_r.clone(), w_l, w_r, w_o, w_4];
@@ -110,8 +108,8 @@ impl UltraArithmeticRelation {
         let q_arith = input.precomputed.q_arith().to_owned();
         let w_l_shift = input.shifted_witness.w_l().to_owned();
 
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
-        let two = FieldCT::from_witness(C::ScalarField::from(2_u64).into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
+        let two = FieldCT::from(C::ScalarField::from(2_u64));
 
         let [q_arith_sub_1_q_arith_sub_2, q_arith_scaling] = FieldCT::multiply_many(
             &[q_arith.sub(&one, builder, driver), q_arith.clone()],
