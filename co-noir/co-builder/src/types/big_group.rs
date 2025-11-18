@@ -1051,6 +1051,10 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             x_coordinates_match.and(&y_coordinates_match.not(), builder, driver)?;
         let lhs_infinity = self.is_infinity.clone();
         let rhs_infinity = other.is_infinity.clone();
+        println!("lhs_infinity: {:?}", lhs_infinity.get_value(driver));
+        println!("rhs_infinity: {:?}", rhs_infinity.get_value(driver));
+        println!("lhs inf is constant: {}", lhs_infinity.is_constant());
+        println!("rhs inf is constant: {}", rhs_infinity.is_constant());
         let has_infinity_input = lhs_infinity.or(&rhs_infinity, builder, driver)?;
 
         // Compute the gradient `lambda`. If we add, `lambda = (y2 - y1)/(x2 - x1)`, else `lambda = 3x1*x1/2y1
@@ -1094,7 +1098,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             builder,
             driver,
         )?;
-        
+
         let mut lambda = BigField::div_without_denominator_check(
             &mut [lambda_numerator],
             &mut lambda_denominator,
@@ -1328,29 +1332,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 continue;
             }
 
-            let updated_x = BigField::conditional_assign(
-                is_infinity,
-                &mut one.x,
-                &mut point.x.clone(),
-                builder,
-                driver,
-            )?;
-            let updated_y = BigField::conditional_assign(
-                is_infinity,
-                &mut one.y,
-                &mut point.y.clone(),
-                builder,
-                driver,
-            )?;
-
-            // TODO CESAR / TODO FLORIN: Need this call for consistency
-            let _ = BoolCT::conditional_assign(
-                is_infinity,
-                &one.is_infinity,
-                &point.is_infinity,
-                builder,
-                driver,
-            )?;
+            let point = point.conditional_select(&mut one, is_infinity, builder, driver)?;
 
             // No normalize
             let updated_scalar = FieldCT::conditional_assign_internal(
@@ -1361,7 +1343,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 driver,
             )?;
 
-            new_points.push(BigGroup::new(updated_x, updated_y));
+            new_points.push(point);
             new_scalars.push(updated_scalar);
 
             // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1002): if both point and scalar are constant,
@@ -1369,6 +1351,48 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         }
 
         Ok((new_points, new_scalars))
+    }
+
+    /**
+     * @brief Selects `this` if predicate is false, `other` if predicate is true.
+     *
+     * @param other
+     * @param predicate
+     * @return element
+     */
+    /// Selects self if predicate is false, other if predicate is true.
+    pub fn conditional_select<P: CurveGroup<ScalarField = F>>(
+        &self,
+        other: &Self,
+        predicate: &BoolCT<F, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        // If predicate is constant, perform selection out of circuit
+        if predicate.is_constant() {
+            let pred_val = predicate.get_value(driver);
+            return Ok(if pred_val == F::ONE.into() {
+                other.clone()
+            } else {
+                self.clone()
+            });
+        }
+
+        let mut result = self.clone();
+        result.x = self
+            .x
+            .conditional_select(&other.x, predicate, builder, driver)?;
+        result.y = self
+            .y
+            .conditional_select(&other.y, predicate, builder, driver)?;
+        result.is_infinity = BoolCT::conditional_assign(
+            predicate,
+            &other.is_infinity,
+            &self.is_infinity,
+            builder,
+            driver,
+        )?;
+        Ok(result)
     }
 
     /// Implements scalar multiplication that supports short scalars.
