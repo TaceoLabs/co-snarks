@@ -518,9 +518,13 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         // Populate the proof with as many public inputs as required from the ACIR constraints
         populate_field_elements::<C, T>(&mut proof, inner_public_inputs_size, None, driver)?;
 
+        let mut builder =
+            GenericUltraCircuitBuilder::<C, PlainAcvmSolver<C::ScalarField>>::new_minimal(0);
+        let mut plain_driver = PlainAcvmSolver::<C::ScalarField>::new();
+        builder.add_default_to_public_inputs(&mut plain_driver)?;
         // Populate the proof with the public inputs added from barretenberg
         for public_input in self.public_inputs.iter() {
-            proof.push(self.get_variable(*public_input as usize));
+            proof.push(builder.get_variable(*public_input as usize).into());
         }
 
         // Populate mock witness polynomial commitments
@@ -613,17 +617,17 @@ fn populate_field_elements<
     C: HonkCurve<TranscriptFieldType>,
     T: NoirWitnessExtensionProtocol<C::ScalarField>,
 >(
-    fields: &mut [T::AcvmType],
+    fields: &mut Vec<T::AcvmType>,
     num_elements: usize,
     value: Option<C::ScalarField>,
     driver: &mut T,
 ) -> eyre::Result<()> {
-    for field in fields.iter_mut().take(num_elements) {
+    for _ in 0..num_elements {
         let val = match &value {
             Some(v) => T::AcvmType::from(*v),
             None => T::AcvmType::from(driver.rand()?),
         };
-        *field = val;
+        fields.push(val);
     }
 
     Ok(())
