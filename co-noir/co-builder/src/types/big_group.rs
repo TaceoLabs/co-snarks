@@ -1051,10 +1051,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             x_coordinates_match.and(&y_coordinates_match.not(), builder, driver)?;
         let lhs_infinity = self.is_infinity.clone();
         let rhs_infinity = other.is_infinity.clone();
-        println!("lhs_infinity: {:?}", lhs_infinity.get_value(driver));
-        println!("rhs_infinity: {:?}", rhs_infinity.get_value(driver));
-        println!("lhs inf is constant: {}", lhs_infinity.is_constant());
-        println!("rhs inf is constant: {}", rhs_infinity.is_constant());
         let has_infinity_input = lhs_infinity.or(&rhs_infinity, builder, driver)?;
 
         // Compute the gradient `lambda`. If we add, `lambda = (y2 - y1)/(x2 - x1)`, else `lambda = 3x1*x1/2y1
