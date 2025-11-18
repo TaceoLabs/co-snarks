@@ -105,6 +105,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
     }
 
+    fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: Self::AcvmType,
+        truthy: Self::OtherAcvmType<C>,
+        falsy: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        assert!(cond.is_one() || cond.is_zero());
+        if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
+    }
+
     fn add(&self, lhs: Self::AcvmType, rhs: Self::AcvmType) -> Self::AcvmType {
         lhs + rhs
     }
@@ -286,8 +296,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
-        let mut rng = thread_rng();
-        Ok(Self::ArithmeticShare::rand(&mut rng))
+        //TODO FLORIN: Reinstate randomness
+        // let mut rng = thread_rng();
+        // Ok(Self::ArithmeticShare::rand(&mut rng))
+        Ok(F::one())
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
