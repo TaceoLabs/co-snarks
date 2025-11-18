@@ -1255,7 +1255,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
         // Get the offset generator G_offset in native and in-circuit form
         let native_offset_generator = Self::precomputed_native_table_offset_generator::<P>()?;
-        let offset_generator_element =
+        let mut offset_generator_element =
             BigGroup::from_witness(&native_offset_generator, driver, builder)?;
 
         // Compute initial point to be added: (δ)⋅G_offset
@@ -1395,7 +1395,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
     /// `scalar` is a field element. If `max_num_bits` > 0, the length of the scalar must not exceed `max_num_bits`.
     /// `max_num_bits` should be even and < 254. Default value 0 corresponds to unspecified scalar length.
     pub fn scalar_mul<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
-        &self,
+        &mut self,
         scalar: &FieldCT<F>,
         max_num_bits: usize,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1413,7 +1413,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // To do this, we need to emulate a binary (or in our case quaternary) number system in Fr, so that we can
         // use the binary/quaternary basis to emulate arithmetic in Fq. Which is very messy. See bigfield.hpp for
         // the specifics.
-        Self::batch_mul(
+        let is_point_at_infinity = self.is_infinity.clone();
+        let mut result = Self::batch_mul(
             &[self.clone()],
             &[scalar.clone()],
             max_num_bits,
@@ -1421,7 +1422,23 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             &FieldCT::from(F::ONE),
             builder,
             driver,
-        )
+        )?;
+        result.x = BigField::conditional_assign(
+            &is_point_at_infinity,
+            &mut self.x,
+            &mut result.x,
+            builder,
+            driver,
+        )?;
+        result.y = BigField::conditional_assign(
+            &is_point_at_infinity,
+            &mut self.y,
+            &mut result.y,
+            builder,
+            driver,
+        )?;
+        result.set_point_at_infinity(is_point_at_infinity, false, builder, driver);
+        Ok(result)
     }
 
     /*
