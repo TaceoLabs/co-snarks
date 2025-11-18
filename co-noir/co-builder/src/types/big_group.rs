@@ -907,13 +907,14 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // If (x_1, y_1), (x_2, y_2) have x_1 == x_2, and the generic formula for lambda has a division by 0.
         // Then y_1 == y_2 (i.e. we are doubling) or y_2 == y_1 (the sum is infinity).
         // The cases have a special addition formula. The following booleans allow us to handle these cases uniformly.
-        let x_coordinates_match = self.x.equals(&mut other.x, builder, driver)?;
+        let x_coordinates_match = other.x.equals(&mut self.x, builder, driver)?;
         let y_coordinates_match = self.y.equals(&mut other.y, builder, driver)?;
         let infinity_predicate =
             x_coordinates_match.and(&y_coordinates_match.not(), builder, driver)?;
         let double_predicate = x_coordinates_match.and(&y_coordinates_match, builder, driver)?;
         let lhs_infinity = self.is_infinity.clone();
         let rhs_infinity = other.is_infinity.clone();
+        let has_infinity_input = lhs_infinity.or(&rhs_infinity, builder, driver)?;
 
         // Compute the gradient `lambda`. If we add, `lambda = (y2 - y1)/(x2 - x1)`, else `lambda = 3x1*x1/2y1
         let mut add_lambda_numerator = other.y.sub(&mut self.y, builder, driver)?;
@@ -944,8 +945,9 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // divide by zero error.
         // Note: if either inputs are points at infinity we will not use the result of this computation.
         let mut safe_edgecase_denominator = BigField::from_constant(&BigUint::from(1u64));
+        let cond = has_infinity_input.or(&infinity_predicate, builder, driver)?;
         lambda_denominator = BigField::conditional_assign(
-            &infinity_predicate,
+            &cond,
             &mut safe_edgecase_denominator,
             &mut lambda_denominator,
             builder,
@@ -959,7 +961,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         )?;
 
         let mut x3 = lambda.sqradd(
-            &mut [self.x.neg(builder, driver)?, other.x.neg(builder, driver)?],
+            &mut [other.x.neg(builder, driver)?, self.x.neg(builder, driver)?],
             builder,
             driver,
         )?;
@@ -1008,9 +1010,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
         // yes = lhs_infinity && rhs_infinity
         // n.b. can likely optimize this
-        let mut result_is_infinity = infinity_predicate
-            .and(&lhs_infinity.not(), builder, driver)?
-            .and(&rhs_infinity.not(), builder, driver)?
+        let result_is_infinity = infinity_predicate
+            .and(&has_infinity_input.not(), builder, driver)?
             .or(
                 &lhs_infinity.and(&rhs_infinity, builder, driver)?,
                 builder,
@@ -1018,11 +1019,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             )?;
 
         // We are in the UltraBuilder case
-        // TODO CESAR: What about this call?
-        // builder.update_used_witnesses(result_is_infinity.witness_index);
-        let tmp = lhs_infinity.and(&rhs_infinity, builder, driver)?;
-        result_is_infinity = result_is_infinity.or(&tmp, builder, driver)?;
-        result.is_infinity = result_is_infinity;
+        result.set_point_at_infinity(result_is_infinity, true, builder, driver);
 
         Ok(result)
     }

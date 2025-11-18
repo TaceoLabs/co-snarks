@@ -1675,7 +1675,7 @@ impl<F: PrimeField> FieldCT<F> {
         // Remove constant terms from input field elements
         for element in input {
             if element.is_constant() {
-                constant_term = constant_term.add(element, builder, driver);
+                constant_term.add_assign(element, builder, driver);
             } else {
                 accumulator.push(element.clone());
             }

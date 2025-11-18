@@ -642,11 +642,14 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         let mut point_to_aggregate =
             other
                 .p0
+                .clone()
                 .scalar_mul(&recursion_separator, 128, builder, driver)?;
         self.p0 = self.p0.add(&mut point_to_aggregate, builder, driver)?;
-        point_to_aggregate = other
-            .p1
-            .scalar_mul(&recursion_separator, 128, builder, driver)?;
+        point_to_aggregate =
+            other
+                .p1
+                .clone()
+                .scalar_mul(&recursion_separator, 128, builder, driver)?;
         self.p1 = self.p1.add(&mut point_to_aggregate, builder, driver)?;
 
         Ok(())

@@ -598,11 +598,11 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<
         for i in 0..self.num_fives {
             round_accumulator.push(self.five_tables[i].get(
                 &[
-                    naf_entries[5 * i].clone(),
-                    naf_entries[5 * i + 1].clone(),
-                    naf_entries[5 * i + 2].clone(),
-                    naf_entries[5 * i + 3].clone(),
-                    naf_entries[5 * i + 4].clone(),
+                    naf_entries[offset + 5 * i].clone(),
+                    naf_entries[offset + 5 * i + 1].clone(),
+                    naf_entries[offset + 5 * i + 2].clone(),
+                    naf_entries[offset + 5 * i + 3].clone(),
+                    naf_entries[offset + 5 * i + 4].clone(),
                 ],
                 builder,
                 driver,
