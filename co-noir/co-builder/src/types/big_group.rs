@@ -173,8 +173,18 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         start_idx
     }
 
-    pub fn set_is_infinity(&mut self, is_infinity: BoolCT<F, T>) {
-        self.is_infinity = is_infinity;
+    pub(crate) fn set_point_at_infinity<P: CurveGroup<ScalarField = F>>(
+        &mut self,
+        is_infinity: BoolCT<F, T>,
+        add_to_used_witnesses: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        self.is_infinity = is_infinity.normalize(builder, driver);
+        if add_to_used_witnesses {
+            // TODO CESAR / TODO FLORIN: What about this?
+            // mark_witness_as_used(field_t<Builder>(_is_infinity));
+        }
     }
 
     pub fn one<P: CurveGroup<ScalarField = F>>() -> Self {
@@ -462,7 +472,12 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // Subtract the skew factors (if any)
         for i in 0..msm_size {
             let skew = accumulator.sub(&mut points[i], builder, driver)?;
-            accumulator.conditional_select(&skew, &naf_entries[i][num_rounds], builder, driver)?;
+            accumulator = accumulator.conditional_select(
+                &skew,
+                &naf_entries[i][num_rounds],
+                builder,
+                driver,
+            )?;
         }
 
         // Subtract the scaled offset generator
@@ -1073,6 +1088,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // divide by zero error.
         // Note: if either inputs are points at infinity we will not use the result of this computation.
         let mut safe_edgecase_denominator = BigField::from_constant(&BigUint::from(1u64));
+
         let cond = has_infinity_input.or(&infinity_predicate, builder, driver)?;
         lambda_denominator = BigField::conditional_assign(
             &cond,
@@ -1140,9 +1156,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // yes = infinity_predicate && !lhs_infinity && !rhs_infinity
         // yes = lhs_infinity && rhs_infinity
         // n.b. can likely optimize this
-        let mut result_is_infinity = infinity_predicate
-            .and(&lhs_infinity.not(), builder, driver)?
-            .and(&rhs_infinity.not(), builder, driver)?
+        let result_is_infinity = infinity_predicate
+            .and(&has_infinity_input.not(), builder, driver)?
             .or(
                 &lhs_infinity.and(&rhs_infinity, builder, driver)?,
                 builder,
@@ -1150,11 +1165,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             )?;
 
         // We are in the UltraBuilder case
-        // TODO CESAR: What about this call?
-        // builder.update_used_witnesses(result_is_infinity.witness_index);
-        let tmp = lhs_infinity.and(&rhs_infinity, builder, driver)?;
-        result_is_infinity = result_is_infinity.or(&tmp, builder, driver)?;
-        result.is_infinity = result_is_infinity;
+        result.set_point_at_infinity(result_is_infinity, true, builder, driver);
 
         Ok(result)
     }
@@ -1208,7 +1219,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
         let mut result = BigGroup::new(x_3, y_3);
         // Set point at infinity flag if input is at infinity
-        result.set_is_infinity(self.is_infinity.clone());
+        result.set_point_at_infinity(self.is_infinity.clone(), false, builder, driver);
         Ok(result)
     }
 

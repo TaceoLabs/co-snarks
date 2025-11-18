@@ -80,7 +80,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
             let mut result = BigGroup::new(x, y);
 
-            result.set_is_infinity(is_zero);
+            result.set_point_at_infinity(is_zero, false, builder, driver);
 
             // Note that in the case of bn254 with Mega arithmetization, the check is delegated to ECCVM, see
             // `on_curve_check` in `ECCVMTranscriptRelationImpl`.
