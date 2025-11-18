@@ -71,7 +71,18 @@ where
     H: TranscriptHasherCT<P>,
 {
     fn default() -> Self {
-        Self::new()
+        Self {
+            proof_data: Vec::new(),
+            manifest: Default::default(),
+            num_frs_written: 0,
+            num_frs_read: 0,
+            round_number: 0,
+            is_first_challenge: false,
+            current_round_data: Default::default(),
+            previous_challenge: Default::default(),
+            phantom_data: Default::default(),
+            independent_hash_buffer: Vec::new(),
+        }
     }
 }
 impl<P, H> TranscriptCT<P, H>
@@ -81,9 +92,6 @@ where
 {
     pub fn new() -> Self {
         Self {
-            num_frs_written: 0,
-            num_frs_read: 0,
-            round_number: 0,
             is_first_challenge: true,
             ..Default::default()
         }
@@ -98,15 +106,8 @@ where
     pub fn new_verifier(proof: Vec<FieldCT<C::ScalarField>>) -> Self {
         Self {
             proof_data: proof,
-            manifest: Default::default(),
-            num_frs_written: 0,
-            num_frs_read: 0,
-            round_number: 0,
             is_first_challenge: true,
-            current_round_data: Default::default(),
-            previous_challenge: Default::default(),
-            phantom_data: Default::default(),
-            independent_hash_buffer: Vec::new(),
+            ..Default::default()
         }
     }
 

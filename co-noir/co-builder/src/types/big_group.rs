@@ -1024,7 +1024,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         Ok(result)
     }
 
-    fn add_assign<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    pub(crate) fn add_assign<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         other: &mut Self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -1172,8 +1172,9 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let negated_y = self.y.neg(builder, driver)?;
-        Ok(BigGroup::new(self.x.clone(), negated_y))
+        let mut result = self.clone();
+        result.y = self.y.neg(builder, driver)?;
+        Ok(result)
     }
 
     /// Doubles the point (i.e., computes 2P).

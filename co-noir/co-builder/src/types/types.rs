@@ -559,7 +559,7 @@ impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoin
         // Assumes that the app-io public inputs are at the end of the public_inputs vector
         let index = public_inputs.len() - PAIRING_POINT_ACCUMULATOR_SIZE as usize;
         let (p0_limbs, p1_limbs) =
-            public_inputs[..index].split_at(PAIRING_POINT_ACCUMULATOR_SIZE as usize / 2);
+            public_inputs[index..].split_at(PAIRING_POINT_ACCUMULATOR_SIZE as usize / 2);
 
         Ok(Self {
             p0: BigGroup::reconstruct_from_public(p0_limbs, builder, driver)?,
@@ -644,13 +644,16 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                 .p0
                 .clone()
                 .scalar_mul(&recursion_separator, 128, builder, driver)?;
-        self.p0 = self.p0.add(&mut point_to_aggregate, builder, driver)?;
+        self.p0
+            .add_assign(&mut point_to_aggregate, builder, driver)?;
+
         point_to_aggregate =
             other
                 .p1
                 .clone()
                 .scalar_mul(&recursion_separator, 128, builder, driver)?;
-        self.p1 = self.p1.add(&mut point_to_aggregate, builder, driver)?;
+        self.p1
+            .add_assign(&mut point_to_aggregate, builder, driver)?;
 
         Ok(())
     }
