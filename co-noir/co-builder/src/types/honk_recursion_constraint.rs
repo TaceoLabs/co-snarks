@@ -523,7 +523,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         let mut plain_driver = PlainAcvmSolver::<C::ScalarField>::new();
         builder.add_default_to_public_inputs(&mut plain_driver)?;
         // Populate the proof with the public inputs added from barretenberg
-        for public_input in self.public_inputs.iter() {
+        for public_input in builder.public_inputs.iter() {
             proof.push(builder.get_variable(*public_input as usize).into());
         }
 
