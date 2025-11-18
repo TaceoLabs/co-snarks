@@ -99,6 +99,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             is_infinity: BoolCT::from_witness_ct(
                 WitnessCT::from_acvm_type(F::from(i as u64).into(), builder),
                 builder,
+                false,
             )
             .normalize(builder, driver),
         };
@@ -783,8 +784,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         naf_entries[num_rounds] = BoolCT::from_witness_ct(
             WitnessCT::from_acvm_type(naf_entries_acvm_type[0].clone(), builder),
             builder,
+            true,
         );
-        builder.create_new_range_constraint(naf_entries[num_rounds].witness_index, 1);
 
         for i in 0..num_rounds - 1 {
             // if the next entry is false, we need to flip the sign of the current entry. i.e. make negative
@@ -793,9 +794,9 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             let bit = BoolCT::from_witness_ct(
                 WitnessCT::from_acvm_type(naf_entries_acvm_type[i + 1].clone(), builder),
                 builder,
+                true,
             );
 
-            builder.create_new_range_constraint(bit.witness_index, 1);
             naf_entries[num_rounds - 1 - i] = bit;
         }
 
@@ -804,9 +805,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         naf_entries[0] = BoolCT::from_witness_ct(
             WitnessCT::from_acvm_type(F::zero().into(), builder),
             builder,
+            true,
         );
-
-        builder.create_new_range_constraint(naf_entries[0].witness_index, 1);
 
         // Validate correctness of NAF
         let mut accumulators = Vec::with_capacity(num_rounds + 1);

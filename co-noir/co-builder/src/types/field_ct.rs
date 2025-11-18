@@ -785,6 +785,7 @@ impl<F: PrimeField> FieldCT<F> {
                 let bit = BoolCT::from_witness_ct(
                     WitnessCT::from_acvm_type(val.into(), builder),
                     builder,
+                    false,
                 );
                 exponent_bits[31 - i] = bit;
             }
@@ -799,6 +800,7 @@ impl<F: PrimeField> FieldCT<F> {
                 let bit = BoolCT::from_witness_ct(
                     WitnessCT::from_acvm_type(value_bit.into(), builder),
                     builder,
+                    false,
                 );
                 exponent_bits[31 - i] = bit;
                 val >>= 1;
@@ -1558,7 +1560,7 @@ impl<F: PrimeField> FieldCT<F> {
                 Self::one_or_inverse_and_is_zero::<P, T>(native_value.to_owned(), driver)?;
             let is_zero_witness = WitnessCT::from_acvm_type(is_zero.to_owned(), builder);
             (
-                BoolCT::from_witness_ct(is_zero_witness, builder),
+                BoolCT::from_witness_ct(is_zero_witness, builder, false),
                 inverse_val,
             )
         } else {
@@ -1572,7 +1574,7 @@ impl<F: PrimeField> FieldCT<F> {
             let is_zero_witness =
                 WitnessCT::from_acvm_type(F::from(is_zero as u64).into(), builder);
             (
-                BoolCT::from_witness_ct(is_zero_witness, builder),
+                BoolCT::from_witness_ct(is_zero_witness, builder, false),
                 inverse_val,
             )
         };
@@ -2123,8 +2125,16 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
     pub fn from_witness_ct<P: CurveGroup<ScalarField = F>>(
         witness: WitnessCT<F, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
+        use_range_constraint: bool,
     ) -> Self {
-        builder.create_bool_gate(witness.witness_index);
+        if use_range_constraint {
+            // Create a range constraint gate
+            builder.create_new_range_constraint(witness.witness_index, 1);
+        } else {
+            // Create an arithmetic gate to enforce x^2 = x
+            builder.create_bool_gate(witness.witness_index);
+        }
+
         Self {
             witness_bool: witness.witness,
             witness_inverted: false,

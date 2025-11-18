@@ -1218,6 +1218,7 @@ impl<F: PrimeField> BigField<F> {
         let is_equal = BoolCT::from_witness_ct(
             WitnessCT::from_acvm_type(is_equal_raw.clone(), builder),
             builder,
+            false,
         );
 
         if self.is_constant() && other.is_constant() {
