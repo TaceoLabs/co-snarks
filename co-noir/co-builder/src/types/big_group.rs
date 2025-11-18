@@ -462,20 +462,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // Subtract the skew factors (if any)
         for i in 0..msm_size {
             let skew = accumulator.sub(&mut points[i], builder, driver)?;
-            let out_x = accumulator.x.conditional_select(
-                &skew.x,
-                &naf_entries[i][num_rounds],
-                builder,
-                driver,
-            )?;
-
-            let out_y = accumulator.y.conditional_select(
-                &skew.y,
-                &naf_entries[i][num_rounds],
-                builder,
-                driver,
-            )?;
-            accumulator = BigGroup::new(out_x, out_y);
+            accumulator.conditional_select(&skew, &naf_entries[i][num_rounds], builder, driver)?;
         }
 
         // Subtract the scaled offset generator
@@ -1231,8 +1218,9 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let new_y = self.y.conditional_negate(cond, builder, driver)?;
-        Ok(BigGroup::new(self.x.clone(), new_y))
+        let mut result = self.clone();
+        result.y = self.y.conditional_negate(cond, builder, driver)?;
+        Ok(result)
     }
 
     /**
@@ -1303,7 +1291,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
      * @details This is a step in enabling our our multiscalar multiplication algorithms to hande points at infinity.
      */
     // TODO CESAR: Batch FieldCT ops
-    fn handle_points_at_infinity<P: CurveGroup<ScalarField = F>>(
+    fn handle_points_at_infinity<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         points: &[Self],
         scalars: &[FieldCT<F>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
