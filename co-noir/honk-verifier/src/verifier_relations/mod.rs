@@ -108,8 +108,8 @@ pub(crate) fn compute_full_relation_purported_value<
         driver
     )?;
 
-    let mut output = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
-    let first_scalar = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+    let mut output = FieldCT::from(C::ScalarField::ZERO);
+    let first_scalar = FieldCT::from(C::ScalarField::ONE);
     scale_and_batch_all!(
         &mut output,
         &univariate_accumulators,

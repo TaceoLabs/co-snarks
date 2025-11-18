@@ -68,9 +68,8 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         let q_arith = input.precomputed.q_arith();
         let q_aux = input.precomputed.q_aux();
 
-        let limb_size =
-            FieldCT::from_witness(C::ScalarField::from(BigUint::one() << 68).into(), builder);
-        let sublimb_shift = FieldCT::from_witness(C::ScalarField::from(1u64 << 14).into(), builder);
+        let limb_size = FieldCT::from(C::ScalarField::from(BigUint::one() << 68));
+        let sublimb_shift = FieldCT::from(C::ScalarField::from(1u64 << 14));
 
         /*
          * Non native field arithmetic gate 2
@@ -223,11 +222,9 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
         let index_delta = w_1_shift.to_owned().sub(w_1, builder, driver);
         let record_delta = w_4_shift.to_owned().sub(w_4, builder, driver);
 
-        let index_delta_one = index_delta.neg().add(
-            &FieldCT::from_witness(C::ScalarField::one().into(), builder),
-            builder,
-            driver,
-        );
+        let index_delta_one = index_delta
+            .neg()
+            .add(&FieldCT::from(C::ScalarField::ONE), builder, driver);
 
         /*
          * RAM Consistency Check
@@ -309,11 +306,7 @@ impl<C: HonkCurve<TranscriptFieldType, ScalarField = TranscriptFieldType>> Relat
                 .sub(&next_gate_access_type, builder, driver);
 
         let mut tmp = next_gate_access_type.to_owned().neg();
-        tmp = tmp.add(
-            &FieldCT::from_witness(C::ScalarField::one().into(), builder),
-            builder,
-            driver,
-        );
+        tmp = tmp.add(&FieldCT::from(C::ScalarField::ONE), builder, driver);
 
         let timestamp_delta = w_2_shift.to_owned().sub(w_2, builder, driver);
         let lhs = vec![

@@ -45,7 +45,7 @@ impl SumcheckVerifier {
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<SumcheckOutput<C>> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
 
         Self::pad_gate_challenges::<C, T>(gate_challenges, builder);
 
@@ -150,7 +150,7 @@ impl SumcheckVerifier {
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
         let lhs = [
             one.sub(indicator, builder, driver),
             univariate[0].add(&univariate[1], builder, driver),
@@ -175,7 +175,7 @@ impl SumcheckVerifier {
         builder: &mut MegaCircuitBuilder<C, T>,
     ) {
         if gate_challenges.len() < CONST_PROOF_SIZE_LOG_N {
-            let zero = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+            let zero = FieldCT::from(C::ScalarField::ZERO);
             for _ in gate_challenges.len()..CONST_PROOF_SIZE_LOG_N {
                 gate_challenges.push(zero.clone());
             }
@@ -194,10 +194,10 @@ pub fn evaluate_with_domain_start<
     builder: &mut MegaCircuitBuilder<C, T>,
     driver: &mut T,
 ) -> HonkProofResult<FieldCT<C::ScalarField>> {
-    let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+    let one = FieldCT::from(C::ScalarField::ONE);
     let mut full_numerator_value = one.clone();
     for i in domain_start..SIZE + domain_start {
-        let coeff = FieldCT::from_witness(C::ScalarField::from(i as u64).into(), builder);
+        let coeff = FieldCT::from(C::ScalarField::from(i as u64));
         let tmp = u.sub(&coeff, builder, driver);
         full_numerator_value = full_numerator_value.multiply(&tmp, builder, driver)?;
     }
@@ -210,7 +210,7 @@ pub fn evaluate_with_domain_start<
     let mut denominator_inverses = vec![FieldCT::default(); SIZE];
 
     let lhs = (0..SIZE)
-        .map(|i| FieldCT::from_witness(lagrange_denominators[i].into(), builder))
+        .map(|i| FieldCT::from(lagrange_denominators[i]))
         .collect::<Vec<_>>();
     let rhs = (0..SIZE)
         .map(|i| u.sub(&big_domain[i].into(), builder, driver))
@@ -224,10 +224,7 @@ pub fn evaluate_with_domain_start<
     // Compute each term v_j / (d_j*(x-x_j)) of the sum
     let result = FieldCT::multiply_many(evals, &denominator_inverses, builder, driver)?
         .iter()
-        .fold(
-            FieldCT::from_witness(C::ScalarField::zero().into(), builder),
-            |acc, x| acc.add(x, builder, driver),
-        );
+        .fold(FieldCT::from(C::ScalarField::ZERO), |acc, x| acc.add(x, builder, driver));
 
     // Scale the sum by the value of B(x)
     Ok(result.multiply(&full_numerator_value, builder, driver)?)

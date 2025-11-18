@@ -237,7 +237,7 @@ impl OinkRecursiveVerifier {
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
         let mut numerator = one.clone();
         let mut denominator = one.clone();
 

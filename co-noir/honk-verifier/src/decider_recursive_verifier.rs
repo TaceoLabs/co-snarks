@@ -80,12 +80,12 @@ impl DeciderRecursiveVerifier {
             unshifted: Batch {
                 commitments: unshifted_commitments,
                 evaluations: unshifted_scalars,
-                scalar: FieldCT::from_witness(C::ScalarField::ONE.into(), builder),
+                scalar: FieldCT::from(C::ScalarField::ONE),
             },
             shifted: Batch {
                 commitments: to_be_shifted_commitments,
                 evaluations: shifted_scalars,
-                scalar: FieldCT::from_witness(C::ScalarField::ONE.into(), builder),
+                scalar: FieldCT::from(C::ScalarField::ONE),
             },
         };
 
@@ -134,8 +134,8 @@ impl DeciderRecursiveVerifier {
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
-        let zero = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
+        let zero = FieldCT::from(C::ScalarField::ZERO);
 
         // Create a domain of size `virtual_log_n` and compute Lagrange denominators
         let big_domain: Vec<C::ScalarField> = Barycentric::construct_big_domain(VIRTUAL_LOG_N, 1);
@@ -148,7 +148,7 @@ impl DeciderRecursiveVerifier {
         let terms = (0..VIRTUAL_LOG_N)
             .map(|i| {
                 log_n.sub(&one, builder, driver).sub(
-                    &FieldCT::from_witness(big_domain[i].into(), builder),
+                    &FieldCT::from(big_domain[i]),
                     builder,
                     driver,
                 )
@@ -221,9 +221,8 @@ impl DeciderRecursiveVerifier {
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
-        let mut accumulated_circuit_size =
-            FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
+        let mut accumulated_circuit_size = FieldCT::from(C::ScalarField::ONE);
 
         for indicator in padding_indicator_array {
             accumulated_circuit_size.mul_assign(
