@@ -367,16 +367,22 @@ where
         let shift = FieldCT::from(C::ScalarField::from(shift));
         let mut elements = Vec::with_capacity(C::NUM_BASEFIELD_ELEMENTS);
         elements.push(
-            element.binary_basis_limbs[1]
-                .element
-                .multiply(&shift, builder, driver)?
-                .add(&element.binary_basis_limbs[0].element, builder, driver),
+            element.binary_basis_limbs[0].element.add(
+                &element.binary_basis_limbs[1]
+                    .element
+                    .multiply(&shift, builder, driver)?,
+                builder,
+                driver,
+            ),
         );
         elements.push(
-            element.binary_basis_limbs[3]
-                .element
-                .multiply(&shift, builder, driver)?
-                .add(&element.binary_basis_limbs[2].element, builder, driver),
+            element.binary_basis_limbs[2].element.add(
+                &element.binary_basis_limbs[3]
+                    .element
+                    .multiply(&shift, builder, driver)?,
+                builder,
+                driver,
+            ),
         );
         Ok(elements)
     }

@@ -94,12 +94,12 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         let one = FieldCT::from(P::ScalarField::ONE);
 
         let lhs = [
-            self.current_element().sub(&one, builder, driver),
+            round_challenge.clone(),
             one.sub(indicator, builder, driver),
             indicator.clone(),
         ];
         let rhs = [
-            round_challenge.clone(),
+            self.current_element().sub(&one, builder, driver),
             self.partial_evaluation_result.clone(),
             self.partial_evaluation_result.clone(),
         ];
@@ -108,12 +108,14 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
                 .try_into()
                 .expect("we have exactly 3 elements");
 
-        let current_univariate_eval = curr_by_challenge.add(&one, builder, driver);
+        let current_univariate_eval = one.add(&curr_by_challenge, builder, driver);
 
         // If dummy round, make no update to the partial_evaluation_result
-        self.partial_evaluation_result = ind_by_partial
-            .multiply(&current_univariate_eval, builder, driver)?
-            .add(&minus_ind_by_partial, builder, driver);
+        self.partial_evaluation_result = minus_ind_by_partial.add(
+            &ind_by_partial.multiply(&current_univariate_eval, builder, driver)?,
+            builder,
+            driver,
+        );
         self.current_element_idx += 1;
         self.periodicity *= 2;
         Ok(())

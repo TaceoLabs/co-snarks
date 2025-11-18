@@ -68,7 +68,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for NonNativeFieldRelation {
 
         // Non native field arithmetic gate 2
         let mut limb_subproduct = w_1.multiply(w_2_shift, builder, driver)?.add(
-            &w_2.multiply(w_1_shift, builder, driver)?,
+            &w_1_shift.multiply(w_2, builder, driver)?,
             builder,
             driver,
         );

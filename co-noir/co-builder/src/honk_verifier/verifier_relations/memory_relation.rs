@@ -228,26 +228,24 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
                 .multiply(&q_memory_by_scaling, builder, driver)?;
         // For RAM entries, if adjacent indices match and the next access is a read, then
         // values must be equal.
-        let tmp = q_3_by_memory_by_scaling.multiply(
-            &adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation,
-            builder,
-            driver,
-        )?;
+        let tmp =
+            adjacent_values_match_if_adjacent_indices_match_and_next_access_is_a_read_operation
+                .multiply(&q_3_by_memory_by_scaling, builder, driver)?;
         accumulator.r3 = accumulator.r3.add(&tmp, builder, driver);
 
         let tmp =
             index_increases_by_zero_or_one.multiply(&q_3_by_memory_by_scaling, builder, driver)?;
         accumulator.r4 = accumulator.r4.add(&tmp, builder, driver);
 
-        let tmp = q_3_by_memory_by_scaling.multiply(
-            &next_gate_access_type_is_boolean,
+        let tmp = next_gate_access_type_is_boolean.multiply(
+            &q_3_by_memory_by_scaling,
             builder,
             driver,
         )?;
         accumulator.r5 = accumulator.r5.add(&tmp, builder, driver);
 
         let ram_consistency_check_identity =
-            q_3_by_memory_by_scaling.multiply(&access_check, builder, driver)?;
+            access_check.multiply(&q_3_by_memory_by_scaling, builder, driver)?;
 
         /*
          * RAM Timestamp Consistency Check

@@ -3555,7 +3555,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             hi_0,
             hi_1,
         };
-        self.cached_partial_non_native_field_multiplications.push(cache_entry);
+        self.cached_partial_non_native_field_multiplications
+            .push(cache_entry);
 
         Ok([lo_0, hi_1])
     }

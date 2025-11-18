@@ -61,7 +61,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for EllipticRelation {
         // q_elliptic * (q_is_double - 1) * (x3 + x2 + x1)(x2 - x1)(x2 - x1) - y2^2 - y1^2 + 2(y2y1)*q_sign = 0
         let y2_sqr = y_2.multiply(&y_2, builder, driver)?;
         let y1_sqr = y_1.multiply(&y_1, builder, driver)?;
-        let y2_mul_q_sign = q_sign.multiply(&y_2, builder, driver)?;
+        let y2_mul_q_sign = y_2.multiply(&q_sign, builder, driver)?;
         let x2_sub_x1_sqr = x2_sub_x1.multiply(&x2_sub_x1, builder, driver)?;
         let mut x_add_identity = x3_plus_x2_plus_x1.multiply(&x2_sub_x1_sqr, builder, driver)?;
         x_add_identity = x_add_identity
@@ -84,7 +84,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for EllipticRelation {
                 .clone()
                 .sub(&q_elliptic_by_scaling, builder, driver);
 
-        let tmp_0 = neg_q_elliptic_not_double_scaling.multiply(&x_add_identity, builder, driver)?;
+        let tmp_0 = x_add_identity.multiply(&neg_q_elliptic_not_double_scaling, builder, driver)?;
 
         accumulator.r0 = accumulator.r0.sub(&tmp_0, builder, driver);
 
@@ -98,7 +98,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for EllipticRelation {
             driver,
         );
 
-        let tmp_1 = neg_q_elliptic_not_double_scaling.multiply(&y_add_identity, builder, driver)?;
+        let tmp_1 = y_add_identity.multiply(&neg_q_elliptic_not_double_scaling, builder, driver)?;
 
         accumulator.r1 = accumulator.r1.sub(&tmp_1, builder, driver);
 
