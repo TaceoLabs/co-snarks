@@ -111,11 +111,13 @@ impl<F: PrimeField> FieldCT<F> {
         if self.is_constant() {
             let left =
                 T::get_public(&self.get_value(builder, driver)).expect("Constant should be public");
-            builder.assert_equal_constant(other.witness_index as usize, left);
+            let index = other.get_witness_index(builder, driver);
+            builder.assert_equal_constant(index as usize, left);
         } else if other.is_constant() {
             let right = T::get_public(&other.get_value(builder, driver))
                 .expect("Constant should be public");
-            builder.assert_equal_constant(self.witness_index as usize, right);
+            let index = self.get_witness_index(builder, driver);
+            builder.assert_equal_constant(index as usize, right);
         } else if self.is_normalized() || other.is_normalized() {
             let self_wi = self.get_witness_index(builder, driver) as usize;
             let other_wi = other.get_witness_index(builder, driver) as usize;
@@ -1967,7 +1969,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
 
         // Scale the sum by the value of B(x)
-        Ok(result.multiply(&full_numerator_value, builder, driver)?)
+        result.multiply(&full_numerator_value, builder, driver)
     }
 }
 
