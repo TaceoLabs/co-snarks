@@ -11,7 +11,7 @@ pub struct Poseidon2<F: PrimeField, const T: usize, const D: u64> {
 }
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
-    /// Creates a new instance of the Poseidon2 permuation with given parameters
+    /// Creates a new instance of the Poseidon2 permutation with given parameters
     pub fn new(params: &'static Poseidon2Params<F, T, D>) -> Self {
         Self { params }
     }
@@ -176,14 +176,14 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         input[0] += &self.params.round_constants_internal[rc_offset];
     }
 
-    /// One external round of the Poseidon2 permuation.
+    /// One external round of the Poseidon2 permutation.
     pub fn external_round(&self, state: &mut [F; T], r: usize) {
         self.add_rc_external(state, r);
         Self::sbox(state);
         Self::matmul_external(state);
     }
 
-    /// One internal round of the Poseidon2 permuation.
+    /// One internal round of the Poseidon2 permutation.
     pub fn internal_round(&self, state: &mut [F; T], r: usize) {
         self.add_rc_internal(state, r);
         Self::single_sbox(&mut state[0]);

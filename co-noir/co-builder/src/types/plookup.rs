@@ -1838,7 +1838,7 @@ impl<F: PrimeField> Plookup<F> {
         //  * | 1 | a1                                | b1                               | s1                                |
         //  * +---+-----------------------------------+----------------------------------+-----------------------------------+
         //  *
-        //  * Note that we compute the accumulating sums of the slices so as to avoid using additonal gates for the purpose of
+        //  * Note that we compute the accumulating sums of the slices so as to avoid using additional gates for the purpose of
         //  * reconstructing the original inputs/outputs. I.e. the output value at the 0th index in the above table is the
         //  * actual value we were interested in computing in the first place. Importantly, the structure of the remaining rows
         //  * is such that row_i - r*row_{i+1} produces an entry {a_j, b_j, s_j} that exactly corresponds to an entry in a
