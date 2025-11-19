@@ -325,8 +325,8 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
         assert_eq!(bits.len(), SIZE.ilog2() as usize);
         let mut accumulators = Vec::new();
         for (i, bit) in bits.iter().enumerate() {
-            accumulators.push(FieldCT::from(F::from(1u64 << i)).multiply(
-                &bit.to_field_ct(driver),
+            accumulators.push(bit.to_field_ct(driver).multiply(
+                &FieldCT::from(F::from(1u64 << i)),
                 builder,
                 driver,
             )?);
@@ -575,7 +575,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BatchLookupTablePlookup<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
     >(
         &mut self,
-        naf_entries: &Vec<BoolCT<F, T>>,
+        naf_entries: &[BoolCT<F, T>],
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<ChainAddAccumulator<F>> {
