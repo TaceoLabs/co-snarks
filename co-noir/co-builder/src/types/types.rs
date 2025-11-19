@@ -1,39 +1,21 @@
 use super::big_field::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
-use crate::builder::UltraCircuitBuilder;
-use crate::flavours::ultra_flavour::UltraFlavour;
 use crate::keys::proving_key::ProvingKey;
-use crate::polynomials::polynomial::Polynomial;
-use crate::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ProverWitnessEntitiesFlavour,
-};
-use crate::prelude::GenericUltraCircuitBuilder;
-use crate::prover_flavour::ProverFlavour;
-use ark_ec::pairing::Pairing;
+use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, ProverWitnessEntities};
+use crate::types::field_ct::BoolCT;
+use crate::ultra_builder::UltraCircuitBuilder;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ZeroKnowledge {
-    No,
-    Yes,
-}
-
-impl From<bool> for ZeroKnowledge {
-    fn from(value: bool) -> Self {
-        if value {
-            ZeroKnowledge::Yes
-        } else {
-            ZeroKnowledge::No
-        }
-    }
-}
 
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct PolyTriple<F: PrimeField> {
@@ -128,19 +110,14 @@ pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) value: PolyTriple<F>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Default)]
 #[expect(clippy::upper_case_acronyms)]
 pub(crate) enum BlockType {
+    #[default]
     ROM = 0,
     RAM = 1,
     CallData = 2,
     ReturnData = 3,
-}
-
-impl Default for BlockType {
-    fn default() -> Self {
-        Self::ROM
-    }
 }
 
 #[derive(Default)]
@@ -190,33 +167,36 @@ pub struct UltraTraceBlocks<T: Default> {
     pub(crate) arithmetic: T,
     pub(crate) delta_range: T,
     pub(crate) elliptic: T,
-    pub(crate) aux: T,
+    pub(crate) memory: T,
+    pub(crate) nnf: T,
     pub(crate) poseidon2_external: T,
     pub(crate) poseidon2_internal: T,
 }
 
 impl<T: Default> UltraTraceBlocks<T> {
-    pub fn get(&self) -> [&T; 8] {
+    pub fn get(&self) -> [&T; 9] {
         [
             &self.pub_inputs,
             &self.lookup,
             &self.arithmetic,
             &self.delta_range,
             &self.elliptic,
-            &self.aux,
+            &self.memory,
+            &self.nnf,
             &self.poseidon2_external,
             &self.poseidon2_internal,
         ]
     }
 
-    pub fn get_mut(&mut self) -> [&mut T; 8] {
+    pub fn get_mut(&mut self) -> [&mut T; 9] {
         [
             &mut self.pub_inputs,
             &mut self.lookup,
             &mut self.arithmetic,
             &mut self.delta_range,
             &mut self.elliptic,
-            &mut self.aux,
+            &mut self.memory,
+            &mut self.nnf,
             &mut self.poseidon2_external,
             &mut self.poseidon2_internal,
         ]
@@ -228,7 +208,7 @@ impl<T: Default> UltraTraceBlocks<T> {
 }
 
 pub const NUM_WIRES: usize = 4;
-pub const NUM_SELECTORS: usize = 13;
+pub const NUM_SELECTORS: usize = 14;
 pub type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS>;
 
 pub struct ExecutionTraceBlock<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> {
@@ -262,14 +242,14 @@ impl<F: PrimeField> Default for UltraTraceBlocks<UltraTraceBlock<F>> {
             arithmetic: Default::default(),
             delta_range: Default::default(),
             elliptic: Default::default(),
-            aux: Default::default(),
+            memory: Default::default(),
+            nnf: Default::default(),
             lookup: Default::default(),
             poseidon2_external: Default::default(),
             poseidon2_internal: Default::default(),
         };
-
         res.pub_inputs.is_pub_inputs = true;
-        res.aux.has_ram_rom = true;
+        res.memory.has_ram_rom = true;
         res
     }
 }
@@ -298,23 +278,24 @@ impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
 }
 
 impl<F: PrimeField> UltraTraceBlock<F> {
-    const W_L: usize = UltraFlavour::W_L;
-    const W_R: usize = UltraFlavour::W_R;
-    const W_O: usize = UltraFlavour::W_O;
-    const W_4: usize = UltraFlavour::W_4;
-    const Q_M: usize = UltraFlavour::Q_M;
-    const Q_C: usize = UltraFlavour::Q_C;
-    const Q_1: usize = UltraFlavour::Q_L;
-    const Q_2: usize = UltraFlavour::Q_R;
-    const Q_3: usize = UltraFlavour::Q_O;
-    const Q_4: usize = UltraFlavour::Q_4;
-    const Q_ARITH: usize = UltraFlavour::Q_ARITH;
-    const Q_DELTA_RANGE: usize = UltraFlavour::Q_DELTA_RANGE;
-    const Q_ELLIPTIC: usize = UltraFlavour::Q_ELLIPTIC;
-    const Q_AUX: usize = UltraFlavour::Q_AUX;
-    const Q_LOOKUP_TYPE: usize = UltraFlavour::Q_LOOKUP;
-    const Q_POSEIDON2_EXTERNAL: usize = UltraFlavour::Q_POSEIDON2_EXTERNAL;
-    const Q_POSEIDON2_INTERNAL: usize = UltraFlavour::Q_POSEIDON2_INTERNAL;
+    const W_L: usize = ProverWitnessEntities::<F>::W_L;
+    const W_R: usize = ProverWitnessEntities::<F>::W_R;
+    const W_O: usize = ProverWitnessEntities::<F>::W_O;
+    const W_4: usize = ProverWitnessEntities::<F>::W_4;
+    const Q_M: usize = PrecomputedEntities::<F>::Q_M;
+    const Q_C: usize = PrecomputedEntities::<F>::Q_C;
+    const Q_1: usize = PrecomputedEntities::<F>::Q_L;
+    const Q_2: usize = PrecomputedEntities::<F>::Q_R;
+    const Q_3: usize = PrecomputedEntities::<F>::Q_O;
+    const Q_4: usize = PrecomputedEntities::<F>::Q_4;
+    const Q_ARITH: usize = PrecomputedEntities::<F>::Q_ARITH;
+    const Q_DELTA_RANGE: usize = PrecomputedEntities::<F>::Q_DELTA_RANGE;
+    const Q_ELLIPTIC: usize = PrecomputedEntities::<F>::Q_ELLIPTIC;
+    const Q_MEMORY: usize = PrecomputedEntities::<F>::Q_MEMORY;
+    const Q_NNF: usize = PrecomputedEntities::<F>::Q_NNF;
+    const Q_LOOKUP_TYPE: usize = PrecomputedEntities::<F>::Q_LOOKUP;
+    const Q_POSEIDON2_EXTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_EXTERNAL;
+    const Q_POSEIDON2_INTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_INTERNAL;
 
     pub(crate) fn w_l(&mut self) -> &mut Vec<u32> {
         &mut self.wires[Self::W_L]
@@ -368,8 +349,12 @@ impl<F: PrimeField> UltraTraceBlock<F> {
         &mut self.selectors[Self::Q_ELLIPTIC]
     }
 
-    pub(crate) fn q_aux(&mut self) -> &mut Vec<F> {
-        &mut self.selectors[Self::Q_AUX]
+    pub(crate) fn q_memory(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_MEMORY]
+    }
+
+    pub(crate) fn q_nnf(&mut self) -> &mut Vec<F> {
+        &mut self.selectors[Self::Q_NNF]
     }
 
     pub(crate) fn q_lookup_type(&mut self) -> &mut Vec<F> {
@@ -412,12 +397,15 @@ pub(crate) struct RangeConstraint {
 pub(crate) struct Poseidon2Constraint<F: PrimeField> {
     pub(crate) state: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
-    pub(crate) len: u32,
 }
 
 pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) points: Vec<WitnessOrConstant<F>>,
     pub(crate) scalars: Vec<WitnessOrConstant<F>>,
+    // Predicate indicating whether the constraint should be disabled:
+    // - true: the constraint is valid
+    // - false: the constraint is disabled, i.e it must not fail and can return whatever.
+    pub(crate) predicate: WitnessOrConstant<F>,
     pub(crate) out_point_x: u32,
     pub(crate) out_point_y: u32,
     pub(crate) out_point_is_infinity: u32,
@@ -430,6 +418,10 @@ pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) input2_x: WitnessOrConstant<F>,
     pub(crate) input2_y: WitnessOrConstant<F>,
     pub(crate) input2_infinite: WitnessOrConstant<F>,
+    // Predicate indicating whether the constraint should be disabled:
+    // - true: the constraint is valid
+    // - false: the constraint is disabled, i.e it must not fail and can return whatever.
+    pub(crate) predicate: WitnessOrConstant<F>,
     pub(crate) result_x: u32,
     pub(crate) result_y: u32,
     pub(crate) result_infinite: u32,
@@ -524,13 +516,21 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) result: [u32; 32],
 }
 
-pub(crate) struct AggregationState<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+#[derive(Default)]
+#[expect(dead_code)]
+pub(crate) struct PairingPoints<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     p0: BigGroup<P, T>,
     p1: BigGroup<P, T>,
+    has_data: bool,
 }
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
+#[expect(dead_code)]
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
     pub(crate) fn new(p0: BigGroup<P, T>, p1: BigGroup<P, T>) -> Self {
-        Self { p0, p1 }
+        Self {
+            p0,
+            p1,
+            has_data: true,
+        }
     }
 }
 
@@ -539,7 +539,8 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationSta
 // Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
 pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
 
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationState<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
+    #[expect(dead_code)]
     pub fn set_public(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
@@ -547,9 +548,6 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationSta
     ) -> usize {
         let start_idx = self.p0.set_public(driver, builder);
         self.p1.set_public(driver, builder);
-        builder
-            .pairing_inputs_public_input_key
-            .set(start_idx as u32);
 
         start_idx
     }
@@ -557,21 +555,26 @@ impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> AggregationSta
 
 pub const AGGREGATION_OBJECT_SIZE: usize = 16;
 
-#[expect(dead_code)]
 #[derive(PartialEq, Eq, Debug)]
-pub(crate) enum AuxSelectors {
-    None,
-    LimbAccumulate1,
-    LimbAccumulate2,
-    NonNativeField1,
-    NonNativeField2,
-    NonNativeField3,
+pub(crate) enum MemorySelectors {
+    MemNone,
     RamConsistencyCheck,
     RomConsistencyCheck,
     RamTimestampCheck,
     RomRead,
     RamRead,
     RamWrite,
+}
+
+#[expect(dead_code)]
+#[derive(PartialEq, Eq, Debug)]
+pub(crate) enum NnfSelectors {
+    NnfNone,
+    LimbAccumulate1,
+    LimbAccumulate2,
+    NonNativeField1,
+    NonNativeField2,
+    NonNativeField3,
 }
 
 #[derive(Clone, Debug)]
@@ -662,7 +665,7 @@ pub struct CycleNode {
 }
 pub type CyclicPermutation = Vec<CycleNode>;
 
-pub(crate) struct TraceData<'a, P: Pairing> {
+pub(crate) struct TraceData<'a, P: CurveGroup> {
     pub(crate) wires: &'a mut [Polynomial<P::ScalarField>; NUM_WIRES],
     pub(crate) selectors: &'a mut [Polynomial<P::ScalarField>; NUM_SELECTORS],
     pub(crate) copy_cycles: Vec<CyclicPermutation>,
@@ -670,10 +673,10 @@ pub(crate) struct TraceData<'a, P: Pairing> {
     pub(crate) pub_inputs_offset: u32,
 }
 
-impl<'a, P: Pairing> TraceData<'a, P> {
+impl<'a, P: CurveGroup> TraceData<'a, P> {
     pub(crate) fn new(
         builder: &UltraCircuitBuilder<P>,
-        proving_key: &'a mut ProvingKey<P, UltraFlavour>,
+        proving_key: &'a mut ProvingKey<P>,
     ) -> Self {
         let copy_cycles = vec![vec![]; builder.variables.len()];
 
@@ -821,7 +824,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
 
     pub(crate) fn from_constant(constant: F) -> Self {
         Self {
-            index: 0,
+            index: u32::MAX,
             value: constant,
             is_constant: true,
         }
@@ -841,46 +844,68 @@ impl<F: PrimeField> WitnessOrConstant<F> {
     }
 
     pub(crate) fn to_grumpkin_point<
-        P: Pairing<ScalarField = F>,
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input_x: &Self,
         input_y: &Self,
         input_infinity: &Self,
+        predicate: &BoolCT<P, T>,
         has_valid_witness_assignments: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
-    ) -> CycleGroupCT<P, T> {
-        let point_x = input_x.to_field_ct();
-        let point_y = input_y.to_field_ct();
-        let infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
+    ) -> eyre::Result<CycleGroupCT<P, T>> {
+        let constant_coordinates = input_x.is_constant && input_y.is_constant;
+        let mut point_x = input_x.to_field_ct();
+        let mut point_y = input_y.to_field_ct();
+        let mut infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
 
-        // When we do not have the witness assignments, we set is_infinite value to true if it is not constant
-        // else default values would give a point which is not on the curve and this will fail verification
-        if !has_valid_witness_assignments {
-            if !input_infinity.is_constant {
-                builder.variables[input_infinity.index as usize] = F::one().into();
-            } else if input_infinity.value.is_zero()
-                && !(input_x.is_constant || input_y.is_constant)
-            {
-                // else, if is_infinite is false, but the coordinates (x, y) are witness (and not constant)
-                // then we set their value to an arbitrary valid curve point (in our case G1).
-                builder.variables[input_x.index as usize] = F::one().into();
-                let g1_y = F::from(BigUint::new(vec![
-                    2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
-                ]));
-                builder.variables[input_y.index as usize] = g1_y.into();
-            }
+        // If a witness is not provided (we are in a write_vk scenario) we ensure the coordinates correspond to a valid
+        // point to avoid erroneous failures during circuit construction. We only do this if the coordinates are
+        // non-constant since otherwise no variable indices exist. Note that there is no need to assign the infinite flag
+        // because native on-curve checks will always pass as long x and y coordinates correspond to a valid point on
+        // Grumpkin.
+        let g1_y = F::from(BigUint::new(vec![
+            2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
+        ]));
+        if !has_valid_witness_assignments && !constant_coordinates {
+            builder.set_variable(input_x.index, F::one().into());
+            builder.set_variable(input_y.index, g1_y.into());
         }
-        CycleGroupCT::new(point_x, point_y, infinity, builder, driver)
+
+        if !predicate.is_constant() {
+            point_x = FieldCT::conditional_assign(
+                predicate,
+                &point_x,
+                &FieldCT::from(F::one()),
+                builder,
+                driver,
+            )?;
+            point_y = FieldCT::conditional_assign(
+                predicate,
+                &point_y,
+                &FieldCT::from(g1_y),
+                builder,
+                driver,
+            )?;
+            infinity = BoolCT::conditional_assign(
+                predicate,
+                &infinity,
+                &BoolCT::from(false),
+                builder,
+                driver,
+            )?;
+        }
+
+        CycleGroupCT::new_with_assert(point_x, point_y, infinity, true, builder, driver)
     }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
 pub struct ActiveRegionData {
-    ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
-    idxs: Vec<usize>,            // full set of poly indices corresposponding to active ranges
-    current_end: usize,          // end of last range; for ensuring monotonicity of ranges
+    pub ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
+    pub idxs: Vec<usize>,            // full set of poly indices corresposponding to active ranges
+    pub current_end: usize,          // end of last range; for ensuring monotonicity of ranges
 }
 impl ActiveRegionData {
     pub fn new() -> Self {

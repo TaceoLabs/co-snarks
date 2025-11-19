@@ -21,9 +21,11 @@ use quinn::{
 };
 use quinn::{
     crypto::rustls::QuicClientConfig,
-    rustls::{RootCertStore, pki_types::CertificateDer},
+    rustls::{
+        RootCertStore,
+        pki_types::{CertificateDer, PrivatePkcs8KeyDer},
+    },
 };
-use rustls::pki_types::PrivatePkcs8KeyDer;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},

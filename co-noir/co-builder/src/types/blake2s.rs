@@ -3,8 +3,10 @@ use super::{
     field_ct::{ByteArray, FieldCT},
     plookup::{ColumnIdx, MultiTableId, Plookup},
 };
-use crate::{TranscriptFieldType, builder::GenericUltraCircuitBuilder, prelude::HonkCurve};
-use ark_ec::pairing::Pairing;
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
+
+use crate::ultra_builder::GenericUltraCircuitBuilder;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use itertools::izip;
@@ -73,7 +75,7 @@ pub(crate) struct Blake2s<F: PrimeField> {
 
 impl<F: PrimeField> Blake2s<F> {
     pub(crate) fn blake2s_increment_counter<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         s: &mut Blake2sState<F>,
@@ -173,16 +175,9 @@ impl<F: PrimeField> Blake2s<F> {
 
         v[15] = lookup_4[ColumnIdx::C3][0].clone();
 
-        BlakeUtils::round_fn_lookup(&mut v, &m, 0, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 1, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 2, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 3, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 4, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 5, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 6, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 7, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 8, BlakeType::Blake2, builder, driver)?;
-        BlakeUtils::round_fn_lookup(&mut v, &m, 9, BlakeType::Blake2, builder, driver)?;
+        for i in 0..10 {
+            BlakeUtils::round_fn_lookup(&mut v, &m, i, BlakeType::Blake2, builder, driver)?;
+        }
 
         // At this point in the algorithm, the elements (v0, v1, v2, v3) and (v8, v9,
         // v10, v11) in the state matrix 'v' can be 'overflowed' i.e. contain values >

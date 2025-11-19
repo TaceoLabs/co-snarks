@@ -1,17 +1,9 @@
 use super::Relation;
-use crate::decider::types::ProverUnivariatesSized;
-use crate::plain_prover_flavour::UnivariateTrait;
-use crate::{
-    decider::{
-        types::{ClaimedEvaluations, RelationParameters},
-        univariate::Univariate,
-    },
-    plain_prover_flavour::PlainProverFlavour,
+use crate::decider::{
+    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+    univariate::Univariate,
 };
 use ark_ff::{PrimeField, Zero};
-use co_builder::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Poseidon2ExternalRelationAcc<F: PrimeField> {
@@ -91,14 +83,14 @@ impl Poseidon2ExternalRelation {
     pub(crate) const NUM_RELATIONS: usize = 4;
 }
 
-impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2ExternalRelation {
+impl<F: PrimeField> Relation<F> for Poseidon2ExternalRelation {
     type Acc = Poseidon2ExternalRelationAcc<F>;
     type VerifyAcc = Poseidon2ExternalRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
-        <Self as Relation<F, L>>::check_skippable();
+    fn skip(input: &ProverUnivariates<F>) -> bool {
+        <Self as Relation<F>>::check_skippable();
         input.precomputed.q_poseidon2_external().is_zero()
     }
 
@@ -126,10 +118,10 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2ExternalR
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<const SIZE: usize>(
+    fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesSized<F, L, SIZE>,
-        _relation_parameters: &RelationParameters<F, L>,
+        input: &ProverUnivariates<F>,
+        _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate Poseidon2ExternalRelation");
@@ -214,8 +206,8 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for Poseidon2ExternalR
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, L>,
-        _relation_parameters: &RelationParameters<F, L>,
+        input: &ClaimedEvaluations<F>,
+        _relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate Poseidon2ExternalRelation");

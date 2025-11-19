@@ -1,5 +1,87 @@
 # Changelog
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.4.0...co-builder-v0.5.0) (2025-11-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* upgrade to Noir 1.0.0-beta.14 and BB 3.0.0-nightly.20250916 ([#480](https://github.com/TaceoLabs/co-snarks/issues/480))
+* remove ClientIVC and Mega flavour
+* add functionality to compute transcript in MPC and integrate it ([#472](https://github.com/TaceoLabs/co-snarks/issues/472))
+* initial implementation of DeciderRecursiveVerifier ([#464](https://github.com/TaceoLabs/co-snarks/issues/464))
+* initial implementation of ProtogalaxyRecursiveVerifier ([#460](https://github.com/TaceoLabs/co-snarks/issues/460))
+* intial implementation of MergeRecursiveVerifier ([#449](https://github.com/TaceoLabs/co-snarks/issues/449))
+* Introduce initial implementation of MegaCircuitBuilder for construct_hiding_circuit_key ([#443](https://github.com/TaceoLabs/co-snarks/issues/443))
+* add MPC version of ECCVM builder and prover ([#456](https://github.com/TaceoLabs/co-snarks/issues/456))
+* move HonkProof and the corresponding field serde to noir-types
+* move witness and input parsing/sharing to new crates for wasm comp
+* plain protogalaxy prover ([#410](https://github.com/TaceoLabs/co-snarks/issues/410))
+* Add MegaFlavour to the Prover and Verifier
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373))
+* Add support for the embedded_curve_add blackbox function to co-noir ([#367](https://github.com/TaceoLabs/co-snarks/issues/367))
+* Performance improvements and cleanup for blake2/blake3
+* add BLAKE3 blackbox function to coNoir
+* add BLAKE2s blackbox function to coNoir
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment
+
+### Features
+
+* Add AES blackbox functionality ([fd7cd49](https://github.com/TaceoLabs/co-snarks/commit/fd7cd496a1fd21e85aa70c0bd2c5cd7aed69fece))
+* add BLAKE2s blackbox function to coNoir ([e98fb7d](https://github.com/TaceoLabs/co-snarks/commit/e98fb7dd60f52d936f07b3e3a74797dfb091e9f3))
+* add BLAKE3 blackbox function to coNoir ([ddcb10e](https://github.com/TaceoLabs/co-snarks/commit/ddcb10e5d685072279b8f11b6935636fb74ecaf0))
+* add Bristol Fashion parsing for GC, also adds the SHA256 blackbox ([#359](https://github.com/TaceoLabs/co-snarks/issues/359)) ([f8509ef](https://github.com/TaceoLabs/co-snarks/commit/f8509ef8147bf29072ba67b4ac0f489546eea2c9))
+* add builder type transcript for recursion ([#433](https://github.com/TaceoLabs/co-snarks/issues/433)) ([2177ad5](https://github.com/TaceoLabs/co-snarks/commit/2177ad54a18c7deeb0d525379095b22ed24f3269))
+* add functionality to compute transcript in MPC and integrate it ([#472](https://github.com/TaceoLabs/co-snarks/issues/472)) ([e636308](https://github.com/TaceoLabs/co-snarks/commit/e636308efdf115149d53e05e70b157cfe5babb6c))
+* add MAESTRO style lut protocol for curve points ([4da5f74](https://github.com/TaceoLabs/co-snarks/commit/4da5f74bed1350c4574bf3f3301c522ae068a096))
+* Add MegaFlavour to the Prover and Verifier ([06ab1a9](https://github.com/TaceoLabs/co-snarks/commit/06ab1a95f0a8204e377f8e07ee2e0c898fbf6379))
+* add MPC version of ECCVM builder and prover ([#456](https://github.com/TaceoLabs/co-snarks/issues/456)) ([0230ccb](https://github.com/TaceoLabs/co-snarks/commit/0230ccb52bb52bf6ebe291103f8945e4fea61ed2))
+* add plain ECCVM Prover ([#409](https://github.com/TaceoLabs/co-snarks/issues/409)) ([dc5f175](https://github.com/TaceoLabs/co-snarks/commit/dc5f175c1f1c61a95731129d10995b0f6122a1c1))
+* Add support for the embedded_curve_add blackbox function to co-noir ([#367](https://github.com/TaceoLabs/co-snarks/issues/367)) ([0533f22](https://github.com/TaceoLabs/co-snarks/commit/0533f22a8a50e14eb756ee9bf82cfad857dd9722))
+* Add the MSM blackbox function to co-noir, which allows to use pedersen hash/commitment ([ffeaa32](https://github.com/TaceoLabs/co-snarks/commit/ffeaa32f754fa16c77bf050486ce871a77908653))
+* bump to Barretenberg 0.86.0 ([#373](https://github.com/TaceoLabs/co-snarks/issues/373)) ([55f4ca3](https://github.com/TaceoLabs/co-snarks/commit/55f4ca3211a944cb755e541cfabc4519697ce665))
+* initial implementation of DeciderRecursiveVerifier ([#464](https://github.com/TaceoLabs/co-snarks/issues/464)) ([74df287](https://github.com/TaceoLabs/co-snarks/commit/74df28773c269f067253e70822c6f96806b32e48))
+* initial implementation of ProtogalaxyRecursiveVerifier ([#460](https://github.com/TaceoLabs/co-snarks/issues/460)) ([34f38ea](https://github.com/TaceoLabs/co-snarks/commit/34f38ea1c159f95ca8fb803495d1b8da4299788e))
+* initial MPC Translator prover and builder implementation ([#467](https://github.com/TaceoLabs/co-snarks/issues/467)) ([ff92fcb](https://github.com/TaceoLabs/co-snarks/commit/ff92fcbe8fa3f2cbc3904d3c28f0890aee3be7fb))
+* intial implementation of MergeRecursiveVerifier ([#449](https://github.com/TaceoLabs/co-snarks/issues/449)) ([f7f2158](https://github.com/TaceoLabs/co-snarks/commit/f7f2158a2c3d5db704250ea94b88eb984fa23420))
+* Introduce initial implementation of MegaCircuitBuilder for construct_hiding_circuit_key ([#443](https://github.com/TaceoLabs/co-snarks/issues/443)) ([c3104a1](https://github.com/TaceoLabs/co-snarks/commit/c3104a1cf28a34372e10a79a08d667b70000c737))
+* move HonkProof and the corresponding field serde to noir-types ([b9821e5](https://github.com/TaceoLabs/co-snarks/commit/b9821e5202855bb9cd931ae32fe9e7d3e5b01378))
+* move witness and input parsing/sharing to new crates for wasm comp ([333785e](https://github.com/TaceoLabs/co-snarks/commit/333785e275bc9256fb82fd8e2dcf18689bd92862))
+* Performance improvements and cleanup for blake2/blake3 ([435fcd3](https://github.com/TaceoLabs/co-snarks/commit/435fcd333080201c7c0274519ff6f6b26fb62d50))
+* plain protogalaxy prover ([#410](https://github.com/TaceoLabs/co-snarks/issues/410)) ([42d49f5](https://github.com/TaceoLabs/co-snarks/commit/42d49f55a93b48e01c133f7ca5d7fefc559fd470))
+* plain translator prover ([#425](https://github.com/TaceoLabs/co-snarks/issues/425)) ([14167b3](https://github.com/TaceoLabs/co-snarks/commit/14167b33e5b15e3d35bc3971913573d29eb92da9))
+* update rust edition to 2024 ([6ea0ba9](https://github.com/TaceoLabs/co-snarks/commit/6ea0ba9f9f34063e8ab859c1d4ae41d05629a1c0))
+
+
+### Bug Fixes
+
+* factor_roots for r=0 to reduce length by 1 ([#434](https://github.com/TaceoLabs/co-snarks/issues/434)) ([a4f0b9c](https://github.com/TaceoLabs/co-snarks/commit/a4f0b9c09fddf7f863fa66dfbfd7c7d129475638))
+
+
+### Miscellaneous Chores
+
+* upgrade to Noir 1.0.0-beta.14 and BB 3.0.0-nightly.20250916 ([#480](https://github.com/TaceoLabs/co-snarks/issues/480)) ([9bdad27](https://github.com/TaceoLabs/co-snarks/commit/9bdad2793e3ca7f82a291f9e9932cf877ef657eb))
+
+
+### Code Refactoring
+
+* remove ClientIVC and Mega flavour ([8ac7719](https://github.com/TaceoLabs/co-snarks/commit/8ac7719023577a899fd430886d541c660f0b6b83))
+* unify MPC networks, split protocol state and networking to allow fork of state without network, replace io::Error with eyre, merge mpc-core and mpc-types with feature gated mpc-net ([16dbf54](https://github.com/TaceoLabs/co-snarks/commit/16dbf546d8f2d80ad4fa9f5053da19edc7270d3c))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.6.0 to 0.7.0
+    * noir-types bumped from 0.1.0 to 0.1.1
+    * mpc-core bumped from 0.9.0 to 0.10.0
+    * co-noir-common bumped from 0.1.0 to 0.2.0
+    * mpc-net bumped from 0.4.0 to 0.5.0
+  * dev-dependencies
+    * mpc-net bumped from 0.4.0 to 0.5.0
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.3.0...co-builder-v0.4.0) (2025-04-03)
 
 

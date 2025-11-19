@@ -42,7 +42,7 @@ impl<F: Clone> Stack<F> {
         let stack_frame = self
             .stack
             .last_mut()
-            .expect("stack is empty and you want to push?");
+            .expect("stack is empty and you want to pop?");
         stack_frame.pop().expect("stack frame is empty?")
     }
 

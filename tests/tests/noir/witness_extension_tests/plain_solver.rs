@@ -1,4 +1,4 @@
-use acir::{native_types::WitnessStack, FieldElement};
+use acir::native_types::WitnessStack;
 use co_acvm::solver::PlainCoSolver;
 use noirc_artifacts::program::ProgramArtifact;
 
@@ -24,3 +24,12 @@ add_plain_acvm_test!("unconstrained_fn");
 add_plain_acvm_test!("unconstrained_fn_field");
 add_plain_acvm_test!("write_access");
 add_plain_acvm_test!("bb_sha256_compression");
+add_plain_acvm_test!("unconstrained_fn_not");
+add_plain_acvm_test!("blackbox_and");
+add_plain_acvm_test!("blackbox_xor");
+add_plain_acvm_test!("blackbox_poseidon2");
+add_plain_acvm_test!("pedersen_hash");
+add_plain_acvm_test!("pedersen_commitment");
+add_plain_acvm_test!("blake2s");
+add_plain_acvm_test!("blake3");
+add_plain_acvm_test!("embedded_curve_add");

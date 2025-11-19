@@ -1,13 +1,9 @@
-use crate::mpc_prover_flavour::MPCProverFlavour;
+use co_builder::prelude::PrecomputedEntities;
+use ultrahonk::prelude::WitnessEntities;
 
-pub(crate) struct PolyF<
-    'a,
-    Shared: Default + std::marker::Sync,
-    Public: Default + Clone + std::marker::Sync,
-    L: MPCProverFlavour,
-> {
-    pub(crate) precomputed: &'a L::PrecomputedEntities<Public>,
-    pub(crate) witness: &'a L::WitnessEntities<Shared>,
+pub(crate) struct PolyF<'a, Shared: Default, Public: Default> {
+    pub(crate) precomputed: &'a PrecomputedEntities<Public>,
+    pub(crate) witness: &'a WitnessEntities<Shared>,
 }
 
 pub(crate) struct PolyG<'a, T: Default> {

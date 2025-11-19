@@ -1014,6 +1014,15 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
         Ok(result)
     }
 
+    // Justification of the + 2 here:
+    // When we have an arithmetic sharing (with bit size N) x = a + b + c, then !x = !a + !b + !c + 2
+    // because !x = 2^N - 1 - x and hence using !a + !b + !c = 3 * (2^N - 1) - (a + b + c) = 3 * (2^N - 1) - x
+    // we get !x = 3 * (2^N - 1) - x - 2 * (2^N - 1) = !a + !b + !c - 2 * (2^N - 1) = !a + !b + !c - 2 * 2^N + 2
+    // which is equivalent to !a + !b + !c + 2 modulo 2^N.
+    // The general formula (via induction) for this is: if x = sum_{i=1}^n s_i then !x = sum_{i=1}^n !s_i + (n - 1)
+    // TACEO TODO: Maybe we want to restrict usage of bitwise operations when we don't have a binary sharing?
+    // On the same note, at the moment it is not possible to recognize whether we have a binary or an arithmetic sharing (as a RingShare), however in Rep3Brillig
+    // we can assume to always have arithmetic sharings for the time being.
     fn not(&self, val: Self::BrilligType) -> eyre::Result<Self::BrilligType> {
         let result = match val {
             Rep3BrilligType::Public(public) => {
@@ -1021,11 +1030,41 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
             }
             Rep3BrilligType::Shared(shared) => match shared {
                 Shared::Ring1(secret) => Rep3BrilligType::shared_u1(!secret),
-                Shared::Ring8(secret) => Rep3BrilligType::shared_u8(!secret),
-                Shared::Ring16(secret) => Rep3BrilligType::shared_u16(!secret),
-                Shared::Ring32(secret) => Rep3BrilligType::shared_u32(!secret),
-                Shared::Ring64(secret) => Rep3BrilligType::shared_u64(!secret),
-                Shared::Ring128(secret) => Rep3BrilligType::shared_u128(!secret),
+                Shared::Ring8(secret) => {
+                    let res = Rep3BrilligType::shared_u8(!secret);
+                    self.add(
+                        res,
+                        Rep3BrilligType::Public(Public::Int(2u8.into(), IntegerBitSize::U8)),
+                    )?
+                }
+                Shared::Ring16(secret) => {
+                    let res = Rep3BrilligType::shared_u16(!secret);
+                    self.add(
+                        res,
+                        Rep3BrilligType::Public(Public::Int(2u16.into(), IntegerBitSize::U16)),
+                    )?
+                }
+                Shared::Ring32(secret) => {
+                    let res = Rep3BrilligType::shared_u32(!secret);
+                    self.add(
+                        res,
+                        Rep3BrilligType::Public(Public::Int(2u32.into(), IntegerBitSize::U32)),
+                    )?
+                }
+                Shared::Ring64(secret) => {
+                    let res = Rep3BrilligType::shared_u64(!secret);
+                    self.add(
+                        res,
+                        Rep3BrilligType::Public(Public::Int(2u64.into(), IntegerBitSize::U64)),
+                    )?
+                }
+                Shared::Ring128(secret) => {
+                    let res = Rep3BrilligType::shared_u128(!secret);
+                    self.add(
+                        res,
+                        Rep3BrilligType::Public(Public::Int(2u128, IntegerBitSize::U128)),
+                    )?
+                }
                 Shared::Field(_) => eyre::bail!("NOT is not supported for fields"),
             },
         };

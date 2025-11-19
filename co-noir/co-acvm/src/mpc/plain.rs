@@ -118,7 +118,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         *secret += public;
     }
 
-    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         share_1 - share_2
     }
 
@@ -736,11 +736,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn blake2s_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut real_input = Vec::new();
-        for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
-            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+        let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+        for inp in message_input.iter() {
             let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend_from_slice(&bytes[..num_elements])
         }
@@ -752,11 +752,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut real_input = Vec::new();
-        for (inp, num_bits) in message_input.iter().zip(num_bits.iter()) {
-            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+        let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+        for inp in message_input.iter() {
             let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend_from_slice(&bytes[..num_elements])
         }
@@ -884,5 +884,18 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         panic!(
             "accumulate_from_sparse_bytes not implemented for plaindriver and normally should not be called"
         );
+    }
+
+    fn mul_many(
+        &mut self,
+        a: &[Self::AcvmType],
+        b: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        debug_assert_eq!(a.len(), b.len());
+        Ok(a.iter().zip(b.iter()).map(|(a, b)| *a * b).collect())
+    }
+
+    fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare {
+        *value
     }
 }

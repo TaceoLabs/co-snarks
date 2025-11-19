@@ -1,18 +1,19 @@
+use std::fs::File;
+
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
-use co_builder::TranscriptFieldType;
-use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::prelude::{CrsParser, HonkRecursion};
+use co_builder::prelude::HonkRecursion;
+use co_builder::prelude::constraint_system_from_reader;
+use co_noir_common::crs::parse::CrsParser;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::plain::PlainUltraHonkDriver;
+use co_noir_common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use co_noir_common::types::ZeroKnowledge;
 use co_ultrahonk::prelude::{CoUltraHonk, PlainCoBuilder, ProvingKey};
-use common::HonkProof;
-use common::mpc::plain::PlainUltraHonkDriver;
-use common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use noir_types::HonkProof;
 use sha3::Keccak256;
-use ultrahonk::{
-    Utils,
-    prelude::{UltraHonk, ZeroKnowledge},
-};
+use ultrahonk::prelude::UltraHonk;
 
 fn promote_public_witness_vector<F: PrimeField, T: NoirWitnessExtensionProtocol<F>>(
     witness: Vec<F>,
@@ -26,15 +27,16 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     witness_file: &str,
     has_zk: ZeroKnowledge,
 ) {
-    const CRS_PATH_G1: &str = "../co-builder/src/crs/bn254_g1.dat";
-    const CRS_PATH_G2: &str = "../co-builder/src/crs/bn254_g2.dat";
+    const CRS_PATH_G1: &str = "../co-noir-common/src/crs/bn254_g1.dat";
+    const CRS_PATH_G2: &str = "../co-noir-common/src/crs/bn254_g2.dat";
 
-    let constraint_system = Utils::get_constraint_system_from_file(circuit_file, true).unwrap();
-    let witness = Utils::get_witness_from_file(witness_file).unwrap();
+    let constraint_system =
+        constraint_system_from_reader(File::open(circuit_file).unwrap(), true).unwrap();
+    let witness = noir_types::witness_from_reader(File::open(witness_file).unwrap()).unwrap();
 
     let witness = promote_public_witness_vector::<_, PlainAcvmSolver<ark_bn254::Fr>>(witness);
     let mut driver = PlainAcvmSolver::new();
-    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+    let builder = PlainCoBuilder::<ark_bn254::G1Projective>::create_circuit(
         &constraint_system,
         false, // We don't support recursive atm
         0,
@@ -45,31 +47,37 @@ fn plaindriver_test<H: TranscriptHasher<TranscriptFieldType>>(
     .unwrap();
 
     let crs_size = builder.compute_dyadic_size();
-    let (prover_crs, verifier_crs) = CrsParser::get_crs(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
-        .unwrap()
-        .split();
+    let (prover_crs, verifier_crs) = CrsParser::<ark_bn254::G1Projective>::get_crs::<Bn254>(
+        CRS_PATH_G1,
+        CRS_PATH_G2,
+        crs_size,
+        has_zk,
+    )
+    .unwrap()
+    .split();
     let (proving_key, verifying_key) =
         ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
 
-    let (proof, public_inputs) = CoUltraHonk::<PlainUltraHonkDriver, _, H, UltraFlavour>::prove(
-        proving_key,
-        &prover_crs,
-        has_zk,
-    )
-    .unwrap();
+    let (proof, public_inputs) =
+        CoUltraHonk::<PlainUltraHonkDriver, ark_bn254::G1Projective, H>::prove(
+            proving_key,
+            &prover_crs,
+            has_zk,
+            &verifying_key.inner_vk,
+        )
+        .unwrap();
 
     if has_zk == ZeroKnowledge::No {
-        let proof_u8 = proof.to_buffer();
+        let proof_u8 = H::to_buffer(proof.inner_as_ref());
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
         assert_eq!(proof_u8, read_proof_u8);
 
-        let read_proof = HonkProof::from_buffer(&read_proof_u8).unwrap();
+        let read_proof = HonkProof::new(H::from_buffer(&read_proof_u8));
         assert_eq!(proof, read_proof);
     }
 
     let is_valid =
-        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_inputs, &verifying_key, has_zk)
-            .unwrap();
+        UltraHonk::<_, H>::verify::<Bn254>(proof, &public_inputs, &verifying_key, has_zk).unwrap();
     assert!(is_valid);
 }
 

@@ -1,17 +1,16 @@
 use super::{MIN_RAYON_ITER, ProverUnivariatesBatch, Relation};
-use crate::{
-    co_decider::{types::RelationParameters, univariates::SharedUnivariate},
-    mpc_prover_flavour::MPCProverFlavour,
+use crate::co_decider::{
+    types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
+    univariates::SharedUnivariate,
 };
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::Zero;
-use co_builder::HonkProofResult;
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::{TranscriptFieldType, prelude::HonkCurve};
-use common::mpc::NoirUltraHonkProver;
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
+};
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_net::Network;
@@ -19,18 +18,18 @@ use rayon::prelude::*;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
-pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct UltraArithmeticRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct UltraArithmeticRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct UltraArithmeticRelationAccHalfShared<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: Univariate<P::ScalarField, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 5>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for UltraArithmeticRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -39,7 +38,9 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationA
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationAccHalfShared<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default
+    for UltraArithmeticRelationAccHalfShared<T, P>
+{
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -48,7 +49,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraArithmeticRelationA
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraArithmeticRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraArithmeticRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraArithmeticRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
@@ -85,15 +86,14 @@ impl UltraArithmeticRelation {
 }
 
 impl UltraArithmeticRelation {
-    fn compute_r0<T, P, L, const SIZE: usize>(
+    fn compute_r0<T, P>(
         state: &mut T::State,
         r0: &mut Univariate<P::ScalarField, 6>,
-        input: &ProverUnivariatesBatch<T, P, L>,
+        input: &ProverUnivariatesBatch<T, P>,
         scaling_factors: &[P::ScalarField],
     ) where
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
-        L: MPCProverFlavour,
     {
         let w_l = input.witness.w_l();
         let w_r = input.witness.w_r();
@@ -168,14 +168,14 @@ impl UltraArithmeticRelation {
             )
             .enumerate()
             .fold(
-                || [P::ScalarField::default(); SIZE],
+                || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
                 |mut acc, (idx, tmp)| {
-                    acc[idx % SIZE] += tmp;
+                    acc[idx % MAX_PARTIAL_RELATION_LENGTH] += tmp;
                     acc
                 },
             )
             .reduce(
-                || [P::ScalarField::default(); SIZE],
+                || [P::ScalarField::default(); MAX_PARTIAL_RELATION_LENGTH],
                 |mut acc, next| {
                     for (acc, next) in izip!(acc.iter_mut(), next) {
                         *acc += next;
@@ -188,15 +188,14 @@ impl UltraArithmeticRelation {
             *evaluations += new;
         }
     }
-    fn compute_r1<T, P, L, const SIZE: usize>(
+    fn compute_r1<T, P>(
         id: <T::State as MpcState>::PartyID,
         r1: &mut SharedUnivariate<T, P, 5>,
-        input: &ProverUnivariatesBatch<T, P, L>,
+        input: &ProverUnivariatesBatch<T, P>,
         scaling_factors: &[P::ScalarField],
     ) where
         T: NoirUltraHonkProver<P>,
         P: HonkCurve<TranscriptFieldType>,
-        L: MPCProverFlavour,
     {
         let w_l = input.witness.w_l();
         let w_4 = input.witness.w_4();
@@ -220,14 +219,14 @@ impl UltraArithmeticRelation {
             })
             .enumerate()
             .fold(
-                || [T::ArithmeticShare::default(); SIZE],
+                || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
                 |mut acc, (idx, tmp)| {
-                    T::add_assign(&mut acc[idx % SIZE], tmp);
+                    T::add_assign(&mut acc[idx % MAX_PARTIAL_RELATION_LENGTH], tmp);
                     acc
                 },
             )
             .reduce(
-                || [T::ArithmeticShare::default(); SIZE],
+                || [T::ArithmeticShare::default(); MAX_PARTIAL_RELATION_LENGTH],
                 |mut acc, next| {
                     for (acc, next) in izip!(acc.iter_mut(), next) {
                         T::add_assign(acc, next);
@@ -241,18 +240,18 @@ impl UltraArithmeticRelation {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
-    Relation<T, P, L> for UltraArithmeticRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for UltraArithmeticRelation
 {
     type Acc = UltraArithmeticRelationAccHalfShared<T, P>;
 
-    fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
+    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
         entity.precomputed.q_arith().is_zero()
     }
 
-    fn add_entities(
-        entity: &super::ProverUnivariates<T, P, L>,
-        batch: &mut ProverUnivariatesBatch<T, P, L>,
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut ProverUnivariatesBatch<T, P>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -322,33 +321,26 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<N: Network, const SIZE: usize>(
+    fn accumulate<N: Network>(
         _net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P, L>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
+        input: &ProverUnivariatesBatch<T, P>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate UltraArithmeticRelation");
         let id = state.id();
         rayon::join(
             || {
-                Self::compute_r0::<T, P, L, SIZE>(
+                Self::compute_r0(
                     state,
                     &mut univariate_accumulator.r0,
                     input,
                     scaling_factors,
                 )
             },
-            || {
-                Self::compute_r1::<T, P, L, SIZE>(
-                    id,
-                    &mut univariate_accumulator.r1,
-                    input,
-                    scaling_factors,
-                )
-            },
+            || Self::compute_r1(id, &mut univariate_accumulator.r1, input, scaling_factors),
         );
         Ok(())
     }

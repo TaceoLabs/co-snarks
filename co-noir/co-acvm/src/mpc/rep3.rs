@@ -4,6 +4,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
+use co_noir_types::Rep3Type;
 use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
@@ -18,7 +19,7 @@ use mpc_core::protocols::rep3::{
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
-    protocols::rep3_ring::lut::Rep3LookupTable,
+    protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
@@ -37,7 +38,7 @@ pub struct Rep3AcvmSolver<'a, F: PrimeField, N: Network> {
     net1: &'a N,
     state0: Rep3State,
     state1: Rep3State,
-    lut_provider: Rep3LookupTable<F>,
+    lut_provider: Rep3FieldLookupTable<F>,
     plain_solver: PlainAcvmSolver<F>,
     phantom_data: PhantomData<F>,
 }
@@ -52,7 +53,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
             net1,
             state0,
             state1,
-            lut_provider: Rep3LookupTable::new(),
+            lut_provider: Rep3FieldLookupTable::new(),
             plain_solver: PlainAcvmSolver::<F>::default(),
             phantom_data: PhantomData,
         })
@@ -308,6 +309,15 @@ impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3AcvmType<F> {
     }
 }
 
+impl<F: PrimeField> From<Rep3Type<F>> for Rep3AcvmType<F> {
+    fn from(value: Rep3Type<F>) -> Self {
+        match value {
+            Rep3Type::Public(public) => Rep3AcvmType::Public(public),
+            Rep3Type::Shared(shared) => Rep3AcvmType::Shared(shared),
+        }
+    }
+}
+
 impl<F: PrimeField> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
     fn from(val: Rep3AcvmType<F>) -> Self {
         match val {
@@ -344,7 +354,7 @@ fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] 
 }
 
 impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<'a, F, N> {
-    type Lookup = Rep3LookupTable<F>;
+    type Lookup = Rep3FieldLookupTable<F>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
 
@@ -461,7 +471,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         match (share_1, share_2) {
             (Rep3AcvmType::Public(share_1), Rep3AcvmType::Public(share_2)) => {
                 Rep3AcvmType::Public(share_1 - share_2)
@@ -655,10 +665,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         Self::AcvmType::from(vec[index].to_owned())
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         Self::AcvmType::from(vec[index].to_owned())
                     }
                 }
@@ -691,7 +701,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 }
             }
             Rep3AcvmType::Shared(index) => {
-                let res = Rep3LookupTable::get_from_public_luts(
+                let res = Rep3FieldLookupTable::get_from_public_luts(
                     index,
                     luts,
                     self.net0,
@@ -720,10 +730,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         vec[index] = value;
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         vec[index] = arithmetic::promote_to_trivial_share(self.id, value);
                     }
                 }
@@ -734,15 +744,17 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
                         let mut vec = vec
                             .iter()
                             .map(|value| arithmetic::promote_to_trivial_share(self.id, *value))
                             .collect::<Vec<_>>();
                         vec[index] = value;
-                        *lut = mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec);
+                        *lut = mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(
+                            vec,
+                        );
                     }
-                    mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Shared(vec) => {
+                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
                         vec[index] = value;
                     }
                 }
@@ -780,7 +792,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         index: Self::ArithmeticShare,
         len: usize,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        self.lut_provider.ohv_from_index(
+        mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<F>::ohv_from_index(
             index,
             len,
             self.net0,
@@ -796,8 +808,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         value: Self::ArithmeticShare,
         lut: &mut [Self::ArithmeticShare],
     ) -> eyre::Result<()> {
-        self.lut_provider
-            .write_to_shared_lut_from_ohv(ohv, value, lut, self.net0, &mut self.state0)
+        mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<F>::write_to_shared_lut_from_ohv(ohv, value, lut, self.net0, &mut self.state0)
     }
 
     fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize {
@@ -1293,7 +1304,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         a: &[Self::AcvmType],
         b: &[Self::AcvmType],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        // TODO: we probably want to compare public values directly if there happen to be any in the same index
+        // TACEO TODO: we probably want to compare public values directly if there happen to be any in the same index
         let bool_a = a.iter().any(|v| Self::is_shared(v));
         let bool_b = b.iter().any(|v| Self::is_shared(v));
         if !bool_a && !bool_b {
@@ -1448,8 +1459,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     self.net0,
                     &mut self.state0,
                 )?;
-                // Set x,y to 0 of infinity is one.
-                // TODO is this even necesary?
+                // Set x,y to 0 if infinity is one.
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -1510,7 +1521,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 let (x, y, i) =
                     conversion::point_share_to_fieldshares(point, self.net0, &mut self.state0)?;
                 // Set x,y to 0 of infinity is one.
-                // TODO is this even necesary?
+                // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
                 let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -1773,7 +1784,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn blake2s_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         if message_input.iter().any(|v| Self::is_shared(v)) {
             let message_input: Vec<_> = message_input
@@ -1792,9 +1803,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 .collect::<Result<Vec<_>, _>>()
         } else {
             let mut real_input = Vec::new();
-            for (inp, num_bits) in message_input.into_iter().zip(num_bits.iter()) {
-                let inp = Self::get_public(&inp).expect("Already checked it is public");
-                let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+            for inp in message_input.iter() {
+                let inp = Self::get_public(inp).expect("Already checked it is public");
                 let bytes = inp.into_bigint().to_bytes_le();
                 real_input.extend_from_slice(&bytes[..num_elements])
             }
@@ -1810,7 +1821,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         if message_input.iter().any(|v| Self::is_shared(v)) {
             let message_input: Vec<_> = message_input
@@ -1829,9 +1840,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 .collect::<Result<Vec<_>, _>>()
         } else {
             let mut real_input = Vec::new();
-            for (inp, num_bits) in message_input.into_iter().zip(num_bits.iter()) {
-                let inp = Self::get_public(&inp).expect("Already checked it is public");
-                let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+            let num_elements = num_bits.div_ceil(8); // We need to round to the next byte
+            for inp in message_input.iter() {
+                let inp = Self::get_public(inp).expect("Already checked it is public");
                 let bytes = inp.into_bigint().to_bytes_le();
                 real_input.extend_from_slice(&bytes[..num_elements])
             }
@@ -1916,7 +1927,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let i = *downcast(&i).expect("We checked types");
 
         // Set x,y to 0 of infinity is one.
-        // TODO is this even necesary?
+        // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
         let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
         let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
 
@@ -2100,7 +2111,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         let res0 = conversion::a2b_many(&results[2 * slices..], self.net0, &mut self.state0)?;
 
-        let sbox_lut = mpc_core::protocols::rep3_ring::lut::PublicPrivateLut::Public(
+        let sbox_lut = mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(
             sbox.iter().map(|&value| F::from(value)).collect::<Vec<_>>(),
         );
         let base_powers = get_base_powers::<32>(base);
@@ -2108,7 +2119,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let mut res1 = Vec::with_capacity(res0.len());
         let mut res2 = Vec::with_capacity(res0.len());
         for index_bits in res0 {
-            let sbox_value = Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<u8, _>(
+            let sbox_value = Rep3FieldLookupTable::get_from_public_lut_no_b2a_conversion::<u8, _>(
                 index_bits,
                 &sbox_lut,
                 self.net0,
@@ -2192,5 +2203,80 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let num_outputs = result.len();
         debug_assert_eq!(num_outputs, 1);
         Ok(Rep3AcvmType::Shared(result[0]))
+    }
+
+    /// Multiply two slices of ACVM-types elementwise: \[c_i\] = \[secret_1_i\] * \[secret_2_i\].
+    fn mul_many(
+        &mut self,
+        secrets_1: &[Self::AcvmType],
+        secrets_2: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        if secrets_1.len() != secrets_2.len() {
+            eyre::bail!("Vectors must have the same length");
+        }
+        // For each coordinate we have four cases:
+        // 1. Both are shared
+        // 2. First is shared, second is public
+        // 3. First is public, second is shared
+        // 4. Both are public
+        // We handle case one separately, in order to use batching and then combine the results.
+        let (all_shared_indices, any_public_indices): (Vec<usize>, Vec<usize>) = (0..secrets_1
+            .len())
+            .partition(|&i| Self::is_shared(&secrets_1[i]) && Self::is_shared(&secrets_2[i]));
+
+        // Case 1: Both are shared
+        let (indices, shares_1, shares_2): (
+            Vec<usize>,
+            Vec<Self::ArithmeticShare>,
+            Vec<Self::ArithmeticShare>,
+        ) = all_shared_indices
+            .into_iter()
+            .map(|i| {
+                (
+                    i,
+                    Self::get_shared(&secrets_1[i]).expect("We already checked it is shared"),
+                    Self::get_shared(&secrets_2[i]).expect("We already checked it is shared"),
+                )
+            })
+            .multiunzip();
+        let mul_all_shared: Vec<Rep3PrimeFieldShare<F>> =
+            arithmetic::mul_vec(&shares_1, &shares_2, self.net0, &mut self.state0)?;
+        let mul_all_shared = mul_all_shared.into_iter().map(Rep3AcvmType::Shared);
+        let mul_all_shared_indexed = indices
+            .into_iter()
+            .zip(mul_all_shared)
+            .collect::<Vec<(usize, Self::AcvmType)>>();
+
+        // For all the other cases, we can just call self.mul
+        let mul_any_public = any_public_indices
+            .iter()
+            .map(|&i| {
+                let a = &secrets_1[i];
+                let b = &secrets_2[i];
+                self.mul(a.clone(), b.clone())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mul_any_public_indexed = any_public_indices
+            .into_iter()
+            .zip(mul_any_public)
+            .collect::<Vec<(usize, Self::AcvmType)>>();
+
+        // Merge sort by index
+        Ok(mul_all_shared_indexed
+            .into_iter()
+            .chain(mul_any_public_indexed)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<Self::AcvmType>>())
+    }
+
+    fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare {
+        if Self::is_shared(value) {
+            Self::get_shared(value).expect("Already checked it is shared")
+        } else {
+            self.promote_to_trivial_share(
+                Self::get_public(value).expect("Already checked it is public"),
+            )
+        }
     }
 }

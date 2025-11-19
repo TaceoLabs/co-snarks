@@ -20,6 +20,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::gadgets;
     use mpc_core::protocols::rep3_ring::ring::bit::Bit;
     use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
+    use mpc_core::protocols::rep3_ring::ring::int_ring::U512;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
     use mpc_core::MpcState;
@@ -92,7 +93,7 @@ mod ring_share {
 
     #[test]
     fn rep3_add() {
-        apply_to_all!(rep3_add_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_add_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_sub_t<T: IntRing2k>()
@@ -120,7 +121,7 @@ mod ring_share {
 
     #[test]
     fn rep3_sub() {
-        apply_to_all!(rep3_sub_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_sub_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_sub_shared_by_public_t<T: IntRing2k>()
@@ -151,7 +152,10 @@ mod ring_share {
 
     #[test]
     fn rep3_sub_shared_by_public() {
-        apply_to_all!(rep3_sub_shared_by_public_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_sub_shared_by_public_t,
+            [Bit, u8, u16, u32, u64, u128, U512]
+        );
     }
 
     fn rep3_sub_public_by_shared_t<T: IntRing2k>()
@@ -182,7 +186,10 @@ mod ring_share {
 
     #[test]
     fn rep3_sub_public_by_shared() {
-        apply_to_all!(rep3_sub_public_by_shared_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_sub_public_by_shared_t,
+            [Bit, u8, u16, u32, u64, u128, U512]
+        );
     }
 
     fn rep3_mul_t<T: IntRing2k>()
@@ -220,7 +227,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul() {
-        apply_to_all!(rep3_mul_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_mul_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_fork_mul_t<T: IntRing2k>()
@@ -268,7 +275,7 @@ mod ring_share {
 
     #[test]
     fn rep3_fork_mul() {
-        apply_to_all!(rep3_fork_mul_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_fork_mul_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_mul2_then_add_t<T: IntRing2k>()
@@ -307,7 +314,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul2_then_add() {
-        apply_to_all!(rep3_mul2_then_add_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_mul2_then_add_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_mul_vec_t<T: IntRing2k>()
@@ -355,7 +362,7 @@ mod ring_share {
 
     #[test]
     fn rep3_mul_vec() {
-        apply_to_all!(rep3_mul_vec_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_mul_vec_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_neg_t<T: IntRing2k>()
@@ -381,7 +388,7 @@ mod ring_share {
 
     #[test]
     fn rep3_neg() {
-        apply_to_all!(rep3_neg_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_neg_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_bit_inject_t<T: IntRing2k>()
@@ -420,7 +427,7 @@ mod ring_share {
 
     #[test]
     fn rep3_bit_inject() {
-        apply_to_all!(rep3_bit_inject_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_bit_inject_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_bit_inject_many_t<T: IntRing2k>()
@@ -471,7 +478,7 @@ mod ring_share {
 
     #[test]
     fn rep3_bit_inject_many() {
-        apply_to_all!(rep3_bit_inject_many_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_bit_inject_many_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     use arithmetic::ge_public;
@@ -522,7 +529,7 @@ mod ring_share {
                     #[test]
                     fn $name() {
                         // $name_t::<Bit>();
-                        apply_to_all!($name_t,[u8, u16, u32, u64, u128]);
+                        apply_to_all!($name_t,[u8, u16, u32, u64, u128,U512]);
                     }
                 }
             };
@@ -563,7 +570,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2b_zero() {
-        apply_to_all!(rep3_a2b_zero_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2b_zero_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y2b_zero_t<T: IntRing2k>()
@@ -597,7 +604,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_zero() {
-        apply_to_all!(rep3_a2y2b_zero_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y2b_zero_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y2b_streaming_zero_t<T: IntRing2k>()
@@ -631,7 +638,10 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_streaming_zero() {
-        apply_to_all!(rep3_a2y2b_streaming_zero_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_a2y2b_streaming_zero_t,
+            [Bit, u8, u16, u32, u64, u128, U512]
+        );
     }
 
     fn rep3_a2b_t<T: IntRing2k>()
@@ -665,7 +675,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2b() {
-        apply_to_all!(rep3_a2b_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2b_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y2b_t<T: IntRing2k>()
@@ -699,7 +709,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b() {
-        apply_to_all!(rep3_a2y2b_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y2b_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y2b_streaming_t<T: IntRing2k>()
@@ -733,7 +743,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y2b_streaming() {
-        apply_to_all!(rep3_a2y2b_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y2b_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2a_t<T: IntRing2k>()
@@ -767,7 +777,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2a() {
-        apply_to_all!(rep3_b2a_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2a_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2y2a_t<T: IntRing2k>()
@@ -801,7 +811,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y2a() {
-        apply_to_all!(rep3_b2y2a_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2y2a_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2y2a_streaming_t<T: IntRing2k>()
@@ -835,7 +845,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y2a_streaming() {
-        apply_to_all!(rep3_b2y2a_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2y2a_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_gc_t<T: IntRing2k>()
@@ -909,7 +919,7 @@ mod ring_share {
 
     #[test]
     fn rep3_gc() {
-        apply_to_all!(rep3_gc_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_gc_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_gc_streaming_t<T: IntRing2k>()
@@ -982,7 +992,7 @@ mod ring_share {
 
     #[test]
     fn rep3_gc_streaming() {
-        apply_to_all!(rep3_gc_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_gc_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y_t<T: IntRing2k>()
@@ -1034,7 +1044,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y() {
-        apply_to_all!(rep3_a2y_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_a2y_streaming_t<T: IntRing2k>()
@@ -1085,7 +1095,7 @@ mod ring_share {
 
     #[test]
     fn rep3_a2y_streaming() {
-        apply_to_all!(rep3_a2y_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_a2y_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_y2a_t<T: IntRing2k>()
@@ -1124,7 +1134,7 @@ mod ring_share {
 
     #[test]
     fn rep3_y2a() {
-        apply_to_all!(rep3_y2a_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_y2a_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_y2a_streaming_t<T: IntRing2k>()
@@ -1164,7 +1174,7 @@ mod ring_share {
 
     #[test]
     fn rep3_y2a_streaming() {
-        apply_to_all!(rep3_y2a_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_y2a_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2y_t<T: IntRing2k>()
@@ -1218,7 +1228,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y() {
-        apply_to_all!(rep3_b2y_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2y_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_b2y_streaming_t<T: IntRing2k>()
@@ -1271,7 +1281,7 @@ mod ring_share {
 
     #[test]
     fn rep3_b2y_streaming() {
-        apply_to_all!(rep3_b2y_streaming_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_b2y_streaming_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_y2b_t<T: IntRing2k>()
@@ -1310,7 +1320,7 @@ mod ring_share {
 
     #[test]
     fn rep3_y2b() {
-        apply_to_all!(rep3_y2b_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_y2b_t, [Bit, u8, u16, u32, u64, u128, U512]);
     }
 
     fn rep3_ring_cast_a2b_t<T, U>()
@@ -1345,8 +1355,8 @@ mod ring_share {
     fn rep3_ring_cast_a2b() {
         apply_to_all2!(
             rep3_ring_cast_a2b_t,
-            [Bit, u8, u16, u32, u64, u128],
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512],
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1381,7 +1391,7 @@ mod ring_share {
     fn rep3_field_to_ring_a2b_cast() {
         apply_to_all!(
             rep3_field_to_ring_cast_a2b_t,
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1542,8 +1552,8 @@ mod ring_share {
     fn rep3_ring_upcast_gc() {
         apply_to_all2!(
             rep3_ring_upcast_gc_t,
-            [Bit, u8, u16, u32, u64, u128],
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512],
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1579,8 +1589,8 @@ mod ring_share {
     fn rep3_ring_cast_gc() {
         apply_to_all2!(
             rep3_ring_cast_gc_t,
-            [Bit, u8, u16, u32, u64, u128],
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512],
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1635,7 +1645,7 @@ mod ring_share {
     fn rep3_decompose_shared_field_many_via_yao() {
         apply_to_all!(
             rep3_decompose_shared_field_many_via_yao_t,
-            [Bit, u8, u16, u32, u64, u128]
+            [Bit, u8, u16, u32, u64, u128, U512]
         );
     }
 
@@ -1681,7 +1691,10 @@ mod ring_share {
 
     #[test]
     fn rep3_div_power_2_via_yao() {
-        apply_to_all!(rep3_div_power_2_via_yao_t, [Bit, u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_div_power_2_via_yao_t,
+            [Bit, u8, u16, u32, u64, u128, U512]
+        );
     }
 
     fn rep3_bin_div_via_yao_t<T: IntRing2k>()
@@ -1733,7 +1746,132 @@ mod ring_share {
 
     #[test]
     fn rep3_bin_div_via_yao() {
-        apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]);
+        apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]); //Too slow for U512
+    }
+
+    fn rep3_translator_remainder_and_quotient_t<T: IntRing2k, F: PrimeField>(divisor: &BigUint)
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 3;
+        const SLICE_SIZE: u64 = 68;
+        const LIMBS_PER_FIELD: usize = 4;
+
+        fn slice_u256(value: &BigUint, start: u64, end: u64) -> BigUint {
+            if end <= start {
+                return BigUint::zero();
+            }
+            let range = end - start;
+            let mask = if range == 256 {
+                (BigUint::from(1u64) << 256) - BigUint::one()
+            } else {
+                (BigUint::one() << range) - BigUint::one()
+            };
+            (value >> start) & mask
+        }
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| {
+                // we are dividing by the field modulus, so we want this to be large enough (also in bb this is close to 512 bits)
+                let mut bytes = vec![0u8; T::BYTES];
+                rand::RngCore::fill_bytes(&mut rng, &mut bytes);
+                let biguint = BigUint::from_bytes_le(&bytes);
+                RingElement(T::cast_from_biguint(&biguint))
+            })
+            .collect_vec();
+        let y = (0..VEC_SIZE)
+            .map(|_| rng.gen::<RingElement<T>>())
+            .collect_vec();
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
+        let mut should_result1: Vec<RingElement<T>> = Vec::with_capacity(VEC_SIZE);
+        for x in x.into_iter() {
+            should_result1.push(RingElement(T::cast_from_biguint(
+                &(x.0.cast_to_biguint() / divisor),
+            )));
+        }
+        let mut should_result_1 = Vec::with_capacity(VEC_SIZE);
+        for x in &should_result1 {
+            let x_biguint = x.0.cast_to_biguint();
+            should_result_1.push(F::from(slice_u256(&x_biguint, 0, SLICE_SIZE)));
+            should_result_1.push(F::from(slice_u256(&x_biguint, SLICE_SIZE, 2 * SLICE_SIZE)));
+            should_result_1.push(F::from(slice_u256(
+                &x_biguint,
+                2 * SLICE_SIZE,
+                3 * SLICE_SIZE,
+            )));
+            should_result_1.push(F::from(slice_u256(
+                &x_biguint,
+                3 * SLICE_SIZE,
+                4 * SLICE_SIZE,
+            )));
+        }
+        let mut should_result_2 = Vec::with_capacity(VEC_SIZE);
+        for y in y {
+            let y_biguint = y.0.cast_to_biguint();
+            should_result_2.push(F::from(slice_u256(&y_biguint, 0, SLICE_SIZE)));
+            should_result_2.push(F::from(slice_u256(&y_biguint, SLICE_SIZE, 2 * SLICE_SIZE)));
+            should_result_2.push(F::from(slice_u256(
+                &y_biguint,
+                2 * SLICE_SIZE,
+                3 * SLICE_SIZE,
+            )));
+            should_result_2.push(F::from(slice_u256(
+                &y_biguint,
+                3 * SLICE_SIZE,
+                4 * SLICE_SIZE,
+            )));
+        }
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y) in izip!(
+            nets,
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter()
+        ) {
+            let divisor = divisor.to_owned();
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+
+                let div = yao::compute_remainder_limbs_and_quotient_limbs_many(
+                    &x,
+                    &y,
+                    SLICE_SIZE as usize,
+                    &divisor,
+                    LIMBS_PER_FIELD,
+                    &net,
+                    &mut state,
+                )
+                .unwrap();
+                tx.send(div)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result: Vec<F> = rep3::combine_field_elements(&result1, &result2, &result3);
+        let mut is_result_1 = Vec::with_capacity(VEC_SIZE * LIMBS_PER_FIELD);
+        let mut is_result_2 = Vec::with_capacity(VEC_SIZE * LIMBS_PER_FIELD);
+        for chunk in is_result.chunks(2 * LIMBS_PER_FIELD) {
+            let (left, right) = chunk.split_at(LIMBS_PER_FIELD);
+            is_result_1.extend_from_slice(left);
+            is_result_2.extend_from_slice(right);
+        }
+        assert_eq!(is_result_1, should_result_1);
+        assert_eq!(is_result_2, should_result_2);
+    }
+
+    #[test]
+    fn rep3_rep3_translator_remainder_and_quotient() {
+        rep3_translator_remainder_and_quotient_t::<U512, ark_bn254::Fr>(
+            &ark_bn254::Fq::MODULUS.into(),
+        );
     }
 
     fn rep3_bin_div_by_public_via_yao_t<T: IntRing2k>()
@@ -1827,7 +1965,10 @@ mod ring_share {
 
     #[test]
     fn rep3_bin_div_by_shared_via_yao() {
-        apply_to_all!(rep3_bin_div_by_shared_via_yao_t, [u8, u16, u32, u64, u128]);
+        apply_to_all!(
+            rep3_bin_div_by_shared_via_yao_t,
+            [u8, u16, u32, u64, u128] //Too slow for U512
+        );
     }
 
     fn rep3_rand_ohv_test_t<T: IntRing2k>()
@@ -1915,7 +2056,8 @@ mod ring_share {
                 let lut = lut.clone();
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-                    let res = gadgets::lut::read_public_lut(&lut, x, &net, &mut state).unwrap();
+                    let res =
+                        gadgets::lut_field::read_public_lut(&lut, x, &net, &mut state).unwrap();
                     tx.send(res)
                 });
             }
@@ -1934,6 +2076,49 @@ mod ring_share {
     #[test]
     fn rep3_lut_test() {
         apply_to_all!(rep3_lut_test_t, [u8, u16]);
+    }
+
+    fn rep3_curve_lut_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let should_result_f = lut[x].to_owned();
+
+            let nets = LocalNetwork::new_3_parties();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+                let lut = lut.clone();
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let res =
+                        gadgets::lut_curve::read_public_lut(&lut, x, &net, &mut state).unwrap();
+                    tx.send(res)
+                });
+            }
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = rep3::combine_curve_point(result1, result2, result3);
+            assert_eq!(is_result, should_result_f);
+        }
+    }
+
+    #[test]
+    fn rep3_curve_lut_test() {
+        apply_to_all!(rep3_curve_lut_test_t, [u8, u16]);
     }
 
     fn rep3_lut_low_depth_test_t<T: IntRing2k>()
@@ -1968,7 +2153,7 @@ mod ring_share {
                     let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
                     let mut state1 = state0.fork(0).unwrap();
 
-                    let res = gadgets::lut::read_public_lut_low_depth(
+                    let res = gadgets::lut_field::read_public_lut_low_depth(
                         &lut,
                         x,
                         &net0,
@@ -2026,8 +2211,8 @@ mod ring_share {
             ) {
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
-
-                    let res = gadgets::lut::read_shared_lut(&lut, x, &net, &mut state).unwrap();
+                    let res =
+                        gadgets::lut_field::read_shared_lut(&lut, x, &net, &mut state).unwrap();
                     tx.send(res)
                 });
             }
@@ -2043,6 +2228,55 @@ mod ring_share {
     #[test]
     fn rep3_shared_lut_test() {
         apply_to_all!(rep3_shared_lut_test_t, [u8, u16]);
+    }
+
+    fn rep3_shared_curve_lut_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let lut_shares = rep3::share_curve_points(&lut, &mut rng);
+            let should_result = lut[x].to_owned();
+
+            let nets = LocalNetwork::new_3_parties();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            for (net, tx, x, lut) in izip!(
+                nets,
+                [tx1, tx2, tx3],
+                x_shares.into_iter(),
+                lut_shares.into_iter()
+            ) {
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let res =
+                        gadgets::lut_curve::read_shared_lut(&lut, x, &net, &mut state).unwrap();
+                    tx.send(res)
+                });
+            }
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = result1 + result2 + result3;
+            assert_eq!(is_result, should_result);
+        }
+    }
+
+    #[test]
+    #[ignore = "This test is a bit slow, so ignore by default"]
+    fn rep3_shared_curve_lut_test() {
+        apply_to_all!(rep3_shared_curve_lut_test_t, [u8, u16]);
     }
 
     fn rep3_write_lut_test_t<T: IntRing2k>()
@@ -2079,7 +2313,7 @@ mod ring_share {
                 std::thread::spawn(move || {
                     let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                    gadgets::lut::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();
+                    gadgets::lut_field::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();
                     tx.send(lut)
                 });
             }
@@ -2095,5 +2329,56 @@ mod ring_share {
     #[test]
     fn rep3_write_lut_test() {
         apply_to_all!(rep3_write_lut_test_t, [u8, u16]);
+    }
+    fn rep3_write_curve_lut_test_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let mut rng = thread_rng();
+        for k in 1..T::K {
+            let n = 1 << k;
+            let lut = (0..n)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let x = rng.gen_range::<usize, _>(0..n);
+            let x_ = RingElement(T::try_from(x as u64).unwrap());
+            let y = ark_bn254::G1Projective::rand(&mut rng);
+            let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
+            let lut_shares = rep3::share_curve_points(&lut, &mut rng);
+            let y_shares = rep3::share_curve_point(y, &mut rng);
+            let mut should_result = lut;
+            should_result[x] = y;
+
+            let nets = LocalNetwork::new_3_parties();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+
+            for (net, tx, x, y, mut lut) in izip!(
+                nets,
+                [tx1, tx2, tx3],
+                x_shares.into_iter(),
+                y_shares.into_iter(),
+                lut_shares.into_iter()
+            ) {
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+
+                    gadgets::lut_curve::write_lut(&y, &mut lut, x, &net, &mut state).unwrap();
+                    tx.send(lut)
+                });
+            }
+
+            let result1 = rx1.recv().unwrap();
+            let result2 = rx2.recv().unwrap();
+            let result3 = rx3.recv().unwrap();
+            let is_result = rep3::combine_curve_points(&result1, &result2, &result3);
+            assert_eq!(is_result, should_result);
+        }
+    }
+
+    #[test]
+    fn rep3_write_cuvre_lut_test() {
+        apply_to_all!(rep3_write_curve_lut_test_t, [u8, u16]);
     }
 }

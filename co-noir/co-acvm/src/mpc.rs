@@ -77,7 +77,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     ) -> Self::AcvmPoint<C>;
 
     /// Subtracts two ACVM-type values: secret - secret
-    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;
+    fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType;
 
     /// Multiply an ACVM-types with a public value: \[c\] = public * \[secret\].
     fn mul_with_public(&mut self, public: F, secret: Self::AcvmType) -> Self::AcvmType;
@@ -88,6 +88,12 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         secret_1: Self::AcvmType,
         secret_2: Self::AcvmType,
     ) -> eyre::Result<Self::AcvmType>;
+
+    fn mul_many(
+        &mut self,
+        secrets_1: &[Self::AcvmType],
+        secrets_2: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Inverts an ACVM-type: \[c\] = \[secret\]^(-1).
     fn invert(&mut self, secret: Self::AcvmType) -> eyre::Result<Self::AcvmType>;
@@ -467,14 +473,14 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn blake2s_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The output is then composed into size 32 Vec of field elements.
     fn blake3_hash(
         &mut self,
         message_input: Vec<Self::AcvmType>,
-        num_bits: &[usize],
+        num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     /// Computes the addition of two EC points, where the points are represented by their x and y coordinates (and a is_infinity indicator). Outputs are also in their coordinate representation.
@@ -504,4 +510,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         input_bitsize: usize,
         output_bitsize: usize,
     ) -> eyre::Result<Self::AcvmType>;
+
+    /// Returns a an ACVM-type as shared no matter if it is public or already shared.
+    fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare;
 }

@@ -783,6 +783,10 @@ pub(crate) fn point_share_to_fieldshares_pre<C: CurveGroup, N: Network>(
 where
     C::BaseField: PrimeField,
 {
+    assert!(
+        !(x.a.is_zero() || x.b.is_zero()),
+        "This fails if one share is zero"
+    );
     let mut x01_x = Rep3PrimeFieldShare::zero_share();
     let mut x01_y = Rep3PrimeFieldShare::zero_share();
     let mut x2_x = Rep3PrimeFieldShare::zero_share();
@@ -831,6 +835,103 @@ where
     Ok((x01_x, x01_y, x2_x, x2_y))
 }
 
+/// This function is the first local step of the point_sharing to sharing of the coordinates transformation. In essence, it is very similar to what is done in a2b. It takes point shares and produces  trivial shares of their x and y coordinates each. To create valid (x,y) coordinate shares from it, these shares need to be added according to the point_addition rules of elliptic curves.
+#[expect(clippy::type_complexity)]
+pub(crate) fn point_share_to_fieldshares_pre_many<C: CurveGroup, N: Network>(
+    x: &[Rep3PointShare<C>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+)>
+where
+    C::BaseField: PrimeField,
+{
+    assert!(
+        x.iter()
+            .all(|share| !(share.a.is_zero() || share.b.is_zero())),
+        "This fails if one share is zero"
+    );
+    let input_len = x.len();
+    let mut x01_x = Vec::with_capacity(input_len);
+    let mut x01_y = Vec::with_capacity(input_len);
+    let mut x2_x = Vec::with_capacity(input_len);
+    let mut x2_y = Vec::with_capacity(input_len);
+
+    let r_x = vec![state.rngs.rand.masking_field_element::<C::BaseField>(); input_len];
+    let r_y = vec![state.rngs.rand.masking_field_element::<C::BaseField>(); input_len];
+
+    for (x, r_x, r_y) in izip!(x.iter(), r_x.iter(), r_y.iter()) {
+        match state.id {
+            PartyID::ID0 => {
+                let mut x01_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x01_y_ = Rep3PrimeFieldShare::zero_share();
+                let mut x2_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x2_y_ = Rep3PrimeFieldShare::zero_share();
+                x01_x_.a = *r_x;
+                x01_y_.a = *r_y;
+                if let Some((x, y)) = x.b.into_affine().xy() {
+                    x2_x_.b = x;
+                    x2_y_.b = y;
+                }
+                x01_x.push(x01_x_);
+                x01_y.push(x01_y_);
+                x2_x.push(x2_x_);
+                x2_y.push(x2_y_);
+            }
+            PartyID::ID1 => {
+                let val = x.a + x.b;
+                let mut x01_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x01_y_ = Rep3PrimeFieldShare::zero_share();
+                if let Some((x, y)) = val.into_affine().xy() {
+                    x01_x_.a = x + r_x;
+                    x01_y_.a = y + r_y;
+                } else {
+                    x01_x_.a = *r_x;
+                    x01_y_.a = *r_y;
+                }
+                x01_x.push(x01_x_);
+                x01_y.push(x01_y_);
+                x2_x.push(Rep3PrimeFieldShare::zero_share());
+                x2_y.push(Rep3PrimeFieldShare::zero_share());
+            }
+            PartyID::ID2 => {
+                let mut x01_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x01_y_ = Rep3PrimeFieldShare::zero_share();
+                let mut x2_x_ = Rep3PrimeFieldShare::zero_share();
+                let mut x2_y_ = Rep3PrimeFieldShare::zero_share();
+                x01_x_.a = *r_x;
+                x01_y_.a = *r_y;
+                if let Some((x, y)) = x.a.into_affine().xy() {
+                    x2_x_.a = x;
+                    x2_y_.a = y;
+                }
+                x01_x.push(x01_x_);
+                x01_y.push(x01_y_);
+                x2_x.push(x2_x_);
+                x2_y.push(x2_y_);
+            }
+        }
+    }
+
+    // reshare x01
+    let mut reshared_inputs: Vec<_> = x01_x.iter().map(|el| el.a.to_owned()).collect();
+    reshared_inputs.extend(x01_y.iter().map(|el| el.a.to_owned()));
+    let local_b = net.reshare_many(&reshared_inputs)?;
+    if local_b.len() != 2 * input_len {
+        eyre::bail!("Expected 2*{input_len} elements");
+    }
+    for i in 0..input_len {
+        x01_x[i].b = local_b[i];
+        x01_y[i].b = local_b[input_len + i];
+    }
+
+    Ok((x01_x, x01_y, x2_x, x2_y))
+}
+
 /// Transforms a replicated point share to shares of its coordinates.
 /// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
 #[expect(clippy::type_complexity)]
@@ -848,6 +949,25 @@ where
 {
     let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre(x, net, state)?;
     detail::point_addition(x01_x, x01_y, x2_x, x2_y, net, state)
+}
+
+/// Transforms a vec of replicated point shares to shares of their coordinates.
+/// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
+#[expect(clippy::type_complexity)]
+pub fn point_share_to_fieldshares_many<C: CurveGroup, N: Network>(
+    x: &[Rep3PointShare<C>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+    Vec<Rep3PrimeFieldShare<C::BaseField>>,
+)>
+where
+    C::BaseField: PrimeField,
+{
+    let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre_many(x, net, state)?;
+    detail::point_addition_many(&x01_x, &x01_y, &x2_x, &x2_y, net, state)
 }
 
 /// Transforms shares of coordinates to a replicated point share.
@@ -915,7 +1035,7 @@ where
     let z = detail::point_addition(x, y, y_x, y_y, net, state)?;
     // If infinity then z should be y
     let cmux = arithmetic::cmux_vec(is_infinity, &[y_x, y_y], &[z.0, z.1], net, state)?;
-    // Since y is randomly chosen, it is very unlikely that the x-coordinate matches the x-coodrinate of x. Thus z.2 is already 0
+    // Since y is randomly chosen, it is very unlikely that the x-coordinate matches the x-coordinate of x. Thus z.2 is already 0
 
     let z_a = [cmux[0].a, cmux[1].a, z.2.a];
     let z_b = [cmux[0].b, cmux[1].b, z.2.b];
@@ -943,6 +1063,176 @@ where
                 z_a[1] + z_b[1] + rcv[1],
                 z_a[2] + z_b[2] + rcv[2],
             )?;
+        }
+        PartyID::ID2 => {
+            net.send_next_many(&z_b)?;
+        }
+    }
+
+    Ok(res)
+}
+
+/// Transforms shares of coordinates to replicated point shares.
+pub fn fieldshares_to_pointshare_many<C: CurveGroup, N: Network>(
+    x: &[Rep3PrimeFieldShare<C::BaseField>],
+    y: &[Rep3PrimeFieldShare<C::BaseField>],
+    is_infinity: &[Rep3PrimeFieldShare<C::BaseField>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3PointShare<C>>>
+where
+    C::BaseField: PrimeField,
+{
+    let mut y_x = vec![Rep3PrimeFieldShare::zero_share(); x.len()];
+    let mut y_y = vec![Rep3PrimeFieldShare::zero_share(); x.len()];
+    let mut res = vec![Rep3PointShare::new(C::zero(), C::zero()); x.len()];
+
+    let r_xs = state
+        .rngs
+        .rand
+        .masking_field_elements_vec::<C::BaseField>(x.len());
+    let r_ys = state
+        .rngs
+        .rand
+        .masking_field_elements_vec::<C::BaseField>(x.len());
+
+    match state.id {
+        PartyID::ID0 => {
+            for (i, r_x) in r_xs.iter().enumerate() {
+                let r_y = &r_ys[i];
+                let k3 = state.rngs.bitcomp2.random_curves_3keys::<C>();
+
+                res[i].b = (k3.0 + k3.1 + k3.2).neg();
+                y_x[i].a = *r_x;
+                y_y[i].a = *r_y;
+            }
+        }
+        PartyID::ID1 => {
+            for (i, r_x) in r_xs.iter().enumerate() {
+                let r_y = &r_ys[i];
+                let k2 = state.rngs.bitcomp1.random_curves_3keys::<C>();
+
+                res[i].a = (k2.0 + k2.1 + k2.2).neg();
+                y_x[i].a = *r_x;
+                y_y[i].a = *r_y;
+            }
+        }
+        PartyID::ID2 => {
+            for (i, r_x) in r_xs.iter().enumerate() {
+                let r_y = &r_ys[i];
+                let k2 = state.rngs.bitcomp1.random_curves_3keys::<C>();
+                let k3 = state.rngs.bitcomp2.random_curves_3keys::<C>();
+
+                let k2_comp = k2.0 + k2.1 + k2.2;
+                let k3_comp = k3.0 + k3.1 + k3.2;
+
+                let val = k2_comp + k3_comp;
+                if let Some((x, y)) = val.into_affine().xy() {
+                    y_x[i].a = x + r_x;
+                    y_y[i].a = y + r_y;
+                } else {
+                    y_x[i].a = *r_x;
+                    y_y[i].a = *r_y;
+                }
+
+                res[i].a = k3_comp.neg();
+                res[i].b = k2_comp.neg();
+            }
+        }
+    }
+
+    // reshare y
+    let y_x_a: Vec<_> = y_x.iter().map(|el| el.a.to_owned()).collect();
+    let y_y_a: Vec<_> = y_y.iter().map(|el| el.a.to_owned()).collect();
+    let local_b = net.reshare_many(&[y_x_a, y_y_a])?;
+    if local_b.len() != 2 {
+        eyre::bail!("Expected 2 vectors",);
+    }
+    let local_b_x = &local_b[0];
+    let local_b_y = &local_b[1];
+
+    for i in 0..x.len() {
+        y_x[i].b = local_b_x[i];
+        y_y[i].b = local_b_y[i];
+    }
+
+    let z = detail::point_addition_many(x, y, &y_x, &y_y, net, state)?;
+    // If infinity then z should be y
+
+    // TACEO TODO: Maybe remove this manual impl of the cmux
+    // let cmux = arithmetic::cmux_vec(is_infinity, &[y_x, y_y], &[z.0, z.1], net, state)?;
+    let yx_minus_z0 = y_x
+        .iter()
+        .zip(z.0.iter())
+        .map(|(y_x, z)| y_x - z)
+        .collect::<Vec<_>>();
+    let yy_minus_z1 = y_y
+        .iter()
+        .zip(z.1.iter())
+        .map(|(y_y, z)| y_y - z)
+        .collect::<Vec<_>>();
+    let mut lhs = Vec::with_capacity(is_infinity.len());
+    let mut rhs = Vec::with_capacity(is_infinity.len());
+    lhs.extend(is_infinity.iter().cloned());
+    lhs.extend(is_infinity.iter().cloned());
+    rhs.extend(yx_minus_z0.iter().cloned());
+    rhs.extend(yy_minus_z1.iter().cloned());
+    let mul = arithmetic::mul_vec(&lhs, &rhs, net, state)?;
+    let first_half = &mul[0..is_infinity.len()];
+    let second_half = &mul[is_infinity.len()..];
+    let first: Vec<_> = first_half
+        .iter()
+        .zip(z.0.iter())
+        .map(|(a, b)| a + b)
+        .collect();
+    let second: Vec<_> = second_half
+        .iter()
+        .zip(z.1.iter())
+        .map(|(a, b)| a + b)
+        .collect();
+    // Since y is randomly chosen, it is very unlikely that the x-coordinate matches the x-coordinate of x. Thus z.2 is already 0
+
+    // let z_a = [cmux[0].a, cmux[1].a, z.2.a];
+    // let z_b = [cmux[0].b, cmux[1].b, z.2.b];
+    // TACEO TODO Can we optimize this further to avoid the allocations?
+    let first_a = first.iter().map(|el| el.a.to_owned()).collect::<Vec<_>>();
+    let second_a = second.iter().map(|el| el.a.to_owned()).collect::<Vec<_>>();
+    let z2_a = z.2.iter().map(|el| el.a.to_owned()).collect::<Vec<_>>();
+    let z_a = [first_a, second_a, z2_a];
+    let first_b = first.iter().map(|el| el.b.to_owned()).collect::<Vec<_>>();
+    let second_b = second.iter().map(|el| el.b.to_owned()).collect::<Vec<_>>();
+    let z2_b = z.2.iter().map(|el| el.b.to_owned()).collect::<Vec<_>>();
+    let mut z_b = first_b;
+    z_b.extend(second_b);
+    z_b.extend(z2_b);
+
+    match state.id {
+        PartyID::ID0 => {
+            net.send_next_many(&z_b)?;
+            let rcv = net.recv_prev_many::<C::BaseField>()?;
+            if rcv.len() != 3 * x.len() {
+                eyre::bail!("Expected 3 * {} elements", x.len());
+            }
+            for i in 0..x.len() {
+                res[i].a = detail::point_from_xy(
+                    z_a[0][i] + z_b[i] + rcv[i],
+                    z_a[1][i] + z_b[x.len() + i] + rcv[x.len() + i],
+                    z_a[2][i] + z_b[2 * x.len() + i] + rcv[2 * x.len() + i],
+                )?;
+            }
+        }
+        PartyID::ID1 => {
+            let rcv = net.recv_prev_many::<C::BaseField>()?;
+            if rcv.len() != 3 * x.len() {
+                eyre::bail!("Expected 3 * {} elements", x.len());
+            }
+            for i in 0..x.len() {
+                res[i].b = detail::point_from_xy(
+                    z_a[0][i] + z_b[i] + rcv[i],
+                    z_a[1][i] + z_b[x.len() + i] + rcv[x.len() + i],
+                    z_a[2][i] + z_b[2 * x.len() + i] + rcv[2 * x.len() + i],
+                )?;
+            }
         }
         PartyID::ID2 => {
             net.send_next_many(&z_b)?;

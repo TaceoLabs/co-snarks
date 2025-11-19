@@ -1,8 +1,8 @@
 export CARGO_TERM_QUIET=true
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
-NARGO_VERSION=1.0.0-beta.6 ##specify the desired nargo version here
-BARRETENBERG_VERSION=0.86.0 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
+NARGO_VERSION=1.0.0-beta.15 ##specify the desired nargo version here
+BARRETENBERG_VERSION=3.0.0-nightly.20251104 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
@@ -26,6 +26,9 @@ fi
 ## use one of these two methods
 ## install bbup: curl -L bbup.dev | bash
 # bash -c "bbup -nv 0.${NARGO_VERSION}.0"
+# If bb is causing problems, run this:
+# curl -L https://raw.githubusercontent.com/AztecProtocol/aztec-packages/refs/heads/next/barretenberg/bbup/install | bash
+# bbup
 r=$(bash -c "$BARRETENBERG_BINARY --version 2> /dev/null")
 if  [[ $r != "$BARRETENBERG_VERSION" ]];
 then
@@ -43,26 +46,28 @@ run_proof_verification() {
   local algorithm=$2
 
   if [[ "$algorithm" == "poseidon" ]]; then
+    prove_command="prove --scheme ultra_honk --oracle_hash poseidon2 --disable_zk"
+    write_command="write_vk --scheme ultra_honk --oracle_hash poseidon2 --disable_zk"
+    verify_command="verify --scheme ultra_honk --oracle_hash poseidon2 --disable_zk"
+  elif [[ "$algorithm" == "keccak" ]]; then
+    prove_command="prove --scheme ultra_honk --oracle_hash keccak --disable_zk"
+    write_command="write_vk --scheme ultra_honk --oracle_hash keccak --disable_zk"
+    verify_command="verify --scheme ultra_honk --oracle_hash keccak --disable_zk"
+  elif [[ "$algorithm" == "poseidon_zk" ]]; then
     prove_command="prove --scheme ultra_honk --oracle_hash poseidon2"
     write_command="write_vk --scheme ultra_honk --oracle_hash poseidon2"
     verify_command="verify --scheme ultra_honk --oracle_hash poseidon2"
-  elif [[ "$algorithm" == "keccak" ]]; then
+  else
     prove_command="prove --scheme ultra_honk --oracle_hash keccak"
     write_command="write_vk --scheme ultra_honk --oracle_hash keccak"
     verify_command="verify --scheme ultra_honk --oracle_hash keccak"
-  elif [[ "$algorithm" == "poseidon_zk" ]]; then
-    prove_command="prove --scheme ultra_honk --oracle_hash poseidon2 --zk"
-    write_command="write_vk --scheme ultra_honk --oracle_hash poseidon2"
-    verify_command="verify --scheme ultra_honk --oracle_hash poseidon2 --zk"
-  else
-    prove_command="prove --scheme ultra_honk --oracle_hash keccak --zk"
-    write_command="write_vk --scheme ultra_honk --oracle_hash keccak"
-    verify_command="verify --scheme ultra_honk --oracle_hash keccak --zk"
   fi
 
   echo "comparing" $name "with bb and $algorithm transcript"
+  
+  bash -c "$BARRETENBERG_BINARY $write_command -b test_vectors/${name}/target/${name}.json -o test_vectors/${name}/ $PIPE"
 
-  bash -c "$BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -o test_vectors/${name}/ $PIPE"
+  bash -c "$BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -k test_vectors/${name}/vk -o test_vectors/${name}/ $PIPE"
 
 
   if [[ "$algorithm" == "poseidon" ]] || [[ "$algorithm" == "keccak" ]]; then
@@ -79,7 +84,6 @@ run_proof_verification() {
       echo "::error::$name diff check of public_inputs failed (with: $algorithm)"
     fi
 
-  bash -c "$BARRETENBERG_BINARY $write_command -b test_vectors/${name}/target/${name}.json -o test_vectors/${name}/ $PIPE"
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof_plaindriver -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk_plaindriver $PIPE"
   if [[ $? -ne 0 ]]; then
@@ -135,8 +139,7 @@ for f in "${test_cases[@]}"; do
     exit_code=1
     echo "::error::" $f "failed with ZK"
   fi
-  # Note: ZK proofs are not (yet) possible with Poseidon in Barretenberg
-  # run_proof_verification "$f" "poseidon_zk"
+  run_proof_verification "$f" "poseidon_zk"
   bash cleanup.sh
 
    # -e to exit on first error

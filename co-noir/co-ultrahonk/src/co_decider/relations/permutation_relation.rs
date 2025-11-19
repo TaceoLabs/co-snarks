@@ -1,29 +1,26 @@
 use super::{ProverUnivariatesBatch, Relation};
-use crate::{
-    co_decider::{
-        relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
-    },
-    mpc_prover_flavour::MPCProverFlavour,
+use crate::co_decider::{
+    relations::fold_accumulator,
+    types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
+    univariates::SharedUnivariate,
 };
-use ark_ec::pairing::Pairing;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::{HonkProofResult, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour};
-use co_builder::{
-    TranscriptFieldType, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
+use ark_ec::CurveGroup;
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
 };
-use common::mpc::NoirUltraHonkProver;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
-pub(crate) struct UltraPermutationRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct UltraPermutationRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 3>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraPermutationRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for UltraPermutationRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -32,7 +29,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for UltraPermutationRelation
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> UltraPermutationRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraPermutationRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == UltraPermutationRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
@@ -71,14 +68,13 @@ impl UltraPermutationRelation {
 impl UltraPermutationRelation {
     fn compute_grand_product_numerator_and_denominator_batch<
         T: NoirUltraHonkProver<P>,
-        P: Pairing,
+        P: CurveGroup,
         N: Network,
-        L: MPCProverFlavour,
     >(
         net: &N,
         state: &mut T::State,
-        input: &ProverUnivariatesBatch<T, P, L>,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        input: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> HonkProofResult<Vec<T::ArithmeticShare>> {
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
@@ -157,18 +153,18 @@ impl UltraPermutationRelation {
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
-    Relation<T, P, L> for UltraPermutationRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for UltraPermutationRelation
 {
     type Acc = UltraPermutationRelationAcc<T, P>;
 
-    fn can_skip(_: &super::ProverUnivariates<T, P, L>) -> bool {
+    fn can_skip(_: &super::ProverUnivariates<T, P>) -> bool {
         false
     }
 
-    fn add_entities(
-        entity: &super::ProverUnivariates<T, P, L>,
-        batch: &mut ProverUnivariatesBatch<T, P, L>,
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut ProverUnivariatesBatch<T, P>,
     ) {
         batch.add_w_l(entity);
         batch.add_w_r(entity);
@@ -206,12 +202,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<N: Network, const SIZE: usize>(
+    fn accumulate<N: Network>(
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesBatch<T, P, L>,
-        relation_parameters: &RelationParameters<P::ScalarField, L>,
+        input: &ProverUnivariatesBatch<T, P>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factors: &[P::ScalarField],
     ) -> HonkProofResult<()> {
         let public_input_delta = &relation_parameters.public_input_delta;
@@ -245,12 +241,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
         T::sub_assign_many(&mut tmp, rhs);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        fold_accumulator!(univariate_accumulator.r0, tmp, SIZE);
+        fold_accumulator!(univariate_accumulator.r0, tmp);
 
         let mut tmp = T::mul_with_public_many(lagrange_last, z_perm_shift);
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
-        fold_accumulator!(univariate_accumulator.r1, tmp, SIZE);
+        fold_accumulator!(univariate_accumulator.r1, tmp);
 
         Ok(())
     }

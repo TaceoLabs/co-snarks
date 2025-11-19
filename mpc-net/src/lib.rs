@@ -15,8 +15,10 @@ pub mod tcp;
 #[cfg(feature = "tls")]
 pub mod tls;
 
-const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
-const DEFAULT_MAX_FRAME_LENTH: usize = 64 * 1024 * 1024; // 64MB
+/// The default connection timeout
+pub const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
+/// The default max frame length for sending messages
+pub const DEFAULT_MAX_FRAME_LENTH: usize = 64 * 1024 * 1024; // 64MB
 
 /// A MPC network that can be used to send and receive data to and from other parties
 ///
@@ -63,6 +65,10 @@ pub struct ConnectionStats {
 }
 
 impl ConnectionStats {
+    /// Create new `ConnectionStats`
+    pub fn new(my_id: usize, stats: BTreeMap<usize, (usize, usize)>) -> Self {
+        Self { my_id, stats }
+    }
     /// Get connection statistics for a specific party.
     /// Returns a tuple of (sent_bytes, received_bytes) if the party_id exists, otherwise returns None.
     pub fn get(&self, party_id: usize) -> Option<(usize, usize)> {

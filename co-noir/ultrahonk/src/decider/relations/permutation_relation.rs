@@ -1,16 +1,9 @@
 use super::Relation;
-use crate::decider::types::ProverUnivariatesSized;
-use crate::{
-    decider::{
-        types::{ClaimedEvaluations, RelationParameters},
-        univariate::Univariate,
-    },
-    plain_prover_flavour::PlainProverFlavour,
+use crate::decider::{
+    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
+    univariate::Univariate,
 };
 use ark_ff::{PrimeField, Zero};
-use co_builder::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct UltraPermutationRelationAcc<F: PrimeField> {
@@ -68,14 +61,14 @@ impl UltraPermutationRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
 }
 
-impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraPermutationRelation {
+impl<F: PrimeField> Relation<F> for UltraPermutationRelation {
     type Acc = UltraPermutationRelationAcc<F>;
     type VerifyAcc = UltraPermutationRelationEvals<F>;
 
     const SKIPPABLE: bool = true;
 
-    fn skip<const SIZE: usize>(input: &ProverUnivariatesSized<F, L, SIZE>) -> bool {
-        <Self as Relation<F, L>>::check_skippable();
+    fn skip(input: &ProverUnivariates<F>) -> bool {
+        <Self as Relation<F>>::check_skippable();
         // If z_perm == z_perm_shift, this implies that none of the wire values for the present input are involved in
         // non-trivial copy constraints.
         (input.witness.z_perm().to_owned() - input.shifted_witness.z_perm()).is_zero()
@@ -97,10 +90,10 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraPermutationRe
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<const SIZE: usize>(
+    fn accumulate(
         univariate_accumulator: &mut Self::Acc,
-        input: &ProverUnivariatesSized<F, L, SIZE>,
-        relation_parameters: &RelationParameters<F, L>,
+        input: &ProverUnivariates<F>,
+        relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         tracing::trace!("Accumulate UltraPermutationRelation");
@@ -175,8 +168,8 @@ impl<F: PrimeField, L: PlainProverFlavour> Relation<F, L> for UltraPermutationRe
 
     fn verify_accumulate(
         univariate_accumulator: &mut Self::VerifyAcc,
-        input: &ClaimedEvaluations<F, L>,
-        relation_parameters: &RelationParameters<F, L>,
+        input: &ClaimedEvaluations<F>,
+        relation_parameters: &RelationParameters<F>,
         scaling_factor: &F,
     ) {
         let w_1 = input.witness.w_l();

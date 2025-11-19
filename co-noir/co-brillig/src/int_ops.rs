@@ -60,6 +60,22 @@ where
         self.increment_program_counter();
         Ok(())
     }
+
+    pub(super) fn handle_not(
+        &mut self,
+        destination: MemoryAddress,
+        source: MemoryAddress,
+        bit_size: IntegerBitSize,
+    ) -> eyre::Result<()> {
+        let value = self
+            .memory
+            .try_read_int(source, bit_size)
+            .context("while getting source for NOT op")?;
+        let negated_value = self.driver.not(value)?;
+        self.memory.write(destination, negated_value)?;
+        self.increment_program_counter();
+        Ok(())
+    }
 }
 
 // we pas

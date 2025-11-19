@@ -1,21 +1,21 @@
-use crate::{builder::GenericUltraCircuitBuilder, types::field_ct::FieldCT};
-use ark_ec::pairing::Pairing;
+use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
+use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::utils::Utils;
 use num_bigint::BigUint;
 
 use super::field_ct::BoolCT;
 
 pub(crate) const NUM_LIMBS: usize = 4;
 
-#[derive(Debug)]
-#[expect(dead_code)]
+#[derive(Debug, Default)]
 pub(crate) struct BigField<F: PrimeField> {
     pub(crate) binary_basis_limbs: [Limb<F>; NUM_LIMBS],
     pub(crate) prime_basis_limb: FieldCT<F>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 #[expect(dead_code)]
 pub(crate) struct Limb<F: PrimeField> {
     pub(crate) element: FieldCT<F>,
@@ -46,7 +46,7 @@ impl<F: PrimeField> BigField<F> {
     ///
     /// Returns the public input index at which the representation of the BigField starts.
     pub(crate) fn set_public<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &self,
@@ -61,8 +61,51 @@ impl<F: PrimeField> BigField<F> {
         start_index
     }
 
+    pub(crate) fn new_from_u256(value: BigUint) -> Self {
+        let default_maximum_limb: BigUint = BigUint::from((1u128 << Self::NUM_LIMB_BITS) - 1);
+        let limbs = [
+            Limb::new(
+                F::from(Utils::slice_u256(&value, 0, Self::NUM_LIMB_BITS as u64)).into(),
+                default_maximum_limb.clone(),
+            ),
+            Limb::new(
+                F::from(Utils::slice_u256(
+                    &value,
+                    Self::NUM_LIMB_BITS as u64,
+                    (Self::NUM_LIMB_BITS * 2) as u64,
+                ))
+                .into(),
+                default_maximum_limb.clone(),
+            ),
+            Limb::new(
+                F::from(Utils::slice_u256(
+                    &value,
+                    (Self::NUM_LIMB_BITS * 2) as u64,
+                    (Self::NUM_LIMB_BITS * 3) as u64,
+                ))
+                .into(),
+                default_maximum_limb.clone(),
+            ),
+            Limb::new(
+                F::from(Utils::slice_u256(
+                    &value,
+                    (Self::NUM_LIMB_BITS * 3) as u64,
+                    (Self::NUM_LIMB_BITS * 4) as u64,
+                ))
+                .into(),
+                default_maximum_limb.clone(),
+            ),
+        ];
+        let prime_basis_limb = F::from(value).into();
+        BigField {
+            binary_basis_limbs: limbs,
+            prime_basis_limb,
+        }
+    }
+
+    #[expect(dead_code)]
     pub(crate) fn from_witness<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         input: &T::AcvmType,
@@ -100,7 +143,7 @@ impl<F: PrimeField> BigField<F> {
     }
 
     pub(crate) fn from_slices<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         low_bits_in: FieldCT<F>,
@@ -231,14 +274,32 @@ impl<F: PrimeField> BigField<F> {
             prime_basis_limb,
         })
     }
+
+    pub(crate) fn convert_constant_to_fixed_witness<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        for limb in &mut self.binary_basis_limbs {
+            limb.element
+                .convert_constant_to_fixed_witness(builder, driver);
+        }
+        self.prime_basis_limb
+            .convert_constant_to_fixed_witness(builder, driver);
+    }
 }
 #[expect(dead_code)]
-pub(crate) struct BigGroup<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+#[derive(Default)]
+pub(crate) struct BigGroup<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
     pub(crate) x: BigField<P::ScalarField>,
     pub(crate) y: BigField<P::ScalarField>,
     pub(crate) is_infinity: BoolCT<P, T>,
 }
-impl<P: Pairing, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P, T> {
+impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> BigGroup<P, T> {
+    #[expect(dead_code)]
     pub(crate) fn new(x: BigField<P::ScalarField>, y: BigField<P::ScalarField>) -> Self {
         BigGroup {
             x,

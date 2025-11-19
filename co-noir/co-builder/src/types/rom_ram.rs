@@ -1,6 +1,6 @@
 use super::field_ct::FieldCT;
-use crate::builder::GenericUltraCircuitBuilder;
-use ark_ec::pairing::Pairing;
+use crate::ultra_builder::GenericUltraCircuitBuilder;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::lut::LookupTableProvider;
@@ -36,7 +36,7 @@ impl<F: PrimeField> RomTable<F> {
     }
 
     pub(crate) fn index_field_ct<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -61,7 +61,7 @@ impl<F: PrimeField> RomTable<F> {
             assert!(val < BigUint::from(self.length));
         }
 
-        let witness_index = index.normalize(builder, driver).get_witness_index();
+        let witness_index = index.get_witness_index(builder, driver);
         let output_idx = builder
             .read_rom_array(self.rom_id, witness_index, driver)
             .expect("Not implemented for other cases");
@@ -69,7 +69,7 @@ impl<F: PrimeField> RomTable<F> {
     }
 
     fn initialize_table<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -88,13 +88,14 @@ impl<F: PrimeField> RomTable<F> {
                     builder.put_constant_variable(val),
                 ));
             } else {
-                self.entries.push(entry.normalize(builder, driver));
+                self.entries.push(entry.clone());
             }
         }
         self.rom_id = builder.create_rom_array(self.length);
 
         for i in 0..self.length {
-            builder.set_rom_element(self.rom_id, i, self.entries[i].get_witness_index());
+            let index = self.entries[i].get_witness_index(builder, driver);
+            builder.set_rom_element(self.rom_id, i, index);
         }
 
         self.initialized = true;
@@ -140,7 +141,7 @@ impl<F: PrimeField> RamTable<F> {
     }
 
     pub(crate) fn read<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -170,7 +171,7 @@ impl<F: PrimeField> RamTable<F> {
     }
 
     pub(crate) fn write<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -210,12 +211,8 @@ impl<F: PrimeField> RamTable<F> {
             let cast_index = usize::try_from(cast_index).expect("Invalid index");
             if !self.index_initialized[cast_index] {
                 // if index constant && not initialized
-                builder.init_ram_element(
-                    driver,
-                    self.ram_id,
-                    cast_index,
-                    value_wire.get_witness_index(),
-                )?;
+                let index = value_wire.get_witness_index(builder, driver);
+                builder.init_ram_element(driver, self.ram_id, cast_index, index)?;
                 self.index_initialized[cast_index] = true;
                 return Ok(());
             }
@@ -244,7 +241,7 @@ impl<F: PrimeField> RamTable<F> {
     }
 
     fn initialize_table<
-        P: Pairing<ScalarField = F>,
+        P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
     >(
         &mut self,
@@ -271,9 +268,10 @@ impl<F: PrimeField> RamTable<F> {
                     .expect("Constant should be public");
                 FieldCT::from_witness_index(builder.put_constant_variable(val))
             } else {
-                raw.normalize(builder, driver)
+                raw.clone()
             };
-            builder.init_ram_element(driver, self.ram_id, i, entry.get_witness_index())?;
+            let index = entry.get_witness_index(builder, driver);
+            builder.init_ram_element(driver, self.ram_id, i, index)?;
             *ind = true;
         }
 
@@ -345,16 +343,11 @@ pub(crate) struct RomTranscript<F: Clone> {
     pub(crate) records: Vec<RomRecord<F>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub(crate) enum RamAccessType {
+    #[default]
     Read,
     Write,
-}
-
-impl Default for RamAccessType {
-    fn default() -> Self {
-        Self::Read
-    }
 }
 
 #[derive(Clone)]

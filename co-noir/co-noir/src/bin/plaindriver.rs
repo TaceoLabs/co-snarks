@@ -3,22 +3,23 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
-use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::prelude::Serialize as FieldSerialize;
-use co_noir::HonkRecursion;
+use co_noir::{Bn254G1, HonkRecursion};
+use co_noir_common::{crs::parse::CrsParser, types::ZeroKnowledge};
+use co_noir_common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use co_ultrahonk::{
     PlainCoBuilder,
-    prelude::{CoUltraHonk, CrsParser, ProvingKey, UltraHonk, Utils, VerifyingKey, ZeroKnowledge},
+    prelude::{CoUltraHonk, ProvingKey, UltraHonk, VerifyingKey},
 };
 use color_eyre::eyre::Context;
-use common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use noir_types::SerializeF;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
 use std::{
+    fs::File,
     io::{BufWriter, Write},
     path::PathBuf,
     process::ExitCode,
@@ -180,13 +181,13 @@ fn main() -> color_eyre::Result<ExitCode> {
     let has_zk = ZeroKnowledge::from(config.zk);
 
     // Read circuit
-    let program_artifact = Utils::get_program_artifact_from_file(&circuit_path)
+    let program_artifact = co_noir::program_artifact_from_reader(File::open(&circuit_path)?)
         .context("while parsing program artifact")?;
-    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact, true);
 
     // Create witness
     let witness = if let Some(witness_path) = witness_file {
-        Utils::get_witness_from_file(&witness_path).expect("failed to parse witness")
+        co_noir::witness_from_reader(File::open(&witness_path)?).expect("failed to parse witness")
     } else {
         let solver = PlainCoSolver::init_plain_driver(program_artifact, input_path)
             .context("while initializing plain driver")?;
@@ -196,7 +197,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Build the circuit
     let mut driver = PlainAcvmSolver::new();
-    let builder = PlainCoBuilder::<Bn254>::create_circuit(
+    let builder = PlainCoBuilder::<Bn254G1>::create_circuit(
         &constraint_system,
         false, // We don't support recursive atm
         0,
@@ -206,8 +207,11 @@ fn main() -> color_eyre::Result<ExitCode> {
     )
     .context("while creating the circuit")?;
     // Read the Crs
-    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false)?;
-    let crs = CrsParser::get_crs(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
+    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false)?;
+    let crs =
+        CrsParser::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::get_crs::<
+            Bn254,
+        >(&prover_crs_path, &verifier_crs_path, crs_size, has_zk)?;
     let (prover_crs, verifier_crs) = crs.split();
     // Create the proving key and the barretenberg-compatible verifying key
     let (proving_key, vk_barretenberg) =
@@ -229,64 +233,82 @@ fn main() -> color_eyre::Result<ExitCode> {
     tracing::info!("Wrote vk to file {}", out_path.display());
 
     // Create the proof
-    let (proof, public_inputs) = match hasher {
-        TranscriptHash::POSEIDON2 => CoUltraHonk::<
-            PlainUltraHonkDriver,
-            _,
-            Poseidon2Sponge,
-            UltraFlavour,
-        >::prove(proving_key, &prover_crs, has_zk)
-        .context("While creating proof")?,
+    let is_valid = match hasher {
+        TranscriptHash::POSEIDON2 => {
+            let (proof, public_inputs) =
+                CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove(
+                    proving_key,
+                    &prover_crs,
+                    has_zk,
+                    &vk_barretenberg,
+                )
+                .context("While creating proof")?;
+            // Write the proof to a file
+            let out_path = out_dir.join("proof_plaindriver");
+            let mut out_file = BufWriter::new(
+                std::fs::File::create(&out_path).context("while creating output file for proof")?,
+            );
+            let proof_u8 = proof.to_buffer();
+            out_file
+                .write(proof_u8.as_slice())
+                .context("while writing proof to file")?;
+            tracing::info!("Wrote proof to file {}", out_path.display());
+
+            // Write the public inputs to a file
+            let out_path = out_dir.join("public_inputs_plaindriver");
+            let mut out_file = BufWriter::new(
+                std::fs::File::create(&out_path).context("while creating output file for proof")?,
+            );
+            let public_inputs_u8 = SerializeF::to_buffer(&public_inputs, false);
+            out_file
+                .write(public_inputs_u8.as_slice())
+                .context("while writing proof to file")?;
+            // Get the verifying key
+            let verifying_key =
+                VerifyingKey::<Bn254>::from_barretenberg_and_crs(vk_barretenberg, verifier_crs);
+
+            // Verify the proof
+            tracing::info!("Wrote public inputs to file {}", out_path.display());
+            UltraHonk::<_, Poseidon2Sponge>::verify(proof, &public_inputs, &verifying_key, has_zk)
+                .context("While verifying proof")?
+        }
         TranscriptHash::KECCAK => {
-            CoUltraHonk::<PlainUltraHonkDriver, _, Keccak256, UltraFlavour>::prove(
+            let (proof, public_inputs) = CoUltraHonk::<PlainUltraHonkDriver, _, Keccak256>::prove(
                 proving_key,
                 &prover_crs,
                 has_zk,
+                &vk_barretenberg,
             )
-            .context("While creating proof")?
+            .context("While creating proof")?;
+            // Write the proof to a file
+            let out_path = out_dir.join("proof_plaindriver");
+            let mut out_file = BufWriter::new(
+                std::fs::File::create(&out_path).context("while creating output file for proof")?,
+            );
+            let proof_u8 = proof.to_buffer();
+            out_file
+                .write(proof_u8.as_slice())
+                .context("while writing proof to file")?;
+            tracing::info!("Wrote proof to file {}", out_path.display());
+
+            // Write the public inputs to a file
+            let out_path = out_dir.join("public_inputs_plaindriver");
+            let mut out_file = BufWriter::new(
+                std::fs::File::create(&out_path).context("while creating output file for proof")?,
+            );
+            let public_inputs_u8 = noir_types::U256::to_buffer(&public_inputs);
+            out_file
+                .write(public_inputs_u8.as_slice())
+                .context("while writing proof to file")?;
+            // Get the verifying key
+            let verifying_key =
+                VerifyingKey::<Bn254>::from_barretenberg_and_crs(vk_barretenberg, verifier_crs);
+
+            // Verify the proof
+            tracing::info!("Wrote public inputs to file {}", out_path.display());
+            UltraHonk::<_, Keccak256>::verify(proof, &public_inputs, &verifying_key, has_zk)
+                .context("While verifying proof")?
         }
-    };
-    // Write the proof to a file
-    let out_path = out_dir.join("proof_plaindriver");
-    let mut out_file = BufWriter::new(
-        std::fs::File::create(&out_path).context("while creating output file for proof")?,
-    );
-    let proof_u8 = proof.to_buffer();
-    out_file
-        .write(proof_u8.as_slice())
-        .context("while writing proof to file")?;
-    tracing::info!("Wrote proof to file {}", out_path.display());
-
-    // Write the public inputs to a file
-    let out_path = out_dir.join("public_inputs_plaindriver");
-    let mut out_file = BufWriter::new(
-        std::fs::File::create(&out_path).context("while creating output file for proof")?,
-    );
-    let public_inputs_u8 = FieldSerialize::to_buffer(&public_inputs, false);
-    out_file
-        .write(public_inputs_u8.as_slice())
-        .context("while writing proof to file")?;
-    tracing::info!("Wrote public inputs to file {}", out_path.display());
-
-    // Get the verifying key
-    let verifying_key = VerifyingKey::from_barrettenberg_and_crs(vk_barretenberg, verifier_crs);
-
-    // Verify the proof
-    let is_valid = match hasher {
-        TranscriptHash::POSEIDON2 => UltraHonk::<_, Poseidon2Sponge, UltraFlavour>::verify(
-            proof,
-            &public_inputs,
-            &verifying_key,
-            has_zk,
-        )
-        .context("While verifying proof")?,
-        TranscriptHash::KECCAK => UltraHonk::<_, Keccak256, UltraFlavour>::verify(
-            proof,
-            &public_inputs,
-            &verifying_key,
-            has_zk,
-        )
-        .context("While verifying proof")?,
     };
 
     if is_valid {

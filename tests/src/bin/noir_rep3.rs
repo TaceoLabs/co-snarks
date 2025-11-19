@@ -1,8 +1,7 @@
-use std::{path::PathBuf, thread};
+use std::{fs::File, path::PathBuf, thread};
 
-use acir::{native_types::WitnessStack, FieldElement};
+use acir::native_types::WitnessStack;
 
-use ark_bn254::Bn254;
 use co_acvm::solver::{PlainCoSolver, Rep3CoSolver};
 use mpc_net::local::LocalNetwork;
 use noirc_artifacts::program::ProgramArtifact;
@@ -44,20 +43,21 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     ))
     .unwrap();
 
-    let should_witness = WitnessStack::<FieldElement>::try_from(should_witness.as_slice()).unwrap();
+    let should_witness = WitnessStack::deserialize(should_witness.as_slice()).unwrap();
     let input = PathBuf::from(format!(
         "{root}/../test_vectors/noir/{test_case}/Prover.toml",
     ));
     // read the input file
-    let inputs = Rep3CoSolver::<_, ()>::partially_read_abi_bn254_fieldelement(
-        &input,
+    let inputs = noir_types::partially_read_abi_bn254(
+        File::open(input)?,
         &program_artifact.abi,
-        &program_artifact.bytecode,
+        &program_artifact.bytecode.functions[0]
+            .public_inputs()
+            .indices(),
     )?;
 
     // create input shares
-    let mut rng = rand::thread_rng();
-    let shares = test_utils::share_input_rep3::<Bn254, _>(inputs, &mut rng);
+    let shares = co_noir_types::split_input_rep3::<ark_bn254::Fr>(inputs);
     let nets0 = LocalNetwork::new_3_parties();
     let nets1 = LocalNetwork::new_3_parties();
     let mut threads = vec![];
@@ -73,7 +73,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     ) {
         threads.push(thread::spawn(move || {
             let input_share =
-                test_utils::translate_witness_share_rep3(share, &program_artifact.abi);
+                co_noir::witness_map_from_string_map(share, &program_artifact.abi).unwrap();
             let solver =
                 Rep3CoSolver::new_with_witness(&net0, &net1, program_artifact, input_share)
                     .unwrap();

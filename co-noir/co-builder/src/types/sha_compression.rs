@@ -1,9 +1,8 @@
-use crate::{
-    TranscriptFieldType, builder::GenericUltraCircuitBuilder, prelude::HonkCurve, utils::Utils,
-};
-use ark_ec::pairing::Pairing;
+use crate::ultra_builder::GenericUltraCircuitBuilder;
+use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 use num_bigint::BigUint;
 use std::{array, marker::PhantomData};
 
@@ -22,7 +21,7 @@ pub(crate) struct SparseValue<F: PrimeField> {
 }
 
 impl<F: PrimeField> SparseValue<F> {
-    pub fn new<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    pub fn new<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         input: FieldCT<F>,
         builder: &GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -275,13 +274,12 @@ impl<F: PrimeField> SHA256<F> {
                 builder,
                 driver,
             );
-            let added_two = added_two.add_two(
+            let xor_result_sparse = added_two.add_two(
                 &w_sparse[i - 2].rotated_limbs[3],
                 &left_xor_sparse,
                 builder,
                 driver,
             );
-            let xor_result_sparse = added_two.normalize(builder, driver);
 
             let xor_result = Plookup::read_from_1_to_2_table(
                 builder,
@@ -317,9 +315,8 @@ impl<F: PrimeField> SHA256<F> {
                     w_out_raw.multiply(&FieldCT::from(inv_pow_two), builder, driver)?;
                 let w_out_inv_pow_two =
                     w_out.multiply(&FieldCT::from(inv_pow_two), builder, driver)?;
-                let divisor = (w_out_raw_inv_pow_two.sub(&w_out_inv_pow_two, builder, driver))
-                    .normalize(builder, driver);
-                builder.create_new_range_constraint(divisor.witness_index, 3);
+                let divisor = w_out_raw_inv_pow_two.sub(&w_out_inv_pow_two, builder, driver);
+                divisor.create_range_constraint(3, builder, driver)?;
                 w_out
             };
 
@@ -378,16 +375,14 @@ impl<F: PrimeField> SHA256<F> {
                 driver,
             );
 
-        let choose_result_sparse = xor_result
-            .add_two(
-                &f.sparse.add(&f.sparse, builder, driver),
-                &g.sparse
-                    .add(&g.sparse, builder, driver)
-                    .add(&g.sparse, builder, driver),
-                builder,
-                driver,
-            )
-            .normalize(builder, driver);
+        let choose_result_sparse = xor_result.add_two(
+            &f.sparse.add(&f.sparse, builder, driver),
+            &g.sparse
+                .add(&g.sparse, builder, driver)
+                .add(&g.sparse, builder, driver),
+            builder,
+            driver,
+        );
 
         let choose_result = Plookup::read_from_1_to_2_table(
             builder,
@@ -443,9 +438,7 @@ impl<F: PrimeField> SHA256<F> {
                 driver,
             );
 
-        let majority_result_sparse = xor_result
-            .add_two(&b.sparse, &c.sparse, builder, driver)
-            .normalize(builder, driver);
+        let majority_result_sparse = xor_result.add_two(&b.sparse, &c.sparse, builder, driver);
 
         let majority_result = Plookup::read_from_1_to_2_table(
             builder,
@@ -457,7 +450,7 @@ impl<F: PrimeField> SHA256<F> {
         Ok(majority_result)
     }
 
-    fn add_normalize<P: Pairing<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    fn add_normalize<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
         a: &FieldCT<F>,
         b: &FieldCT<F>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,

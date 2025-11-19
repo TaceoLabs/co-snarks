@@ -46,7 +46,7 @@ impl<F: PrimeField> ShamirPreprocessing<F> {
         let mut rng_buffer = ShamirRng::new(seed, num_parties, threshold, net)?;
 
         let start = Instant::now();
-        // buffer_triple generates amount * batch_size, so we ceil dive the amount we want
+        // buffer_triple generates amount * batch_size, so we ceil div the amount we want
         let amount = amount.div_ceil(rng_buffer.get_size_per_batch());
         rng_buffer.buffer_triples(net, amount)?;
         tracing::debug!(

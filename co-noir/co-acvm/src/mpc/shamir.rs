@@ -2,13 +2,15 @@ use super::{NoirWitnessExtensionProtocol, plain::PlainAcvmSolver};
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
+use co_noir_types::ShamirType;
 use core::panic;
+use itertools::Itertools;
 use mpc_core::{
     MpcState,
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     protocols::{
         rep3::yao::circuits::SHA256Table,
-        rep3_ring::lut::Rep3LookupTable,
+        rep3_ring::lut_field::Rep3FieldLookupTable,
         shamir::{
             ShamirPointShare, ShamirPrimeFieldShare, ShamirState, arithmetic,
             network::ShamirNetworkExt, pointshare,
@@ -128,6 +130,15 @@ impl<F: PrimeField> From<ShamirPrimeFieldShare<F>> for ShamirAcvmType<F> {
     }
 }
 
+impl<F: PrimeField> From<ShamirType<F>> for ShamirAcvmType<F> {
+    fn from(value: ShamirType<F>) -> Self {
+        match value {
+            ShamirType::Public(public) => ShamirAcvmType::Public(public),
+            ShamirType::Shared(shared) => ShamirAcvmType::Shared(shared),
+        }
+    }
+}
+
 impl<F: PrimeField> From<ShamirAcvmType<F>> for ShamirBrilligType<F> {
     fn from(val: ShamirAcvmType<F>) -> Self {
         match val {
@@ -147,7 +158,7 @@ impl<F: PrimeField> From<ShamirBrilligType<F>> for ShamirAcvmType<F> {
 }
 
 impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAcvmSolver<'a, F, N> {
-    type Lookup = Rep3LookupTable<F>; // This is just a dummy and unused
+    type Lookup = Rep3FieldLookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
 
@@ -267,7 +278,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         }
     }
 
-    fn sub(&mut self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
+    fn sub(&self, share_1: Self::AcvmType, share_2: Self::AcvmType) -> Self::AcvmType {
         match (share_1, share_2) {
             (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
                 ShamirAcvmType::Public(share_1 - share_2)
@@ -865,7 +876,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     fn blake2s_hash(
         &mut self,
         _message_input: Vec<Self::AcvmType>,
-        _num_bits: &[usize],
+        _num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("functionality blake2s_hash not feasible for Shamir")
     }
@@ -873,7 +884,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     fn blake3_hash(
         &mut self,
         _message_input: Vec<Self::AcvmType>,
-        _num_bits: &[usize],
+        _num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         panic!("functionality blake2s_hash not feasible for Shamir")
     }
@@ -939,5 +950,79 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         _output_bitsize: usize,
     ) -> eyre::Result<Self::AcvmType> {
         panic!("functionality accumulate_from_sparse_bytes not feasible for Shamir")
+    }
+
+    /// Multiply two slices of ACVM-types elementwise: \[c_i\] = \[secret_1_i\] * \[secret_2_i\].
+    fn mul_many(
+        &mut self,
+        secrets_1: &[Self::AcvmType],
+        secrets_2: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        if secrets_1.len() != secrets_2.len() {
+            eyre::bail!("Vectors must have the same length");
+        }
+        // For each coordinate we have four cases:
+        // 1. Both are shared
+        // 2. First is shared, second is public
+        // 3. First is public, second is shared
+        // 4. Both are public
+        // We handle case one separately, in order to use batching and then combine the results.
+        let (all_shared_indices, any_public_indices): (Vec<usize>, Vec<usize>) = (0..secrets_1
+            .len())
+            .partition(|&i| Self::is_shared(&secrets_1[i]) && Self::is_shared(&secrets_2[i]));
+
+        // Case 1: Both are shared
+        let (indices, shares_1, shares_2): (
+            Vec<usize>,
+            Vec<Self::ArithmeticShare>,
+            Vec<Self::ArithmeticShare>,
+        ) = all_shared_indices
+            .into_iter()
+            .map(|i| {
+                (
+                    i,
+                    Self::get_shared(&secrets_1[i]).unwrap(),
+                    Self::get_shared(&secrets_2[i]).unwrap(),
+                )
+            })
+            .multiunzip();
+        let mul_all_shared = arithmetic::mul_vec(&shares_1, &shares_2, self.net, &mut self.state)?;
+        let mul_all_shared = mul_all_shared.into_iter().map(ShamirAcvmType::Shared);
+        let mul_all_shared_indexed = indices
+            .into_iter()
+            .zip(mul_all_shared)
+            .collect::<Vec<(usize, Self::AcvmType)>>();
+
+        // For all the other cases, we can just call self.mul
+        let mul_any_public = any_public_indices
+            .iter()
+            .map(|&i| {
+                let a = &secrets_1[i];
+                let b = &secrets_2[i];
+                self.mul(a.clone(), b.clone())
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let mul_any_public_indexed = any_public_indices
+            .into_iter()
+            .zip(mul_any_public)
+            .collect::<Vec<(usize, Self::AcvmType)>>();
+
+        // Merge sort by index
+        Ok(mul_all_shared_indexed
+            .into_iter()
+            .chain(mul_any_public_indexed)
+            .sorted_by_key(|(i, _)| *i)
+            .map(|(_, val)| val)
+            .collect::<Vec<Self::AcvmType>>())
+    }
+
+    fn get_as_shared(&mut self, value: &Self::AcvmType) -> Self::ArithmeticShare {
+        if Self::is_shared(value) {
+            Self::get_shared(value).expect("Already checked it is shared")
+        } else {
+            self.promote_to_trivial_share(
+                Self::get_public(value).expect("Already checked it is public"),
+            )
+        }
     }
 }

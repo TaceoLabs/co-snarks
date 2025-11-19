@@ -1,13 +1,17 @@
 use crate::proof_tests::{CRS_PATH_G1, CRS_PATH_G2};
 use ark_bn254::Bn254;
-use co_acvm::ShamirAcvmType;
-use co_builder::flavours::ultra_flavour::UltraFlavour;
-use co_builder::TranscriptFieldType;
-use co_ultrahonk::prelude::{CrsParser, ShamirCoUltraHonk, UltraHonk, Utils, ZeroKnowledge};
-use common::transcript::{Poseidon2Sponge, TranscriptHasher};
+use co_noir::Bn254G1;
+use co_noir_common::{
+    crs::parse::CrsParser,
+    honk_proof::TranscriptFieldType,
+    transcript::{Poseidon2Sponge, TranscriptHasher},
+    types::ZeroKnowledge,
+};
+use co_noir_types::ShamirType;
+use co_ultrahonk::prelude::{ShamirCoUltraHonk, UltraHonk};
 use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
-use std::sync::Arc;
+use std::{fs::File, sync::Arc};
 
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     name: &str,
@@ -18,26 +22,45 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let circuit_file = format!("../test_vectors/noir/{name}/kat/{name}.json");
     let witness_file = format!("../test_vectors/noir/{name}/kat/{name}.gz");
 
-    let program_artifact = Utils::get_program_artifact_from_file(&circuit_file)
-        .expect("failed to parse program artifact");
-    let witness = Utils::get_witness_from_file(&witness_file).expect("failed to parse witness");
+    let program_artifact =
+        co_noir::program_artifact_from_reader(File::open(&circuit_file).unwrap())
+            .expect("failed to parse program artifact");
+    let witness = co_noir::witness_from_reader(File::open(&witness_file).unwrap())
+        .expect("failed to parse witness");
 
     // Will be trivially shared anyways
     let witness = witness
         .into_iter()
-        .map(ShamirAcvmType::from)
+        .map(ShamirType::from)
         .collect::<Vec<_>>();
 
     let nets = LocalNetwork::new(num_parties);
     let mut threads = Vec::with_capacity(num_parties);
-    let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
-    let crs_size = co_noir::compute_circuit_size::<Bn254>(&constraint_system, false).unwrap();
-    let prover_crs =
-        Arc::new(CrsParser::<Bn254>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact, true);
+    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false).unwrap();
+    let prover_crs = Arc::new(
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
+            CRS_PATH_G1,
+            crs_size,
+            has_zk,
+        )
+        .unwrap(),
+    );
+    // Get vk
+    let verifier_crs =
+        CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g2::<
+            Bn254,
+        >(CRS_PATH_G2)
+        .unwrap();
+    let vk =
+        co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs.clone(), verifier_crs, false)
+            .unwrap();
     for net in nets {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
-        let constraint_system = Utils::get_constraint_system_from_artifact(&program_artifact, true);
+        let vk = vk.clone();
+        let constraint_system =
+            co_noir::get_constraint_system_from_artifact(&program_artifact, true);
         threads.push(std::thread::spawn(move || {
             // generate proving key and vk
             let pk = co_noir::generate_proving_key_shamir(
@@ -49,13 +72,14 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 &net,
             )
             .unwrap();
-            let (proof, public_inputs) = ShamirCoUltraHonk::<_, H, UltraFlavour>::prove(
+            let (proof, public_inputs) = ShamirCoUltraHonk::<_, H>::prove(
                 &net,
                 num_parties,
                 threshold,
                 pk,
                 &prover_crs,
                 has_zk,
+                &vk.inner_vk,
             )
             .unwrap();
             (proof, public_inputs)
@@ -82,12 +106,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(public_input, p);
     }
 
-    // Get vk
-    let verifier_crs = CrsParser::<Bn254>::get_crs_g2(CRS_PATH_G2).unwrap();
-    let vk = co_noir::generate_vk(&constraint_system, prover_crs, verifier_crs, false).unwrap();
-
-    let is_valid =
-        UltraHonk::<_, H, UltraFlavour>::verify(proof, &public_input, &vk, has_zk).unwrap();
+    let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);
 }
 

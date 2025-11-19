@@ -1,54 +1,36 @@
-use crate::decider::barycentric::Barycentric;
-use crate::plain_prover_flavour::UnivariateTrait;
 use ark_ff::{PrimeField, Zero};
+use co_noir_common::barycentric::Barycentric;
 use rand::{CryptoRng, Rng};
 use std::{
     array,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
+
 #[derive(Clone, Debug)]
 pub struct Univariate<F, const SIZE: usize> {
     pub evaluations: [F; SIZE],
 }
 
 impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
-    pub(crate) fn extend_and_batch_univariates<const SIZE2: usize>(
-        &self,
-        result: &mut Univariate<F, SIZE2>,
-        extended_random_poly: &Univariate<F, SIZE2>,
-        partial_evaluation_result: &F,
-        linear_independent: bool,
-    ) {
-        let mut extended = Univariate::<F, SIZE2>::default();
-        extended.extend_from(&self.evaluations);
-        if linear_independent {
-            *result += extended * extended_random_poly * partial_evaluation_result;
-        } else {
-            *result += extended;
-        }
-    }
-}
-
-impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE> {
-    fn double(self) -> Self {
+    pub(crate) fn double(self) -> Self {
         let mut result = self;
         result.double_in_place();
         result
     }
 
-    fn double_in_place(&mut self) {
+    pub(crate) fn double_in_place(&mut self) {
         for i in 0..SIZE {
             self.evaluations[i].double_in_place();
         }
     }
 
-    fn sqr(self) -> Self {
+    pub(crate) fn sqr(self) -> Self {
         let mut result = self;
         result.square_in_place();
         result
     }
 
-    fn square_in_place(&mut self) {
+    pub(crate) fn square_in_place(&mut self) {
         for i in 0..SIZE {
             self.evaluations[i].square_in_place();
         }
@@ -72,7 +54,7 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE
      * = f(2) + Δ...
      *
      */
-    fn extend_from(&mut self, poly: &[F]) {
+    pub fn extend_from(&mut self, poly: &[F]) {
         let length = poly.len();
         let extended_length = SIZE;
 
@@ -195,7 +177,7 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE
         }
     }
 
-    fn evaluate(&self, u: F) -> F {
+    pub(crate) fn evaluate(&self, u: F) -> F {
         if u == F::zero() {
             return self.evaluations[0];
         }
@@ -230,16 +212,26 @@ impl<F: PrimeField, const SIZE: usize> UnivariateTrait<F> for Univariate<F, SIZE
         result
     }
 
-    fn get_random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
-        let evaluations = array::from_fn(|_| F::rand(rng));
-        Self { evaluations }
+    pub(crate) fn extend_and_batch_univariates<const SIZE2: usize>(
+        &self,
+        result: &mut Univariate<F, SIZE2>,
+        extended_random_poly: &Univariate<F, SIZE2>,
+        partial_evaluation_result: &F,
+        linear_independent: bool,
+    ) {
+        let mut extended = Univariate::<F, SIZE2>::default();
+        extended.extend_from(&self.evaluations);
+
+        if linear_independent {
+            *result += extended * extended_random_poly * partial_evaluation_result;
+        } else {
+            *result += extended;
+        }
     }
 
-    fn evaluations(&mut self) -> &mut [F] {
-        &mut self.evaluations
-    }
-    fn evaluations_as_ref(&self) -> &[F] {
-        &self.evaluations
+    pub(crate) fn get_random<R: Rng + CryptoRng>(rng: &mut R) -> Self {
+        let evaluations = array::from_fn(|_| F::rand(rng));
+        Self { evaluations }
     }
 }
 

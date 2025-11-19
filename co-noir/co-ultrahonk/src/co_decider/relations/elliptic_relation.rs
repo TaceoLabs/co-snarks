@@ -1,32 +1,27 @@
 use super::Relation;
-use crate::{
-    co_decider::{
-        relations::fold_accumulator, types::RelationParameters, univariates::SharedUnivariate,
-    },
-    mpc_prover_flavour::MPCProverFlavour,
+use crate::co_decider::{
+    relations::fold_accumulator,
+    types::{MAX_PARTIAL_RELATION_LENGTH, RelationParameters},
+    univariates::SharedUnivariate,
 };
-use common::mpc::NoirUltraHonkProver;
-
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Zero;
-use co_builder::polynomials::polynomial_flavours::WitnessEntitiesFlavour;
-use co_builder::prelude::HonkCurve;
-use co_builder::{HonkProofResult, polynomials::polynomial_flavours::PrecomputedEntitiesFlavour};
-use co_builder::{
-    TranscriptFieldType, polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour,
+use co_noir_common::{
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    mpc::NoirUltraHonkProver,
 };
 use itertools::Itertools as _;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
-
 #[derive(Clone, Debug)]
-pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct EllipticRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 6>,
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EllipticRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for EllipticRelationAcc<T, P> {
     fn default() -> Self {
         Self {
             r0: Default::default(),
@@ -35,7 +30,7 @@ impl<T: NoirUltraHonkProver<P>, P: Pairing> Default for EllipticRelationAcc<T, P
     }
 }
 
-impl<T: NoirUltraHonkProver<P>, P: Pairing> EllipticRelationAcc<T, P> {
+impl<T: NoirUltraHonkProver<P>, P: CurveGroup> EllipticRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, elements: &[P::ScalarField]) {
         assert!(elements.len() == EllipticRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
@@ -71,18 +66,18 @@ impl EllipticRelation {
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 12;
 }
 
-impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverFlavour>
-    Relation<T, P, L> for EllipticRelation
+impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
+    for EllipticRelation
 {
     type Acc = EllipticRelationAcc<T, P>;
 
-    fn can_skip(entity: &super::ProverUnivariates<T, P, L>) -> bool {
+    fn can_skip(entity: &super::ProverUnivariates<T, P>) -> bool {
         entity.precomputed.q_elliptic().is_zero()
     }
 
-    fn add_entities(
-        entity: &super::ProverUnivariates<T, P, L>,
-        batch: &mut super::ProverUnivariatesBatch<T, P, L>,
+    fn add_entites(
+        entity: &super::ProverUnivariates<T, P>,
+        batch: &mut super::ProverUnivariatesBatch<T, P>,
     ) {
         batch.add_w_r(entity);
         batch.add_w_o(entity);
@@ -107,12 +102,12 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    fn accumulate<N: Network, const SIZE: usize>(
+    fn accumulate<N: Network>(
         net: &N,
         state: &mut T::State,
         univariate_accumulator: &mut Self::Acc,
-        input: &super::ProverUnivariatesBatch<T, P, L>,
-        _relation_parameters: &RelationParameters<<P>::ScalarField, L>,
+        input: &super::ProverUnivariatesBatch<T, P>,
+        _relation_parameters: &RelationParameters<<P>::ScalarField>,
         scaling_factors: &[<P>::ScalarField],
     ) -> HonkProofResult<()> {
         tracing::trace!("Accumulate EllipticRelation");
@@ -251,13 +246,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>, L: MPCProverF
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
-        // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
+        // (y1 + y3) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
         let y_double_identity = T::sub_many(chunks2[3], chunks2[4]);
         let tmp = T::mul_with_public_many(&q_elliptic_q_double_scaling, &y_double_identity);
         T::add_assign_many(&mut tmp_2, &tmp);
 
-        fold_accumulator!(univariate_accumulator.r0, tmp_1, SIZE);
-        fold_accumulator!(univariate_accumulator.r1, tmp_2, SIZE);
+        fold_accumulator!(univariate_accumulator.r0, tmp_1);
+        fold_accumulator!(univariate_accumulator.r1, tmp_2);
         Ok(())
     }
 }

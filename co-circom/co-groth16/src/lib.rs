@@ -257,7 +257,7 @@ mod tests {
         let c = Matrix::<ark_bls12_377::Fr>::deserialize_uncompressed(c_file).unwrap();
         let matrices = ConstraintMatrices {
             num_instance_variables: pkey.b_g1_query.len() - pkey.l_query.len(),
-            num_witness_variables: pkey.a_query.len(),
+            num_witness_variables: pkey.a_query.len() - pkey.b_g1_query.len() + pkey.l_query.len(),
             num_constraints: a.len(),
             a_num_non_zero: a.len(),
             b_num_non_zero: b.len(),

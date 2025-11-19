@@ -1,6 +1,6 @@
 [package]
 name = "tests"
-version = "0.1.11"
+version = "0.1.12"
 edition = "2021"
 publish = false
 license = "GPL-3.0" # due to circom-mpc-compiler dep
@@ -13,28 +13,28 @@ ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-grumpkin = { workspace = true }
 ark-std = { workspace = true }
-ark-serialize = { workspace = true }
 blake2.workspace = true
 blake3.workspace = true
 bincode.workspace = true
-bytes = { workspace = true }
-circom-mpc-compiler = { version = "0.9.1", path = "../co-circom/circom-mpc-compiler" }
-circom-mpc-vm = { version = "0.8.0", path = "../co-circom/circom-mpc-vm" }
-circom-types = { version = "0.9.0", path = "../co-circom/circom-types" }
-co-acvm = { version = "0.6.0", path = "../co-noir/co-acvm" }
-co-circom-types = { version = "0.5.0", path = "../co-circom/co-circom-types" }
-co-builder = { version = "0.4.0", path = "../co-noir/co-builder" }
-co-groth16 = { version = "0.9.0", path = "../co-circom/co-groth16", features = [
+circom-mpc-compiler = { version = "0.10.0", path = "../co-circom/circom-mpc-compiler" }
+circom-mpc-vm = { version = "0.9.0", path = "../co-circom/circom-mpc-vm" }
+circom-types = { version = "0.10.0", path = "../co-circom/circom-types" }
+co-acvm = { version = "0.7.0", path = "../co-noir/co-acvm" }
+co-circom-types = { version = "0.6.0", path = "../co-circom/co-circom-types" }
+co-builder = { version = "0.5.0", path = "../co-noir/co-builder" }
+co-groth16 = { version = "0.10.0", path = "../co-circom/co-groth16", features = [
     "verifier",
 ] }
-co-noir = { version = "0.6.0", path = "../co-noir/co-noir" }
-co-plonk = { version = "0.6.1", path = "../co-circom/co-plonk" }
-co-ultrahonk = { version = "0.5.0", path = "../co-noir/co-ultrahonk" }
-common = { version = "0.1.0", path = "../co-noir/common" }
+co-noir = { version = "0.7.0", path = "../co-noir/co-noir" }
+co-noir-types = { version = "0.1.1", path = "../co-noir/co-noir-types" }
+noir-types = { version = "0.1.1", path = "../co-noir/noir-types" }
+co-plonk = { version = "0.7.0", path = "../co-circom/co-plonk" }
+co-ultrahonk = { version = "0.6.0", path = "../co-noir/co-ultrahonk" }
+co-noir-common = { version = "0.2.0", path = "../co-noir/co-noir-common" }
 eyre.workspace = true
 itertools = { workspace = true }
-mpc-core = { version = "0.9.0", path = "../mpc-core" }
-mpc-net = { version = "0.4.0", path = "../mpc-net", default-features = false, features = ["local"] }
+mpc-core = { version = "0.10.0", path = "../mpc-core" }
+mpc-net = { version = "0.5.0", path = "../mpc-net", default-features = false, features = ["local"] }
 num-bigint.workspace = true
 num-traits = { workspace = true }
 noirc-artifacts = { workspace = true }
@@ -42,7 +42,6 @@ rand = { workspace = true }
 sha2.workspace = true
 serde_json = { workspace = true }
 libaes = { workspace = true }
-noirc-abi = { workspace = true }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 

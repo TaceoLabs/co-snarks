@@ -1,6 +1,6 @@
 [package]
 name = "mpc-net"
-version = "0.4.0"
+version = "0.5.0"
 exclude = ["data"]
 publish.workspace = true
 authors.workspace = true
@@ -17,7 +17,7 @@ default = ["tcp"]
 local = []
 tcp = ["dep:crossbeam-channel", "dep:socket2"]
 tls = ["dep:rustls", "dep:crossbeam-channel", "dep:socket2"]
-quic = ["dep:futures", "dep:quinn", "dep:tokio", "dep:tokio-util"]
+quic = ["dep:rustls", "dep:futures", "dep:quinn", "dep:tokio", "dep:tokio-util"]
 
 [[example]]
 name = "three_party_tcp"
@@ -37,6 +37,7 @@ bytes = { workspace = true }
 eyre.workspace = true
 futures = { version = "0.3.30", optional = true }
 intmap.workspace = true
+itertools.workspace = true
 parking_lot = "0.12.4"
 quinn = { version = "0.11", optional = true }
 rustls = { workspace = true, optional = true }
@@ -55,7 +56,7 @@ toml.workspace = true
 tracing = { workspace = true }
 crossbeam-channel = { version = "0.5.15", optional = true }
 humantime-serde = "1.1.1"
-socket2 = { version = "0.5.10", optional = true }
+socket2 = { version = "0.6.0", optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }

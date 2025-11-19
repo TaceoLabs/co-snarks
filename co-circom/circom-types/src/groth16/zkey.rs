@@ -69,10 +69,12 @@ pub struct ZKey<P: Pairing> {
     pub l_query: Vec<P::G1Affine>,
     /// alpha_g1
     pub alpha_g1: P::G1Affine,
-    /// beta_g1
+    /// beta_g2
     pub beta_g2: P::G2Affine,
-    /// delta_g1
+    /// delta_g2
     pub delta_g2: P::G2Affine,
+    /// gamma_g2
+    pub gamma_g2: P::G2Affine,
     /// Used to bind public inputs to the proof
     pub ic: Vec<P::G1Affine>,
     /// The constraint matrices A
@@ -90,7 +92,7 @@ impl<P: Pairing> From<ZKey<P>> for (ConstraintMatrices<P::ScalarField>, ProvingK
         (
             ConstraintMatrices {
                 num_instance_variables: zkey.n_public + 1,
-                num_witness_variables: zkey.a_query.len(),
+                num_witness_variables: zkey.a_query.len() - zkey.n_public - 1,
                 num_constraints: zkey.num_constraints,
                 a_num_non_zero: zkey.a_matrix.len(),
                 b_num_non_zero: zkey.b_matrix.len(),
@@ -103,7 +105,7 @@ impl<P: Pairing> From<ZKey<P>> for (ConstraintMatrices<P::ScalarField>, ProvingK
                 vk: VerifyingKey {
                     alpha_g1: zkey.alpha_g1,
                     beta_g2: zkey.beta_g2,
-                    gamma_g2: zkey.delta_g2,
+                    gamma_g2: zkey.gamma_g2,
                     delta_g2: zkey.delta_g2,
                     gamma_abc_g1: zkey.ic,
                 },
@@ -128,6 +130,7 @@ struct HeaderGroth<P: Pairing> {
     alpha_g1: P::G1Affine,
     beta_g1: P::G1Affine,
     beta_g2: P::G2Affine,
+    gamma_g2: P::G2Affine,
     delta_g1: P::G1Affine,
     delta_g2: P::G2Affine,
 }
@@ -211,6 +214,7 @@ where
             alpha_g1: header.alpha_g1,
             beta_g2: header.beta_g2,
             delta_g2: header.delta_g2,
+            gamma_g2: header.gamma_g2,
             a_matrix,
             b_matrix,
             ic: ic.unwrap()?,
@@ -340,8 +344,7 @@ where
             let alpha_g1 = P::g1_from_reader(&mut reader, check)?;
             let beta_g1 = P::g1_from_reader(&mut reader, check)?;
             let beta_g2 = P::g2_from_reader(&mut reader, check)?;
-            // we don't need this element but we need to read it anyways
-            let _ = P::g2_from_reader(&mut reader, check)?;
+            let gamma_g2 = P::g2_from_reader(&mut reader, check)?;
             let delta_g1 = P::g1_from_reader(&mut reader, check)?;
             let delta_g2 = P::g2_from_reader(&mut reader, check)?;
             tracing::debug!("read header done!");
@@ -355,6 +358,7 @@ where
                 beta_g2,
                 delta_g1,
                 delta_g2,
+                gamma_g2,
             })
         } else {
             Err(ZKeyParserError::CorruptedBinFile(format!(

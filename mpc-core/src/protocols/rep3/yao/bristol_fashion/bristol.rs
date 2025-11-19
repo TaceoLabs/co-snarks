@@ -633,6 +633,7 @@ pub trait BristolFashionEvaluator {
     }
 }
 
+#[allow(dead_code)] // expect somehow does not work here?
 pub struct BoolBristolFashionEvaluator;
 
 impl BristolFashionEvaluator for BoolBristolFashionEvaluator {

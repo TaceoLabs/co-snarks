@@ -5,8 +5,8 @@ mod field_share {
     use ark_ff::PrimeField;
     use ark_std::{UniformRand, Zero};
     use blake2::{Blake2s256, Digest};
-    use co_builder::prelude::Utils;
     use co_builder::prelude::AES128_SBOX;
+    use co_noir_common::utils::Utils;
     use itertools::izip;
     use itertools::Itertools;
     use libaes::Cipher;
@@ -604,6 +604,41 @@ mod field_share {
     bool_op_test!(le, <=);
     bool_op_test!(gt, >);
     bool_op_test!(ge, >=);
+
+    #[test]
+    fn rep3_pow_public_field() {
+        use mpc_core::protocols::rep3::arithmetic;
+        let exponents: [u64; 6] = [0, 1, 2, 3, 5, 10];
+        let mut rng = thread_rng();
+
+        for &exp in &exponents {
+            let nets = LocalNetwork::new_3_parties();
+            let base = ark_bn254::Fr::rand(&mut rng);
+            let base_shares = rep3::share_field_element(base, &mut rng);
+            let public_exp = ark_bn254::Fr::from(exp);
+
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+            for (net, tx, share) in izip!(nets, [tx1, tx2, tx3], base_shares) {
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let res = arithmetic::pow_public(share, public_exp, &net, &mut state).unwrap();
+                    tx.send(res).unwrap();
+                });
+            }
+            let res1 = rx1.recv().unwrap();
+            let res2 = rx2.recv().unwrap();
+            let res3 = rx3.recv().unwrap();
+            let got = rep3::combine_field_element(res1, res2, res3);
+
+            let mut expected = ark_bn254::Fr::one();
+            for _ in 0..exp {
+                expected *= base;
+            }
+            assert_eq!(got, expected);
+        }
+    }
 
     #[test]
     fn rep3_a2b_zero() {
@@ -1341,6 +1376,58 @@ mod field_share {
         assert_eq!(is_result, should_result);
     }
 
+    #[test]
+    fn rep3_decompose_shared_field_to_other_field_many_via_yao() {
+        const VEC_SIZE: usize = 10;
+        const TOTAL_BIT_SIZE: usize = 64;
+        const CHUNK_SIZE: usize = 14;
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| ark_bn254::Fr::rand(&mut rng))
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut should_result =
+            Vec::with_capacity(VEC_SIZE * (TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE)));
+        let big_mask = (BigUint::from(1u64) << TOTAL_BIT_SIZE) - BigUint::one();
+        let small_mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        for x in x.into_iter() {
+            let mut x: BigUint = x.into();
+            x &= &big_mask;
+            for _ in 0..TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE) {
+                let chunk = &x & &small_mask;
+                x >>= CHUNK_SIZE;
+                should_result.push(ark_bn254::Fq::from(chunk));
+            }
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+
+                let decomposed = yao::decompose_arithmetic_to_other_field_many::<
+                    ark_bn254::Fr,
+                    ark_bn254::Fq,
+                    _,
+                >(&x, &net, &mut state, TOTAL_BIT_SIZE, CHUNK_SIZE)
+                .unwrap();
+                tx.send(decomposed)
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+        assert_eq!(is_result, should_result);
+    }
+
     fn rep3_slice_shared_field_many_via_yao_inner(msb: usize, lsb: usize, bitsize: usize) {
         const VEC_SIZE: usize = 10;
 
@@ -1481,6 +1568,203 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
         assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_compute_wnaf_digits() {
+        const VEC_SIZE: usize = 10;
+
+        const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
+        const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
+        const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
+        const WNAF_MASK: u64 = (1 << NUM_WNAF_DIGIT_BITS) - 1;
+        const WNAF_DIGITS_PER_ROW: usize = 4;
+        let num_rows_per_scalar = NUM_WNAF_DIGITS_PER_SCALAR / WNAF_DIGITS_PER_ROW;
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let mask: BigUint = (BigUint::one() << NUM_SCALAR_BITS) - BigUint::one();
+        let x = (0..VEC_SIZE)
+            .map(|_| {
+                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
+                ark_bn254::Fr::from(res)
+            })
+            .collect_vec();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+
+        let mut should_result = Vec::with_capacity(
+            VEC_SIZE * NUM_WNAF_DIGITS_PER_SCALAR + VEC_SIZE * (NUM_WNAF_DIGITS_PER_SCALAR - 1),
+        );
+        let mut should_result_pos = Vec::with_capacity(
+            VEC_SIZE * NUM_WNAF_DIGITS_PER_SCALAR + VEC_SIZE * (NUM_WNAF_DIGITS_PER_SCALAR - 1),
+        );
+        let mut should_result_even = Vec::with_capacity(VEC_SIZE);
+        let mut should_result_unchanged = Vec::with_capacity(VEC_SIZE * NUM_WNAF_DIGITS_PER_SCALAR);
+        let mut should_result_row_chunks =
+            Vec::with_capacity(VEC_SIZE * NUM_WNAF_DIGITS_PER_SCALAR);
+        let mut should_result_row_chunks_neg =
+            Vec::with_capacity(VEC_SIZE * NUM_WNAF_DIGITS_PER_SCALAR);
+        let mut should_result_row_s = Vec::with_capacity(VEC_SIZE * NUM_WNAF_DIGITS_PER_SCALAR);
+
+        let compute_wnaf_digits = |mut scalar: BigUint| -> (
+            [i32; NUM_WNAF_DIGITS_PER_SCALAR],
+            [bool; NUM_WNAF_DIGITS_PER_SCALAR],
+            [i32; NUM_WNAF_DIGITS_PER_SCALAR],
+        ) {
+            let mut output = [0; NUM_WNAF_DIGITS_PER_SCALAR];
+            let mut pos_output = [true; NUM_WNAF_DIGITS_PER_SCALAR];
+            let mut neg_output = [0i32; NUM_WNAF_DIGITS_PER_SCALAR];
+            let mut previous_slice = 0;
+            const BORROW_CONSTANT: i32 = 1 << NUM_WNAF_DIGIT_BITS;
+
+            for i in 0..NUM_WNAF_DIGITS_PER_SCALAR {
+                let raw_slice = &scalar & BigUint::from(WNAF_MASK);
+                let is_even = (&raw_slice & BigUint::one()) == BigUint::zero();
+                let mut wnaf_slice = raw_slice
+                    .to_u32_digits()
+                    .first()
+                    .cloned()
+                    .unwrap_or_default() as i32;
+
+                if i == 0 && is_even {
+                    wnaf_slice += 1;
+                } else if is_even {
+                    previous_slice -= BORROW_CONSTANT;
+
+                    wnaf_slice += 1;
+                }
+
+                if i > 0 {
+                    if previous_slice < 0 {
+                        pos_output[NUM_WNAF_DIGITS_PER_SCALAR - i] = false;
+                    }
+                    neg_output[NUM_WNAF_DIGITS_PER_SCALAR - i] = previous_slice;
+                    output[NUM_WNAF_DIGITS_PER_SCALAR - i] = (previous_slice + 15) / 2;
+                }
+                previous_slice = wnaf_slice;
+
+                scalar >>= NUM_WNAF_DIGIT_BITS;
+            }
+
+            assert!(scalar.is_zero());
+            output[0] = (previous_slice + 15) / 2;
+            pos_output[0] = previous_slice > 0;
+            neg_output[0] = previous_slice;
+
+            (output, pos_output, neg_output)
+        };
+        for x in x.into_iter() {
+            let x: BigUint = x.into();
+            let (wnaf_digits, neg_output, outputs_unchanged) = compute_wnaf_digits(x.clone());
+            let is_even = (x & BigUint::one()) == BigUint::zero();
+            should_result_even.push(ark_bn254::Fr::from(is_even as u64));
+            should_result.extend(wnaf_digits.iter().map(|&d| ark_bn254::Fr::from(d as u64)));
+            should_result_pos.extend(neg_output);
+            should_result_unchanged.extend(outputs_unchanged);
+        }
+
+        // This happens later in the code in compute_rows, but we put it into the gc to save time
+        for chunk in should_result_unchanged.chunks(NUM_WNAF_DIGITS_PER_SCALAR) {
+            for i in 0..num_rows_per_scalar {
+                let slice0 = &chunk[i * WNAF_DIGITS_PER_ROW];
+                let slice1 = &chunk[i * WNAF_DIGITS_PER_ROW + 1];
+                let slice2 = &chunk[i * WNAF_DIGITS_PER_ROW + 2];
+                let slice3 = &chunk[i * WNAF_DIGITS_PER_ROW + 3];
+                let row_chunk = slice3 + (slice2 << 4) + (slice1 << 8) + (slice0 << 12);
+
+                let slice0base2 = (slice0 + 15) / 2;
+                let slice1base2 = (slice1 + 15) / 2;
+                let slice2base2 = (slice2 + 15) / 2;
+                let slice3base2 = (slice3 + 15) / 2;
+
+                // Convert into 2-bit chunks
+                let row_s1 = slice0base2 >> 2;
+                let row_s2 = slice0base2 & 3;
+                let row_s3 = slice1base2 >> 2;
+                let row_s4 = slice1base2 & 3;
+                let row_s5 = slice2base2 >> 2;
+                let row_s6 = slice2base2 & 3;
+                let row_s7 = slice3base2 >> 2;
+                let row_s8 = slice3base2 & 3;
+                should_result_row_s.push(ark_bn254::Fr::from(row_s1 as u64));
+                should_result_row_s.push(ark_bn254::Fr::from(row_s2 as u64));
+                should_result_row_s.push(ark_bn254::Fr::from(row_s3 as u64));
+                should_result_row_s.push(ark_bn254::Fr::from(row_s4 as u64));
+                should_result_row_s.push(ark_bn254::Fr::from(row_s5 as u64));
+                should_result_row_s.push(ark_bn254::Fr::from(row_s6 as u64));
+                should_result_row_s.push(ark_bn254::Fr::from(row_s7 as u64));
+                should_result_row_s.push(ark_bn254::Fr::from(row_s8 as u64));
+                if row_chunk < 0 {
+                    should_result_row_chunks_neg.push(ark_bn254::Fr::one())
+                } else {
+                    should_result_row_chunks_neg.push(ark_bn254::Fr::zero())
+                }
+                should_result_row_chunks.push(ark_bn254::Fr::from(row_chunk.unsigned_abs()));
+            }
+        }
+
+        let should_result_neg: Vec<ark_bn254::Fr> = should_result_pos
+            .iter()
+            .map(|x| {
+                if *x {
+                    ark_bn254::Fr::one()
+                } else {
+                    ark_bn254::Fr::zero()
+                }
+            })
+            .collect();
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter(),) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+
+                let decomposed = yao::compute_wnaf_digits_and_compute_rows_many(
+                    &x,
+                    &net,
+                    &mut state,
+                    NUM_SCALAR_BITS,
+                )
+                .unwrap();
+                tx.send(decomposed)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
+
+        let mut is_result_even = Vec::with_capacity(32 * VEC_SIZE);
+        let mut is_result_values = Vec::<ark_bn254::Fr>::with_capacity(32 * VEC_SIZE);
+        let mut is_result_pos = Vec::<ark_bn254::Fr>::with_capacity(VEC_SIZE);
+        let mut row_s = Vec::with_capacity(8 * 8 * VEC_SIZE);
+        let mut row_chunks_abs = Vec::with_capacity(8 * VEC_SIZE);
+        let mut row_chunks_neg = Vec::with_capacity(8 * VEC_SIZE);
+
+        let chunk_size: usize = 32 + 32 + 1 + 8 * 8 + 8 + 8;
+        for chunk in is_result.chunks(chunk_size) {
+            is_result_even.push(chunk[0]);
+
+            for second_chunk in chunk[1..].chunks(18) {
+                let tmp_values = second_chunk.iter().step_by(2).take(4);
+                is_result_values.extend(tmp_values);
+                let tmp_values = second_chunk.iter().skip(1).step_by(2).take(4);
+                is_result_pos.extend(tmp_values);
+                row_s.extend_from_slice(&second_chunk[8..16]);
+                row_chunks_abs.push(second_chunk[16]);
+                row_chunks_neg.push(second_chunk[17]);
+            }
+        }
+
+        assert_eq!(is_result_even, should_result_even);
+        assert_eq!(is_result_values, should_result);
+        assert_eq!(is_result_pos, should_result_neg);
+        assert_eq!(row_s, should_result_row_s);
+        assert_eq!(row_chunks_abs, should_result_row_chunks);
+        assert_eq!(row_chunks_neg, should_result_row_chunks_neg);
     }
 
     #[test]
@@ -2216,7 +2500,7 @@ mod field_share {
                     rs.extend_from_slice(&val[2 * slices..]);
                 }
 
-                let sbox_lut = rep3_ring::lut::PublicPrivateLut::Public(
+                let sbox_lut = rep3_ring::lut_field::PublicPrivateLut::Public(
                     s_box
                         .iter()
                         .map(|&value| ark_bn254::Fr::from(value))
@@ -2229,7 +2513,7 @@ mod field_share {
                 let rs = conversion::a2b_many(&rs, &net0, &mut state0).unwrap();
                 for key in rs {
                     let sbox_value =
-                        rep3_ring::lut::Rep3LookupTable::get_from_public_lut_no_b2a_conversion::<
+                        rep3_ring::lut_field::Rep3FieldLookupTable::get_from_public_lut_no_b2a_conversion::<
                             u8,
                             _,
                         >(
@@ -3167,15 +3451,15 @@ mod field_share {
         let mut rng = thread_rng();
         const INPUT_SIZE: usize = 64;
         let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
-        let num_bits = vec![8; INPUT_SIZE];
+        let num_bits = 8usize;
 
         let x = input.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
 
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
         let mut real_input = Vec::new();
-        for (inp, num_bits) in x.into_iter().zip(num_bits.iter()) {
-            let num_elements = (*num_bits as u32).div_ceil(8);
+        let num_elements = (num_bits as u32).div_ceil(8);
+        for inp in x.into_iter() {
             let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend(bytes[0..num_elements as usize].to_vec());
         }
@@ -3191,7 +3475,7 @@ mod field_share {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                let res = rep3::yao::blake2s(&x, &net, &mut state, &num_bits).unwrap();
+                let res = rep3::yao::blake2s(&x, &net, &mut state, num_bits).unwrap();
                 tx.send(res)
             });
         }
@@ -3210,15 +3494,15 @@ mod field_share {
         let mut rng = thread_rng();
         const INPUT_SIZE: usize = 64;
         let input: Vec<u8> = (0..INPUT_SIZE).map(|_| rng.gen()).collect();
-        let num_bits = vec![8; INPUT_SIZE];
+        let num_bits = 8usize;
 
         let x = input.iter().map(|&x| ark_bn254::Fr::from(x)).collect_vec();
 
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
         let mut real_input = Vec::new();
-        for (inp, num_bits) in x.into_iter().zip(num_bits.iter()) {
-            let num_elements = (*num_bits as u32).div_ceil(8);
+        let num_elements = (num_bits as u32).div_ceil(8);
+        for inp in x.into_iter() {
             let bytes = inp.into_bigint().to_bytes_le();
             real_input.extend(bytes[0..num_elements as usize].to_vec());
         }
@@ -3234,7 +3518,7 @@ mod field_share {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                let res = rep3::yao::blake3(&x, &net, &mut state, &num_bits).unwrap();
+                let res = rep3::yao::blake3(&x, &net, &mut state, num_bits).unwrap();
                 tx.send(res)
             });
         }
@@ -3459,6 +3743,56 @@ mod curve_share {
         }
     }
 
+    fn to_fieldshares_many<C: CurveGroup>(points: &[C])
+    where
+        C::BaseField: PrimeField,
+    {
+        let mut rng = thread_rng();
+        let point_shares = rep3::share_curve_points(points, &mut rng);
+
+        let nets = LocalNetwork::new_3_parties();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        let (should_result_xs, should_result_ys) = points
+            .iter()
+            .map(|p| p.into_affine().xy().unwrap_or_default())
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+
+        for (net, tx, point) in izip!(nets.into_iter(), [tx1, tx2, tx3], point_shares) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                tx.send(
+                    conversion::point_share_to_fieldshares_many(&point, &net, &mut state).unwrap(),
+                )
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result_x = rep3::combine_field_elements(&result1.0, &result2.0, &result3.0);
+        let is_result_y = rep3::combine_field_elements(&result1.1, &result2.1, &result3.1);
+        let is_result_is_zero = rep3::combine_field_elements(&result1.2, &result2.2, &result3.2);
+
+        for (is_res_x, is_res_y, is_res_inf, should_x, should_y, point) in izip!(
+            is_result_x,
+            is_result_y,
+            is_result_is_zero,
+            should_result_xs,
+            should_result_ys,
+            points
+        ) {
+            assert!(is_res_inf <= C::BaseField::one());
+            if is_res_inf.is_zero() {
+                assert_eq!(is_res_x, should_x, "x");
+                assert_eq!(is_res_y, should_y, "y");
+            } else {
+                assert!(point.is_zero(), "is_zero");
+            }
+        }
+    }
+
     #[test]
     fn bn254_to_fieldshares() {
         for _ in 0..10 {
@@ -3472,6 +3806,44 @@ mod curve_share {
         for _ in 0..10 {
             to_fieldshares(ark_grumpkin::Projective::zero());
             to_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        }
+    }
+
+    #[test]
+    fn bn254_to_fieldshares_many() {
+        const VEC_SIZE: usize = 10;
+        const RUNS: usize = 10;
+        for _ in 0..RUNS {
+            let mut rng = thread_rng();
+            let points = (0..VEC_SIZE)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .collect_vec();
+            to_fieldshares_many(&points);
+        }
+        for _ in 0..RUNS {
+            let points = (0..VEC_SIZE)
+                .map(|_| ark_bn254::G1Projective::zero())
+                .collect_vec();
+            to_fieldshares_many(&points);
+        }
+    }
+
+    #[test]
+    fn grumpkin_to_fieldshares_many() {
+        const VEC_SIZE: usize = 10;
+        const RUNS: usize = 10;
+        for _ in 0..RUNS {
+            let mut rng = thread_rng();
+            let points = (0..VEC_SIZE)
+                .map(|_| ark_grumpkin::Projective::rand(&mut rng))
+                .collect_vec();
+            to_fieldshares_many(&points);
+        }
+        for _ in 0..RUNS {
+            let points = (0..VEC_SIZE)
+                .map(|_| ark_grumpkin::Projective::zero())
+                .collect_vec();
+            to_fieldshares_many(&points);
         }
     }
 
@@ -3516,6 +3888,58 @@ mod curve_share {
         assert_eq!(is_result, point);
     }
 
+    fn from_fieldshares_many<C: CurveGroup>(points: &[C])
+    where
+        C::BaseField: PrimeField,
+    {
+        let mut rng = thread_rng();
+        let coords: Vec<_> = points
+            .iter()
+            .map(|c| c.into_affine().xy().unwrap_or_default())
+            .collect_vec();
+        let (x, y): (Vec<_>, Vec<_>) = coords.into_iter().unzip();
+        let x_shares = rep3::share_field_elements(&x, &mut rng);
+        let y_shares = rep3::share_field_elements(&y, &mut rng);
+        let is_infinity = points
+            .iter()
+            .map(|p| {
+                if p.is_zero() {
+                    C::BaseField::one()
+                } else {
+                    C::BaseField::zero()
+                }
+            })
+            .collect_vec();
+        let is_infinity = rep3::share_field_elements(&is_infinity, &mut rng);
+
+        let nets = LocalNetwork::new_3_parties();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x, y, is_inf) in izip!(
+            nets.into_iter(),
+            [tx1, tx2, tx3],
+            x_shares.into_iter(),
+            y_shares.into_iter(),
+            is_infinity.into_iter()
+        ) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                tx.send(
+                    conversion::fieldshares_to_pointshare_many(&x, &y, &is_inf, &net, &mut state)
+                        .unwrap(),
+                )
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result: Vec<C> = rep3::combine_curve_points(&result1, &result2, &result3);
+
+        assert_eq!(is_result, points);
+    }
+
     #[test]
     fn bn254_from_fieldshares() {
         for _ in 0..10 {
@@ -3529,6 +3953,27 @@ mod curve_share {
         for _ in 0..10 {
             from_fieldshares(ark_grumpkin::Projective::zero());
             from_fieldshares(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        }
+    }
+
+    #[test]
+    fn bn254_from_fieldshares_many() {
+        for _ in 0..10 {
+            let mut rng = thread_rng();
+            let points = (0..10)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .collect_vec();
+            from_fieldshares_many(&points);
+        }
+    }
+    #[test]
+    fn grumpkin_from_fieldshares_many() {
+        for _ in 0..10 {
+            let mut rng = thread_rng();
+            let points = (0..10)
+                .map(|_| ark_grumpkin::Projective::rand(&mut rng))
+                .collect_vec();
+            from_fieldshares_many(&points);
         }
     }
 
@@ -3567,11 +4012,82 @@ mod curve_share {
         }
     }
 
+    fn point_is_zero_many<C: CurveGroup>(points: &[C])
+    where
+        C::BaseField: PrimeField,
+    {
+        let mut rng = thread_rng();
+        let mut shares: [Vec<_>; 3] = [
+            Vec::with_capacity(points.len()),
+            Vec::with_capacity(points.len()),
+            Vec::with_capacity(points.len()),
+        ];
+        for p in points {
+            let s = rep3::share_curve_point(*p, &mut rng);
+            shares[0].push(s[0]);
+            shares[1].push(s[1]);
+            shares[2].push(s[2]);
+        }
+
+        let nets = LocalNetwork::new_3_parties();
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(nets.into_iter(), [tx1, tx2, tx3], shares.into_iter(),) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let res = pointshare::is_zero_many(&x, &net, &mut state).unwrap();
+                let mut res_ = Vec::with_capacity(res.len());
+                for r in res {
+                    res_.push(Rep3BigUintShare::<C::ScalarField>::new(
+                        BigUint::from(r.0),
+                        BigUint::from(r.1),
+                    ));
+                }
+                tx.send(res_)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let mut is_results = Vec::with_capacity(result1.len());
+        for i in 0..result1.len() {
+            is_results.push(rep3::combine_binary_element(
+                result1[i].clone(),
+                result2[i].clone(),
+                result3[i].clone(),
+            ));
+        }
+        for (point, is_result) in points.iter().zip(is_results.iter()) {
+            assert!(is_result <= &BigUint::one());
+            if point.is_zero() {
+                assert_eq!(*is_result, BigUint::one());
+            } else {
+                assert_eq!(*is_result, BigUint::zero());
+            }
+        }
+    }
+
     #[test]
     fn bn254_point_is_zero() {
         for _ in 0..10 {
             point_is_zero(ark_bn254::G1Projective::zero());
             point_is_zero(ark_bn254::G1Projective::rand(&mut thread_rng()));
+        }
+    }
+    #[test]
+    fn bn254_point_is_zero_many() {
+        for _ in 0..10 {
+            let mut rng = thread_rng();
+            let points = (0..10)
+                .map(|_| ark_bn254::G1Projective::rand(&mut rng))
+                .chain(std::iter::once(ark_bn254::G1Projective::zero()))
+                .collect_vec();
+            point_is_zero_many(&points);
+
+            let zero_points = vec![ark_bn254::G1Projective::zero(); 10];
+            point_is_zero_many(&zero_points);
         }
     }
 
@@ -3580,6 +4096,20 @@ mod curve_share {
         for _ in 0..10 {
             point_is_zero(ark_grumpkin::Projective::zero());
             point_is_zero(ark_grumpkin::Projective::rand(&mut thread_rng()));
+        }
+    }
+    #[test]
+    fn grumpkin_point_is_zero_many() {
+        for _ in 0..10 {
+            let mut rng = thread_rng();
+            let points = (0..10)
+                .map(|_| ark_grumpkin::Projective::rand(&mut rng))
+                .chain(std::iter::once(ark_grumpkin::Projective::zero()))
+                .collect_vec();
+            point_is_zero_many(&points);
+
+            let zero_points = vec![ark_grumpkin::Projective::zero(); 10];
+            point_is_zero_many(&zero_points);
         }
     }
 }

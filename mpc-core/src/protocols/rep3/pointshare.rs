@@ -93,6 +93,26 @@ pub fn scalar_mul<C: CurveGroup, N: Network>(
     })
 }
 
+/// Perform scalar multiplication
+pub fn scalar_mul_many<C: CurveGroup, N: Network>(
+    a: &[PointShare<C>],
+    b: &[FieldShare<C::ScalarField>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<PointShare<C>>> {
+    let mut local_a = Vec::with_capacity(a.len());
+    for (a, b) in izip!(a, b) {
+        local_a.push(*b * a + state.rngs.rand.masking_ec_element::<C>());
+    }
+    let local_b = net.reshare_many(&local_a)?;
+    let result = local_a
+        .iter()
+        .zip(local_b.iter())
+        .map(|(a, b)| PointShare { a: *a, b: *b })
+        .collect();
+    Ok(result)
+}
+
 /// Perform local part of scalar multiplication
 pub fn scalar_mul_local<C: CurveGroup>(
     a: &PointShare<C>,
@@ -100,6 +120,24 @@ pub fn scalar_mul_local<C: CurveGroup>(
     state: &mut Rep3State,
 ) -> C {
     b * a + state.rngs.rand.masking_ec_element::<C>()
+}
+
+/// Transforms a public value into a shared value: \[a\] = a.
+/// We do it this way since it otherwise causes problems in the point_share_to_fieldshares conversion. (TACEO TODO: fix that)
+pub fn promote_to_trivial_share<C: CurveGroup>(id: PartyID, a: &C) -> PointShare<C> {
+    if a.is_zero() {
+        match id {
+            PartyID::ID0 => PointShare::new(C::generator(), C::generator()),
+            PartyID::ID1 => PointShare::new(-C::generator() - C::generator(), C::generator()),
+            PartyID::ID2 => PointShare::new(C::generator(), -C::generator() - C::generator()),
+        }
+    } else {
+        match id {
+            PartyID::ID0 => PointShare::new(*a, C::generator()),
+            PartyID::ID1 => PointShare::new(-C::generator(), *a),
+            PartyID::ID2 => PointShare::new(C::generator(), -C::generator()),
+        }
+    }
 }
 
 /// Open the shared point
@@ -122,6 +160,29 @@ pub fn open_point_many<C: CurveGroup, N: Network>(
     let bs = a.iter().map(|x| x.b).collect_vec();
     let cs = net.reshare(bs)?;
     Ok(izip!(a, cs).map(|(x, c)| x.a + x.b + c).collect_vec())
+}
+
+/// Opens a vector shared points and a vector of shared field elements together
+pub fn open_point_and_field_many<C: CurveGroup, N: Network>(
+    a: &[PointShare<C>],
+    b: &[FieldShare<C::ScalarField>],
+    net: &N,
+) -> eyre::Result<(Vec<C>, Vec<C::ScalarField>)> {
+    let a_bs = a.iter().map(|x| x.b).collect_vec();
+    let b_bs = b.iter().map(|x| x.b).collect_vec();
+
+    let (c1, c2) = net.reshare((a_bs, b_bs))?;
+    let mut res_a = Vec::with_capacity(a.len());
+    let mut res_b = Vec::with_capacity(b.len());
+    for (x, c1) in izip!(a, c1) {
+        res_a.push(x.a + x.b + c1);
+    }
+    for (y, c2) in izip!(b, c2) {
+        res_b.push(y.a + y.b + c2);
+    }
+    debug_assert_eq!(res_a.len(), a.len());
+    debug_assert_eq!(res_b.len(), b.len());
+    Ok((res_a, res_b))
 }
 
 /// Opens a shared point and a shared field element together
@@ -170,4 +231,28 @@ where
     let a = !is_equal.a.is_zero();
     let b = !is_equal.b.is_zero();
     Ok((a, b))
+}
+
+/// Checks whether the shared point is zero/infinity.
+/// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underyling value is not zero.
+/// Returns a replicated boolean share in two separate parts.
+pub fn is_zero_many<C: CurveGroup, N: Network>(
+    x: &[PointShare<C>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<(bool, bool)>>
+where
+    C::BaseField: PrimeField,
+{
+    let input_len = x.len();
+    let (a_x, _, b_x, _) = conversion::point_share_to_fieldshares_pre_many::<C, N>(x, net, state)?;
+    let is_equal = arithmetic::eq_bit_many(&a_x, &b_x, net, state)?;
+    if is_equal.len() != input_len {
+        eyre::bail!("Expected {input_len} elements, got {}", is_equal.len());
+    }
+    let mut res = Vec::with_capacity(input_len);
+    for is_equal in is_equal {
+        res.push((!is_equal.a.is_zero(), !is_equal.b.is_zero()));
+    }
+    Ok(res)
 }

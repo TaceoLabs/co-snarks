@@ -4,7 +4,8 @@ use super::{
 };
 use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
-use eyre::{bail, eyre};
+use co_circom_types::Rep3InputType;
+use eyre::bail;
 use itertools::Itertools;
 use mpc_core::{
     MpcState,
@@ -43,6 +44,15 @@ impl<F: PrimeField> From<F> for Rep3VmType<F> {
 impl<F: PrimeField> From<ArithmeticShare<F>> for Rep3VmType<F> {
     fn from(value: ArithmeticShare<F>) -> Self {
         Self::Arithmetic(value)
+    }
+}
+
+impl<F: PrimeField> From<Rep3InputType<F>> for Rep3VmType<F> {
+    fn from(value: Rep3InputType<F>) -> Self {
+        match value {
+            Rep3InputType::Public(public) => Self::Public(public),
+            Rep3InputType::Shared(shared) => Self::Arithmetic(shared),
+        }
     }
 }
 

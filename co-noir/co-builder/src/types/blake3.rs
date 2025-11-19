@@ -2,14 +2,14 @@ use {
     super::blake_util::{BlakeType, BlakeUtils},
     super::blake2s::BLAKE2S_IV,
     super::plookup::{ColumnIdx, MultiTableId, Plookup},
-    crate::TranscriptFieldType,
-    crate::builder::GenericUltraCircuitBuilder,
-    crate::prelude::HonkCurve,
     crate::types::field_ct::{ByteArray, FieldCT},
+    crate::ultra_builder::GenericUltraCircuitBuilder,
     ark_ff::PrimeField,
     co_acvm::mpc::NoirWitnessExtensionProtocol,
     std::array,
 };
+
+use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
 // Internal flags
 #[repr(u8)]

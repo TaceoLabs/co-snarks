@@ -25,6 +25,8 @@ ignore = [
     { id = "RUSTSEC-2022-0081", reason = "ignore json unmaintained, dependency of circom" },
     { id = "RUSTSEC-2024-0388", reason = "ignore drivative unmaintained, dependency of circom" },
     { id = "RUSTSEC-2024-0436", reason = "ignore paste unmaintained" },
+    { id = "RUSTSEC-2025-0055", reason = "ignore vulnerability in tracing-subscriber < 0.3.20, used by ark-relation in examples but as normal dependency" },
+    { id = "RUSTSEC-2025-0057", reason = "ignore fxhash unmaintained, dependency of acvm" },
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -62,6 +64,7 @@ allow = [
     "OpenSSL",
     "CC0-1.0",
     "Unicode-3.0",
+    "Zlib",
 ]
 # The confidence threshold for detecting a license from license text.
 # The higher the value, the more closely the license text must be to the
@@ -74,17 +77,17 @@ exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     { crate = "webpki-roots", allow = ["MPL-2.0", "CDLA-Permissive-2.0"] },
     { crate = "webpki-root-certs", allow = ["MPL-2.0", "CDLA-Permissive-2.0"] },
-    { crate = "type_analysis", allow = ["GPL-3.0"] },
-    { crate = "program_structure", allow = ["GPL-3.0"] },
-    { crate = "parser", allow = ["GPL-3.0"] },
-    { crate = "dag", allow = ["GPL-3.0"] },
-    { crate = "constraint_writers", allow = ["GPL-3.0"] },
-    { crate = "constraint_list", allow = ["GPL-3.0"] },
-    { crate = "constraint_generation", allow = ["GPL-3.0"] },
-    { crate = "constant_tracking", allow = ["GPL-3.0"] },
-    { crate = "compiler", allow = ["GPL-3.0"] },
-    { crate = "code_producers", allow = ["GPL-3.0"] },
-    { crate = "circom_algebra", allow = ["GPL-3.0"] },
+    { crate = "type_analysis", allow = ["GPL-3.0-only"] },
+    { crate = "program_structure", allow = ["GPL-3.0-only"] },
+    { crate = "parser", allow = ["GPL-3.0-only"] },
+    { crate = "dag", allow = ["GPL-3.0-only"] },
+    { crate = "constraint_writers", allow = ["GPL-3.0-only"] },
+    { crate = "constraint_list", allow = ["GPL-3.0-only"] },
+    { crate = "constraint_generation", allow = ["GPL-3.0-only"] },
+    { crate = "constant_tracking", allow = ["GPL-3.0-only"] },
+    { crate = "compiler", allow = ["GPL-3.0-only"] },
+    { crate = "code_producers", allow = ["GPL-3.0-only"] },
+    { crate = "circom_algebra", allow = ["GPL-3.0-only"] },
     { crate = "sized-chunks", allow = ["MPL-2.0"] },
     { crate = "bitmaps", allow = ["MPL-2.0"] },
     { crate = "im", allow = ["MPL-2.0"] },

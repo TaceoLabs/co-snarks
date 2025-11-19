@@ -84,7 +84,7 @@ pub struct CompilerConfig {
 }
 
 fn default_version() -> String {
-    "2.2.0".to_owned()
+    "2.2.2".to_owned()
 }
 
 impl Default for CompilerConfig {

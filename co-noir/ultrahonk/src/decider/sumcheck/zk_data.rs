@@ -1,22 +1,22 @@
 use crate::Utils;
-use crate::plain_prover_flavour::UnivariateTrait;
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
-
 use crate::prelude::Univariate;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::UniformRand;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::HonkProofError;
-use co_builder::HonkProofResult;
-use co_builder::prelude::HonkCurve;
-use co_builder::prelude::Polynomial;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofError;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript::TranscriptHasher;
 use rand::CryptoRng;
 use rand::Rng;
 
-pub(crate) struct ZKSumcheckData<P: Pairing> {
+pub(crate) struct ZKSumcheckData<P: CurveGroup> {
     pub(crate) constant_term: P::ScalarField,
     pub(crate) interpolation_domain: Vec<P::ScalarField>,
     pub(crate) libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,
@@ -34,7 +34,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
     pub(crate) fn new<H: TranscriptHasher<TranscriptFieldType>, R: Rng + CryptoRng>(
         multivariate_d: usize,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        commitment_key: &[P::G1Affine],
+        commitment_key: &[P::Affine],
         rng: &mut R,
     ) -> HonkProofResult<Self> {
         let constant_term = P::ScalarField::rand(rng);

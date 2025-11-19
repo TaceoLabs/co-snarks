@@ -1,47 +1,42 @@
 use super::univariate::Univariate;
-use crate::plain_prover_flavour::PlainProverFlavour;
-use crate::types::AllEntities;
-use ark_ec::pairing::Pairing;
+use crate::{NUM_ALPHAS, types::AllEntities};
+use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_ff::PrimeField;
-use co_builder::polynomials::polynomial_flavours::PrecomputedEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::ShiftedWitnessEntitiesFlavour;
-use co_builder::polynomials::polynomial_flavours::{
-    ProverWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-};
-use co_builder::prelude::Polynomial;
 use co_builder::prelude::{Polynomials, VerifyingKey};
-use co_builder::prover_flavour::Flavour;
 use itertools::izip;
 use std::{iter, vec};
 
-pub(crate) struct ProverMemory<P: Pairing, L: PlainProverFlavour> {
-    pub(crate) polys: AllEntities<Vec<P::ScalarField>, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
+pub(crate) struct ProverMemory<P: CurveGroup> {
+    pub(crate) polys: AllEntities<Vec<P::ScalarField>>,
+    pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
+    pub(crate) alphas: [P::ScalarField; NUM_ALPHAS],
+    pub(crate) gate_challenges: Vec<P::ScalarField>,
 }
 
-pub(crate) struct VerifierMemory<P: Pairing, L: PlainProverFlavour> {
-    pub(crate) verifier_commitments: VerifierCommitments<P::G1Affine, L>,
-    pub(crate) relation_parameters: RelationParameters<P::ScalarField, L>,
-    pub(crate) claimed_evaluations: ClaimedEvaluations<P::ScalarField, L>,
+pub(crate) struct VerifierMemory<C: CurveGroup> {
+    pub(crate) verifier_commitments: VerifierCommitments<C::Affine>,
+    pub(crate) relation_parameters: RelationParameters<C::ScalarField>,
+    pub(crate) alphas: [C::ScalarField; NUM_ALPHAS],
+    pub(crate) gate_challenges: Vec<C::ScalarField>,
+    pub(crate) claimed_evaluations: ClaimedEvaluations<C::ScalarField>,
 }
 
-pub(crate) type ProverUnivariates<F, L> =
-    AllEntities<<L as PlainProverFlavour>::ProverUnivariate<F>, L>;
-pub(crate) type ProverUnivariatesSized<F, L, const SIZE: usize> =
-    AllEntities<Univariate<F, SIZE>, L>;
-pub(crate) type PartiallyEvaluatePolys<F, L> = AllEntities<Vec<F>, L>;
-pub(crate) type ClaimedEvaluations<F, L> = AllEntities<F, L>;
-pub(crate) type VerifierCommitments<P, L> = AllEntities<P, L>;
+pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
+pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
+pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
-pub struct RelationParameters<F: PrimeField, L: PlainProverFlavour> {
+pub(crate) type ProverUnivariates<F> = AllEntities<Univariate<F, MAX_PARTIAL_RELATION_LENGTH>>;
+pub(crate) type PartiallyEvaluatePolys<F> = AllEntities<Vec<F>>;
+pub(crate) type ClaimedEvaluations<F> = AllEntities<F>;
+pub(crate) type VerifierCommitments<P> = AllEntities<P>;
+
+pub(crate) struct RelationParameters<F: PrimeField> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
     pub(crate) beta: F,
     pub(crate) gamma: F,
     pub(crate) public_input_delta: F,
-    pub(crate) alphas: L::Alphas<F>, // TODO: Can we just make this a Vec<F>?
-    pub(crate) gate_challenges: Vec<F>,
 }
 
 pub struct GateSeparatorPolynomial<F: PrimeField> {
@@ -113,12 +108,20 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
         self.current_element_idx += 1;
         self.periodicity *= 2;
     }
+
+    pub fn construct_virtual_separator(betas: &[F], round_challenges: &[F]) -> Self {
+        let mut separator = Self::new_without_products(betas.to_vec());
+        for u_k in round_challenges {
+            separator.partially_evaluate(*u_k);
+        }
+        separator
+    }
 }
 
-impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
+impl<P: CurveGroup> ProverMemory<P> {
     pub(crate) fn from_memory_and_polynomials(
-        prover_memory: crate::oink::types::ProverMemory<P, L>,
-        polynomials: Polynomials<P::ScalarField, L>,
+        prover_memory: crate::oink::types::ProverMemory<P>,
+        polynomials: Polynomials<P::ScalarField>,
     ) -> Self {
         let relation_parameters = RelationParameters {
             eta_1: prover_memory.challenges.eta_1,
@@ -127,11 +130,11 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
             beta: prover_memory.challenges.beta,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
-            alphas: prover_memory.challenges.alphas,
-            gate_challenges: Default::default(),
         };
+        let alphas = prover_memory.challenges.alphas;
+        let gate_challenges = Default::default();
 
-        let mut memory = AllEntities::<Vec<P::ScalarField>, L>::default();
+        let mut memory = AllEntities::default();
 
         // TACEO TODO Barretenberg uses the same memory for the shifted polynomials as for the non-shifted ones
 
@@ -141,56 +144,6 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
             polynomials.witness.lookup_read_counts().as_ref().to_vec();
         *memory.witness.lookup_read_tags_mut() =
             polynomials.witness.lookup_read_tags().as_ref().to_vec();
-        if L::FLAVOUR == Flavour::Mega {
-            for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_ECC_OP_WIRE_1.expect("ECC_OP_WIRE_1 is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::ECC_OP_WIRE_1.expect("ECC_OP_WIRE_1 is not set"))
-                    .take(7)
-            ) {
-                *des = src.as_ref().to_vec();
-            }
-
-            *memory.witness.calldata_inverses_mut() = prover_memory.calldata_inverses.into_vec();
-
-            for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_SECONDARY_CALLDATA.expect("SECONDARY_CALLDATA is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::SECONDARY_CALLDATA.expect("SECONDARY_CALLDATA is not set"))
-                    .take(3)
-            ) {
-                *des = src.as_ref().to_vec();
-            }
-
-            *memory.witness.secondary_calldata_inverses_mut() =
-                prover_memory.secondary_calldata_inverses.into_vec();
-
-            for (des, src) in izip!(
-                memory
-                    .witness
-                    .iter_mut()
-                    .skip(L::WITNESS_RETURN_DATA.expect("RETURN_DATA is not set")),
-                polynomials
-                    .witness
-                    .iter()
-                    .skip(L::RETURN_DATA.expect("RETURN_DATA is not set"))
-                    .take(3)
-            ) {
-                *des = src.as_ref().to_vec();
-            }
-            *memory.witness.return_data_inverses_mut() =
-                prover_memory.return_data_inverses.into_vec();
-        }
 
         // Shift the witnesses
         for (des_shifted, des, src) in izip!(
@@ -213,22 +166,23 @@ impl<P: Pairing, L: PlainProverFlavour> ProverMemory<P, L> {
             memory.precomputed.iter_mut(),
             polynomials.precomputed.into_iter()
         ) {
-            let poly: Polynomial<P::ScalarField> = src;
-            *des = poly.into_vec();
+            *des = src.into_vec();
         }
 
         Self {
             polys: memory,
             relation_parameters,
+            alphas,
+            gate_challenges,
         }
     }
 }
 
-impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
+impl<C: CurveGroup> VerifierMemory<C> {
     #[expect(clippy::field_reassign_with_default)]
-    pub(crate) fn from_memory_and_key(
-        verifier_memory: crate::oink::types::VerifierMemory<P, L>,
-        vk: &VerifyingKey<P, L>,
+    pub(crate) fn from_memory_and_key<P: Pairing<G1 = C, G1Affine = C::Affine>>(
+        verifier_memory: crate::oink::types::VerifierMemory<C>,
+        vk: &VerifyingKey<P>,
     ) -> Self {
         let relation_parameters = RelationParameters {
             eta_1: verifier_memory.challenges.eta_1,
@@ -237,13 +191,13 @@ impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
             beta: verifier_memory.challenges.beta,
             gamma: verifier_memory.challenges.gamma,
             public_input_delta: verifier_memory.public_input_delta,
-            alphas: verifier_memory.challenges.alphas,
-            gate_challenges: Default::default(),
         };
+        let alphas = verifier_memory.challenges.alphas;
+        let gate_challenges = Default::default();
 
-        let mut memory = AllEntities::<P::G1Affine, _>::default();
+        let mut memory = AllEntities::<C::Affine>::default();
         memory.witness = verifier_memory.witness_commitments;
-        memory.precomputed = vk.commitments.clone();
+        memory.precomputed = vk.inner_vk.commitments.clone();
 
         // These copies are not required
         // for (des, src) in izip!(
@@ -262,6 +216,8 @@ impl<P: Pairing, L: PlainProverFlavour> VerifierMemory<P, L> {
         Self {
             relation_parameters,
             verifier_commitments: memory,
+            alphas,
+            gate_challenges,
             claimed_evaluations: Default::default(),
         }
     }

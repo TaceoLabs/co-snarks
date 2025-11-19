@@ -1,2 +1,2 @@
-pub(crate) mod prover;
-pub(crate) mod types;
+pub(crate) mod co_shplemini_prover;
+mod types;

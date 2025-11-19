@@ -1,21 +1,22 @@
-use crate::CONST_PROOF_SIZE_LOG_N;
 use crate::Utils;
-use crate::plain_prover_flavour::UnivariateTrait;
-use common::transcript::{Transcript, TranscriptFieldType, TranscriptHasher};
-
 use crate::prelude::Univariate;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::HonkProofError;
-use co_builder::HonkProofResult;
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofError;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript::TranscriptHasher;
 use rand::{CryptoRng, Rng};
 
 use super::sumcheck::zk_data::ZKSumcheckData;
 
-pub(crate) struct SmallSubgroupIPAProver<P: Pairing> {
+pub(crate) struct SmallSubgroupIPAProver<P: CurveGroup> {
     interpolation_domain: Vec<P::ScalarField>,
     concatenated_polynomial: Polynomial<P::ScalarField>,
     libra_concatenated_lagrange_form: Polynomial<P::ScalarField>,
@@ -119,11 +120,7 @@ impl<P: HonkCurve<TranscriptFieldType>> SmallSubgroupIPAProver<P> {
         let mut coeffs_lagrange_basis = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
         coeffs_lagrange_basis[0] = P::ScalarField::one();
 
-        for (challenge_idx, &challenge) in multivariate_challenge
-            .iter()
-            .enumerate()
-            .take(CONST_PROOF_SIZE_LOG_N)
-        {
+        for (challenge_idx, &challenge) in multivariate_challenge.iter().enumerate() {
             // We concatenate 1 with CONST_PROOF_SIZE_LOG_N Libra Univariates of length LIBRA_UNIVARIATES_LENGTH
             let poly_to_concatenate_start = 1 + P::LIBRA_UNIVARIATES_LENGTH * challenge_idx;
             coeffs_lagrange_basis[poly_to_concatenate_start] = P::ScalarField::one();

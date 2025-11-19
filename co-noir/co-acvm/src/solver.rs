@@ -1,7 +1,6 @@
 use acir::{
-    FieldElement,
     acir_field::GenericFieldElement,
-    circuit::{Circuit, ExpressionWidth, Opcode, Program},
+    circuit::{Circuit, ExpressionWidth, Opcode},
     native_types::{Witness, WitnessMap, WitnessStack},
 };
 use ark_ff::PrimeField;
@@ -15,10 +14,9 @@ use mpc_core::{
     },
 };
 use mpc_net::Network;
-use noirc_abi::{Abi, MAIN_RETURN_NAME, input_parser::Format};
+use noirc_abi::Abi;
 use noirc_artifacts::program::ProgramArtifact;
-use partial_abi::PublicMarker;
-use std::{collections::BTreeMap, io, path::Path};
+use std::{collections::BTreeMap, fs::File, io, path::Path};
 
 use crate::{
     mpc::{
@@ -35,7 +33,6 @@ mod assert_zero_solver;
 mod blackbox_solver;
 mod brillig_call_solver;
 mod memory_solver;
-pub mod partial_abi;
 
 pub type PlainCoSolver<F> = CoSolver<PlainAcvmSolver<F>, F>;
 pub type Rep3CoSolver<'a, F, N> = CoSolver<Rep3AcvmSolver<'a, F, N>, F>;
@@ -99,54 +96,11 @@ where
 {
     const DEFAULT_FUNCTION_INDEX: usize = 0;
 
-    pub fn read_abi_bn254_fieldelement(
-        path: impl AsRef<Path>,
-        abi: &Abi,
-    ) -> eyre::Result<WitnessMap<FieldElement>> {
-        if abi.is_empty() {
-            Ok(WitnessMap::default())
-        } else {
-            let input_string = std::fs::read_to_string(path)?;
-            let mut input_map = Format::Toml.parse(&input_string, abi)?;
-            let return_value = input_map.remove(MAIN_RETURN_NAME);
-            // TACEO TODO the return value can be none for the witness extension
-            // do we want to keep it like that? Seems not necessary but maybe
-            // we need it for proving/verifying
-            Ok(abi.encode(&input_map, return_value.clone())?)
-        }
-    }
-
-    // This is the same as read_abi_bn254_fieldelement, but only warns if parameters are missing instead of throwing an error and returns a map with strings instead
-    pub fn partially_read_abi_bn254_fieldelement(
-        path: impl AsRef<Path>,
-        abi: &Abi,
-        program: &Program<FieldElement>,
-    ) -> eyre::Result<BTreeMap<String, PublicMarker<FieldElement>>> {
-        if abi.is_empty() {
-            Ok(BTreeMap::default())
-        } else {
-            let input_string = std::fs::read_to_string(path)?;
-            let abi_ = Self::create_partial_abi(&input_string, abi)?;
-            let mut input_map = Format::Toml.parse(&input_string, &abi_)?;
-            let return_value = input_map.remove(MAIN_RETURN_NAME);
-            // TACEO TODO the return value can be none for the witness extension
-            // do we want to keep it like that? Seems not necessary but maybe
-            // we need it for proving/verifying
-            let encoded = abi_.encode(&input_map, return_value.clone())?;
-            Ok(Self::create_string_map(
-                abi,
-                &abi_,
-                encoded,
-                &program.functions[Self::DEFAULT_FUNCTION_INDEX].public_parameters,
-            )?)
-        }
-    }
-
     pub fn read_abi_bn254(
         path: impl AsRef<Path>,
         abi: &Abi,
     ) -> eyre::Result<WitnessMap<T::AcvmType>> {
-        let initial_witness = Self::read_abi_bn254_fieldelement(path, abi)?;
+        let initial_witness = noir_types::read_abi_bn254_fieldelement(File::open(path)?, abi)?;
         let mut witnesses = WitnessMap::<T::AcvmType>::default();
         for (witness, v) in initial_witness.into_iter() {
             witnesses.insert(witness, T::AcvmType::from(v.into_repr()));
@@ -390,11 +344,7 @@ where
                     init,
                     block_type: _, // apparently not used
                 } => self.solve_memory_init_block(*block_id, init)?,
-                Opcode::MemoryOp {
-                    block_id,
-                    op,
-                    predicate,
-                } => self.solve_memory_op(*block_id, op, predicate.to_owned())?,
+                Opcode::MemoryOp { block_id, op } => self.solve_memory_op(*block_id, op)?,
                 Opcode::BlackBoxFuncCall(bb_func) => self.solve_blackbox(bb_func)?,
                 Opcode::BrilligCall {
                     id,
@@ -489,6 +439,9 @@ where
                             ))?;
                         }
                     }
+                }
+                Opcode::BlackBoxFuncCall(bb_func) => {
+                    self.solve_r1cs_blackbox(bb_func)?;
                 }
                 _ => todo!("opcode {} detected, not supported", opcode),
             }

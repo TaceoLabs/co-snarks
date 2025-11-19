@@ -1,14 +1,9 @@
-use crate::decider::types::{ClaimedEvaluations, ProverUnivariatesSized, RelationParameters};
-use crate::decider::univariate::Univariate;
-use crate::plain_prover_flavour::PlainProverFlavour;
-use crate::plain_prover_flavour::UnivariateTrait;
+use crate::decider::types::{ClaimedEvaluations, RelationParameters};
+use crate::decider::{types::ProverUnivariates, univariate::Univariate};
 use ark_ff::AdditiveGroup;
 use ark_ff::{Field, PrimeField, Zero};
-use co_builder::polynomials::polynomial_flavours::{
-    PrecomputedEntitiesFlavour, ShiftedWitnessEntitiesFlavour, WitnessEntitiesFlavour,
-};
-use co_builder::prelude::HonkCurve;
-use common::transcript::TranscriptFieldType;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::TranscriptFieldType;
 #[derive(Clone, Debug, Default)]
 pub(crate) struct EllipticRelationAcc<F: PrimeField> {
     pub(crate) r0: Univariate<F, 6>,
@@ -65,10 +60,8 @@ impl EllipticRelation {
     pub(crate) const NUM_RELATIONS: usize = 2;
     pub(crate) const SKIPPABLE: bool = true;
 
-    pub(crate) fn skip<F: PrimeField, L: PlainProverFlavour, const SIZE: usize>(
-        input: &ProverUnivariatesSized<F, L, SIZE>,
-    ) -> bool {
-        // This is the relation implemented manually
+    pub(crate) fn skip<F: PrimeField>(input: &ProverUnivariates<F>) -> bool {
+        // This is the relation implemented manally
         if !Self::SKIPPABLE {
             panic!("Cannot skip this relation");
         }
@@ -85,14 +78,10 @@ impl EllipticRelation {
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */
-    pub(crate) fn accumulate<
-        P: HonkCurve<TranscriptFieldType>,
-        L: PlainProverFlavour,
-        const UNIVARIATE_SIZE: usize,
-    >(
+    pub(crate) fn accumulate<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulator: &mut EllipticRelationAcc<P::ScalarField>,
-        input: &ProverUnivariatesSized<P::ScalarField, L, UNIVARIATE_SIZE>,
-        _relation_parameters: &RelationParameters<P::ScalarField, L>,
+        input: &ProverUnivariates<P::ScalarField>,
+        _relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) {
         tracing::trace!("Accumulate EllipticRelation");
@@ -154,7 +143,7 @@ impl EllipticRelation {
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
-        // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
+        // (y1 + y3) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
         let x1_sqr_mul_3 = x1_mul_3 * x_1;
         let y_double_identity =
             x1_sqr_mul_3 * (x_1.to_owned() - x_3) - (y_1.to_owned() + y_1) * y1_plus_y3;
@@ -171,10 +160,10 @@ impl EllipticRelation {
         }
     }
 
-    pub(crate) fn verify_accumulate<P: HonkCurve<TranscriptFieldType>, L: PlainProverFlavour>(
+    pub(crate) fn verify_accumulate<P: HonkCurve<TranscriptFieldType>>(
         univariate_accumulator: &mut EllipticRelationEvals<P::ScalarField>,
-        input: &ClaimedEvaluations<P::ScalarField, L>,
-        _relation_parameters: &RelationParameters<P::ScalarField, L>,
+        input: &ClaimedEvaluations<P::ScalarField>,
+        _relation_parameters: &RelationParameters<P::ScalarField>,
         scaling_factor: &P::ScalarField,
     ) where
         P::ScalarField: PrimeField,
@@ -238,7 +227,7 @@ impl EllipticRelation {
 
         ///////////////////////////////////////////////////////////////////////
         // Contribution (4) point doubling, y-coordinate check
-        // (y1 + y1) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
+        // (y1 + y3) (2y1) - (3 * x1 * x1)(x1 - x3) = 0
         let x1_sqr_mul_3 = x1_mul_3 * x_1;
         let y_double_identity =
             x1_sqr_mul_3 * (x_1.to_owned() - x_3) - (y_1.to_owned() + y_1) * y1_plus_y3;

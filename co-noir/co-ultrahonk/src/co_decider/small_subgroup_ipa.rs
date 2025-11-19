@@ -2,24 +2,25 @@ use std::marker::PhantomData;
 
 use super::co_sumcheck::zk_data::SharedZKSumcheckData;
 use super::univariates::SharedUnivariate;
-use crate::CONST_PROOF_SIZE_LOG_N;
-use crate::mpc_prover_flavour::SharedUnivariateTrait;
-use ark_ec::pairing::Pairing;
+use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::Zero;
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use co_builder::HonkProofError;
-use co_builder::HonkProofResult;
-use co_builder::TranscriptFieldType;
-use co_builder::prelude::{HonkCurve, Polynomial, ProverCrs};
-use common::CoUtils;
-use common::mpc::NoirUltraHonkProver;
-use common::shared_polynomial::SharedPolynomial;
-use common::transcript::{Transcript, TranscriptHasher};
+use co_noir_common::CoUtils;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofError;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::shared_polynomial::SharedPolynomial;
+use co_noir_common::transcript::Transcript;
+use co_noir_common::transcript::TranscriptHasher;
 use mpc_core::MpcState;
 use mpc_net::Network;
 
-pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: Pairing> {
+pub(crate) struct SharedSmallSubgroupIPAProver<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     interpolation_domain: Vec<P::ScalarField>,
     concatenated_polynomial: SharedPolynomial<T, P>,
     libra_concatenated_lagrange_form: SharedPolynomial<T, P>,
@@ -136,11 +137,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
         let mut coeffs_lagrange_basis = vec![P::ScalarField::zero(); Self::SUBGROUP_SIZE];
         coeffs_lagrange_basis[0] = P::ScalarField::one();
 
-        for (challenge_idx, &challenge) in multivariate_challenge
-            .iter()
-            .enumerate()
-            .take(CONST_PROOF_SIZE_LOG_N)
-        {
+        for (challenge_idx, &challenge) in multivariate_challenge.iter().enumerate() {
             // We concatenate 1 with CONST_PROOF_SIZE_LOG_N Libra Univariates of length LIBRA_UNIVARIATES_LENGTH
             let poly_to_concatenate_start = 1 + P::LIBRA_UNIVARIATES_LENGTH * challenge_idx;
             coeffs_lagrange_basis[poly_to_concatenate_start] = P::ScalarField::one();

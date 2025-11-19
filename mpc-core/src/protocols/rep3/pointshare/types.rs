@@ -1,8 +1,8 @@
 use ark_ec::CurveGroup;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
-/// This type represents a replicated shared point. Since a replicated share of a point contains additive shares of two parties, this type contains two point.
-#[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize)]
+/// This type represents a replicated shared point. Since a replicated share of a point contains additive shares of two parties, this type contains two points.
+#[derive(Debug, Clone, PartialEq, Eq, CanonicalSerialize, CanonicalDeserialize, Default, Copy)]
 pub struct Rep3PointShare<C: CurveGroup> {
     /// Share of this party
     pub a: C,
@@ -19,5 +19,13 @@ impl<C: CurveGroup> Rep3PointShare<C> {
     /// Unwraps the type into two additive shares.
     pub fn ab(self) -> (C, C) {
         (self.a, self.b)
+    }
+
+    /// Constructs a zero share.
+    pub fn zero_share() -> Self {
+        Self {
+            a: C::zero(),
+            b: C::zero(),
+        }
     }
 }
