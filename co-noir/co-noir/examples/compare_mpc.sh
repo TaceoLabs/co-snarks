@@ -73,7 +73,7 @@ run_proof_verification() {
 
   bash -c "$BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -k test_vectors/${name}/vk -o test_vectors/${name}/ $PIPE"
 
-   if [[ "$algorithm" == "poseidon" ]] || [[ "$algorithm" == "keccak" ]]; then
+  if [[ ( "$algorithm" == "poseidon" || "$algorithm" == "keccak" ) && "$name" != "recursion" ]]; then
     diff test_vectors/${name}/proof test_vectors/${name}/cosnark_proof
     if [[ $? -ne 0 ]]; then
       exit_code=1
