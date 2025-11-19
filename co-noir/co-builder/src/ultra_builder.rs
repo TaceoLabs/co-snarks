@@ -49,7 +49,6 @@ use co_noir_common::utils::Utils;
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
-use std::arch::x86_64::_MM_HINT_ET0;
 use std::{
     array,
     collections::{BTreeMap, HashMap},

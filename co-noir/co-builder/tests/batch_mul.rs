@@ -207,8 +207,8 @@ impl TestData<Plain> {
         let point_bfs = point_bfs.into_iter().fold(
             vec![Vec::new(), Vec::new(), Vec::new()],
             |mut acc, shares| {
-                for i in 0..3 {
-                    acc[i].push((shares.0[i].clone(), shares.1[i].clone(), shares.2));
+                for (i, item) in acc.iter_mut().enumerate().take(3) {
+                    item.push((shares.0[i], shares.1[i], shares.2));
                 }
                 acc
             },
@@ -222,7 +222,7 @@ impl TestData<Plain> {
             .map(|i| {
                 scalar_cts
                     .iter()
-                    .map(|shares| shares[i].clone())
+                    .map(|shares| shares[i])
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -234,13 +234,10 @@ impl TestData<Plain> {
                 (
                     self.max_num_bits as u8,
                     self.with_edge_cases,
-                    masking_scalar_shares[i].clone(),
+                    masking_scalar_shares[i],
                     izip!(point_bfs[i].iter(), scalar_cts[i].iter())
                         .map(|(point_share, scalar_share)| {
-                            (
-                                (point_share.0.clone(), point_share.1.clone(), point_share.2),
-                                scalar_share.clone(),
-                            )
+                            ((point_share.0, point_share.1, point_share.2), *scalar_share)
                         })
                         .collect::<Vec<_>>(),
                     self.expected_result,
@@ -278,7 +275,7 @@ impl TestData<Rep3> {
         let (
             max_num_bits,
             with_edge_cases,
-            masking_scalar_share,
+            _masking_scalar_share,
             point_scalar_pairs,
             expected_result,
         ) = entry;

@@ -11,7 +11,6 @@ use ark_ff::{PrimeField, Zero};
 use co_noir_common::constants::MOCK_PROOF_DYADIC_SIZE;
 use std::{
     array,
-    cmp::max,
     collections::{BTreeMap, HashSet},
 };
 

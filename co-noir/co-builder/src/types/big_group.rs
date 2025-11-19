@@ -12,7 +12,6 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::Zero;
 use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use itertools::izip;
 use mpc_core::gadgets::field_from_hex_string;
 use num_bigint::BigUint;
 
@@ -196,7 +195,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         }
     }
 
-    pub(crate) fn from_constant_coordinates<P: CurveGroup<ScalarField = F>>(
+    pub(crate) fn from_constant_coordinates(
         x: &BigUint,
         y: &BigUint,
         is_infinity: bool,
@@ -215,7 +214,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             Some((x, y)) => (x.into(), y.into(), false),
             None => (BigUint::from(0u64), BigUint::from(0u64), true),
         };
-        BigGroup::from_constant_coordinates::<P>(&x, &y, i)
+        BigGroup::from_constant_coordinates(&x, &y, i)
     }
 
     /**
@@ -262,7 +261,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
     ) -> eyre::Result<Self> {
         // Sanity checks input sizes
         debug_assert!(
-            points.len() > 0,
+            !points.is_empty(),
             "biggroup batch_mul: no points provided for batch multiplication"
         );
         debug_assert_eq!(
@@ -288,7 +287,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             // We do this to ensure that the x-coordinates of the points are all distinct. This is required
             // while creating the ROM lookup table with the points.
             (points, scalars) =
-                BigGroup::mask_points(&mut points, &scalars, &masking_scalar, builder, driver)?;
+                BigGroup::mask_points(&mut points, &scalars, masking_scalar, builder, driver)?;
         }
 
         debug_assert_eq!(
@@ -368,7 +367,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 builder,
                 driver,
             )?;
-            accumulator = if big_points.len() > 0 {
+            accumulator = if !big_points.is_empty() {
                 accumulator.add(&mut small_result, builder, driver)?
             } else {
                 small_result
@@ -387,7 +386,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
     ) -> eyre::Result<Self> {
         // Sanity checks
         debug_assert!(
-            points.len() > 0,
+            !points.is_empty(),
             "biggroup process_strauss_msm_rounds: no points provided for batch multiplication"
         );
         debug_assert_eq!(
@@ -415,12 +414,12 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // │   6   │ -G1 - G2 + G3   │
         // │   7   │ -G1 - G2 - G3   │
         // └───────┴─────────────────┘
-        let mut point_table = BatchLookupTablePlookup::new(&points, builder, driver)?;
+        let mut point_table = BatchLookupTablePlookup::new(points, builder, driver)?;
 
         // Compute NAF representation of scalars
         let mut naf_entries = Vec::with_capacity(msm_size);
-        for i in 0..msm_size {
-            naf_entries.push(Self::compute_naf(&scalars[i], num_rounds, builder, driver)?);
+        for scalar in scalars.iter().take(msm_size) {
+            naf_entries.push(Self::compute_naf(scalar, num_rounds, builder, driver)?);
         }
 
         // We choose a deterministic offset generator based on the number of rounds.
@@ -1192,12 +1191,12 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
         // neg_lambda = -((x * (two_x + x)) / (y + y))
         let three_x = two_x.clone().add(&mut self.x.clone(), builder, driver)?;
-        let mut denominator = self.y.clone().add(&mut self.y.clone(), builder, driver)?;
+        let denominator = self.y.clone().add(&mut self.y.clone(), builder, driver)?;
         let mut neg_lambda = BigField::msub_div(
-            &mut [self.x.clone()],
-            &mut [three_x],
-            &mut denominator,
-            &mut [],
+            std::slice::from_ref(&self.x),
+            &[three_x],
+            &denominator,
+            &[],
             false,
             builder,
             driver,
@@ -1306,7 +1305,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<(Vec<Self>, Vec<FieldCT<F>>)> {
-        let mut one = Self::one::<P>();
+        let one = Self::one::<P>();
         let mut new_points = Vec::new();
         let mut new_scalars = Vec::new();
 
@@ -1325,13 +1324,13 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 continue;
             }
 
-            let point = point.conditional_select(&mut one, is_infinity, builder, driver)?;
+            let point = point.conditional_select(&one, is_infinity, builder, driver)?;
 
             // No normalize
             let updated_scalar = FieldCT::conditional_assign_internal(
                 is_infinity,
                 &FieldCT::from(F::ZERO),
-                &scalar,
+                scalar,
                 builder,
                 driver,
             )?;
@@ -1413,8 +1412,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         // the specifics.
         let is_point_at_infinity = self.is_infinity.clone();
         let mut result = Self::batch_mul(
-            &[self.clone()],
-            &[scalar.clone()],
+            std::slice::from_ref(self),
+            std::slice::from_ref(scalar),
             max_num_bits,
             false,
             &FieldCT::from(F::ONE),
@@ -1516,7 +1515,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
             let x2 = &mut acc.x3_prev;
             let mut lambda = BigField::msub_div(
-                &[acc.lambda_prev.clone()],
+                std::slice::from_ref(&acc.lambda_prev),
                 &[x2.sub(&mut acc.x1_prev, builder, driver)?],
                 &x2.sub(&mut p1.x, builder, driver)?,
                 &[acc.y1_prev.clone(), p1.y.clone()],
@@ -1597,7 +1596,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
     ) -> eyre::Result<P::Affine> {
         let is_infinity = self.is_infinity.get_value(driver);
         let pub_is_infinity = T::get_public(&is_infinity).expect("Could not get public value");
-        if pub_is_infinity == F::ONE.into() {
+        if pub_is_infinity == F::ONE {
             return Ok(P::Affine::zero());
         }
 
@@ -1663,6 +1662,7 @@ pub(crate) struct ChainAddAccumulator<F: PrimeField> {
 }
 
 impl<F: PrimeField> ChainAddAccumulator<F> {
+    #[expect(unused)]
     pub(crate) fn debug_print<
         P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
         T: NoirWitnessExtensionProtocol<F>,
@@ -1683,12 +1683,13 @@ impl<F: PrimeField> ChainAddAccumulator<F> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use ark_bn254::{Fq, Fr, G1Affine};
     use ark_ec::{AffineRepr, CurveGroup};
     use ark_ff::One;
+    use ark_ff::UniformRand;
     use ark_ff::Zero;
-    use ark_ff::{PrimeField, UniformRand};
     use co_acvm::PlainAcvmSolver;
     use mpc_core::gadgets::field_from_hex_string;
     use num_bigint::BigUint;
@@ -1775,7 +1776,7 @@ mod tests {
 
         for length in 2..254 {
             let mut scalar_biguint: BigUint = Fr::rand(&mut rng).into();
-            scalar_biguint = scalar_biguint >> (256 - length);
+            scalar_biguint >>= 256 - length;
 
             // NAF with short scalars doesn't handle 0
             if scalar_biguint == BigUint::from(0u64) {
@@ -1794,8 +1795,8 @@ mod tests {
 
             // scalar = -naf[L] + \sum_{i=0}^{L-1}(1-2*naf[i]) 2^{L-1-i}
             let mut reconstructed_scalar = Fr::zero();
-            for i in 0..length {
-                reconstructed_scalar += (Fr::one() - Fr::from(2u64) * naf[i].get_value(driver))
+            for (i, item) in naf.iter().enumerate().take(length) {
+                reconstructed_scalar += (Fr::one() - Fr::from(2u64) * item.get_value(driver))
                     * Fr::from(BigUint::one() << (length - 1 - i) as u32);
             }
 

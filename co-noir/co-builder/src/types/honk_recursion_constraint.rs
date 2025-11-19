@@ -229,7 +229,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         };
         let recursive_decider_vkey = RecursiveDeciderVerificationKey {
             vk_and_hash,
-            is_complete: false,
+            _is_complete: false,
             public_inputs: proof_fields
                 .iter()
                 .take(input.public_inputs.len())

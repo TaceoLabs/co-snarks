@@ -8,7 +8,7 @@ use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
-use itertools::{interleave, izip};
+use itertools::izip;
 
 pub struct Batch<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
 {
@@ -128,7 +128,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                     commitments.push(commitment.clone());
                     scalars.push(batch.scalar.neg().multiply(rho_power, builder, driver)?);
                     batched_evaluation.add_assign(
-                        &evaluation.multiply(&rho_power, builder, driver)?,
+                        &evaluation.multiply(rho_power, builder, driver)?,
                         builder,
                         driver,
                     );

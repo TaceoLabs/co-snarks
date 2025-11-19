@@ -430,6 +430,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
+    #[expect(clippy::type_complexity)]
     pub(crate) fn multiply_many_raw<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -526,6 +527,7 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
+    #[expect(clippy::type_complexity)]
     pub(crate) fn commit_mul<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -534,10 +536,9 @@ impl<F: PrimeField> FieldCT<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> eyre::Result<Self> {
         if let Some((poly_triple, out_value)) = &mut mul_raw_data.0 {
-            let mut result = Self::default();
-            result.witness_index = builder.add_variable(out_value.clone());
+            let result = Self::from_witness_index(builder.add_variable(out_value.clone()));
             poly_triple.c = result.witness_index;
-            builder.create_poly_gate(&poly_triple);
+            builder.create_poly_gate(poly_triple);
             Ok(result)
         } else if let Some(res) = &mut mul_raw_data.1 {
             Ok(res.clone())
@@ -1965,8 +1966,8 @@ impl<F: PrimeField> FieldCT<F> {
         let mut terms_data =
             Self::multiply_many_raw(evals, &denominator_inverses, builder, driver)?;
         let mut result = FieldCT::from(F::zero());
-        for i in 0..SIZE {
-            let term = Self::commit_mul(&mut terms_data[i], builder)?;
+        for item in terms_data.iter_mut().take(SIZE) {
+            let term = Self::commit_mul(item, builder)?;
             result = result.add(&term, builder, driver);
         }
 
@@ -3877,56 +3878,6 @@ impl<F: PrimeField> CycleScalarCT<F> {
             res.validate_scalar_is_in_field(builder, driver)?;
         }
         Ok(res)
-    }
-
-    pub(crate) fn from_field_ct<
-        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        inp: &FieldCT<F>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<Self> {
-        let value = inp.get_value(builder, driver);
-        let msb = Self::NUM_BITS as u8;
-        let lsb = Self::LO_BITS as u8;
-        let total_bitsize = F::MODULUS_BIT_SIZE as usize;
-        let shift: BigUint = BigUint::one() << Self::LO_BITS;
-        let shift_ct = FieldCT::from(F::from(shift.clone()));
-        let (hi_v, lo_v) = if T::is_shared(&value) {
-            let value = T::get_shared(&value).expect("Already checked it is shared");
-            let [lo, _, hi] = driver.slice(value, msb - 1, lsb, total_bitsize)?;
-            (T::AcvmType::from(hi), T::AcvmType::from(lo))
-        } else {
-            let value: BigUint = T::get_public(&value)
-                .expect("Already checked it is public")
-                .into();
-
-            let lo = &value & (&shift - BigUint::one());
-            let hi = value >> Self::LO_BITS;
-
-            (
-                T::AcvmType::from(F::from(hi)),
-                T::AcvmType::from(F::from(lo)),
-            )
-        };
-
-        if inp.is_constant() {
-            Ok(Self {
-                lo: FieldCT::from(T::get_public(&lo_v).expect("Constants are public")),
-                hi: FieldCT::from(T::get_public(&hi_v).expect("Constants are public")),
-            })
-        } else {
-            let result = Self {
-                lo: FieldCT::from_witness(lo_v, builder),
-                hi: FieldCT::from_witness(hi_v, builder),
-            };
-            let mul = result.hi.multiply(&shift_ct, builder, driver)?;
-            let recomposed = result.lo.add(&mul, builder, driver);
-            inp.assert_equal(&recomposed, builder, driver);
-            result.validate_scalar_is_in_field(builder, driver)?;
-            Ok(result)
-        }
     }
 
     fn is_constant(&self) -> bool {

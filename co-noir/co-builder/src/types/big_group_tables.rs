@@ -232,37 +232,37 @@ impl<const SIZE: usize, F: PrimeField, T: NoirWitnessExtensionProtocol<F>>
         let mut y_hi_limbs = Vec::with_capacity(num_elements);
         let mut prime_limbs = Vec::with_capacity(num_elements);
 
-        for i in 0..num_elements {
+        for item in rom_data.iter().take(num_elements) {
             for j in 0..4 {
                 limb_max[j] = max(
                     limb_max[j].clone(),
-                    rom_data[i].x.binary_basis_limbs[j].maximum_value.clone(),
+                    item.x.binary_basis_limbs[j].maximum_value.clone(),
                 );
                 limb_max[j + 4] = max(
                     limb_max[j + 4].clone(),
-                    rom_data[i].y.binary_basis_limbs[j].maximum_value.clone(),
+                    item.y.binary_basis_limbs[j].maximum_value.clone(),
                 );
             }
 
             x_lo_limbs.push([
-                rom_data[i].x.binary_basis_limbs[0].element.clone(),
-                rom_data[i].x.binary_basis_limbs[1].element.clone(),
+                item.x.binary_basis_limbs[0].element.clone(),
+                item.x.binary_basis_limbs[1].element.clone(),
             ]);
             x_hi_limbs.push([
-                rom_data[i].x.binary_basis_limbs[2].element.clone(),
-                rom_data[i].x.binary_basis_limbs[3].element.clone(),
+                item.x.binary_basis_limbs[2].element.clone(),
+                item.x.binary_basis_limbs[3].element.clone(),
             ]);
             y_lo_limbs.push([
-                rom_data[i].y.binary_basis_limbs[0].element.clone(),
-                rom_data[i].y.binary_basis_limbs[1].element.clone(),
+                item.y.binary_basis_limbs[0].element.clone(),
+                item.y.binary_basis_limbs[1].element.clone(),
             ]);
             y_hi_limbs.push([
-                rom_data[i].y.binary_basis_limbs[2].element.clone(),
-                rom_data[i].y.binary_basis_limbs[3].element.clone(),
+                item.y.binary_basis_limbs[2].element.clone(),
+                item.y.binary_basis_limbs[3].element.clone(),
             ]);
             prime_limbs.push([
-                rom_data[i].x.prime_basis_limb.clone(),
-                rom_data[i].y.prime_basis_limb.clone(),
+                item.x.prime_basis_limb.clone(),
+                item.y.prime_basis_limb.clone(),
             ]);
         }
 

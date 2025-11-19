@@ -943,7 +943,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         scalar: &Self::AcvmType,
         max_num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        let mut scalar_multiplier: BigUint = scalar.clone().into();
+        let mut scalar_multiplier: BigUint = (*scalar).into();
 
         let num_rounds = if max_num_bits == 0 || scalar_multiplier.is_zero() {
             F::MODULUS_BIT_SIZE as usize
@@ -1013,8 +1013,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         a: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
-        Ok(a.inverse()
-            .ok_or_else(|| eyre::eyre!("Element has no inverse"))?)
+        a.inverse()
+            .ok_or_else(|| eyre::eyre!("Element has no inverse"))
     }
 
     fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(

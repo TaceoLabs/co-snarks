@@ -37,7 +37,7 @@ use co_noir_common::{
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use std::{array, marker::PhantomData};
+use std::marker::PhantomData;
 use ultrahonk::NUM_ALPHAS;
 
 pub(crate) struct CoOink<

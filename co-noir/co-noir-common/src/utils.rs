@@ -163,9 +163,9 @@ impl Utils {
         let mut limbs = [F::zero(); NUM_LIMBS];
         let limb_mask = (BigUint::one() << LIMB_SIZE) - BigUint::one();
 
-        for i in 0..NUM_LIMBS {
+        for (i, item) in limbs.iter_mut().enumerate().take(NUM_LIMBS) {
             let limb_value = (value >> (i * LIMB_SIZE)) & &limb_mask;
-            limbs[i] = F::from(limb_value);
+            *item = F::from(limb_value);
         }
 
         limbs

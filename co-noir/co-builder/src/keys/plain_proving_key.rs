@@ -52,6 +52,7 @@ pub trait PlainPkTrait<P: CurveGroup> {
         active_region_data: &ActiveRegionData,
     );
 
+    #[expect(private_interfaces)]
     fn compute_permutation_mapping<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         circuit_size: usize,
         pub_inputs_offset: usize,
@@ -59,6 +60,7 @@ pub trait PlainPkTrait<P: CurveGroup> {
         wire_copy_cycles: Vec<CyclicPermutation>,
     ) -> PermutationMapping;
 
+    #[expect(private_interfaces)]
     fn compute_honk_style_permutation_lagrange_polynomials_from_mapping(
         permutation_polynomials: &mut [Polynomial<P::ScalarField>],
         permutation_mappings: Mapping,
@@ -257,6 +259,7 @@ impl<P: CurveGroup> PlainPkTrait<P> for PlainProvingKey<P> {
         );
     }
 
+    #[expect(private_interfaces)]
     fn compute_permutation_mapping<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
         circuit_size: usize,
         pub_inputs_offset: usize,
@@ -326,6 +329,7 @@ impl<P: CurveGroup> PlainPkTrait<P> for PlainProvingKey<P> {
         mapping
     }
 
+    #[expect(private_interfaces)]
     fn compute_honk_style_permutation_lagrange_polynomials_from_mapping(
         permutation_polynomials: &mut [Polynomial<P::ScalarField>],
         permutation_mappings: Mapping,

@@ -2324,8 +2324,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let scalar = self.get_as_shared(scalar);
 
         // NAF can't handle 0
-        let scalar_is_zero =
-            arithmetic::eq_public(scalar.clone(), F::ZERO, self.net0, &mut self.state0)?;
+        let scalar_is_zero = arithmetic::eq_public(scalar, F::ZERO, self.net0, &mut self.state0)?;
         let modulus_decomposition = ((F::MODULUS.into() as BigUint) + BigUint::one())
             .to_bytes_be()
             .into_iter()
@@ -2354,7 +2353,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // first entry is skew. i.e. do we subtract one from the final result or not
         for i in 0..num_rounds - 1 {
             naf_entries[num_rounds - i] =
-                arithmetic::sub_public_by_shared(F::ONE, scalar_bits[i].clone(), self.id);
+                arithmetic::sub_public_by_shared(F::ONE, scalar_bits[i], self.id);
         }
 
         naf_entries = arithmetic::cmux_vec(
@@ -2379,9 +2378,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         match input.clone() {
             Rep3AcvmType::Public(public) => {
                 let limbs = PlainAcvmSolver::new()
-                    .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, LIMB_BITS, C>(
-                        &public.into(),
-                    )?;
+                    .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, LIMB_BITS, C>(&public)?;
                 let limbs = limbs
                     .into_iter()
                     .map(|x| Rep3AcvmType::Public(x))
