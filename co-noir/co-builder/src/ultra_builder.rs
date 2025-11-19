@@ -1172,7 +1172,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             // In case of invalid witness assignment, we set the value of index value to zero to not hit out of bound in
             // ROM table
             if !has_valid_witness_assignments {
-                self.set_variable(index.witness_index, T::AcvmType::default());
+                let index_nwi = index.get_witness_index(self, driver);
+                self.set_variable(index_nwi, T::AcvmType::default());
             }
             let val = table.index_field_ct(&index, self, driver);
             value.assert_equal(&val, self, driver);
@@ -1195,7 +1196,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             // In case of invalid witness assignment, we set the value of index value to zero to not hit out of bound in
             // RAM table
             if !has_valid_witness_assignments {
-                self.set_variable(index.witness_index, T::AcvmType::default());
+                let index_nwi = index.get_witness_index(self, driver);
+                self.set_variable(index_nwi, T::AcvmType::default());
             }
 
             if op.access_type == 0 {
@@ -2693,7 +2695,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             self.blocks
                 .nnf
                 .populate_wires(input.a[2], input.b[2], self.zero_idx, input_hi_0);
-            self.apply_nnf_selectors(NnfSelectors::NonNativeField2);
+            self.apply_nnf_selectors(NnfSelectors::NonNativeField3);
             self.num_gates += 1;
 
             let input_hi_1: BigUint = input.hi_1.into();
@@ -3840,6 +3842,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let neg_modulus = input.neg_modulus;
 
         let limb_shift = P::ScalarField::from(1u128 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+        let limb_shift_2 = limb_shift * limb_shift;
         let limb_rshift = limb_shift.inverse().unwrap();
         let limb_rshift_2 = limb_rshift * limb_rshift;
 
@@ -3947,7 +3950,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 a_scaling: input.neg_modulus[0] + input.neg_modulus[1] * limb_shift,
                 b_scaling: input.neg_modulus[0] * limb_shift,
                 c_scaling: -limb_shift,
-                d_scaling: -limb_rshift_2,
+                d_scaling: -limb_shift_2,
                 const_scaling: P::ScalarField::zero(),
             },
             true,

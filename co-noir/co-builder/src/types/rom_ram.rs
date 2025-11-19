@@ -545,7 +545,13 @@ impl<F: PrimeField> TwinRomTable<F> {
         }
         self.initialize_table(builder, driver);
 
-        // TODO CESAR: Check bounds
+        if !T::is_shared(&builder.get_variable(index.witness_index as usize)) {
+            // Sanity check, only doable in plain
+            let value = T::get_public(&index.get_value(builder, driver))
+                .expect("Already checked it is public");
+            let val: BigUint = value.into();
+            assert!(val < BigUint::from(self.length));
+        }
 
         let normalized_witness_index = index.get_witness_index(builder, driver);
         let output_indices =
