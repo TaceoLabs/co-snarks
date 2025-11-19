@@ -59,7 +59,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         .expect("failed to parse witness");
 
     let mut driver = PlainAcvmSolver::new();
-    //TODO FLORIN Streamline this
+
     let recursion_crs_size = constraint_system.get_honk_recursion_public_inputs_size();
     let recursion_crs = if recursion_crs_size > 0 {
         CrsParser::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::get_crs_g1(
@@ -132,7 +132,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let witness = convert_witness_plain(witness);
 
     let mut driver = PlainAcvmSolver::new();
-    //TODO FLORIN Streamline this
+
     let recursion_crs_size = constraint_system.get_honk_recursion_public_inputs_size();
     let recursion_crs = if recursion_crs_size > 0 {
         CrsParser::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::get_crs_g1(

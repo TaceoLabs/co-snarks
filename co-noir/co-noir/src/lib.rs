@@ -191,7 +191,7 @@ pub fn compute_circuit_size<P: HonkCurve<TranscriptFieldType>>(
         constraint_system,
         0,
         HonkRecursion::UltraHonk,
-        &ProverCrs::<P>::default(), // We don't need the actual crs here when we dont have a witness TODO FLORIN CHECK THIS
+        &ProverCrs::<P>::default(),
         &mut PlainAcvmSolver::new(),
     )
 }
