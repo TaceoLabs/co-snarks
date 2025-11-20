@@ -2856,7 +2856,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         )?;
 
         let [quotient, remainder] =
-            mpc_core::protocols::rep3_ring::yao::ring_to_field_many::<_, C::BaseField, _>(
+            casts::ring_to_field_a2b_many(
                 &[ring_quotient, ring_element],
                 self.net0,
                 &mut self.state0,
