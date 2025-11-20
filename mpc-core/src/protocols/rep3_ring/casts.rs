@@ -230,10 +230,12 @@ where
 
         let biguint_shares = bit_shares
             .into_iter()
-            .map(|share| Rep3BigUintShare::new(
-                BigUint::from(share.a.0.convert() as u64),
-                BigUint::from(share.b.0.convert() as u64),
-            ))
+            .map(|share| {
+                Rep3BigUintShare::new(
+                    BigUint::from(share.a.0.convert() as u64),
+                    BigUint::from(share.b.0.convert() as u64),
+                )
+            })
             .collect::<Vec<_>>();
 
         return rep3::conversion::bit_inject_many(&biguint_shares, net, state);
@@ -242,10 +244,12 @@ where
     let binary = conversion::a2b_many(shares, net, state)?;
     let biguint_shares = binary
         .into_iter()
-        .map(|binary| Rep3BigUintShare::new(
-            T::cast_to_biguint(&binary.a.0),
-            T::cast_to_biguint(&binary.b.0),
-        ))
+        .map(|binary| {
+            Rep3BigUintShare::new(
+                T::cast_to_biguint(&binary.a.0),
+                T::cast_to_biguint(&binary.b.0),
+            )
+        })
         .collect::<Vec<_>>();
     rep3::conversion::b2a_many(&biguint_shares, net, state)
 }

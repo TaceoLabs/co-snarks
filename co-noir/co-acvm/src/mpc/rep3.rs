@@ -19,8 +19,9 @@ use mpc_core::protocols::rep3::{
     Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion,
     network::Rep3NetworkExt, pointshare, yao,
 };
+use mpc_core::protocols::rep3_ring::arithmetic::RingShare;
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
-use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512};
+use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512, U1024};
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{Rep3RingShare, casts, ring};
 use mpc_core::{
@@ -32,9 +33,9 @@ use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::any::TypeId;
-use std::array;
 use std::marker::PhantomData;
 use std::ops::BitXor;
+use std::{array, convert};
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
@@ -898,7 +899,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
-        Ok(arithmetic::rand(&mut self.state0))
+        Ok(promote_to_trivial_share(self.id, F::one()))
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
@@ -2327,28 +2328,85 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    // TODO CESAR / TODO FLORIN: Avoid converting between fields
     fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         cond: Self::AcvmType,
         truthy: Self::OtherAcvmType<C>,
         falsy: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
-        todo!()
+        match (cond, truthy, falsy) {
+            (Rep3AcvmType::Public(cond), truthy, falsy) => {
+                assert!(cond.is_one() || cond.is_zero());
+                return if cond.is_one() { Ok(truthy) } else { Ok(falsy) };
+            }
+            (Rep3AcvmType::Shared(cond), truthy, falsy) => {
+                let cond_bin = conversion::a2b_selector(cond, self.net0, &mut self.state0)?;
+                let cond_other_acvm: Rep3PrimeFieldShare<C::BaseField> = conversion::b2a(
+                    &Rep3BigUintShare::new(cond_bin.a, cond_bin.b),
+                    self.net0,
+                    &mut self.state0,
+                )?;
+                let b_min_a = self.sub_other_acvm_types::<C>(truthy, falsy.clone());
+                let d = self.mul_other_acvm_types::<C>(cond_other_acvm.into(), b_min_a)?;
+                return Ok(self.add_other_acvm_types::<C>(falsy, d));
+            }
+        }
     }
 
+    // TODO CESAR / TODO FLORIN: Avoid converting between fields
     fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &Self::OtherAcvmType<C>,
         b: &Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::AcvmType> {
-        todo!()
+        let res = match (a, b) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => {
+                return Ok(Rep3AcvmType::Public(F::from(a == b)));
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared)) => {
+                arithmetic::eq_public(*shared, *public, self.net0, &mut self.state0)?
+            }
+
+            (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                arithmetic::eq_public(*shared, *public, self.net0, &mut self.state0)?
+            }
+
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => {
+                arithmetic::eq(*a, *b, self.net0, &mut self.state0)?
+            }
+        };
+
+        let res_bin = conversion::a2b_selector(res, self.net0, &mut self.state0)?;
+
+        let res = conversion::b2a(
+            &Rep3BigUintShare::new(res_bin.a, res_bin.b),
+            self.net0,
+            &mut self.state0,
+        )?;
+
+        Ok(Rep3AcvmType::Shared(res))
     }
 
     fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::OtherAcvmType<C>],
     ) -> eyre::Result<Vec<C::BaseField>> {
-        todo!()
+        let a = a
+            .iter()
+            .map(|x| match x {
+                Rep3AcvmType::Public(public) => {
+                    arithmetic::promote_to_trivial_share(self.id, *public)
+                }
+                Rep3AcvmType::Shared(shared) => *shared,
+            })
+            .collect_vec();
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        let mut cs = self.net0.reshare(bs)?;
+
+        izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
+
+        Ok(cs)
     }
 
     fn compute_naf_entries(
@@ -2443,7 +2501,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     &[shared],
                     self.net0,
                     &mut self.state0,
-                    F::MODULUS_BIT_SIZE as usize,
+                    NUM_LIMBS * LIMB_BITS,
                     LIMB_BITS,
                 )?;
                 let limbs = limbs
@@ -2625,18 +2683,80 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
     ) -> [Self::AcvmType; 4] {
-        let other_acvm_type_lhs = self
-            .acvm_type_limbs_to_other_acvm_type::<C>(lhs)
-            .expect("Conversion failed");
-        let other_acvm_type_rhs = self
-            .acvm_type_limbs_to_other_acvm_type::<C>(rhs)
-            .expect("Conversion failed");
-        let other_acvm_type_add =
-            self.add_other_acvm_types::<C>(other_acvm_type_lhs, other_acvm_type_rhs);
-        let limbs_add = self
-            .other_acvm_type_to_acvm_type_limbs::<4, 68, C>(&other_acvm_type_add)
-            .expect("Conversion failed");
-        limbs_add
+        if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
+            let lhs_limbs = lhs
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let rhs_limbs = rhs
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let result_limbs =
+                PlainAcvmSolver::new().add_acvm_type_limbs::<C>(&lhs_limbs, &rhs_limbs);
+            return result_limbs
+                .into_iter()
+                .map(|x| Rep3AcvmType::Public(x))
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("We have 4 elements");
+        }
+
+        let all_limbs = lhs
+            .iter()
+            .cloned()
+            .chain(rhs.iter().cloned())
+            .map(|x| self.get_as_shared(&x))
+            .collect::<Vec<_>>();
+
+        let ring_limbs =
+            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)
+                .expect("Conversion failed");
+
+        let shifts: Vec<RingElement<U512>> = (0..4)
+            .map(|i| {
+                let shift = BigUint::one() << (68 * i);
+                U512::cast_from_biguint(&shift).into()
+            })
+            .collect::<Vec<_>>();
+
+        let mut ring_element = Rep3RingShare::zero();
+        for (i, share) in ring_limbs.into_iter().enumerate() {
+            ring_element += share * shifts[i % 4];
+        }
+
+        let mut ring_element = mpc_core::protocols::rep3_ring::conversion::a2b(
+            ring_element,
+            self.net0,
+            &mut self.state0,
+        )
+        .expect("Conversion failed");
+
+        let mask = (BigUint::one() << 68) - BigUint::one();
+        let mask_ring: RingElement<U512> = U512::cast_from_biguint(&mask).into();
+        let limbs = (0..4)
+            .map(|_| {
+                let limb = ring_element.clone() & mask_ring.clone();
+                ring_element = ring_element >> 68;
+                limb
+            })
+            .collect::<Vec<_>>();
+
+        let limbs = mpc_core::protocols::rep3_ring::conversion::b2a_many(
+            &limbs,
+            self.net0,
+            &mut self.state0,
+        )
+        .expect("Conversion failed");
+
+        let limbs_shares =
+            casts::ring_to_field_a2b_many::<_, F, _>(&limbs, self.net0, &mut self.state0)
+                .expect("Conversion failed");
+
+        limbs_shares
+            .into_iter()
+            .map(|x| Rep3AcvmType::Shared(x))
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("We have 4 elements")
     }
 
     // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
@@ -2709,36 +2829,35 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let ring_limbs =
             casts::field_to_ring_a2b_many::<_, U512, _>(&limbs, self.net0, &mut self.state0)?;
 
-        let shifts = (0..4)
+        let shifts: Vec<RingElement<U512>> = (0..4)
             .map(|i| {
                 let shift = BigUint::one() << (68 * i);
-                U512::cast_from_biguint(&shift)
+                U512::cast_from_biguint(&shift).into()
             })
             .collect::<Vec<_>>();
         let mut ring_element = Rep3RingShare::zero();
         for (i, share) in ring_limbs.into_iter().enumerate() {
-            let tmp =
-                mpc_core::protocols::rep3_ring::arithmetic::mul_public(share, shifts[i].into());
-            mpc_core::protocols::rep3_ring::arithmetic::add_assign(&mut ring_element, tmp);
+            ring_element += share * shifts[i];
         }
 
         let modulus = C::BaseField::MODULUS.into();
-        let modulus_ring = U512::cast_from_biguint(&modulus);
+        let modulus_ring: RingElement<U512> = U512::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
-            modulus_ring.into(),
+            modulus_ring.clone(),
             self.net0,
             &mut self.state0,
         )?;
 
-        let [quotient, remainder] =
-            mpc_core::protocols::rep3_ring::yao::ring_to_field_many::<_, C::BaseField, _>(
-                &[ring_quotient, ring_element],
-                self.net0,
-                &mut self.state0,
-            )?
-            .try_into()
-            .expect("We have 2 elements");
+        let ring_remainder = ring_element - ring_quotient * modulus_ring;
+
+        let [quotient, remainder] = casts::ring_to_field_a2b_many::<_, C::BaseField, _>(
+            &[ring_quotient, ring_remainder],
+            self.net0,
+            &mut self.state0,
+        )?
+        .try_into()
+        .expect("We have 2 elements");
 
         let (quotient, remainder) = (
             Rep3AcvmType::Shared(quotient),
@@ -2847,22 +2966,23 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
 
         let modulus = C::BaseField::MODULUS.into();
-        let modulus_ring = U512::cast_from_biguint(&modulus);
+        let modulus_ring: RingElement<U512> = U512::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
-            modulus_ring.into(),
+            modulus_ring.clone(),
             self.net0,
             &mut self.state0,
         )?;
 
-        let [quotient, remainder] =
-            casts::ring_to_field_a2b_many(
-                &[ring_quotient, ring_element],
-                self.net0,
-                &mut self.state0,
-            )?
-            .try_into()
-            .expect("We have 2 elements");
+        let ring_remainder = ring_element - ring_quotient * modulus_ring;
+
+        let [quotient, remainder] = casts::ring_to_field_a2b_many(
+            &[ring_quotient, ring_remainder],
+            self.net0,
+            &mut self.state0,
+        )?
+        .try_into()
+        .expect("We have 2 elements");
 
         let (quotient, remainder) = (
             Rep3AcvmType::Shared(quotient),
@@ -2953,18 +3073,18 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             v
         };
         let ring_limbs =
-            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)?;
+            casts::field_to_ring_a2b_many::<_, U1024, _>(&all_limbs, self.net0, &mut self.state0)?;
 
         let (a_ring_limbs, rest) = ring_limbs.split_at(a.len() * 4);
         let (b_ring_limbs, to_add_ring_limbs) = rest.split_at(b.len() * 4);
         let shifts = (0..4)
             .map(|i| {
                 let shift = BigUint::one() << (68 * i);
-                U512::cast_from_biguint(&shift).into()
+                U1024::cast_from_biguint(&shift).into()
             })
             .collect::<Vec<RingElement<_>>>();
         let mut a_rings = Vec::with_capacity(a.len());
-        for (i, arr) in a_ring_limbs.chunks_exact(4).enumerate() {
+        for arr in a_ring_limbs.chunks_exact(4) {
             let mut a_ring = Rep3RingShare::zero();
             for (j, &share) in arr.iter().enumerate() {
                 a_ring += share * shifts[j];
@@ -2973,7 +3093,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
 
         let mut b_rings = Vec::with_capacity(b.len());
-        for (i, arr) in b_ring_limbs.chunks_exact(4).enumerate() {
+        for arr in b_ring_limbs.chunks_exact(4) {
             let mut b_ring = Rep3RingShare::zero();
             for (j, &share) in arr.iter().enumerate() {
                 b_ring += share * shifts[j];
@@ -2983,11 +3103,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         let mut to_add_ring = Rep3RingShare::zero();
         for to_add_arr in to_add_ring_limbs.chunks_exact(4) {
-            let mut to_add_elem = Rep3RingShare::zero();
             for (i, &share) in to_add_arr.iter().enumerate() {
-                to_add_elem += share * shifts[i];
+                to_add_ring += share * shifts[i];
             }
-            to_add_ring += to_add_elem;
         }
 
         let mut ring_element = Rep3RingShare::zero();
@@ -3004,29 +3122,58 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         ring_element += to_add_ring;
 
         let modulus = C::BaseField::MODULUS.into();
-        let modulus_ring = U512::cast_from_biguint(&modulus);
+        let modulus_ring: RingElement<U1024> = U1024::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
-            modulus_ring.into(),
+            modulus_ring.clone(),
             self.net0,
             &mut self.state0,
         )?;
 
-        let [quotient, remainder] =
-            mpc_core::protocols::rep3_ring::yao::ring_to_field_many::<_, C::BaseField, _>(
-                &[ring_quotient, ring_element],
-                self.net0,
-                &mut self.state0,
-            )?
-            .try_into()
-            .expect("We have 2 elements");
+        let ring_remainder = ring_element - (ring_quotient * modulus_ring);
+
+        let mut ring_quotient = mpc_core::protocols::rep3_ring::conversion::a2b(
+            ring_quotient,
+            self.net0,
+            &mut self.state0,
+        )
+        .expect("Conversion failed");
+
+        let mask = (BigUint::one() << 68) - BigUint::one();
+        let mask_ring: RingElement<U1024> = U1024::cast_from_biguint(&mask).into();
+        let quotient_limbs = (0..4)
+            .map(|_| {
+                let limb = ring_quotient.clone() & mask_ring.clone();
+                ring_quotient = ring_quotient >> 68;
+                limb
+            })
+            .collect::<Vec<_>>();
+
+        let quotient_limbs = mpc_core::protocols::rep3_ring::conversion::b2a_many(
+            &quotient_limbs,
+            self.net0,
+            &mut self.state0,
+        )?;
+
+        let quotient_limbs =
+            casts::ring_to_field_a2b_many::<_, F, _>(&quotient_limbs, self.net0, &mut self.state0)?;
+
+        let remainder = casts::ring_to_field_a2b::<_, C::BaseField, _>(
+            ring_remainder,
+            self.net0,
+            &mut self.state0,
+        )?;
 
         let (quotient, remainder) = (
-            Rep3AcvmType::Shared(quotient),
+            quotient_limbs
+                .into_iter()
+                .map(Rep3AcvmType::Shared)
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("We have 4 elements"),
             Rep3AcvmType::Shared(remainder),
         );
 
-        let limbs_quotient = self.other_acvm_type_to_acvm_type_limbs::<4, 68, C>(&quotient)?;
-        Ok((limbs_quotient, remainder))
+        Ok((quotient, remainder))
     }
 }

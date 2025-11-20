@@ -8,7 +8,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::utils::Utils;
 use core::panic;
 use eyre::Ok;
-use num_bigint::BigUint;
+use num_bigint::{BigUint, ToBigUint};
 use std::array;
 use std::cmp::max;
 
@@ -648,6 +648,7 @@ impl<F: PrimeField> BigField<F> {
             .expect("We provided NUM_LIMBS elements"))
     }
 
+    // TODO CESAR / TODO FLORIN: Remove or add warning that this is only for testing
     pub(crate) fn get_unreduced_value<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<F>,
@@ -2587,13 +2588,13 @@ impl<F: PrimeField> BigField<F> {
             .iter()
             .cloned()
             .partition::<Vec<Self>, _>(|a| a.is_constant());
-        let add_right_constant_sum =
-            add_const
-                .into_iter()
-                .fold(T::OtherAcvmType::default(), |acc, a| {
-                    let val = a.get_value_fq(builder, driver).expect("Should get value");
-                    driver.add_other_acvm_types(acc, val)
-                });
+        let add_right_constant_sum = add_const.into_iter().fold(BigUint::zero(), |acc, a| {
+            let val = a.get_value_fq(builder, driver).expect("Should not fail");
+            let pub_val: BigUint = T::get_public_other_acvm_type::<P>(&val)
+                .expect("Constants are public")
+                .into();
+            acc + pub_val
+        });
         let add_constant = new_to_add.is_empty();
 
         // Compute the product sum
@@ -2604,28 +2605,23 @@ impl<F: PrimeField> BigField<F> {
             .partition::<Vec<(Self, Self)>, _>(|(a, b)| a.is_constant() && b.is_constant());
 
         // TODO CESAR: Batch these
-        let product_constant_sum =
-            prod_const
-                .into_iter()
-                .fold(T::OtherAcvmType::default(), |acc, (a, b)| {
-                    let a_val = a.get_value_fq(builder, driver).expect("Should get value");
-                    let b_val = b.get_value_fq(builder, driver).expect("Should get value");
-                    let tmp = driver
-                        .mul_other_acvm_types(a_val, b_val)
-                        .expect("Should multiply");
-                    driver.add_other_acvm_types(acc, tmp)
-                });
+        let product_constant_sum = prod_const.into_iter().fold(BigUint::zero(), |acc, (a, b)| {
+            let a_val = a.get_value_fq(builder, driver).expect("Should not fail");
+            let b_val = b.get_value_fq(builder, driver).expect("Should not fail");
+            let a_pub: BigUint = T::get_public_other_acvm_type::<P>(&a_val)
+                .expect("Constants are public")
+                .into();
+            let b_pub: BigUint = T::get_public_other_acvm_type::<P>(&b_val)
+                .expect("Constants are public")
+                .into();
+            acc + a_pub * b_pub
+        });
 
         let product_sum_constant = new_mul.is_empty();
 
         // Compute the constant term we're adding to the product sum
-        let tmp = driver.add_other_acvm_types(product_constant_sum, add_right_constant_sum);
-        let tmp = driver.other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, P>(&tmp)?;
-        let (_, r) = driver.div_mod_acvm_limbs(&tmp)?;
-        let r_const = T::get_public_other_acvm_type::<P>(&r)
-            .expect("Constants are public")
-            .into_bigint()
-            .into();
+        let tmp = product_constant_sum + add_right_constant_sum;
+        let r_const = tmp % P::BaseField::MODULUS.into();
         if product_sum_constant {
             if add_constant {
                 return Ok(BigField::from_constant(&r_const));
@@ -2689,9 +2685,42 @@ impl<F: PrimeField> BigField<F> {
         // Get the number of range proof bits for the quotient
         let num_quotient_bits = Self::get_quotient_max_bits(&[Self::default_maximum_remainder()]);
 
+        // Print values for debugging
+        let limbs_ = a
+            .iter()
+            .flat_map(|limbs| limbs.iter().cloned())
+            .map(|limb| driver.get_as_shared(&limb))
+            .collect::<Vec<_>>();
+        let opened = driver.open_many(&limbs_)?;
+        println!("bigfield::mult_madd: left opened values: {:?}", opened);
+
+        let limbs_ = b
+            .iter()
+            .flat_map(|limbs| limbs.iter().cloned())
+            .map(|limb| driver.get_as_shared(&limb))
+            .collect::<Vec<_>>();
+        let opened = driver.open_many(&limbs_)?;
+        println!("bigfield::mult_madd: right opened values: {:?}", opened);
+
+        let limbs_ = add_right_final_sum
+            .iter()
+            .map(|limb| driver.get_as_shared(&limb))
+            .collect::<Vec<_>>();
+        let opened = driver.open_many(&limbs_)?;
+        println!(
+            "bigfield::mult_madd: add_right_final_sum opened values: {:?}",
+            opened
+        );
         // Compute the final quotient and remainder
         let (quotient, remainder) =
             driver.madd_div_mod_many_acvm_limbs(&a, &b, &[add_right_final_sum])?;
+
+        let limbs_ = quotient.clone().map(|limb| driver.get_as_shared(&limb));
+        let opened = driver.open_many(&limbs_)?;
+        println!("bigfield::mult_madd: quotient opened value: {:?}", opened);
+
+        let opened = driver.open_many_other(&[remainder.clone()])?;
+        println!("bigfield::mult_madd: remainder opened value: {:?}", opened);
 
         // If we are establishing an identity and the remainder has to be zero, we need to check, that it actually is
         // TODO CESAR
