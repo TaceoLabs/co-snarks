@@ -607,12 +607,12 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
         match $state.id {
             PartyID::ID0 => {
                 for res in res.iter_mut() {
-          let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
+                    let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
                     res.b = (k3.0 + k3.1 + k3.2).neg();
                 }
 
                 // TODO this can be parallelized with joint_input_arithmetic_added_many
-        let x23 = crate::protocols::rep3::yao::input_field_id2_many::<F, _>(None, None, $output_size, $net, $state)?;
+                let x23 = crate::protocols::rep3::yao::input_field_id2_many::<F, _>(None, None, $output_size, $net, $state)?;
 
                 let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($net);
                 evaluator.receive_circuit()?;
@@ -622,18 +622,18 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
                 let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
                 // Compose the bits
-                   for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
+                for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
                     res.a = yao::GCUtils::bits_to_field(x1)?;
                 }
             }
             PartyID::ID1 => {
                 for res in res.iter_mut() {
-                               let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
+                    let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
                     res.a = (k2.0 + k2.1 + k2.2).neg();
                 }
 
                 // TODO this can be parallelized with joint_input_arithmetic_added_many
-               let x23 = crate::protocols::rep3::yao::input_field_id2_many::<F, _>(None, None, $output_size, $net, $state)?;
+                let x23 = crate::protocols::rep3::yao::input_field_id2_many::<F, _>(None, None, $output_size, $net, $state)?;
 
                 let mut garbler =
                     rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
@@ -644,14 +644,14 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
                 let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
 
                 // Compose the bits
-                      for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
+                for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
                     res.b = yao::GCUtils::bits_to_field(x1)?;
                 }
             }
             PartyID::ID2 => {
                 let mut x23 = Vec::with_capacity($output_size);
                 for res in res.iter_mut() {
-                                      let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
+                    let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
                     let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
                     let k2_comp = k2.0 + k2.1 + k2.2;
                     let k3_comp = k3.0 + k3.1 + k3.2;
@@ -661,7 +661,7 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
                 }
 
                 // TODO this can be parallelized with joint_input_arithmetic_added_many
-               let x23 = crate::protocols::rep3::yao::input_field_id2_many(Some(x23), delta, $output_size, $net, $state)?;
+                let x23 = crate::protocols::rep3::yao::input_field_id2_many(Some(x23), delta, $output_size, $net, $state)?;
 
                 let mut garbler =
                    rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
@@ -679,6 +679,130 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
     }};
 }
 pub(crate) use decompose_circuit_compose_to_fields_blueprint;
+
+macro_rules! decompose_circuit_compose_to_two_fields_blueprint {
+    ($inputs:expr, $net:expr, $state:expr, $output_size:expr, $output_size_other:expr, $num_inputs:expr, $t:ty, $circuit:expr, ($( $args:expr ),*)) => {{
+        use itertools::izip;
+        use $crate::protocols::rep3_ring::yao;
+        use $crate::protocols::rep3::Rep3PrimeFieldShare;
+
+        let delta = $state
+            .rngs
+            .generate_random_garbler_delta($state.id);
+
+        let [x01, x2] = yao::joint_input_arithmetic_added_many($inputs, delta, $net, $state)?;
+
+        let mut res = vec![Rep3PrimeFieldShare::<F>::zero_share(); $output_size * $num_inputs];
+        let mut res_other= vec![Rep3PrimeFieldShare::<K>::zero_share(); $output_size_other * $num_inputs];
+
+        match $state.id {
+            PartyID::ID0 => {
+                for res in res.iter_mut() {
+                    let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
+                    res.b = (k3.0 + k3.1 + k3.2).neg();
+                }
+                 for res in res_other.iter_mut() {
+                    let k3 = $state.rngs.bitcomp2.random_fes_3keys::<K>();
+                    res.b = (k3.0 + k3.1 + k3.2).neg();
+                }
+
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = crate::protocols::rep3::yao::input_two_field_id2_many::<F, K, _>(None, None, None, $output_size, $output_size_other, $num_inputs, $net, $state)?;
+
+
+                let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($net);
+                evaluator.receive_circuit()?;
+
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
+
+                // Compose the bits
+                for (res, res_other, x1) in izip!(res.chunks_mut($output_size), res_other.chunks_mut($output_size_other), x1.chunks(F::MODULUS_BIT_SIZE as usize * $output_size + $output_size_other * K::MODULUS_BIT_SIZE as usize)) {
+                    let (f_part, k_part) = x1.split_at(F::MODULUS_BIT_SIZE as usize * $output_size);
+                    for (chunk, res_) in f_part.chunks(F::MODULUS_BIT_SIZE as usize).take($output_size).zip(res.iter_mut()) {
+                        res_.a = yao::GCUtils::bits_to_field(chunk)?;
+                    }
+                    for (chunk, res_) in k_part.chunks(K::MODULUS_BIT_SIZE as usize).take($output_size_other).zip(res_other.iter_mut()) {
+                        res_.a = yao::GCUtils::bits_to_field(chunk)?;
+                    }
+                }
+            }
+            PartyID::ID1 => {
+                for res in res.iter_mut() {
+                    let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
+                    res.a = (k2.0 + k2.1 + k2.2).neg();
+                }
+                for res in res_other.iter_mut() {
+                    let k2 = $state.rngs.bitcomp1.random_fes_3keys::<K>();
+                    res.a = (k2.0 + k2.1 + k2.2).neg();
+                }
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = crate::protocols::rep3::yao::input_two_field_id2_many::<F, K, _>(None, None, None, $output_size, $output_size_other, $num_inputs, $net, $state)?;
+
+                let mut garbler =
+                    rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+
+                // Compose the bits
+                for (res, res_other, x1) in izip!(res.chunks_mut($output_size), res_other.chunks_mut($output_size_other), x1.chunks(F::MODULUS_BIT_SIZE as usize * $output_size + $output_size_other * K::MODULUS_BIT_SIZE as usize)) {
+                    let (f_part, k_part) = x1.split_at(F::MODULUS_BIT_SIZE as usize * $output_size);
+                    for (chunk, res_) in f_part.chunks(F::MODULUS_BIT_SIZE as usize).take($output_size).zip(res.iter_mut()) {
+                        res_.b = yao::GCUtils::bits_to_field(chunk)?;
+                    }
+                    for (chunk, res_) in k_part.chunks(K::MODULUS_BIT_SIZE as usize).take($output_size_other).zip(res_other.iter_mut()) {
+                        res_.b = yao::GCUtils::bits_to_field(chunk)?;
+                    }
+                }
+            }
+            PartyID::ID2 => {
+                let mut x23 = Vec::with_capacity($output_size * $num_inputs);
+                let mut x23_other = Vec::with_capacity($output_size_other * $num_inputs);
+                for res in res.iter_mut() {
+                    let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
+                    let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
+                    let k2_comp = k2.0 + k2.1 + k2.2;
+                    let k3_comp = k3.0 + k3.1 + k3.2;
+                    x23.push(k2_comp + k3_comp);
+                    res.a = k3_comp.neg();
+                    res.b = k2_comp.neg();
+                }
+                for res in res_other.iter_mut() {
+                    let k2 = $state.rngs.bitcomp1.random_fes_3keys::<K>();
+                    let k3 = $state.rngs.bitcomp2.random_fes_3keys::<K>();
+                    let k2_comp = k2.0 + k2.1 + k2.2;
+                    let k3_comp = k3.0 + k3.1 + k3.2;
+                    x23_other.push(k2_comp + k3_comp);
+                    res.a = k3_comp.neg();
+                    res.b = k2_comp.neg();
+                }
+
+
+                // TODO this can be parallelized with joint_input_arithmetic_added_many
+                let x23 = crate::protocols::rep3::yao::input_two_field_id2_many(Some(x23), Some(x23_other), delta, $output_size, $output_size_other, $num_inputs, $net, $state)?;
+
+                let mut garbler =
+                   rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
+
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
+                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
+                if x1.is_some()  {
+                    eyre::bail!("Unexpected output received");
+                }
+            }
+        }
+
+        Ok((res, res_other))
+    }};
+}
+pub(crate) use decompose_circuit_compose_to_two_fields_blueprint;
 
 /// An upcast of a vector Rep3RingShares from a smaller ring to a larger ring
 pub fn upcast_many<T: IntRing2k, U: IntRing2k, N: Network>(
@@ -785,12 +909,77 @@ where
     )
 }
 
-/// Does a division with a public divisor and returns the two inputs as num_limbs_per_field limbs each, where each limb is a ring element of type T. The output is a field element of type F. The slice_size parameter indicates how many bits of the ring elements are used in each slice of the circuit. The divisor is provided as a BigUint.
-pub fn compute_remainder_limbs_and_quotient_limbs_many<T: IntRing2k, N: Network, F: PrimeField>(
-    input1: &[Rep3RingShare<T>],
-    input2: &[Rep3RingShare<T>],
-    slice_size: usize,
+/// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
+#[expect(clippy::type_complexity)]
+pub fn ring_div_by_public_to_fr_limbs_and_fq_many<
+    T: IntRing2k,
+    N: Network,
+    F: PrimeField,
+    K: PrimeField,
+>(
+    input: &[Rep3RingShare<T>],
+    limb_size: usize,
     divisor: &BigUint,
+    num_limbs_per_field: usize,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(Vec<Rep3PrimeFieldShare<F>>, Vec<Rep3PrimeFieldShare<K>>)>
+where
+    Standard: Distribution<T>,
+{
+    let num_inputs = input.len();
+    let divisor_as_bits =
+        GCUtils::ring_to_bits::<U512>(RingElement(U512::cast_from_biguint(divisor)));
+
+    let mut combined_inputs = Vec::with_capacity(input.len());
+    combined_inputs.extend_from_slice(input);
+
+    decompose_circuit_compose_to_two_fields_blueprint!(
+        &combined_inputs,
+        net,
+        state,
+        num_limbs_per_field,
+        1,
+        num_inputs,
+        T,
+        GarbledCircuits::ring_div_by_public_to_fr_limbs_and_fq_many::<_, F, K>,
+        (T::K, limb_size, num_limbs_per_field, &divisor_as_bits)
+    )
+}
+
+/// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
+pub fn ring_div_by_public_to_fr_limbs_and_fq<
+    T: IntRing2k,
+    N: Network,
+    F: PrimeField,
+    K: PrimeField,
+>(
+    input: Rep3RingShare<T>,
+    limb_size: usize,
+    divisor: &BigUint,
+    num_limbs_per_field: usize,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(Rep3PrimeFieldShare<F>, Rep3PrimeFieldShare<K>)>
+where
+    Standard: Distribution<T>,
+{
+    ring_div_by_public_to_fr_limbs_and_fq_many(
+        &[input],
+        limb_size,
+        divisor,
+        num_limbs_per_field,
+        net,
+        state,
+    )
+    .map(|(fr_shares, fq_shares)| (fr_shares[0], fq_shares[0]))
+}
+
+/// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
+pub fn ring_div_by_public_to_limbs_many<T: IntRing2k, N: Network, F: PrimeField>(
+    input: &[Rep3RingShare<T>],
+    divisor: &BigUint,
+    limb_size: usize,
     num_limbs_per_field: usize,
     net: &N,
     state: &mut Rep3State,
@@ -798,26 +987,46 @@ pub fn compute_remainder_limbs_and_quotient_limbs_many<T: IntRing2k, N: Network,
 where
     Standard: Distribution<T>,
 {
-    let num_inputs = input1.len();
-    debug_assert_eq!(input1.len(), input2.len());
-    let total_limbs = 2 * num_limbs_per_field;
-
+    let num_inputs = input.len();
     let divisor_as_bits =
         GCUtils::ring_to_bits::<U512>(RingElement(U512::cast_from_biguint(divisor)));
+    let num_outputs = 2 * num_inputs * num_limbs_per_field;
 
-    let mut combined_inputs = Vec::with_capacity(input1.len() + input2.len());
-    combined_inputs.extend_from_slice(input1);
-    combined_inputs.extend_from_slice(input2);
+    let mut combined_inputs = Vec::with_capacity(input.len());
+    combined_inputs.extend_from_slice(input);
 
     decompose_circuit_compose_to_fields_blueprint!(
         &combined_inputs,
         net,
         state,
-        total_limbs * num_inputs,
+        num_outputs,
         T,
-        GarbledCircuits::compute_translator_limbs_many::<_, F>,
-        (T::K, slice_size, num_limbs_per_field, &divisor_as_bits)
+        GarbledCircuits::ring_div_by_public_to_limbs_many::<_, F>,
+        (T::K, &divisor_as_bits, limb_size, num_limbs_per_field)
     )
+}
+
+/// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
+pub fn ring_div_by_public_to_limbs<T: IntRing2k, N: Network, F: PrimeField>(
+    input: Rep3RingShare<T>,
+    divisor: &BigUint,
+    limb_size: usize,
+    num_limbs_per_field: usize,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(Rep3PrimeFieldShare<F>, Rep3PrimeFieldShare<F>)>
+where
+    Standard: Distribution<T>,
+{
+    let res = ring_div_by_public_to_limbs_many(
+        &[input],
+        divisor,
+        limb_size,
+        num_limbs_per_field,
+        net,
+        state,
+    )?;
+    Ok((res[0], res[1]))
 }
 
 /// Divides a ring element by another.
