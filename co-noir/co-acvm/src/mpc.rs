@@ -79,9 +79,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         cond: Self::AcvmType,
         truthy: Self::OtherAcvmType<C>,
         falsy: Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::OtherAcvmType<C>> {
-        todo!()
-    }
+    ) -> eyre::Result<Self::OtherAcvmType<C>>;
 
     /// Adds a public value to an ACVM-type in place: *\[target\] += public
     fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType);
@@ -210,9 +208,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Returns the base field value if the type is public
     fn get_public_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         a: &Self::OtherAcvmType<C>,
-    ) -> Option<C::BaseField> {
-        todo!()
-    }
+    ) -> Option<C::BaseField>;
 
     /// Returns the value if the point is public
     fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C>;
@@ -225,9 +221,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         a: &Self::OtherAcvmType<C>,
         b: &Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::AcvmType> {
-        todo!()
-    }
+    ) -> eyre::Result<Self::AcvmType>;
 
     /// Checks if two slices of shared values are equal element-wise. The result is a Vec of shared values that have value 1 if the two corresponding shared values are equal and 0 otherwise.
     fn equal_many(
@@ -242,9 +236,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::OtherAcvmType<C>],
-    ) -> eyre::Result<Vec<C::BaseField>> {
-        todo!()
-    }
+    ) -> eyre::Result<Vec<C::BaseField>>;
 
     // Generate a shared random value
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare>;
@@ -564,118 +556,88 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         scalar: &Self::AcvmType,
         max_num_bits: usize,
-    ) -> eyre::Result<Vec<Self::AcvmType>> {
-        todo!()
-    }
+    ) -> eyre::Result<Vec<Self::AcvmType>>;
 
     fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         limbs: &[Self::AcvmType; 4],
-    ) -> eyre::Result<Self::OtherAcvmType<C>> {
-        todo!()
-    }
+    ) -> eyre::Result<Self::OtherAcvmType<C>>;
 
     fn neg_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: Self::OtherAcvmType<C>,
-    ) -> Self::OtherAcvmType<C> {
-        todo!()
-    }
+    ) -> Self::OtherAcvmType<C>;
 
     fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: Self::OtherAcvmType<C>,
         rhs: Self::OtherAcvmType<C>,
-    ) -> Self::OtherAcvmType<C> {
-        todo!()
-    }
+    ) -> Self::OtherAcvmType<C>;
 
     fn sub_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: Self::OtherAcvmType<C>,
         rhs: Self::OtherAcvmType<C>,
-    ) -> Self::OtherAcvmType<C> {
-        todo!()
-    }
+    ) -> Self::OtherAcvmType<C>;
 
     fn inverse_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::OtherAcvmType<C>> {
-        todo!()
-    }
+    ) -> eyre::Result<Self::OtherAcvmType<C>>;
 
     fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
-    ) -> eyre::Result<[Self::AcvmType; 4]> {
-        todo!()
-    }
+    ) -> eyre::Result<[Self::AcvmType; 4]>;
 
     fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
-    ) -> [Self::AcvmType; 4] {
-        todo!()
-    }
+    ) -> [Self::AcvmType; 4];
 
     fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
-    ) -> eyre::Result<[Self::AcvmType; 4]> {
-        todo!()
-    }
+    ) -> eyre::Result<[Self::AcvmType; 4]>;
 
     fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
-    ) -> eyre::Result<[Self::AcvmType; 4]> {
-        todo!()
-    }
+    ) -> eyre::Result<[Self::AcvmType; 4]>;
 
     fn div_unchecked_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: Self::OtherAcvmType<C>,
         rhs: Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::OtherAcvmType<C>> {
-        todo!()
-    }
+    ) -> eyre::Result<Self::OtherAcvmType<C>>;
 
     fn mul_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: Self::OtherAcvmType<C>,
         rhs: Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::OtherAcvmType<C>> {
-        todo!()
-    }
+    ) -> eyre::Result<Self::OtherAcvmType<C>>;
 
     fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
         b: &[Self::AcvmType; 4],
         to_add: &[[Self::AcvmType; 4]],
-    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
-        todo!()
-    }
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)>;
 
     fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[[Self::AcvmType; 4]],
         b: &[[Self::AcvmType; 4]],
         to_add: &[[Self::AcvmType; 4]],
-    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
-        todo!()
-    }
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)>;
 
     fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
-    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
-        todo!()
-    }
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)>;
 
     fn other_acvm_type_to_acvm_type_limbs<
         const NUM_LIMBS: usize,
@@ -684,7 +646,5 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     >(
         &mut self,
         input: &Self::OtherAcvmType<C>,
-    ) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]> {
-        todo!()
-    }
+    ) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]>;
 }

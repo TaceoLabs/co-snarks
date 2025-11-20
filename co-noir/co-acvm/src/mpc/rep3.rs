@@ -2407,4 +2407,143 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
         }
     }
+
+    fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: Self::AcvmType,
+        truthy: Self::OtherAcvmType<C>,
+        falsy: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn get_public_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::BaseField> {
+        todo!()
+    }
+
+    fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &Self::OtherAcvmType<C>,
+        b: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::AcvmType> {
+        todo!()
+    }
+
+    fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<C::BaseField>> {
+        todo!()
+    }
+
+    fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        limbs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn neg_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        todo!()
+    }
+
+    fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        todo!()
+    }
+
+    fn sub_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        todo!()
+    }
+
+    fn inverse_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        todo!()
+    }
+
+    fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> [Self::AcvmType; 4] {
+        todo!()
+    }
+
+    fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        todo!()
+    }
+
+    fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        todo!()
+    }
+
+    fn div_unchecked_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn mul_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        todo!()
+    }
+
+    fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+        b: &[Self::AcvmType; 4],
+        to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        todo!()
+    }
+
+    fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[[Self::AcvmType; 4]],
+        b: &[[Self::AcvmType; 4]],
+        to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        todo!()
+    }
+
+    fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        todo!()
+    }
 }
