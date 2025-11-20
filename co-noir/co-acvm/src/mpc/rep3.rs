@@ -22,7 +22,7 @@ use mpc_core::protocols::rep3::{
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512};
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
-use mpc_core::protocols::rep3_ring::{Rep3RingShare, ring};
+use mpc_core::protocols::rep3_ring::Rep3RingShare;
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -2625,47 +2625,87 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     // TODO CESAR: Make all these generic over the number of limbs and limb size
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
     fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
     ) -> [Self::AcvmType; 4] {
-        let other_acvm_type_lhs = self
-            .acvm_type_limbs_to_other_acvm_type::<C>(lhs)
-            .expect("Conversion failed");
-        let other_acvm_type_rhs = self
-            .acvm_type_limbs_to_other_acvm_type::<C>(rhs)
-            .expect("Conversion failed");
-        let other_acvm_type_add =
-            self.add_other_acvm_types::<C>(other_acvm_type_lhs, other_acvm_type_rhs);
-        let limbs_add = self
-            .other_acvm_type_to_acvm_type_limbs::<4, 68, C>(&other_acvm_type_add)
-            .expect("Conversion failed");
-        limbs_add
+        // Optimized implementation: work directly on limbs without full field conversion
+        // Check if all limbs are public for fast path
+        if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
+            // Public case: use PlainAcvmSolver
+            let lhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
+            let rhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
+            let result = PlainAcvmSolver::new()
+                .add_acvm_type_limbs::<C>(&lhs_public, &rhs_public);
+            return array::from_fn(|i| Rep3AcvmType::Public(result[i]));
+        }
+
+        // Shared case: add limbs directly in field F
+        // This avoids expensive a2b/b2a conversions by working on limbs directly
+        let lhs_shares: [Self::ArithmeticShare; 4] = array::from_fn(|i| self.get_as_shared(&lhs[i]));
+        let rhs_shares: [Self::ArithmeticShare; 4] = array::from_fn(|i| self.get_as_shared(&rhs[i]));
+        
+        // Add each limb directly
+        let sum_shares = [
+            arithmetic::add(lhs_shares[0], rhs_shares[0]),
+            arithmetic::add(lhs_shares[1], rhs_shares[1]),
+            arithmetic::add(lhs_shares[2], rhs_shares[2]),
+            arithmetic::add(lhs_shares[3], rhs_shares[3]),
+        ];
+
+        array::from_fn(|i| Rep3AcvmType::Shared(sum_shares[i]))
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
     fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
     ) -> eyre::Result<[Self::AcvmType; 4]> {
-        let other_acvm_type_lhs = self.acvm_type_limbs_to_other_acvm_type::<C>(lhs)?;
-        let other_acvm_type_rhs = self.acvm_type_limbs_to_other_acvm_type::<C>(rhs)?;
-        let other_acvm_type_sub =
-            self.sub_other_acvm_types::<C>(other_acvm_type_lhs, other_acvm_type_rhs);
-        let limbs_sub =
-            self.other_acvm_type_to_acvm_type_limbs::<4, 68, C>(&other_acvm_type_sub)?;
-        Ok(limbs_sub)
+        // Optimized implementation: work directly on limbs without full field conversion
+        // Check if all limbs are public for fast path
+        if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
+            // Public case: use PlainAcvmSolver
+            let lhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
+            let rhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
+            let result = PlainAcvmSolver::new()
+                .sub_acvm_type_limbs::<C>(&lhs_public, &rhs_public)?;
+            return Ok(array::from_fn(|i| Rep3AcvmType::Public(result[i])));
+        }
+
+        // Shared case: subtract limbs directly in field F
+        // This avoids expensive a2b/b2a conversions by working on limbs directly
+        let lhs_shares: [Self::ArithmeticShare; 4] = array::from_fn(|i| self.get_as_shared(&lhs[i]));
+        let rhs_shares: [Self::ArithmeticShare; 4] = array::from_fn(|i| self.get_as_shared(&rhs[i]));
+        
+        // Subtract each limb directly
+        let diff_shares = [
+            arithmetic::sub(lhs_shares[0], rhs_shares[0]),
+            arithmetic::sub(lhs_shares[1], rhs_shares[1]),
+            arithmetic::sub(lhs_shares[2], rhs_shares[2]),
+            arithmetic::sub(lhs_shares[3], rhs_shares[3]),
+        ];
+
+        Ok(array::from_fn(|i| Rep3AcvmType::Shared(diff_shares[i])))
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
     fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
     ) -> eyre::Result<[Self::AcvmType; 4]> {
+        // Check if all limbs are public for fast path
+        if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
+            // Public case: use PlainAcvmSolver
+            let lhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
+            let rhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
+            let result = PlainAcvmSolver::new()
+                .mul_mod_acvm_type_limbs::<C>(&lhs_public, &rhs_public)?;
+            return Ok(array::from_fn(|i| Rep3AcvmType::Public(result[i])));
+        }
+
+        // Shared case: convert to full field element, multiply, convert back
+        // For multiplication with modular reduction, we need the full field element
         let other_acvm_type_lhs = self.acvm_type_limbs_to_other_acvm_type::<C>(lhs)?;
         let other_acvm_type_rhs = self.acvm_type_limbs_to_other_acvm_type::<C>(rhs)?;
         let other_acvm_type_mul =
@@ -2675,11 +2715,21 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(limbs_mul)
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
     fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
     ) -> eyre::Result<[Self::AcvmType; 4]> {
+        // Check if all limbs are public for fast path
+        if a.iter().all(|x| !Self::is_shared(x)) {
+            // Public case: use PlainAcvmSolver
+            let a_public: [F; 4] = array::from_fn(|i| Self::get_public(&a[i]).expect("Already checked"));
+            let result = PlainAcvmSolver::new()
+                .inverse_acvm_type_limbs::<C>(&a_public)?;
+            return Ok(array::from_fn(|i| Rep3AcvmType::Public(result[i])));
+        }
+
+        // Shared case: convert to full field element, invert, convert back
+        // This operation requires the full field element so we use the existing conversion
         let other_acvm_type = self.acvm_type_limbs_to_other_acvm_type::<C>(a)?;
         let other_acvm_type_inv = self.inverse_other_acvm_type::<C>(other_acvm_type)?;
         let limbs_inv =
@@ -2687,7 +2737,6 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(limbs_inv)
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
     fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
@@ -2758,8 +2807,6 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok((limbs_quotient, remainder))
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
-    // TODO CESAR / TODO FLORIN: What if a/b/to_add is public and a/b/to_add is shared?
     fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
@@ -2885,8 +2932,6 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok((limbs_quotient, remainder))
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
-    // TODO CESAR / TODO FLORIN: What if a/b/to_add is public and a/b/to_add is shared?
     fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[[Self::AcvmType; 4]],
