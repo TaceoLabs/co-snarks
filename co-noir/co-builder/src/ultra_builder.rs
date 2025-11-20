@@ -3026,6 +3026,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         &mut self,
         limb_idx: u32,
         num_limb_bits: usize,
+        driver: &mut T,
     ) -> eyre::Result<[u32; 2]> {
         // we skip this assert
         // ASSERT(uint256_t(this->get_variable_reference(limb_idx)) < (uint256_t(1) << num_limb_bits));
@@ -3033,8 +3034,17 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let limb_mask =
             (BigUint::one() << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) - BigUint::one();
         let value = self.get_variable(limb_idx as usize);
-        if T::is_shared(&value) {
-            panic!("This function should not have been called on a shared value");
+
+        // TODO CESAR / TODO FLORIN: No need to check if shared or public, can use the driver methods directly
+        let (low, hi) = if T::is_shared(&value) {
+            let limb_mask_field = P::ScalarField::from(limb_mask.clone());
+            let low = driver.integer_bitwise_and(
+                value.clone(),
+                limb_mask_field.into(),
+                Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS as u32,
+            )?;
+            let hi = driver.right_shift(value, Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS)?;
+            (low, hi)
         } else {
             let value: BigUint = T::get_public(&value)
                 .expect("Already checked it is public")
@@ -3044,16 +3054,21 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
             assert!(&low + (&hi << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) == value);
 
-            let low_idx = self.add_variable(P::ScalarField::from(low).into());
-            let hi_idx = self.add_variable(P::ScalarField::from(hi).into());
+            (
+                P::ScalarField::from(low).into(),
+                P::ScalarField::from(hi).into(),
+            )
+        };
 
-            assert!(num_limb_bits > Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+        let low_idx = self.add_variable(low);
+        let hi_idx = self.add_variable(hi);
 
-            let lo_bits = Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
-            let hi_bits = num_limb_bits - Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
-            self.range_constrain_two_limbs(low_idx, hi_idx, lo_bits, hi_bits)?;
-            Ok([low_idx, hi_idx])
-        }
+        assert!(num_limb_bits > Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+
+        let lo_bits = Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+        let hi_bits = num_limb_bits - Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+        self.range_constrain_two_limbs(low_idx, hi_idx, lo_bits, hi_bits, driver)?;
+        Ok([low_idx, hi_idx])
     }
 
     // for now we only need this function for public values
@@ -3063,6 +3078,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         hi_idx: u32,
         lo_limb_bits: usize,
         hi_limb_bits: usize,
+        driver: &mut T,
     ) -> eyre::Result<()> {
         // Validate limbs are <= 70 bits. If limbs are larger we require more witnesses and cannot use our limb accumulation
         // custom gate
@@ -3073,7 +3089,82 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let mut get_sublimbs = |limb_idx: u32, sublimb_masks: [u64; 5]| -> [u32; 5] {
             let limb = self.get_variable(limb_idx as usize);
             if T::is_shared(&limb) {
-                panic!("This function should not have been called on a shared value");
+                // TODO CESAR / TODO FLORIN: No need to check if shared or public, can use the driver methods directly
+                const MAX_SUBLIMB_MASK: u64 = (1u64 << 14) - 1;
+                let mut sublimb_indices = [self.zero_idx; 5];
+                sublimb_indices[0] = if sublimb_masks[0] != 0 {
+                    let tmp = driver
+                        .integer_bitwise_and(
+                            limb.clone(),
+                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
+                            14,
+                        )
+                        .expect("Bitwise AND failed");
+                    self.add_variable(tmp)
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices[1] = if sublimb_masks[1] != 0 {
+                    let shifted = driver
+                        .right_shift(limb.clone(), 14)
+                        .expect("Right shift failed");
+                    let tmp = driver
+                        .integer_bitwise_and(
+                            shifted,
+                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
+                            14,
+                        )
+                        .expect("Bitwise AND failed");
+                    self.add_variable(tmp)
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices[2] = if sublimb_masks[2] != 0 {
+                    let shifted = driver
+                        .right_shift(limb.clone(), 28)
+                        .expect("Right shift failed");
+                    let tmp = driver
+                        .integer_bitwise_and(
+                            shifted,
+                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
+                            14,
+                        )
+                        .expect("Bitwise AND failed");
+                    self.add_variable(tmp)
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices[3] = if sublimb_masks[3] != 0 {
+                    let shifted = driver
+                        .right_shift(limb.clone(), 42)
+                        .expect("Right shift failed");
+                    let tmp = driver
+                        .integer_bitwise_and(
+                            shifted,
+                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
+                            14,
+                        )
+                        .expect("Bitwise AND failed");
+                    self.add_variable(tmp)
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices[4] = if sublimb_masks[4] != 0 {
+                    let shifted = driver
+                        .right_shift(limb.clone(), 56)
+                        .expect("Right shift failed");
+                    let tmp = driver
+                        .integer_bitwise_and(
+                            shifted,
+                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
+                            14,
+                        )
+                        .expect("Bitwise AND failed");
+                    self.add_variable(tmp)
+                } else {
+                    self.zero_idx
+                };
+                sublimb_indices
             } else {
                 // we can use constant 2^14 - 1 mask here. If the sublimb value exceeds the expected value then witness will
                 // fail the range check below

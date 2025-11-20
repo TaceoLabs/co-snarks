@@ -310,6 +310,7 @@ impl<F: PrimeField> BigField<F> {
             limb_1_index,
             NUM_LIMB_BITS,
             NUM_LIMB_BITS,
+            driver,
         )?;
 
         builder.range_constrain_two_limbs(
@@ -317,6 +318,7 @@ impl<F: PrimeField> BigField<F> {
             limb_3_index,
             NUM_LIMB_BITS,
             num_last_limb_bits,
+            driver,
         )?;
 
         Ok(result)
@@ -352,7 +354,8 @@ impl<F: PrimeField> BigField<F> {
             let low_bits_in_normalized = low_bits_in.get_witness_index(builder, driver);
             let limb_witnesses = builder.decompose_non_native_field_double_width_limb(
                 low_bits_in_normalized,
-                2 * Self::NUM_LIMB_BITS,
+                (2 * Self::NUM_LIMB_BITS) as usize,
+                driver,
             )?;
             limb_0.witness_index = limb_witnesses[0];
             limb_1.witness_index = limb_witnesses[1];
@@ -402,7 +405,8 @@ impl<F: PrimeField> BigField<F> {
             let high_bits_in_normalized = high_bits_in.get_witness_index(builder, driver);
             let limb_witnesses = builder.decompose_non_native_field_double_width_limb(
                 high_bits_in_normalized,
-                num_high_limb_bits,
+                num_high_limb_bits as usize,
+                driver,
             )?;
             limb_2.witness_index = limb_witnesses[0];
             limb_3.witness_index = limb_witnesses[1];
@@ -561,8 +565,9 @@ impl<F: PrimeField> BigField<F> {
         builder.range_constrain_two_limbs(
             first_index,
             second_index,
-            Self::NUM_LIMB_BITS,
-            Self::NUM_LIMB_BITS,
+            Self::NUM_LIMB_BITS as usize,
+            Self::NUM_LIMB_BITS as usize,
+            driver,
         )?;
 
         // Range constrain the last two limbs to NUM_LIMB_BITS and NUM_LAST_LIMB_BITS
@@ -581,8 +586,9 @@ impl<F: PrimeField> BigField<F> {
         builder.range_constrain_two_limbs(
             first_index,
             second_index,
-            Self::NUM_LIMB_BITS,
-            num_last_limb_bits,
+            Self::NUM_LIMB_BITS as usize,
+            num_last_limb_bits as usize,
+            driver,
         )?;
 
         Ok(result)
@@ -2157,7 +2163,13 @@ impl<F: PrimeField> BigField<F> {
         if (carry_lo_msb <= 70) && (carry_hi_msb <= 70) {
             let hi_nwi = hi.get_witness_index(builder, driver);
             let lo_nwi = lo.get_witness_index(builder, driver);
-            builder.range_constrain_two_limbs(hi_nwi, lo_nwi, carry_hi_msb, carry_lo_msb)?;
+            builder.range_constrain_two_limbs(
+                hi_nwi,
+                lo_nwi,
+                carry_hi_msb,
+                carry_lo_msb,
+                driver,
+            )?;
         } else {
             //TACEO TODO: We can batch the two decompositions into a single one here for more efficiency
             hi.create_range_constraint(carry_hi_msb, builder, driver)?;
@@ -3255,7 +3267,7 @@ impl<F: PrimeField> BigField<F> {
         if carry_lo_msb <= 70 && carry_hi_msb <= 70 {
             let h1_wi = hi.get_witness_index(builder, driver);
             let l1_wi = lo.get_witness_index(builder, driver);
-            builder.range_constrain_two_limbs(h1_wi, l1_wi, carry_hi_msb, carry_lo_msb)?;
+            builder.range_constrain_two_limbs(h1_wi, l1_wi, carry_hi_msb, carry_lo_msb, driver)?;
         } else {
             hi.create_range_constraint(carry_hi_msb, builder, driver)?;
             lo.create_range_constraint(carry_lo_msb, builder, driver)?;
