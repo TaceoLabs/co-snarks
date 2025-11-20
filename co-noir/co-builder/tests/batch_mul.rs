@@ -14,6 +14,7 @@ use mpc_core::{
 };
 use mpc_net::local::LocalNetwork;
 use num_traits::identities::One;
+use rand::{SeedableRng, rngs::StdRng};
 
 type Plain = PlainAcvmSolver<Fr>;
 type Rep3 = Rep3AcvmSolver<'static, Fr, LocalNetwork>;
@@ -30,6 +31,8 @@ type TestEntry = (
 );
 
 type SharedTestEntry<T, Q> = (u8, bool, T, Vec<((Q, Q, bool), T)>, G1Affine);
+
+const SEED: u64 = 42;
 
 struct TestData<T: NoirWitnessExtensionProtocol<Fr>> {
     expected_result: G1Affine,
@@ -49,7 +52,7 @@ impl<T: NoirWitnessExtensionProtocol<Fr>> TestData<T> {
         builder: &mut GenericUltraCircuitBuilder<Bn254G1, T>,
         driver: &mut T,
     ) -> Self {
-        let mut rng = &mut rand::thread_rng();
+        let mut rng = StdRng::seed_from_u64(SEED);
 
         let mut points = Vec::new();
         let mut scalars = Vec::new();
@@ -374,7 +377,6 @@ fn test_batch_mul_plaindriver() {
 }
 
 #[test]
-#[ignore = "Broken test - to be fixed"]
 fn test_batch_mul_rep3_driver() {
     for num_points in [1, 5, 10, 20] {
         let shared_entries =
@@ -396,12 +398,21 @@ fn test_batch_mul_rep3_driver() {
             threads.push(std::thread::spawn(move || {
                 let net_1b = Box::leak(Box::new(net_1));
                 let net_2b = Box::leak(Box::new(net_2));
-                let mut builder = GenericUltraCircuitBuilder::<Bn254G1, Rep3>::new(100);
+                let mut builder = GenericUltraCircuitBuilder::<Bn254G1, Rep3>::new(0);
+                println!(
+                    "Created builder for Rep3 batch_mul test with {} points",
+                    num_points
+                );
                 let mut driver = Rep3::new(net_1b, net_2b, A2BType::Direct).unwrap();
                 let test_data =
                     TestData::from_shared_test_entry(test_data, &mut builder, &mut driver);
                 run_test(test_data, &mut builder, &mut driver);
             }));
+        }
+
+        for handle in threads {
+            handle.join().unwrap();
+            println!("Finished Rep3 batch_mul test with {} points", num_points);
         }
     }
 }
