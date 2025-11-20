@@ -212,7 +212,7 @@ impl<F: PrimeField> BigField<F> {
         driver: &mut T,
     ) -> eyre::Result<Self> {
         assert!(
-            maximum_bitlength == 0 || (!can_overflow && maximum_bitlength > (3 * NUM_LIMB_BITS)) //TODO FLORIN CHECK AGAIN
+            maximum_bitlength == 0 || (!can_overflow && maximum_bitlength > (3 * NUM_LIMB_BITS))
         );
 
         let limbs_ct = limbs
