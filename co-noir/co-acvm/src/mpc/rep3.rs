@@ -22,7 +22,7 @@ use mpc_core::protocols::rep3::{
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512};
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
-use mpc_core::protocols::rep3_ring::{Rep3RingShare, ring};
+use mpc_core::protocols::rep3_ring::{Rep3RingShare, casts, ring};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -2712,11 +2712,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         let limbs = a.clone().map(|x| self.get_as_shared(&x));
 
-        let ring_limbs = mpc_core::protocols::rep3_ring::yao::field_to_ring_many(
-            &limbs,
-            self.net0,
-            &mut self.state0,
-        )?;
+        let ring_limbs =
+            casts::field_to_ring_a2b_many::<_, U512, _>(&limbs, self.net0, &mut self.state0)?;
 
         let shifts = (0..4)
             .map(|i| {
@@ -2818,11 +2815,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             v
         };
-        let ring_limbs = mpc_core::protocols::rep3_ring::yao::field_to_ring_many(
-            &all_limbs,
-            self.net0,
-            &mut self.state0,
-        )?;
+        let ring_limbs =
+            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)?;
 
         let (a_ring_limbs, rest) = ring_limbs.split_at(4);
         let (b_ring_limbs, to_add_ring_limbs) = rest.split_at(4);
@@ -2964,11 +2958,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             v
         };
-        let ring_limbs = mpc_core::protocols::rep3_ring::yao::field_to_ring_many(
-            &all_limbs,
-            self.net0,
-            &mut self.state0,
-        )?;
+        let ring_limbs =
+            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)?;
 
         let (a_ring_limbs, rest) = ring_limbs.split_at(a.len() * 4);
         let (b_ring_limbs, to_add_ring_limbs) = rest.split_at(b.len() * 4);
