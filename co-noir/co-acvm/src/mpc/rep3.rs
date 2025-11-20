@@ -2359,7 +2359,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Public case
         if let Some(scalar_public) = Self::get_public(scalar) {
             return PlainAcvmSolver::new()
-                .compute_naf_entries(&scalar_public.into(), max_num_bits)
+                .compute_naf_entries(&scalar_public, max_num_bits)
                 .map(|entries| {
                     entries
                         .into_iter()
@@ -2379,8 +2379,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         };
 
         // NAF can't handle 0
-        let scalar_is_zero =
-            arithmetic::eq_public(scalar.clone(), F::ZERO, self.net0, &mut self.state0)?;
+        let scalar_is_zero = arithmetic::eq_public(scalar, F::ZERO, self.net0, &mut self.state0)?;
 
         let modulus = F::MODULUS.into() as BigUint;
         let modulus_decomposition = {
@@ -2407,7 +2406,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let mut bits = vec![Self::ArithmeticShare::default(); num_rounds];
 
         for i in 0..num_rounds {
-            bits[i] = arithmetic::sub_public_by_shared(F::ONE, scalar_bits[i].clone(), self.id);
+            bits[i] = arithmetic::sub_public_by_shared(F::ONE, scalar_bits[i], self.id);
         }
 
         let naf_entries = arithmetic::cmux_vec(
@@ -2440,19 +2439,13 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Ok(limbs.try_into().expect("We have NUM_LIMBS elements"))
             }
             Rep3AcvmType::Shared(shared) => {
-                let limbs = yao::decompose_arithmetic(
-                    shared,
+                let limbs = yao::decompose_arithmetic_to_other_field_many::<C::BaseField, F, _>(
+                    &[shared],
                     self.net0,
                     &mut self.state0,
                     F::MODULUS_BIT_SIZE as usize,
                     LIMB_BITS,
                 )?;
-                let limbs = conversion::a2b_many(&limbs, self.net0, &mut self.state0)?;
-                let limbs: Vec<Rep3BigUintShare<F>> = limbs
-                    .into_iter()
-                    .map(|x| Rep3BigUintShare::new(x.a.clone(), x.b.clone()))
-                    .collect();
-                let limbs = conversion::b2a_many(&limbs, self.net0, &mut self.state0)?;
                 let limbs = limbs
                     .into_iter()
                     .map(|x| Rep3AcvmType::Shared(x))
@@ -2626,6 +2619,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
     // TODO CESAR: Make all these generic over the number of limbs and limb size
     // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
+    // TODO CESAR / TODO FLORIN: make this return a Result
     fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
@@ -2838,8 +2832,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
 
         let mut ring_element = mpc_core::protocols::rep3_ring::arithmetic::mul(
-            a_ring.clone(),
-            b_ring.clone(),
+            a_ring,
+            b_ring,
             self.net0,
             &mut self.state0,
         )?;
