@@ -19,10 +19,10 @@ use mpc_core::protocols::rep3::{
     Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion,
     network::Rep3NetworkExt, pointshare, yao,
 };
+use mpc_core::protocols::rep3_ring::Rep3RingShare;
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512};
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
-use mpc_core::protocols::rep3_ring::Rep3RingShare;
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -2634,18 +2634,21 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Check if all limbs are public for fast path
         if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
             // Public case: use PlainAcvmSolver
-            let lhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
-            let rhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
-            let result = PlainAcvmSolver::new()
-                .add_acvm_type_limbs::<C>(&lhs_public, &rhs_public);
+            let lhs_public: [F; 4] =
+                array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
+            let rhs_public: [F; 4] =
+                array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
+            let result = PlainAcvmSolver::new().add_acvm_type_limbs::<C>(&lhs_public, &rhs_public);
             return array::from_fn(|i| Rep3AcvmType::Public(result[i]));
         }
 
         // Shared case: add limbs directly in field F
         // This avoids expensive a2b/b2a conversions by working on limbs directly
-        let lhs_shares: [Self::ArithmeticShare; 4] = array::from_fn(|i| self.get_as_shared(&lhs[i]));
-        let rhs_shares: [Self::ArithmeticShare; 4] = array::from_fn(|i| self.get_as_shared(&rhs[i]));
-        
+        let lhs_shares: [Self::ArithmeticShare; 4] =
+            array::from_fn(|i| self.get_as_shared(&lhs[i]));
+        let rhs_shares: [Self::ArithmeticShare; 4] =
+            array::from_fn(|i| self.get_as_shared(&rhs[i]));
+
         // Add each limb directly
         let sum_shares = [
             arithmetic::add(lhs_shares[0], rhs_shares[0]),
@@ -2666,18 +2669,22 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Check if all limbs are public for fast path
         if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
             // Public case: use PlainAcvmSolver
-            let lhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
-            let rhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
-            let result = PlainAcvmSolver::new()
-                .sub_acvm_type_limbs::<C>(&lhs_public, &rhs_public)?;
+            let lhs_public: [F; 4] =
+                array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
+            let rhs_public: [F; 4] =
+                array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
+            let result =
+                PlainAcvmSolver::new().sub_acvm_type_limbs::<C>(&lhs_public, &rhs_public)?;
             return Ok(array::from_fn(|i| Rep3AcvmType::Public(result[i])));
         }
 
         // Shared case: subtract limbs directly in field F
         // This avoids expensive a2b/b2a conversions by working on limbs directly
-        let lhs_shares: [Self::ArithmeticShare; 4] = array::from_fn(|i| self.get_as_shared(&lhs[i]));
-        let rhs_shares: [Self::ArithmeticShare; 4] = array::from_fn(|i| self.get_as_shared(&rhs[i]));
-        
+        let lhs_shares: [Self::ArithmeticShare; 4] =
+            array::from_fn(|i| self.get_as_shared(&lhs[i]));
+        let rhs_shares: [Self::ArithmeticShare; 4] =
+            array::from_fn(|i| self.get_as_shared(&rhs[i]));
+
         // Subtract each limb directly
         let diff_shares = [
             arithmetic::sub(lhs_shares[0], rhs_shares[0]),
@@ -2697,10 +2704,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Check if all limbs are public for fast path
         if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
             // Public case: use PlainAcvmSolver
-            let lhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
-            let rhs_public: [F; 4] = array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
-            let result = PlainAcvmSolver::new()
-                .mul_mod_acvm_type_limbs::<C>(&lhs_public, &rhs_public)?;
+            let lhs_public: [F; 4] =
+                array::from_fn(|i| Self::get_public(&lhs[i]).expect("Already checked"));
+            let rhs_public: [F; 4] =
+                array::from_fn(|i| Self::get_public(&rhs[i]).expect("Already checked"));
+            let result =
+                PlainAcvmSolver::new().mul_mod_acvm_type_limbs::<C>(&lhs_public, &rhs_public)?;
             return Ok(array::from_fn(|i| Rep3AcvmType::Public(result[i])));
         }
 
@@ -2722,9 +2731,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         // Check if all limbs are public for fast path
         if a.iter().all(|x| !Self::is_shared(x)) {
             // Public case: use PlainAcvmSolver
-            let a_public: [F; 4] = array::from_fn(|i| Self::get_public(&a[i]).expect("Already checked"));
-            let result = PlainAcvmSolver::new()
-                .inverse_acvm_type_limbs::<C>(&a_public)?;
+            let a_public: [F; 4] =
+                array::from_fn(|i| Self::get_public(&a[i]).expect("Already checked"));
+            let result = PlainAcvmSolver::new().inverse_acvm_type_limbs::<C>(&a_public)?;
             return Ok(array::from_fn(|i| Rep3AcvmType::Public(result[i])));
         }
 
