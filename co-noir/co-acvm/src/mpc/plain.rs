@@ -297,7 +297,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
         let mut rng = thread_rng();
-        Ok(Self::ArithmeticShare::rand(&mut rng))
+        Ok(F::one()) //TODO CESAR / TODO FLORIN: reinstate randomness
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {

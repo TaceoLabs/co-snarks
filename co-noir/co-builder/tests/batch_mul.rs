@@ -399,10 +399,6 @@ fn test_batch_mul_rep3_driver() {
                 let net_1b = Box::leak(Box::new(net_1));
                 let net_2b = Box::leak(Box::new(net_2));
                 let mut builder = GenericUltraCircuitBuilder::<Bn254G1, Rep3>::new(0);
-                println!(
-                    "Created builder for Rep3 batch_mul test with {} points",
-                    num_points
-                );
                 let mut driver = Rep3::new(net_1b, net_2b, A2BType::Direct).unwrap();
                 let test_data =
                     TestData::from_shared_test_entry(test_data, &mut builder, &mut driver);

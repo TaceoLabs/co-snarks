@@ -2726,13 +2726,87 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
     ) -> eyre::Result<[Self::AcvmType; 4]> {
-        let other_acvm_type_lhs = self.acvm_type_limbs_to_other_acvm_type::<C>(lhs)?;
-        let other_acvm_type_rhs = self.acvm_type_limbs_to_other_acvm_type::<C>(rhs)?;
-        let other_acvm_type_sub =
-            self.sub_other_acvm_types::<C>(other_acvm_type_lhs, other_acvm_type_rhs);
-        let limbs_sub =
-            self.other_acvm_type_to_acvm_type_limbs::<4, 68, C>(&other_acvm_type_sub)?;
-        Ok(limbs_sub)
+        if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
+            let lhs_limbs = lhs
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let rhs_limbs = rhs
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let result_limbs =
+                PlainAcvmSolver::new().sub_acvm_type_limbs::<C>(&lhs_limbs, &rhs_limbs)?;
+            return Ok(result_limbs
+                .into_iter()
+                .map(|x| Rep3AcvmType::Public(x))
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("We have 4 elements"));
+        }
+
+        let all_limbs = lhs
+            .iter()
+            .cloned()
+            .chain(rhs.iter().cloned())
+            .map(|x| self.get_as_shared(&x))
+            .collect::<Vec<_>>();
+
+        let ring_limbs =
+            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)
+                .expect("Conversion failed");
+
+        let shifts: Vec<RingElement<U512>> = (0..4)
+            .map(|i| {
+                let shift = BigUint::one() << (68 * i);
+                U512::cast_from_biguint(&shift).into()
+            })
+            .collect::<Vec<_>>();
+
+        let mut ring_element = Rep3RingShare::zero();
+        for i in 0..4 {
+            ring_element += ring_limbs[i] * shifts[i];
+        }
+
+        for i in 0..4 {
+            ring_element -= ring_limbs[i + 4] * shifts[i];
+        }
+
+        let mut ring_element = mpc_core::protocols::rep3_ring::conversion::a2b(
+            ring_element,
+            self.net0,
+            &mut self.state0,
+        )
+        .expect("Conversion failed");
+
+        let mask = (BigUint::one() << 68) - BigUint::one();
+        let mask_ring: RingElement<U512> = U512::cast_from_biguint(&mask).into();
+        let limbs = (0..4)
+            .map(|_| {
+                let limb = ring_element.clone() & mask_ring.clone();
+                ring_element = ring_element >> 68;
+                limb
+            })
+            .collect::<Vec<_>>();
+
+        let limbs = mpc_core::protocols::rep3_ring::conversion::b2a_many(
+            &limbs,
+            self.net0,
+            &mut self.state0,
+        )
+        .expect("Conversion failed");
+
+        let limbs_shares =
+            casts::ring_to_field_a2b_many::<_, F, _>(&limbs, self.net0, &mut self.state0)
+                .expect("Conversion failed");
+
+
+        Ok(
+            limbs_shares
+            .into_iter()
+            .map(|x| Rep3AcvmType::Shared(x))
+            .collect::<Vec<_>>()
+            .try_into()
+            .expect("We have 4 elements"))
+            
     }
 
     // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
@@ -2889,25 +2963,32 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             v
         };
         let ring_limbs =
-            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)?;
+            casts::field_to_ring_a2b_many::<_, U1024, _>(&all_limbs, self.net0, &mut self.state0)?;
 
         let (a_ring_limbs, rest) = ring_limbs.split_at(4);
         let (b_ring_limbs, to_add_ring_limbs) = rest.split_at(4);
-
         let shifts = (0..4)
             .map(|i| {
                 let shift = BigUint::one() << (68 * i);
-                U512::cast_from_biguint(&shift).into()
+                U1024::cast_from_biguint(&shift).into()
             })
-            .collect::<Vec<RingElement<U512>>>();
+            .collect::<Vec<RingElement<_>>>();
+
         let mut a_ring = Rep3RingShare::zero();
-        for (i, share) in a_ring_limbs.iter().enumerate() {
-            a_ring += share * shifts[i];
+        for (j, &share) in a_ring_limbs.iter().enumerate() {
+            a_ring += share * shifts[j];
         }
 
         let mut b_ring = Rep3RingShare::zero();
-        for (i, &share) in b_ring_limbs.iter().enumerate() {
-            b_ring += share * shifts[i];
+        for (j, &share) in b_ring_limbs.iter().enumerate() {
+            b_ring += share * shifts[j];
+        }
+
+        let mut to_add_ring = Rep3RingShare::zero();
+        for to_add_arr in to_add_ring_limbs.chunks_exact(4) {
+            for (i, &share) in to_add_arr.iter().enumerate() {
+                to_add_ring += share * shifts[i];
+            }
         }
 
         let mut ring_element = mpc_core::protocols::rep3_ring::arithmetic::mul(
@@ -2917,23 +2998,16 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             &mut self.state0,
         )?;
 
-        for to_add_arr in to_add_ring_limbs.chunks_exact(4) {
-            let mut to_add_elem = Rep3RingShare::zero();
-            for (i, &share) in to_add_arr.iter().enumerate() {
-                to_add_elem += share * shifts[i];
-            }
-            ring_element += to_add_elem;
-        }
+        ring_element += to_add_ring;
 
         let modulus = C::BaseField::MODULUS.into();
-        let modulus_ring: RingElement<U512> = U512::cast_from_biguint(&modulus).into();
+        let modulus_ring: RingElement<U1024> = U1024::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
             modulus_ring,
             self.net0,
             &mut self.state0,
         )?;
-
         let ring_remainder = ring_element - ring_quotient * modulus_ring;
 
         let [quotient, remainder] = casts::ring_to_field_a2b_big_ring_many(

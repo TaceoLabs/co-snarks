@@ -2687,42 +2687,9 @@ impl<F: PrimeField> BigField<F> {
         // Get the number of range proof bits for the quotient
         let num_quotient_bits = Self::get_quotient_max_bits(&[Self::default_maximum_remainder()]);
 
-        // Print values for debugging
-        let limbs_ = a
-            .iter()
-            .flat_map(|limbs| limbs.iter().cloned())
-            .map(|limb| driver.get_as_shared(&limb))
-            .collect::<Vec<_>>();
-        let opened = driver.open_many(&limbs_)?;
-        println!("bigfield::mult_madd: left opened values: {:?}", opened);
-
-        let limbs_ = b
-            .iter()
-            .flat_map(|limbs| limbs.iter().cloned())
-            .map(|limb| driver.get_as_shared(&limb))
-            .collect::<Vec<_>>();
-        let opened = driver.open_many(&limbs_)?;
-        println!("bigfield::mult_madd: right opened values: {:?}", opened);
-
-        let limbs_ = add_right_final_sum
-            .iter()
-            .map(|limb| driver.get_as_shared(&limb))
-            .collect::<Vec<_>>();
-        let opened = driver.open_many(&limbs_)?;
-        println!(
-            "bigfield::mult_madd: add_right_final_sum opened values: {:?}",
-            opened
-        );
         // Compute the final quotient and remainder
         let (quotient, remainder) =
             driver.madd_div_mod_many_acvm_limbs(&a, &b, &[add_right_final_sum])?;
-
-        let limbs_ = quotient.clone().map(|limb| driver.get_as_shared(&limb));
-        let opened = driver.open_many(&limbs_)?;
-        println!("bigfield::mult_madd: quotient opened value: {:?}", opened);
-
-        let opened = driver.open_many_other(&[remainder.clone()])?;
-        println!("bigfield::mult_madd: remainder opened value: {:?}", opened);
 
         // If we are establishing an identity and the remainder has to be zero, we need to check, that it actually is
         // TODO CESAR

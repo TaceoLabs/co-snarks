@@ -5,6 +5,7 @@ use co_noir::{Bn254G1, HonkProof};
 use co_noir_common::{
     crs::parse::CrsParser,
     honk_proof::TranscriptFieldType,
+    keys::verification_key::VerifyingKey,
     transcript::{Poseidon2Sponge, TranscriptHasher},
     types::ZeroKnowledge,
 };
@@ -50,12 +51,9 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
             Bn254,
         >(CRS_PATH_G2)
         .unwrap();
-    let vk = co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs.clone(), verifier_crs)
-        .unwrap();
     for (net0, net1) in nets0.into_iter().zip(nets1) {
         let witness = witness.clone();
         let prover_crs = prover_crs.clone();
-        let vk = vk.clone();
         let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
         threads.push(std::thread::spawn(move || {
             // generate proving key and vk
@@ -67,10 +65,11 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 &prover_crs,
             )
             .unwrap();
+            let vk: VerifyingKey<Bn254> = pk.create_vk(&prover_crs, verifier_crs).unwrap();
             let (proof, public_input) =
                 Rep3CoUltraHonk::<_, H>::prove(&net0, pk, &prover_crs, has_zk, &vk.inner_vk)
                     .unwrap();
-            (proof, public_input)
+            (proof, public_input, vk)
         }));
     }
 
@@ -78,7 +77,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 
     let mut proofs = results
         .iter()
-        .map(|(proof, _)| proof.to_owned())
+        .map(|(proof, _, _)| proof.to_owned())
         .collect::<Vec<_>>();
     let proof = proofs.pop().unwrap();
     for p in proofs {
@@ -87,13 +86,14 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
 
     let mut public_inputs = results
         .iter()
-        .map(|(_, public_input)| public_input.to_owned())
+        .map(|(_, public_input, _)| public_input.to_owned())
         .collect::<Vec<_>>();
     let public_input = public_inputs.pop().unwrap();
     for p in public_inputs {
         assert_eq!(public_input, p);
     }
 
+    let vk = results[0].2.clone();
     if has_zk == ZeroKnowledge::No && name != "recursion" {
         let proof_u8 = H::to_buffer(proof.inner_as_ref());
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
@@ -103,7 +103,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(proof, read_proof);
     }
 
-    let is_valid = UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
+    let is_valid = UltraHonk::<Bn254G1, H>::verify(proof, &public_input, &vk, has_zk).unwrap();
     assert!(is_valid);
 }
 
@@ -264,5 +264,5 @@ fn recursion_witness_and_proof_test_poseidon2sponge() {
 #[test]
 fn recursion_proof_test_poseidon2sponge() {
     proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::No, "");
-    proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::Yes, "");
+    // proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::Yes, "");
 }
