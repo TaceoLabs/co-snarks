@@ -176,15 +176,10 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
     pub(crate) fn set_point_at_infinity<P: CurveGroup<ScalarField = F>>(
         &mut self,
         is_infinity: BoolCT<F, T>,
-        add_to_used_witnesses: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) {
         self.is_infinity = is_infinity.normalize(builder, driver);
-        if add_to_used_witnesses {
-            // TODO CESAR / TODO FLORIN: What about this?
-            // mark_witness_as_used(field_t<Builder>(_is_infinity));
-        }
     }
 
     pub fn one<P: CurveGroup<ScalarField = F>>() -> Self {
@@ -1018,7 +1013,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             )?;
 
         // We are in the UltraBuilder case
-        result.set_point_at_infinity(result_is_infinity, true, builder, driver);
+        result.set_point_at_infinity(result_is_infinity, builder, driver);
 
         Ok(result)
     }
@@ -1161,7 +1156,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             )?;
 
         // We are in the UltraBuilder case
-        result.set_point_at_infinity(result_is_infinity, true, builder, driver);
+        result.set_point_at_infinity(result_is_infinity, builder, driver);
 
         Ok(result)
     }
@@ -1216,7 +1211,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
         let mut result = BigGroup::new(x_3, y_3);
         // Set point at infinity flag if input is at infinity
-        result.set_point_at_infinity(self.is_infinity.clone(), false, builder, driver);
+        result.set_point_at_infinity(self.is_infinity.clone(), builder, driver);
         Ok(result)
     }
 
@@ -1434,7 +1429,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             builder,
             driver,
         )?;
-        result.set_point_at_infinity(is_point_at_infinity, false, builder, driver);
+        result.set_point_at_infinity(is_point_at_infinity, builder, driver);
         Ok(result)
     }
 

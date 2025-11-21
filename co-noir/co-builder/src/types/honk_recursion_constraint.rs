@@ -80,7 +80,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
             let mut result = BigGroup::new(x, y);
 
-            result.set_point_at_infinity(is_zero, false, builder, driver);
+            result.set_point_at_infinity(is_zero, builder, driver);
 
             // Note that in the case of bn254 with Mega arithmetization, the check is delegated to ECCVM, see
             // `on_curve_check` in `ECCVMTranscriptRelationImpl`.
@@ -406,6 +406,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             &vk,
         )?
         .inner();
+        // TODO CESAR / TODO FLORIN: Handle unsafeness properly
         let proof: Vec<C::ScalarField> = downcast::<_, Vec<C::ScalarField>>(&proof)
             .expect("We checked types")
             .clone();

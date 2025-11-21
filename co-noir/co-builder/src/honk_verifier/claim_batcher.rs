@@ -69,8 +69,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         let inverse_vanishing_eval_pos = &inverted_vanishing_evals[0];
         let inverse_vanishing_eval_neg = &inverted_vanishing_evals[1];
 
-        // TODO CESAR / TODO FLORIN: Do not recompute inverse_vanishing_eval_neg * nu_challenge twice
-
+        // TACEO TODO: Batch multiplications (especially do not recompute inverse_vanishing_eval_neg * nu_challenge twice)
         // (1/(z−r) + ν/(z+r))
         self.unshifted.scalar = inverse_vanishing_eval_pos.add(
             &nu_challenge.multiply(inverse_vanishing_eval_neg, builder, driver)?,
@@ -119,7 +118,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     ) -> HonkProofResult<()> {
         // Append the commitments/scalars from a given batch to the corresponding containers; update the batched
         // evaluation and the running batching challenge in place
-        // TODO CESAR / TODO FLORIN Batch again
+        // TACEO TODO: Batch multiplications
         let mut aggregate_claim_data_and_update_batched_evaluation =
             |batch: &Batch<C, T>, rho_power: &mut FieldCT<C::ScalarField>| -> HonkProofResult<()> {
                 for (commitment, evaluation) in

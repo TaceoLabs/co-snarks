@@ -205,7 +205,7 @@ where
 
         let mut result = BigGroup::new(x, y);
 
-        result.set_point_at_infinity(is_zero, false, builder, driver);
+        result.set_point_at_infinity(is_zero, builder, driver);
         // Note that in the case of bn254 with Mega arithmetization, the check is delegated to ECCVM, see
         // `on_curve_check` in `ECCVMTranscriptRelationImpl`.
         result.validate_on_curve(builder, driver)?;

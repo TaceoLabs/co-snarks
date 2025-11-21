@@ -19,11 +19,10 @@ use mpc_core::protocols::rep3::{
     Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion,
     network::Rep3NetworkExt, pointshare, yao,
 };
-use mpc_core::protocols::rep3_ring::arithmetic::RingShare;
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512, U1024};
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
-use mpc_core::protocols::rep3_ring::{Rep3RingShare, casts, ring};
+use mpc_core::protocols::rep3_ring::{Rep3RingShare, casts};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -33,9 +32,9 @@ use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::any::TypeId;
+use std::array;
 use std::marker::PhantomData;
 use std::ops::BitXor;
-use std::{array, convert};
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
@@ -358,30 +357,6 @@ fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] 
         output[i] = tmp & &mask;
     }
     output
-}
-
-#[derive(Clone)]
-pub(crate) enum Rep3AcvmBinaryType<F: PrimeField> {
-    Public(BigUint),
-    Shared(Rep3BigUintShare<F>),
-}
-
-impl<F: PrimeField> Default for Rep3AcvmBinaryType<F> {
-    fn default() -> Self {
-        Self::Public(BigUint::zero())
-    }
-}
-
-impl<F: PrimeField> From<BigUint> for Rep3AcvmBinaryType<F> {
-    fn from(value: BigUint) -> Self {
-        Self::Public(value)
-    }
-}
-
-impl<F: PrimeField> From<Rep3BigUintShare<F>> for Rep3AcvmBinaryType<F> {
-    fn from(value: Rep3BigUintShare<F>) -> Self {
-        Self::Shared(value)
-    }
 }
 
 impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<'a, F, N> {
@@ -2328,41 +2303,37 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    // TODO CESAR / TODO FLORIN: Avoid converting between fields
     fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        cond: Self::AcvmType,
+        cond: Self::OtherAcvmType<C>,
         truthy: Self::OtherAcvmType<C>,
         falsy: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
         match (cond, truthy, falsy) {
             (Rep3AcvmType::Public(cond), truthy, falsy) => {
                 assert!(cond.is_one() || cond.is_zero());
-                return if cond.is_one() { Ok(truthy) } else { Ok(falsy) };
+                if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
             }
             (Rep3AcvmType::Shared(cond), truthy, falsy) => {
-                let cond_bin = conversion::a2b_selector(cond, self.net0, &mut self.state0)?;
-                let cond_other_acvm: Rep3PrimeFieldShare<C::BaseField> = conversion::b2a(
-                    &Rep3BigUintShare::new(cond_bin.a, cond_bin.b),
-                    self.net0,
-                    &mut self.state0,
-                )?;
                 let b_min_a = self.sub_other_acvm_types::<C>(truthy, falsy.clone());
-                let d = self.mul_other_acvm_types::<C>(cond_other_acvm.into(), b_min_a)?;
-                return Ok(self.add_other_acvm_types::<C>(falsy, d));
+                let d = self.mul_other_acvm_types::<C>(cond.into(), b_min_a)?;
+                Ok(self.add_other_acvm_types::<C>(falsy, d))
             }
         }
     }
 
-    // TODO CESAR / TODO FLORIN: Avoid converting between fields
+    // TACEO TODO: we could make the equality check return the basefield element here
     fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &Self::OtherAcvmType<C>,
         b: &Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::AcvmType> {
+    ) -> eyre::Result<(Self::AcvmType, Self::OtherAcvmType<C>)> {
         let res = match (a, b) {
             (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => {
-                return Ok(Rep3AcvmType::Public(F::from(a == b)));
+                return Ok((
+                    Rep3AcvmType::Public(F::from(a == b)),
+                    Rep3AcvmType::Public(C::BaseField::from(a == b)),
+                ));
             }
             (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared)) => {
                 arithmetic::eq_public(*shared, *public, self.net0, &mut self.state0)?
@@ -2379,13 +2350,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         let res_bin = conversion::a2b_selector(res, self.net0, &mut self.state0)?;
 
-        let res = conversion::b2a(
+        let res_fr = conversion::b2a(
             &Rep3BigUintShare::new(res_bin.a, res_bin.b),
             self.net0,
             &mut self.state0,
         )?;
-
-        Ok(Rep3AcvmType::Shared(res))
+        Ok((res_fr.into(), res.into()))
     }
 
     fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
@@ -2676,13 +2646,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     // TODO CESAR: Make all these generic over the number of limbs and limb size
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
-    // TODO CESAR / TODO FLORIN: make this return a Result
+    // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
     fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
-    ) -> [Self::AcvmType; 4] {
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
         if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
             let lhs_limbs = lhs
                 .clone()
@@ -2691,13 +2660,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 .clone()
                 .map(|x| Self::get_public(&x).expect("Already checked it is public"));
             let result_limbs =
-                PlainAcvmSolver::new().add_acvm_type_limbs::<C>(&lhs_limbs, &rhs_limbs);
-            return result_limbs
-                .into_iter()
-                .map(|x| Rep3AcvmType::Public(x))
-                .collect::<Vec<_>>()
-                .try_into()
-                .expect("We have 4 elements");
+                PlainAcvmSolver::new().add_acvm_type_limbs::<C>(&lhs_limbs, &rhs_limbs)?;
+            return Ok(result_limbs.map(Rep3AcvmType::Public));
         }
 
         let all_limbs = lhs
@@ -2708,8 +2672,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect::<Vec<_>>();
 
         let ring_limbs =
-            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)
-                .expect("Conversion failed");
+            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)?;
 
         let shifts: Vec<RingElement<U512>> = (0..4)
             .map(|i| {
@@ -2727,14 +2690,13 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             ring_element,
             self.net0,
             &mut self.state0,
-        )
-        .expect("Conversion failed");
+        )?;
 
         let mask = (BigUint::one() << 68) - BigUint::one();
         let mask_ring: RingElement<U512> = U512::cast_from_biguint(&mask).into();
         let limbs = (0..4)
             .map(|_| {
-                let limb = ring_element.clone() & mask_ring.clone();
+                let limb = ring_element & mask_ring;
                 ring_element = ring_element >> 68;
                 limb
             })
@@ -2744,22 +2706,21 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             &limbs,
             self.net0,
             &mut self.state0,
-        )
-        .expect("Conversion failed");
+        )?;
 
         let limbs_shares =
-            casts::ring_to_field_a2b_big_ring_many::<_, F, _>(&limbs, self.net0, &mut self.state0)
-                .expect("Conversion failed");
+            casts::ring_to_field_a2b_big_ring_many::<_, F, _>(&limbs, self.net0, &mut self.state0)?;
 
-        limbs_shares
+        let limbs_array: [Self::AcvmType; 4] = limbs_shares
             .into_iter()
-            .map(|x| Rep3AcvmType::Shared(x))
+            .map(Rep3AcvmType::Shared)
             .collect::<Vec<_>>()
             .try_into()
-            .expect("We have 4 elements")
+            .expect("We have 4 elements");
+        Ok(limbs_array)
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
+    // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
     fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
@@ -2774,7 +2735,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(limbs_sub)
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
+    // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
     fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
@@ -2789,7 +2750,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(limbs_mul)
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
+    // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
     fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
@@ -2801,7 +2762,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(limbs_inv)
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
+    // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
     fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
@@ -2844,7 +2805,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let modulus_ring: RingElement<U512> = U512::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
-            modulus_ring.clone(),
+            modulus_ring,
             self.net0,
             &mut self.state0,
         )?;
@@ -2868,8 +2829,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok((limbs_quotient, remainder))
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
-    // TODO CESAR / TODO FLORIN: What if a/b/to_add is public and a/b/to_add is shared?
+    // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
     fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
@@ -2969,7 +2929,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let modulus_ring: RingElement<U512> = U512::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
-            modulus_ring.clone(),
+            modulus_ring,
             self.net0,
             &mut self.state0,
         )?;
@@ -2993,8 +2953,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok((limbs_quotient, remainder))
     }
 
-    // TODO CESAR / TODO FLORIN: Very naive implementation, optimize later
-    // TODO CESAR / TODO FLORIN: What if a/b/to_add is public and a/b/to_add is shared?
+    // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
     fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[[Self::AcvmType; 4]],
@@ -3125,7 +3084,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let modulus_ring: RingElement<U1024> = U1024::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
-            modulus_ring.clone(),
+            modulus_ring,
             self.net0,
             &mut self.state0,
         )?;
@@ -3143,7 +3102,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let mask_ring: RingElement<U1024> = U1024::cast_from_biguint(&mask).into();
         let quotient_limbs = (0..4)
             .map(|_| {
-                let limb = ring_quotient.clone() & mask_ring.clone();
+                let limb = ring_quotient & mask_ring;
                 ring_quotient = ring_quotient >> 68;
                 limb
             })

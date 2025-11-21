@@ -107,7 +107,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
     fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        cond: Self::AcvmType,
+        cond: Self::OtherAcvmType<C>,
         truthy: Self::OtherAcvmType<C>,
         falsy: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
@@ -553,8 +553,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         a: &Self::OtherAcvmType<C>,
         b: &Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::AcvmType> {
-        Ok(Self::ArithmeticShare::from(a == b))
+    ) -> eyre::Result<(Self::AcvmType, Self::OtherAcvmType<C>)> {
+        Ok((F::from(a == b), C::BaseField::from(a == b)))
     }
 
     fn equal_many(
@@ -1042,13 +1042,13 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
-    ) -> [Self::AcvmType; 4] {
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
         let lhs_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(lhs);
         let rhs_as_biguint = Utils::field_limbs_to_biguint::<_, 4, 68>(rhs);
 
         let sum = lhs_as_biguint + rhs_as_biguint;
 
-        Utils::biguint_to_field_limbs::<_, 4, 68>(&sum)
+        Ok(Utils::biguint_to_field_limbs::<_, 4, 68>(&sum))
     }
 
     fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(

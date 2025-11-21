@@ -8,7 +8,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::utils::Utils;
 use core::panic;
 use eyre::Ok;
-use num_bigint::{BigUint, ToBigUint};
+use num_bigint::BigUint;
 use std::array;
 use std::cmp::max;
 
@@ -354,7 +354,7 @@ impl<F: PrimeField> BigField<F> {
             let low_bits_in_normalized = low_bits_in.get_witness_index(builder, driver);
             let limb_witnesses = builder.decompose_non_native_field_double_width_limb(
                 low_bits_in_normalized,
-                (2 * Self::NUM_LIMB_BITS) as usize,
+                2 * Self::NUM_LIMB_BITS,
                 driver,
             )?;
             limb_0.witness_index = limb_witnesses[0];
@@ -405,7 +405,7 @@ impl<F: PrimeField> BigField<F> {
             let high_bits_in_normalized = high_bits_in.get_witness_index(builder, driver);
             let limb_witnesses = builder.decompose_non_native_field_double_width_limb(
                 high_bits_in_normalized,
-                num_high_limb_bits as usize,
+                num_high_limb_bits,
                 driver,
             )?;
             limb_2.witness_index = limb_witnesses[0];
@@ -565,8 +565,8 @@ impl<F: PrimeField> BigField<F> {
         builder.range_constrain_two_limbs(
             first_index,
             second_index,
-            Self::NUM_LIMB_BITS as usize,
-            Self::NUM_LIMB_BITS as usize,
+            Self::NUM_LIMB_BITS,
+            Self::NUM_LIMB_BITS,
             driver,
         )?;
 
@@ -586,8 +586,8 @@ impl<F: PrimeField> BigField<F> {
         builder.range_constrain_two_limbs(
             first_index,
             second_index,
-            Self::NUM_LIMB_BITS as usize,
-            num_last_limb_bits as usize,
+            Self::NUM_LIMB_BITS,
+            num_last_limb_bits,
             driver,
         )?;
 
@@ -1163,9 +1163,10 @@ impl<F: PrimeField> BigField<F> {
     ) -> eyre::Result<BoolCT<F, T>> {
         let lhs = self.get_value_fq(builder, driver)?;
         let rhs = other.get_value_fq(builder, driver)?;
-        let is_equal_raw = driver.equals_other_acvm_type(&lhs, &rhs)?;
+        let (is_equal_raw_acvm, is_equal_raw_acvm_other) =
+            driver.equals_other_acvm_type(&lhs, &rhs)?;
         let is_equal = BoolCT::from_witness_ct(
-            WitnessCT::from_acvm_type(is_equal_raw.clone(), builder),
+            WitnessCT::from_acvm_type(is_equal_raw_acvm.clone(), builder),
             builder,
             false,
         );
@@ -1179,7 +1180,7 @@ impl<F: PrimeField> BigField<F> {
         // TODO CESAR: Handle zero case
         let inverse_native = driver.inverse_other_acvm_type(diff_native)?;
         let inverse_native = driver.cmux_other_acvm_type(
-            is_equal_raw,
+            is_equal_raw_acvm_other,
             T::OtherAcvmType::<P>::default(),
             inverse_native,
         )?;
@@ -1797,10 +1798,11 @@ impl<F: PrimeField> BigField<F> {
             .map(|n| n.get_limb_values(builder, driver))
             .collect::<eyre::Result<Vec<_>>>()?;
         let numerator_constant = numerators.iter().all(|n| n.is_constant());
-        let numerator_sum = numerator_values
-            .into_iter()
-            .reduce(|acc, x| driver.add_acvm_type_limbs::<P>(&acc, &x))
-            .expect("At least one numerator");
+        let mut iter = numerator_values.into_iter();
+        let mut numerator_sum = iter.next().expect("At least one numerator");
+        for limbs in iter {
+            numerator_sum = driver.add_acvm_type_limbs::<P>(&numerator_sum, &limbs)?;
+        }
 
         // a / b = c
         // TODO CESAR: Handle zero case
@@ -2649,7 +2651,7 @@ impl<F: PrimeField> BigField<F> {
             // Technically not needed, but better to leave just in case
             a.reduction_check(builder, driver)?;
             let limbs = a.get_limb_values(builder, driver)?;
-            add_right_final_sum = driver.add_acvm_type_limbs::<P>(&add_right_final_sum, &limbs);
+            add_right_final_sum = driver.add_acvm_type_limbs::<P>(&add_right_final_sum, &limbs)?;
             add_right_maximum += &a.get_maximum_value();
         }
 

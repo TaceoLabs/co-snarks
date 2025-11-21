@@ -76,7 +76,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
 
     fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        cond: Self::AcvmType,
+        cond: Self::OtherAcvmType<C>,
         truthy: Self::OtherAcvmType<C>,
         falsy: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>>;
@@ -216,12 +216,12 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
     fn equal(&mut self, a: &Self::AcvmType, b: &Self::AcvmType) -> eyre::Result<Self::AcvmType>;
 
-    /// Checks if two shared basefield values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
+    /// Checks if two shared basefield values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise. Returns the result as both ACVM-type and OtherAcvmType.
     fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &Self::OtherAcvmType<C>,
         b: &Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::AcvmType>;
+    ) -> eyre::Result<(Self::AcvmType, Self::OtherAcvmType<C>)>;
 
     /// Checks if two slices of shared values are equal element-wise. The result is a Vec of shared values that have value 1 if the two corresponding shared values are equal and 0 otherwise.
     fn equal_many(
@@ -594,7 +594,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         &mut self,
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
-    ) -> [Self::AcvmType; 4];
+    ) -> eyre::Result<[Self::AcvmType; 4]>;
 
     fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
@@ -620,6 +620,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         rhs: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>>;
 
+    #[expect(clippy::type_complexity)]
     fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],
@@ -627,6 +628,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         to_add: &[[Self::AcvmType; 4]],
     ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)>;
 
+    #[expect(clippy::type_complexity)]
     fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[[Self::AcvmType; 4]],
@@ -634,6 +636,7 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         to_add: &[[Self::AcvmType; 4]],
     ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)>;
 
+    #[expect(clippy::type_complexity)]
     fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &[Self::AcvmType; 4],

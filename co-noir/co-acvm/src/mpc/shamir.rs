@@ -1036,7 +1036,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
 
     fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
-        _cond: Self::AcvmType,
+        _cond: Self::OtherAcvmType<C>,
         _truthy: Self::OtherAcvmType<C>,
         _falsy: Self::OtherAcvmType<C>,
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
@@ -1056,7 +1056,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         &mut self,
         _a: &Self::OtherAcvmType<C>,
         _b: &Self::OtherAcvmType<C>,
-    ) -> eyre::Result<Self::AcvmType> {
+    ) -> eyre::Result<(Self::AcvmType, Self::OtherAcvmType<C>)> {
         panic!("functionality equals_other_acvm_type not feasible for Shamir")
     }
 
@@ -1161,7 +1161,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         &mut self,
         _lhs: &[Self::AcvmType; 4],
         _rhs: &[Self::AcvmType; 4],
-    ) -> [Self::AcvmType; 4] {
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
         panic!("functionality add_acvm_type_limbs not feasible for Shamir")
     }
 

@@ -125,8 +125,6 @@ impl ShpleminiVerifier {
             &shplonk_batching_challenge,
             virtual_log_n,
             has_zk == ZeroKnowledge::Yes,
-            // TODO CESAR / TODO FLORIN
-            false,
             builder,
             driver,
         )?;
@@ -385,7 +383,7 @@ impl ShpleminiVerifier {
         let evals = fold_neg_evals.to_vec();
         let mut eval_pos_prev = batched_evaluation.clone();
         let one = FieldCT::from(C::ScalarField::ONE);
-        // TODO CESAR / TODO FLORIN: But why is this here?
+
         let mut zero = FieldCT::from(C::ScalarField::ZERO);
         zero.convert_constant_to_fixed_witness(builder, driver);
 
@@ -394,8 +392,7 @@ impl ShpleminiVerifier {
         // Add the contribution of P-((-r)ˢ) to get A_0(-r), which is 0 if there are no interleaved polynomials
         // evals[0] += p_neg
 
-        // TODO CESAR / TODO FLORIN: Batch these
-
+        // TACEO TODO: Batch multiplications
         // Solve the sequence of linear equations
         let one_sub_u = evaluation_point
             .iter()
@@ -947,19 +944,14 @@ impl ShpleminiVerifier {
         shplonk_batching_challenge: &FieldCT<C::ScalarField>,
         virtual_log_n: usize,
         has_zk: bool,
-        committed_sumcheck: bool,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
         // Minimum size of denominators
         let mut num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
-        const NUM_COMMITTED_SUMCHECK_CLAIMS_PER_ROUND: usize = 3;
 
         if has_zk {
             num_powers += NUM_SMALL_IPA_EVALUATIONS;
-        }
-        if committed_sumcheck {
-            num_powers += NUM_COMMITTED_SUMCHECK_CLAIMS_PER_ROUND * virtual_log_n;
         }
 
         let mut result = Vec::with_capacity(num_powers);
