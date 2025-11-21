@@ -928,8 +928,7 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = input.len();
-    let divisor_as_bits =
-        GCUtils::ring_to_bits::<U512>(RingElement(U512::cast_from_biguint(divisor)));
+    let divisor_as_bits = GCUtils::ring_to_bits::<T>(RingElement(T::cast_from_biguint(divisor)));
 
     let mut combined_inputs = Vec::with_capacity(input.len());
     combined_inputs.extend_from_slice(input);
@@ -960,7 +959,7 @@ pub fn ring_div_by_public_to_fr_limbs_and_fq<
     num_limbs_per_field: usize,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<(Rep3PrimeFieldShare<F>, Rep3PrimeFieldShare<K>)>
+) -> eyre::Result<(Vec<Rep3PrimeFieldShare<F>>, Rep3PrimeFieldShare<K>)>
 where
     Standard: Distribution<T>,
 {
@@ -972,7 +971,7 @@ where
         net,
         state,
     )
-    .map(|(fr_shares, fq_shares)| (fr_shares[0], fq_shares[0]))
+    .map(|(fr_shares, fq_shares)| (fr_shares, fq_shares[0]))
 }
 
 /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
@@ -988,8 +987,7 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = input.len();
-    let divisor_as_bits =
-        GCUtils::ring_to_bits::<U512>(RingElement(U512::cast_from_biguint(divisor)));
+    let divisor_as_bits = GCUtils::ring_to_bits::<T>(RingElement(T::cast_from_biguint(divisor)));
     let num_outputs = 2 * num_inputs * num_limbs_per_field;
 
     let mut combined_inputs = Vec::with_capacity(input.len());

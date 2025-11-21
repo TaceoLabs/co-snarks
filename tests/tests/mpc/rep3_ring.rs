@@ -20,6 +20,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::gadgets;
     use mpc_core::protocols::rep3_ring::ring::bit::Bit;
     use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
+    use mpc_core::protocols::rep3_ring::ring::int_ring::U1024;
     use mpc_core::protocols::rep3_ring::ring::int_ring::U512;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
@@ -1428,6 +1429,39 @@ mod ring_share {
             rep3_ring_to_field_cast_a2b_t,
             [Bit, u8, u16, u32, u64, u128]
         );
+    }
+
+    fn rep3_ring_to_field_cast_a2b_t_wip<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let should_result = ark_bn254::Fr::rand(&mut rng);
+        let x = RingElement(T::cast_from_biguint(&BigUint::from(should_result)));
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let y =
+                    casts::ring_to_field_a2b_big_ring::<_, ark_bn254::Fr, _>(x, &net, &mut state)
+                        .unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_ring_to_field_cast_a2b_wip() {
+        apply_to_all!(rep3_ring_to_field_cast_a2b_t_wip, [U512, U1024]);
     }
 
     fn rep3_field_to_ring_cast_gc_t<T: IntRing2k>()

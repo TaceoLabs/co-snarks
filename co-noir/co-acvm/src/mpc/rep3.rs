@@ -899,7 +899,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
-        Ok(promote_to_trivial_share(self.id, F::one()))
+        Ok(promote_to_trivial_share(self.id, F::one())) //TODO CESAR / TODO FLORIN: reinstate randomness
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
@@ -2501,7 +2501,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     &[shared],
                     self.net0,
                     &mut self.state0,
-                    NUM_LIMBS * LIMB_BITS,
+                    F::MODULUS_BIT_SIZE as usize,
                     LIMB_BITS,
                 )?;
                 let limbs = limbs
@@ -2748,7 +2748,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         .expect("Conversion failed");
 
         let limbs_shares =
-            casts::ring_to_field_a2b_many::<_, F, _>(&limbs, self.net0, &mut self.state0)
+            casts::ring_to_field_a2b_big_ring_many::<_, F, _>(&limbs, self.net0, &mut self.state0)
                 .expect("Conversion failed");
 
         limbs_shares
@@ -2851,7 +2851,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         let ring_remainder = ring_element - ring_quotient * modulus_ring;
 
-        let [quotient, remainder] = casts::ring_to_field_a2b_many::<_, C::BaseField, _>(
+        let [quotient, remainder] = casts::ring_to_field_a2b_big_ring_many::<_, C::BaseField, _>(
             &[ring_quotient, ring_remainder],
             self.net0,
             &mut self.state0,
@@ -2976,7 +2976,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
 
         let ring_remainder = ring_element - ring_quotient * modulus_ring;
 
-        let [quotient, remainder] = casts::ring_to_field_a2b_many(
+        let [quotient, remainder] = casts::ring_to_field_a2b_big_ring_many(
             &[ring_quotient, ring_remainder],
             self.net0,
             &mut self.state0,
@@ -3155,10 +3155,13 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             &mut self.state0,
         )?;
 
-        let quotient_limbs =
-            casts::ring_to_field_a2b_many::<_, F, _>(&quotient_limbs, self.net0, &mut self.state0)?;
+        let quotient_limbs = casts::ring_to_field_a2b_big_ring_many::<_, F, _>(
+            &quotient_limbs,
+            self.net0,
+            &mut self.state0,
+        )?;
 
-        let remainder = casts::ring_to_field_a2b::<_, C::BaseField, _>(
+        let remainder = casts::ring_to_field_a2b_big_ring::<_, C::BaseField, _>(
             ring_remainder,
             self.net0,
             &mut self.state0,
