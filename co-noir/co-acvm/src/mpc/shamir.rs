@@ -585,8 +585,18 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         _msb: u8,
         _lsb: u8,
         _bitsize: usize,
-    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
+    ) -> eyre::Result<[Self::ArithmeticShare; 2]> {
         panic!("functionality slice not feasible for Shamir")
+    }
+
+    fn slice_many(
+        &mut self,
+        _input: &[Self::ArithmeticShare],
+        _msb: u8,
+        _lsb: u8,
+        _bitsize: usize,
+    ) -> eyre::Result<Vec<[Self::ArithmeticShare; 2]>> {
+        panic!("functionality slice_many not feasible for Shamir")
     }
 
     fn right_shift(

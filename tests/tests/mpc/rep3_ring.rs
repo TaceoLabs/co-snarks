@@ -1,6 +1,7 @@
 mod ring_share {
     use ark_ff::PrimeField;
     use ark_std::UniformRand;
+    use co_noir_common::utils::Utils;
     use itertools::izip;
     use itertools::Itertools;
     use mpc_core::protocols::rep3;
@@ -1792,19 +1793,6 @@ mod ring_share {
         const SLICE_SIZE: u64 = 68;
         const LIMBS_PER_FIELD: usize = 4;
 
-        fn slice_u256(value: &BigUint, start: u64, end: u64) -> BigUint {
-            if end <= start {
-                return BigUint::zero();
-            }
-            let range = end - start;
-            let mask = if range == 256 {
-                (BigUint::from(1u64) << 256) - BigUint::one()
-            } else {
-                (BigUint::one() << range) - BigUint::one()
-            };
-            (value >> start) & mask
-        }
-
         let nets = LocalNetwork::new_with_timeout(3, std::time::Duration::from_secs(120));
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
@@ -1828,18 +1816,18 @@ mod ring_share {
         let mut should_result_quotients = Vec::with_capacity(VEC_SIZE);
         for x in &should_result1 {
             let x_biguint = x.0.cast_to_biguint();
-            should_result_quotients.push(F::from(slice_u256(&x_biguint, 0, SLICE_SIZE)));
-            should_result_quotients.push(F::from(slice_u256(
+            should_result_quotients.push(F::from(Utils::slice_u256(&x_biguint, 0, SLICE_SIZE)));
+            should_result_quotients.push(F::from(Utils::slice_u256(
                 &x_biguint,
                 SLICE_SIZE,
                 2 * SLICE_SIZE,
             )));
-            should_result_quotients.push(F::from(slice_u256(
+            should_result_quotients.push(F::from(Utils::slice_u256(
                 &x_biguint,
                 2 * SLICE_SIZE,
                 3 * SLICE_SIZE,
             )));
-            should_result_quotients.push(F::from(slice_u256(
+            should_result_quotients.push(F::from(Utils::slice_u256(
                 &x_biguint,
                 3 * SLICE_SIZE,
                 4 * SLICE_SIZE,
@@ -1894,19 +1882,6 @@ mod ring_share {
         const SLICE_SIZE: u64 = 68;
         const LIMBS_PER_FIELD: usize = 4;
 
-        fn slice_u256(value: &BigUint, start: u64, end: u64) -> BigUint {
-            if end <= start {
-                return BigUint::zero();
-            }
-            let range = end - start;
-            let mask = if range == 256 {
-                (BigUint::from(1u64) << 256) - BigUint::one()
-            } else {
-                (BigUint::one() << range) - BigUint::one()
-            };
-            (value >> start) & mask
-        }
-
         let nets = LocalNetwork::new_with_timeout(3, std::time::Duration::from_secs(120));
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
@@ -1929,16 +1904,36 @@ mod ring_share {
         let mut should_result_quotients = Vec::with_capacity(VEC_SIZE * LIMBS_PER_FIELD);
         let mut should_result_remainders = Vec::with_capacity(VEC_SIZE * LIMBS_PER_FIELD);
         for x in &should_result_quotients_ {
-            should_result_quotients.push(F::from(slice_u256(x, 0, SLICE_SIZE)));
-            should_result_quotients.push(F::from(slice_u256(x, SLICE_SIZE, 2 * SLICE_SIZE)));
-            should_result_quotients.push(F::from(slice_u256(x, 2 * SLICE_SIZE, 3 * SLICE_SIZE)));
-            should_result_quotients.push(F::from(slice_u256(x, 3 * SLICE_SIZE, 4 * SLICE_SIZE)));
+            should_result_quotients.push(F::from(Utils::slice_u256(x, 0, SLICE_SIZE)));
+            should_result_quotients.push(F::from(Utils::slice_u256(x, SLICE_SIZE, 2 * SLICE_SIZE)));
+            should_result_quotients.push(F::from(Utils::slice_u256(
+                x,
+                2 * SLICE_SIZE,
+                3 * SLICE_SIZE,
+            )));
+            should_result_quotients.push(F::from(Utils::slice_u256(
+                x,
+                3 * SLICE_SIZE,
+                4 * SLICE_SIZE,
+            )));
         }
         for x in &should_result_remainders_ {
-            should_result_remainders.push(F::from(slice_u256(x, 0, SLICE_SIZE)));
-            should_result_remainders.push(F::from(slice_u256(x, SLICE_SIZE, 2 * SLICE_SIZE)));
-            should_result_remainders.push(F::from(slice_u256(x, 2 * SLICE_SIZE, 3 * SLICE_SIZE)));
-            should_result_remainders.push(F::from(slice_u256(x, 3 * SLICE_SIZE, 4 * SLICE_SIZE)));
+            should_result_remainders.push(F::from(Utils::slice_u256(x, 0, SLICE_SIZE)));
+            should_result_remainders.push(F::from(Utils::slice_u256(
+                x,
+                SLICE_SIZE,
+                2 * SLICE_SIZE,
+            )));
+            should_result_remainders.push(F::from(Utils::slice_u256(
+                x,
+                2 * SLICE_SIZE,
+                3 * SLICE_SIZE,
+            )));
+            should_result_remainders.push(F::from(Utils::slice_u256(
+                x,
+                3 * SLICE_SIZE,
+                4 * SLICE_SIZE,
+            )));
         }
 
         let (tx1, rx1) = mpsc::channel();

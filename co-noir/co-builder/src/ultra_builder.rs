@@ -3034,17 +3034,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let limb_mask =
             (BigUint::one() << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) - BigUint::one();
         let value = self.get_variable(limb_idx as usize);
-
-        // TODO CESAR / TODO FLORIN: No need to check if shared or public, can use the driver methods directly
         let (low, hi) = if T::is_shared(&value) {
-            let limb_mask_field = P::ScalarField::from(limb_mask.clone());
-            let low = driver.integer_bitwise_and(
-                value.clone(),
-                limb_mask_field.into(),
-                Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS as u32,
+            let value = T::get_shared(&value).expect("Already checked it is shared");
+            let [low, hi] = driver.slice(
+                value,
+                Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS as u8,
+                0,
+                P::ScalarField::MODULUS_BIT_SIZE as usize,
             )?;
-            let hi = driver.right_shift(value, Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS)?;
-            (low, hi)
+            (low.into(), hi.into())
         } else {
             let value: BigUint = T::get_public(&value)
                 .expect("Already checked it is public")
@@ -3086,85 +3084,28 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         assert!(hi_limb_bits <= (14 * 5));
 
         // Sometimes we try to use limbs that are too large. It's easier to catch this issue here
-        let mut get_sublimbs = |limb_idx: u32, sublimb_masks: [u64; 5]| -> [u32; 5] {
+        let mut get_sublimbs = |limb_idx: u32, sublimb_masks: [u64; 5]| -> eyre::Result<[u32; 5]> {
             let limb = self.get_variable(limb_idx as usize);
             if T::is_shared(&limb) {
                 // TODO CESAR / TODO FLORIN: No need to check if shared or public, can use the driver methods directly
-                const MAX_SUBLIMB_MASK: u64 = (1u64 << 14) - 1;
                 let mut sublimb_indices = [self.zero_idx; 5];
-                sublimb_indices[0] = if sublimb_masks[0] != 0 {
-                    let tmp = driver
-                        .integer_bitwise_and(
-                            limb.clone(),
-                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
-                            14,
-                        )
-                        .expect("Bitwise AND failed");
-                    self.add_variable(tmp)
-                } else {
-                    self.zero_idx
-                };
-                sublimb_indices[1] = if sublimb_masks[1] != 0 {
-                    let shifted = driver
-                        .right_shift(limb.clone(), 14)
-                        .expect("Right shift failed");
-                    let tmp = driver
-                        .integer_bitwise_and(
-                            shifted,
-                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
-                            14,
-                        )
-                        .expect("Bitwise AND failed");
-                    self.add_variable(tmp)
-                } else {
-                    self.zero_idx
-                };
-                sublimb_indices[2] = if sublimb_masks[2] != 0 {
-                    let shifted = driver
-                        .right_shift(limb.clone(), 28)
-                        .expect("Right shift failed");
-                    let tmp = driver
-                        .integer_bitwise_and(
-                            shifted,
-                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
-                            14,
-                        )
-                        .expect("Bitwise AND failed");
-                    self.add_variable(tmp)
-                } else {
-                    self.zero_idx
-                };
-                sublimb_indices[3] = if sublimb_masks[3] != 0 {
-                    let shifted = driver
-                        .right_shift(limb.clone(), 42)
-                        .expect("Right shift failed");
-                    let tmp = driver
-                        .integer_bitwise_and(
-                            shifted,
-                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
-                            14,
-                        )
-                        .expect("Bitwise AND failed");
-                    self.add_variable(tmp)
-                } else {
-                    self.zero_idx
-                };
-                sublimb_indices[4] = if sublimb_masks[4] != 0 {
-                    let shifted = driver
-                        .right_shift(limb.clone(), 56)
-                        .expect("Right shift failed");
-                    let tmp = driver
-                        .integer_bitwise_and(
-                            shifted,
-                            P::ScalarField::from(MAX_SUBLIMB_MASK).into(),
-                            14,
-                        )
-                        .expect("Bitwise AND failed");
-                    self.add_variable(tmp)
-                } else {
-                    self.zero_idx
-                };
-                sublimb_indices
+                let all_masks_zero = sublimb_masks.iter().all(|&mask| mask == 0);
+                if all_masks_zero {
+                    return Ok(sublimb_indices);
+                }
+                let slices = driver.decompose_arithmetic(
+                    T::get_shared(&limb).expect("Checked it is shared"),
+                    56,
+                    14,
+                )?;
+                for (val, (i, mask)) in slices.into_iter().zip(sublimb_masks.iter().enumerate()) {
+                    sublimb_indices[i] = if *mask != 0 {
+                        self.add_variable(val.into())
+                    } else {
+                        self.zero_idx
+                    };
+                }
+                Ok(sublimb_indices)
             } else {
                 // we can use constant 2^14 - 1 mask here. If the sublimb value exceeds the expected value then witness will
                 // fail the range check below
@@ -3212,7 +3153,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 } else {
                     self.zero_idx
                 };
-                sublimb_indices
+                Ok(sublimb_indices)
             }
         };
 
@@ -3254,8 +3195,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         let lo_masks = get_limb_masks(lo_limb_bits);
         let hi_masks = get_limb_masks(hi_limb_bits);
-        let lo_sublimbs = get_sublimbs(lo_idx, lo_masks);
-        let hi_sublimbs = get_sublimbs(hi_idx, hi_masks);
+        //TACEO TODO: Could batch the decompositions in there
+        let lo_sublimbs = get_sublimbs(lo_idx, lo_masks)?;
+        let hi_sublimbs = get_sublimbs(hi_idx, hi_masks)?;
 
         self.blocks
             .nnf

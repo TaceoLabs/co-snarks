@@ -363,21 +363,29 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         msb: u8,
         lsb: u8,
         bitsize: usize,
-    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
-        let big_mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
-        let hi_mask = (BigUint::one() << (bitsize - msb as usize)) - BigUint::one();
-        let lo_mask = (BigUint::one() << lsb) - BigUint::one();
-        let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
+    ) -> eyre::Result<[Self::ArithmeticShare; 2]> {
+        let x: BigUint = input.into();
+        let hi = F::from(Utils::slice_u256(&x, lsb as u64, msb as u64));
+        let lo = F::from(Utils::slice_u256(&x, msb as u64, bitsize as u64));
 
-        let msb_plus_one = msb as u32 + 1;
-        let mut x: BigUint = input.into();
-        x &= &big_mask;
+        Ok([lo, hi])
+    }
 
-        let hi = F::from((&x >> msb_plus_one) & hi_mask);
-        let lo = F::from(&x & lo_mask);
-        let slice = F::from((x >> lsb) & slice_mask);
-
-        Ok([lo, slice, hi])
+    fn slice_many(
+        &mut self,
+        input: &[Self::ArithmeticShare],
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> eyre::Result<Vec<[Self::ArithmeticShare; 2]>> {
+        let mut result = Vec::with_capacity(input.len());
+        for x in input.iter() {
+            let x: BigUint = (*x).into();
+            let hi = F::from(Utils::slice_u256(&x, lsb as u64, msb as u64));
+            let lo = F::from(Utils::slice_u256(&x, msb as u64, bitsize as u64));
+            result.push([lo, hi]);
+        }
+        Ok(result)
     }
 
     fn integer_bitwise_and(

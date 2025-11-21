@@ -280,16 +280,27 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         bitsize: usize,
     ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>>;
 
-    /// Slices a value at given indices (msb, lsb), both included in the slice.
+    /// Slices a value at given indices (msb, lsb).
     /// Only considers bitsize bits.
-    /// Result is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
+    /// Result is thus [lo, hi], where lo has all bits from lsb to (excluding) msb and hi all bits from msb up to bitsize.
     fn slice(
         &mut self,
         input: Self::ArithmeticShare,
         msb: u8,
         lsb: u8,
         bitsize: usize,
-    ) -> eyre::Result<[Self::ArithmeticShare; 3]>;
+    ) -> eyre::Result<[Self::ArithmeticShare; 2]>;
+
+    /// Slices a slice of values at given indices (msb, lsb).
+    /// Only considers bitsize bits.
+    /// Result is thus [lo, hi], where lo has all bits from lsb to (excluding) msb and hi all bits from msb up to bitsize.
+    fn slice_many(
+        &mut self,
+        input: &[Self::ArithmeticShare],
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> eyre::Result<Vec<[Self::ArithmeticShare; 2]>>;
 
     /// Shifts a shared field element to the right by shift bits.
     fn right_shift(&mut self, input: Self::AcvmType, shift: usize) -> eyre::Result<Self::AcvmType>;

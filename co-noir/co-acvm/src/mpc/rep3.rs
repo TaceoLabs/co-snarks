@@ -962,7 +962,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         msb: u8,
         lsb: u8,
         bitsize: usize,
-    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
+    ) -> eyre::Result<[Self::ArithmeticShare; 2]> {
         let res = yao::slice_arithmetic(
             input,
             self.net0,
@@ -971,8 +971,27 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             lsb as usize,
             bitsize,
         )?;
-        debug_assert_eq!(res.len(), 3);
-        Ok([res[0], res[1], res[2]])
+        debug_assert_eq!(res.len(), 2);
+        Ok([res[0], res[1]])
+    }
+
+    fn slice_many(
+        &mut self,
+        input: &[Self::ArithmeticShare],
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> eyre::Result<Vec<[Self::ArithmeticShare; 2]>> {
+        let res = yao::slice_arithmetic_many(
+            input,
+            self.net0,
+            &mut self.state0,
+            msb as usize,
+            lsb as usize,
+            bitsize,
+        )?;
+        debug_assert!(res.len() == input.len() * 2);
+        Ok(res.chunks(2).map(|chunk| [chunk[0], chunk[1]]).collect())
     }
 
     fn integer_bitwise_and(

@@ -720,18 +720,18 @@ pub fn decompose_arithmetic_to_other_field<F: PrimeField, K: PrimeField, N: Netw
     )
 }
 
-/// Slices a shared field element at given indices (msb, lsb), both included in the slice.
+/// Slices a value at given indices (lo, mid).
 /// Only considers bitsize bits.
-/// Result  is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
+/// Result is thus [lo, hi], where lo has all bits from lo to (excluding) mid and hi all bits from mid up to bitsize.
 pub fn slice_arithmetic<F: PrimeField, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
-    msb: usize,
-    lsb: usize,
+    lo: usize,
+    mid: usize,
     bitsize: usize,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    slice_arithmetic_many(&[input], net, state, msb, lsb, bitsize)
+    slice_arithmetic_many(&[input], net, state, lo, mid, bitsize)
 }
 
 /// Computes input % 2^divisor_bit.
@@ -1226,26 +1226,26 @@ pub fn decompose_arithmetic_to_other_field_many<F: PrimeField, K: PrimeField, N:
     )
 }
 
-/// Slices a vector of shared field elements at given indices (msb, lsb), both included in the slice.
-/// Only consideres bitsize bits.
-/// Result (per input) is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
+/// Slices a vector of shared field elements at given indices (lo, mid).
+/// Only considers bitsize bits.
+/// Result is thus [lo, hi], where lo has all bits from lo to (excluding) mid and hi all bits from mid up to bitsize.
 pub fn slice_arithmetic_many<F: PrimeField, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
-    msb: usize,
-    lsb: usize,
+    lo: usize,
+    mid: usize,
     bitsize: usize,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     let num_inputs = inputs.len();
-    let total_output_elements = 3 * num_inputs;
+    let total_output_elements = 2 * num_inputs;
     decompose_circuit_compose_blueprint!(
         inputs,
         net,
         state,
         total_output_elements,
         GarbledCircuits::slice_field_element_many::<_, F>,
-        (msb, lsb, bitsize)
+        (mid, lo, bitsize)
     )
 }
 

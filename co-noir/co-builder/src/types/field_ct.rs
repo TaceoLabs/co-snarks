@@ -1058,8 +1058,7 @@ impl<F: PrimeField> FieldCT<F> {
         let (hi, lo) = if T::is_shared(&value) {
             let value = T::get_shared(&value).expect("Already checked it is shared");
             // TACEO TODO: We are returning one more value than needed here
-            let [lo, hi, _] =
-                driver.slice(value, num_bits, lsb_index, F::MODULUS_BIT_SIZE as usize)?;
+            let [lo, hi] = driver.slice(value, lsb_index, 0, num_bits as usize)?;
             (T::AcvmType::from(hi), T::AcvmType::from(lo))
         } else {
             let value: BigUint = T::get_public(&value)
@@ -1817,8 +1816,7 @@ impl<F: PrimeField> FieldCT<F> {
 
         let (lo_val, hi_val) = if T::is_shared(&value) {
             let value = T::get_shared(&value).expect("Already checked it is shared");
-            let [lo, _, hi] = driver.slice(value, (max_bits - 1) as u8, lo_bits as u8, max_bits)?;
-            //TODO FLORIN / TODO CESAR Is the slicing still correct?
+            let [lo, hi] = driver.slice(value, lo_bits as u8, 0, max_bits)?;
             (T::AcvmType::from(hi), T::AcvmType::from(lo))
         } else {
             let value: BigUint = T::get_public(&value)
@@ -4434,8 +4432,8 @@ impl<F: PrimeField> ByteArray<F> {
             let [diff_lo_lo_value, diff_lo_hi_value] = if T::is_shared(&diff_lo_value) {
                 let slice_result = driver.slice(
                     T::get_shared(&diff_lo_value).expect("we checked it is shared"),
-                    127,
                     0,
+                    127,
                     F::MODULUS_BIT_SIZE as usize,
                 )?;
                 [
