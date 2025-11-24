@@ -56,21 +56,21 @@ pub fn padding_indicator_array<
             &Barycentric::construct_lagrange_denominators(VIRTUAL_LOG_N, &big_domain),
         );
 
-        let terms = (0..VIRTUAL_LOG_N)
-            .map(|i| {
-                log_n
-                    .sub(&one, builder, driver)
-                    .sub(&FieldCT::from(big_domain[i]), builder, driver)
-            })
-            .collect::<Vec<_>>();
-
         let mut result = vec![zero.clone(); VIRTUAL_LOG_N];
 
         // 1) Build prefix products:
         //    prefix[i] = ∏_{m=0..(i-1)} (x - 1 - big_domain[m]), with prefix[0] = 1.
         let mut prefix = vec![one.clone(); VIRTUAL_LOG_N];
         for i in 1..VIRTUAL_LOG_N {
-            prefix[i] = prefix[i - 1].multiply(&terms[i - 1], builder, driver)?;
+            prefix[i] = prefix[i - 1].multiply(
+                &log_n.sub(&one, builder, driver).sub(
+                    &FieldCT::from(big_domain[i - 1]),
+                    builder,
+                    driver,
+                ),
+                builder,
+                driver,
+            )?;
         }
 
         // 2) Build suffix products:
@@ -79,7 +79,15 @@ pub fn padding_indicator_array<
         //    suffix[virtual_log_n] = 1.
         let mut suffix = vec![one.clone(); VIRTUAL_LOG_N + 1];
         for i in (1..=VIRTUAL_LOG_N).rev() {
-            suffix[i - 1] = suffix[i].multiply(&terms[i - 1], builder, driver)?;
+            suffix[i - 1] = suffix[i].multiply(
+                &log_n.sub(&one, builder, driver).sub(
+                    &FieldCT::from(big_domain[i - 1]),
+                    builder,
+                    driver,
+                ),
+                builder,
+                driver,
+            )?;
         }
 
         // To ensure 0 < log_n < N, note that suffix[1] = \prod_{i=1}^{N-1} (x - 1 - i), therefore we just need to ensure
@@ -89,14 +97,10 @@ pub fn padding_indicator_array<
         // 3) Combine prefixes & suffixes to get L_i(x-1):
         //    L_i(x-1) = (1 / lagrange_denominators[i]) * prefix[i] * suffix[i+1].
         //    (We skip factor (x - big_domain[i]) by splitting into prefix & suffix.)
-        let prefix_by_suffix = FieldCT::multiply_many(&prefix, &suffix[1..], builder, driver)?;
-
         for i in 0..VIRTUAL_LOG_N {
-            result[i] = prefix_by_suffix[i].multiply(
-                &FieldCT::from(precomputed_denominator_inverses[i]),
-                builder,
-                driver,
-            )?;
+            result[i] = FieldCT::from(precomputed_denominator_inverses[i])
+                .multiply(&prefix[i], builder, driver)?
+                .multiply(&suffix[i + 1], builder, driver)?;
         }
 
         // Convert result into the array of step function evaluations sums b_i.

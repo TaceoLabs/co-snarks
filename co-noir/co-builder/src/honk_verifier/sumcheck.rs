@@ -126,6 +126,18 @@ impl SumcheckVerifier {
         // For ZK Flavors: compute the evaluation of the Row Disabling Polynomial at the sumcheck challenge and of the
         // libra univariate used to hide the contribution from the actual Honk relation
         let libra_evaluation = if has_zk == ZeroKnowledge::Yes {
+            // Compute the evaluations of the polynomial (1 - \sum L_i) where the sum is for i corresponding to the
+            // rows where all sumcheck relations are disabled
+            full_honk_purported_value = full_honk_purported_value.multiply(
+                &Self::evaluate_at_challenge_with_padding(
+                    &multivariate_challenge,
+                    padding_indicator_array,
+                    builder,
+                    driver,
+                )?,
+                builder,
+                driver,
+            )?;
             let libra_evaluation =
                 transcript.receive_fr_from_prover("Libra:claimed_evaluation".to_owned())?;
             let tmp = libra_evaluation.multiply(
@@ -168,19 +180,53 @@ impl SumcheckVerifier {
         driver: &mut T,
     ) -> HonkProofResult<()> {
         let one = FieldCT::from(C::ScalarField::ONE);
-        let lhs = [
-            one.sub(indicator, builder, driver),
-            univariate[0].add(&univariate[1], builder, driver),
-        ];
-        let rhs = [target_sum.clone(), indicator.clone()];
 
-        let [lhs, rhs] = FieldCT::multiply_many(&lhs, &rhs, builder, driver)?
-            .try_into()
-            .expect("We provided 2 elements");
-
-        let total_sum = lhs.add(&rhs, builder, driver);
+        let total_sum = (one.sub(indicator, builder, driver))
+            .multiply(target_sum, builder, driver)?
+            .add(
+                &indicator.multiply(
+                    &univariate[0].add(&univariate[1], builder, driver),
+                    builder,
+                    driver,
+                )?,
+                builder,
+                driver,
+            );
 
         target_sum.assert_equal(&total_sum, builder, driver);
         Ok(())
+    }
+
+    /**
+     * @brief A variant of the above that uses `padding_indicator_array`.
+     *
+     * @param multivariate_challenge Sumcheck evaluation challenge
+     * @param padding_indicator_array An array with first log_n entries equal to 1, and the remaining entries are 0.
+     */
+    pub fn evaluate_at_challenge_with_padding<
+        C: HonkCurve<TranscriptFieldType>,
+        T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    >(
+        multivariate_challenge: &[FieldCT<C::ScalarField>],
+        padding_indicator_array: &[FieldCT<C::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<FieldCT<C::ScalarField>> {
+        let one = FieldCT::from(C::ScalarField::ONE);
+        let mut evaluation_at_multivariate_challenge = one.clone();
+
+        for (idx, indicator) in padding_indicator_array.iter().enumerate().skip(2) {
+            evaluation_at_multivariate_challenge = evaluation_at_multivariate_challenge.multiply(
+                &one.sub(indicator, builder, driver).add(
+                    &indicator.multiply(&multivariate_challenge[idx], builder, driver)?,
+                    builder,
+                    driver,
+                ),
+                builder,
+                driver,
+            )?;
+        }
+
+        Ok(one.sub(&evaluation_at_multivariate_challenge, builder, driver))
     }
 }

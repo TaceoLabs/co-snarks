@@ -94,7 +94,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     let vk = results[0].2.clone();
-    if has_zk == ZeroKnowledge::No && name != "recursion" {
+    if has_zk == ZeroKnowledge::No && name != "recursion" && name != "recursion_zk" {
         let proof_u8 = H::to_buffer(proof.inner_as_ref());
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
         assert_eq!(proof_u8, read_proof_u8);
@@ -186,7 +186,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(public_input, p);
     }
 
-    if has_zk == ZeroKnowledge::No && name != "recursion" {
+    if has_zk == ZeroKnowledge::No && name != "recursion" && name != "recursion_zk" {
         let proof_u8 = H::to_buffer(proof.inner_as_ref());
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
         assert_eq!(proof_u8, read_proof_u8);
@@ -264,5 +264,17 @@ fn recursion_witness_and_proof_test_poseidon2sponge() {
 #[test]
 fn recursion_proof_test_poseidon2sponge() {
     proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::No, "");
-    // proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::Yes, "");
+    proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::Yes, "");
+}
+
+#[test]
+fn zk_recursion_witness_and_proof_test_poseidon2sponge() {
+    witness_and_proof_test::<Poseidon2Sponge>("recursion_zk", ZeroKnowledge::No, "");
+    witness_and_proof_test::<Poseidon2Sponge>("recursion_zk", ZeroKnowledge::Yes, "");
+}
+
+#[test]
+fn zk_recursion_proof_test_poseidon2sponge() {
+    proof_test::<Poseidon2Sponge>("recursion_zk", ZeroKnowledge::No, "");
+    proof_test::<Poseidon2Sponge>("recursion_zk", ZeroKnowledge::Yes, "");
 }
