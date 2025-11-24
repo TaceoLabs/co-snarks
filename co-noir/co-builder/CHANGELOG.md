@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.5.0...co-builder-v0.6.0) (2025-11-24)
+
+
+### Features
+
+* upgrade to Noir 1.0.0-beta.15 and BB 3.0.0-nightly.20251104 ([#485](https://github.com/TaceoLabs/co-snarks/issues/485)) ([cd1fb5b](https://github.com/TaceoLabs/co-snarks/commit/cd1fb5b260ba80b81eba2a37e036d180eedc090a))
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.4.0...co-builder-v0.5.0) (2025-11-06)
 
 

@@ -1,6 +1,6 @@
 [package]
 name = "co-noir"
-version = "0.7.0"
+version = "0.8.0"
 
 publish.workspace = true
 authors.workspace = true
@@ -20,8 +20,8 @@ ark-ff.workspace = true
 bincode.workspace = true
 clap.workspace = true
 co-acvm = { version = "0.7.0", path = "../co-acvm" }
-co-ultrahonk = { version = "0.6.0", path = "../co-ultrahonk" }
-co-builder = { version = "0.5.0", path = "../co-builder" }
+co-ultrahonk = { version = "0.7.0", path = "../co-ultrahonk" }
+co-builder = { version = "0.6.0", path = "../co-builder" }
 co-noir-types = { version = "0.1.1", path = "../co-noir-types" }
 noir-types = { version = "0.1.1", path = "../noir-types" }
 co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
