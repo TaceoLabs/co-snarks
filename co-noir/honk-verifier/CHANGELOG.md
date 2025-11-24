@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.1](https://github.com/TaceoLabs/co-snarks/compare/honk-verifier-v0.1.0...honk-verifier-v0.1.1) (2025-11-24)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-builder bumped from 0.5.0 to 0.6.0
+    * ultrahonk bumped from 0.6.0 to 0.7.0
+    * co-ultrahonk bumped from 0.6.0 to 0.7.0
+
 ## 0.1.0 (2025-11-06)
 
 
