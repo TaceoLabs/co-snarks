@@ -19,7 +19,8 @@ use co_noir_common::constants::{
     BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, CONST_PROOF_SIZE_LOG_N,
     DECIDER_PROOF_LENGTH, NUM_ALL_ENTITIES, NUM_SMALL_IPA_EVALUATIONS,
     OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS, PUBLIC_INPUTS_SIZE,
-    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS, ULTRA_VERIFICATION_KEY_LENGTH,
+    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS, ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK,
+    ULTRA_VERIFICATION_KEY_LENGTH,
 };
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
@@ -425,7 +426,11 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        assert_eq!(proof_size, ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
+        if has_zk == ZeroKnowledge::Yes {
+            assert_eq!(proof_size, ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK);
+        } else {
+            assert_eq!(proof_size, ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
+        }
 
         let num_inner_public_inputs = public_inputs_size - PUBLIC_INPUTS_SIZE;
         let pub_inputs_offset = 1; // NativeFlavor::has_zero_row ? 1 : 0; We always have a zero row for Ultra flavours
@@ -512,8 +517,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         inner_public_inputs_size: usize,
         driver: &mut T,
     ) -> eyre::Result<Vec<T::AcvmType>> {
-        self.add_default_to_public_inputs(driver)?;
-
         let mut proof = Vec::with_capacity(OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
 
         // Populate the proof with as many public inputs as required from the ACIR constraints
