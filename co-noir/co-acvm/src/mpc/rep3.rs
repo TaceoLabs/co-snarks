@@ -986,8 +986,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             input,
             self.net0,
             &mut self.state0,
-            msb as usize,
             lsb as usize,
+            msb as usize,
             bitsize,
         )?;
         debug_assert!(res.len() == input.len() * 2);

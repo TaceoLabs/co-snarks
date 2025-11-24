@@ -1245,7 +1245,7 @@ pub fn slice_arithmetic_many<F: PrimeField, N: Network>(
         state,
         total_output_elements,
         GarbledCircuits::slice_field_element_many::<_, F>,
-        (mid, lo, bitsize)
+        (lo, mid, bitsize)
     )
 }
 

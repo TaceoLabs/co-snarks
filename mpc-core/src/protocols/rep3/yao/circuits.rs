@@ -1077,7 +1077,7 @@ impl GarbledCircuits {
 
         debug_assert_eq!(input_size % input_bitlen, 0);
         debug_assert!(input_bitlen >= bitsize);
-        debug_assert!(lo >= mid);
+        debug_assert!(lo <= mid);
         debug_assert!(lo < bitsize);
         debug_assert_eq!(wires_c.size(), input_bitlen * total_output_elements);
 
