@@ -378,7 +378,7 @@ fn test_batch_mul_plaindriver() {
 
 #[test]
 fn test_batch_mul_rep3_driver() {
-    for num_points in [1] {
+    for num_points in [1, 5, 10, 20] {
         let shared_entries =
             TestData::random_shared_test_entries(num_points, 0, false, FieldCT::from(Fr::ONE));
 

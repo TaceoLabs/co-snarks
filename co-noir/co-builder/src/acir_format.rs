@@ -8,17 +8,21 @@ use acir::{
     native_types::{Expression, Witness, WitnessMap},
 };
 use ark_ff::{PrimeField, Zero};
-use co_noir_common::constants::MOCK_PROOF_DYADIC_SIZE;
+use co_noir_common::{constants::MOCK_PROOF_DYADIC_SIZE, honk_curve::HonkCurve};
 use std::{
     array,
+    cmp::max,
     collections::{BTreeMap, HashSet},
 };
 
-use crate::types::types::{
-    AES128Constraint, AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput,
-    Blake3Constraint, Blake3Input, BlockConstraint, BlockType, EcAdd, LogicConstraint, MemOp,
-    MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
-    Sha256Compression, WitnessOrConstant,
+use crate::{
+    transcript_ct::TranscriptFieldType,
+    types::types::{
+        AES128Constraint, AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput,
+        Blake3Constraint, Blake3Input, BlockConstraint, BlockType, EcAdd, LogicConstraint, MemOp,
+        MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint,
+        RecursionConstraint, Sha256Compression, WitnessOrConstant,
+    },
 };
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum ProofType {
@@ -957,14 +961,27 @@ impl<F: PrimeField> AcirFormat<F> {
         }
     }
 
-    pub fn get_honk_recursion_public_inputs_size(&self) -> usize {
+    pub fn get_honk_recursion_public_inputs_size<
+        C: HonkCurve<TranscriptFieldType, ScalarField = F>,
+    >(
+        &self,
+    ) -> usize {
         let mut total_size = 0;
         if !self.honk_recursion_constraints.is_empty() {
             for constraint in &self.honk_recursion_constraints {
-                total_size += constraint.public_inputs.len();
+                let mut size =
+                    (constraint.public_inputs.len() + MOCK_PROOF_DYADIC_SIZE).next_power_of_two(); // the circuit is at least size 64 (we take next power of 2 to be safe)
+                assert!(
+                    constraint.proof_type == ProofType::Honk as u32
+                        || constraint.proof_type == ProofType::HonkZk as u32
+                );
+                size = if constraint.proof_type == ProofType::Honk as u32 {
+                    size
+                } else {
+                    max(size, C::SUBGROUP_SIZE * 2)
+                };
+                total_size = max(total_size, size);
             }
-            //TACEO TODO: Investigate the proper size needed for the recursion proof a bit more
-            total_size = (total_size + MOCK_PROOF_DYADIC_SIZE).next_power_of_two(); // the circuit is at least size 64 (we take next power of 2 to be safe)
         }
         total_size
     }

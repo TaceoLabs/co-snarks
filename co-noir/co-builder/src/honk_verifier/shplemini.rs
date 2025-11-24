@@ -272,19 +272,6 @@ impl ShpleminiVerifier {
             )?;
         }
 
-        // Currently, only used in ECCVM
-        // TACEO TODO: committed_sumcheck
-        // if (committed_sumcheck) {
-        //     batch_sumcheck_round_claims(commitments,
-        //                                 scalars,
-        //                                 constant_term_accumulator,
-        //                                 multivariate_challenge,
-        //                                 shplonk_batching_challenge_powers,
-        //                                 shplonk_evaluation_challenge,
-        //                                 sumcheck_round_commitments,
-        //                                 sumcheck_round_evaluations);
-        // }
-
         // Finalize the batch opening claim
         commitments.push(g1_identity.clone());
         scalars.push(constant_term_accumulator);

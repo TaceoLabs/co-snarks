@@ -264,26 +264,16 @@ where
     Standard: Distribution<T>,
 {
     let modulus = F::MODULUS_BIT_SIZE as usize;
-    // A special case for Bit
-    if TypeId::of::<T>() == TypeId::of::<Bit>() {
-        let share =
-            crate::downcast::<_, Rep3RingShare<Bit>>(&share).expect("We already checked types");
-        let biguint_share = Rep3BigUintShare::new(
-            BigUint::from(share.a.0.convert() as u64),
-            BigUint::from(share.b.0.convert() as u64),
-        );
+    debug_assert!(T::K > modulus);
 
-        return rep3::conversion::bit_inject(&biguint_share, net, state);
-    }
+    let mut binary = conversion::a2b(share, net, state)?;
+    let mask = T::cast_from_biguint(&((BigUint::from(1u64) << modulus) - BigUint::from(1u64)));
+    binary &= RingElement(mask);
 
-    let binary = conversion::a2b(share, net, state)?;
-    let a_big = T::cast_to_biguint(&binary.a.0);
-    let b_big = T::cast_to_biguint(&binary.b.0);
-    let mask = (BigUint::from(1u64) << modulus) - BigUint::from(1u64);
-    let a = a_big & &mask;
-    let b = b_big & &mask;
-
-    let biguint_share = Rep3BigUintShare::new(a, b);
+    let biguint_share = Rep3BigUintShare::new(
+        T::cast_to_biguint(&binary.a.0),
+        T::cast_to_biguint(&binary.b.0),
+    );
     rep3::conversion::b2a(&biguint_share, net, state)
 }
 
@@ -296,32 +286,15 @@ pub fn ring_to_field_a2b_big_ring_many<T: IntRing2k, F: PrimeField, N: Network>(
 where
     Standard: Distribution<T>,
 {
-    // A special case for Bit
-    if TypeId::of::<T>() == TypeId::of::<Bit>() {
-        let bit_shares = shares
-            .iter()
-            .map(|share| {
-                crate::downcast::<_, Rep3RingShare<Bit>>(share).expect("We already checked types")
-            })
-            .collect::<Vec<_>>();
-
-        let biguint_shares = bit_shares
-            .into_iter()
-            .map(|share| {
-                Rep3BigUintShare::new(
-                    BigUint::from(share.a.0.convert() as u64),
-                    BigUint::from(share.b.0.convert() as u64),
-                )
-            })
-            .collect::<Vec<_>>();
-
-        return rep3::conversion::bit_inject_many(&biguint_shares, net, state);
-    }
+    let modulus = F::MODULUS_BIT_SIZE as usize;
+    debug_assert!(T::K > modulus);
 
     let binary = conversion::a2b_many(shares, net, state)?;
+    let mask = T::cast_from_biguint(&((BigUint::from(1u64) << modulus) - BigUint::from(1u64)));
     let biguint_shares = binary
         .into_iter()
         .map(|binary| {
+            let binary = binary & RingElement(mask);
             Rep3BigUintShare::new(
                 T::cast_to_biguint(&binary.a.0),
                 T::cast_to_biguint(&binary.b.0),

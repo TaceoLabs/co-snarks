@@ -1295,7 +1295,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     let constraint_system = co_noir::constraint_system_from_reader(&File::open(&circuit_path)?)
         .context("while parsing constraint system")?;
 
-    let circuit_size = constraint_system.get_honk_recursion_public_inputs_size();
+    let circuit_size = constraint_system.get_honk_recursion_public_inputs_size::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>();
     let prover_crs =
         CrsParser::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>::get_crs_g1(
             crs_path,

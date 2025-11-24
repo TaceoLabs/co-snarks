@@ -26,7 +26,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
     let witness = noir_types::witness_from_reader(File::open(witness_file).unwrap()).unwrap();
     let mut driver = PlainAcvmSolver::new();
 
-    let recursion_crs_size = constraint_system.get_honk_recursion_public_inputs_size();
+    let recursion_crs_size = constraint_system.get_honk_recursion_public_inputs_size::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>();
     let recursion_crs = if recursion_crs_size > 0 {
         CrsParser::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::get_crs_g1(
                 CRS_PATH_G1,

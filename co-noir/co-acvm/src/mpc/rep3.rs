@@ -2800,7 +2800,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let mask_ring: RingElement<U512> = U512::cast_from_biguint(&mask).into();
         let limbs = (0..4)
             .map(|_| {
-                let limb = ring_element.clone() & mask_ring.clone();
+                let limb = ring_element & mask_ring;
                 ring_element = ring_element >> 68;
                 limb
             })
@@ -2817,15 +2817,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             casts::ring_to_field_a2b_many::<_, F, _>(&limbs, self.net0, &mut self.state0)
                 .expect("Conversion failed");
 
-
-        Ok(
-            limbs_shares
+        Ok(limbs_shares
             .into_iter()
             .map(|x| Rep3AcvmType::Shared(x))
             .collect::<Vec<_>>()
             .try_into()
             .expect("We have 4 elements"))
-            
     }
 
     // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
