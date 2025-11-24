@@ -3087,7 +3087,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let mut get_sublimbs = |limb_idx: u32, sublimb_masks: [u64; 5]| -> eyre::Result<[u32; 5]> {
             let limb = self.get_variable(limb_idx as usize);
             if T::is_shared(&limb) {
-                // TODO CESAR / TODO FLORIN: No need to check if shared or public, can use the driver methods directly
                 let mut sublimb_indices = [self.zero_idx; 5];
                 let all_masks_zero = sublimb_masks.iter().all(|&mask| mask == 0);
                 if all_masks_zero {
