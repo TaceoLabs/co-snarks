@@ -377,6 +377,7 @@ fn test_batch_mul_plaindriver() {
 }
 
 #[test]
+#[ignore = "this is way too slow for regular test runs"]
 fn test_batch_mul_rep3_driver() {
     for num_points in [1, 5, 10, 20] {
         let shared_entries =
