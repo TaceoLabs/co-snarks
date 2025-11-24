@@ -123,7 +123,7 @@ for f in "${test_cases[@]}"; do
   bash -c "(cd test_vectors/${f} && nargo execute) $PIPE"
 
   # -e to exit on first error
-  bash -c "RUST_BACKTRACE=full ${PLAINDRIVER} --prover-crs ../../co-noir-common/src/crs/bn254_g1.dat --verifier-crs ../../co-noir-common/src/crs/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} $PIPE" || failed=1
+  bash -c "${PLAINDRIVER} --prover-crs ../../co-noir-common/src/crs/bn254_g1.dat --verifier-crs ../../co-noir-common/src/crs/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} $PIPE" || failed=1
 
   if [ "$failed" -ne 0 ]
   then
