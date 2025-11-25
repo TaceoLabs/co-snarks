@@ -569,9 +569,13 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         max_num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>>;
 
-    fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn acvm_type_limbs_to_other_acvm_type<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        limbs: &[Self::AcvmType; 4],
+        limbs: &[Self::AcvmType; NUM_LIMBS],
     ) -> eyre::Result<Self::OtherAcvmType<C>>;
 
     fn neg_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(

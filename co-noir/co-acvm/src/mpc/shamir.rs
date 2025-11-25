@@ -1085,9 +1085,13 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         panic!("functionality compute_naf_entries not feasible for Shamir")
     }
 
-    fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn acvm_type_limbs_to_other_acvm_type<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        _limbs: &[Self::AcvmType; 4],
+        _limbs: &[Self::AcvmType; NUM_LIMBS],
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
         panic!("functionality acvm_type_limbs_to_other_acvm_type not feasible for Shamir")
     }

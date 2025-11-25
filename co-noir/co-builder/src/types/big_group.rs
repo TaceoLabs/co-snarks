@@ -662,7 +662,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 // `builder::evaluate_partial_non_native_field_multiplication` is called.
                 // (the 1st mul_left, mul_right elements will trigger builder::evaluate_non_native_field_multiplication
                 //  when Fq::mult_madd is called - this term cannot be cached so we want to make sure it is unique)
-                // TODO CESAR: Verify this is correct
                 y_4.mul_left.extend(previous_y.mul_left.iter().cloned());
                 y_4.mul_right.extend(previous_y.mul_right.iter().cloned());
                 y_4.add.extend(previous_y.add.iter().cloned());

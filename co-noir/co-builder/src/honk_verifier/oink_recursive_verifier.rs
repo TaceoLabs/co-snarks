@@ -42,15 +42,21 @@ impl OinkRecursiveVerifier {
 
         transcript.add_element_frs_to_hash_buffer("vk_hash".to_string(), &[vk_hash]);
 
-        let num_public_inputs: BigUint = T::get_public(
-            &verification_key
-                .vk_and_hash
-                .vk
-                .num_public_inputs
-                .get_value(builder, driver),
-        )
-        .expect("Number of public inputs should be public")
+        let num_public_inputs = verification_key
+            .vk_and_hash
+            .vk
+            .num_public_inputs
+            .get_value(builder, driver);
+
+        // TODO CESAR / TODO FLORIN We should not open here
+        let num_public_inputs: BigUint = if let Some(n) = T::get_public(&num_public_inputs) {
+            n
+        } else {
+            driver.open_many(&[T::get_shared(&num_public_inputs)
+                .expect("Number of public inputs should be shared")])?[0]
+        }
         .into();
+
         let num_public_inputs_usize = *num_public_inputs
             .to_u64_digits()
             .first()

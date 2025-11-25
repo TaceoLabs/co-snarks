@@ -349,8 +349,7 @@ fn run_test<T: NoirWitnessExtensionProtocol<Fr>>(
 }
 
 fn run_tests<T: NoirWitnessExtensionProtocol<Fr>>(test_file: &str, driver: &mut T) {
-    // TODO CESAR: size hint?
-    let mut builder = GenericUltraCircuitBuilder::<Bn254G1, T>::new(100);
+    let mut builder = GenericUltraCircuitBuilder::<Bn254G1, T>::new(0);
     let test_data_list = TestData::get_from_file(test_file, &mut builder, driver);
 
     for test_data in test_data_list {

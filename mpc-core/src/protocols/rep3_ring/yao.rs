@@ -11,7 +11,7 @@ use crate::protocols::{
             garbler::Rep3Garbler,
         },
     },
-    rep3_ring::{conversion, ring::int_ring::U512},
+    rep3_ring::conversion,
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};

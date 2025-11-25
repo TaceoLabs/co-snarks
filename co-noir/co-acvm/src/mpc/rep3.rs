@@ -20,7 +20,7 @@ use mpc_core::protocols::rep3::{
     network::Rep3NetworkExt, pointshare, yao,
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
-use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U512, U1024};
+use mpc_core::protocols::rep3_ring::ring::int_ring::{IntRing2k, U320, U576};
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{Rep3RingShare, casts};
 use mpc_core::{
@@ -2627,12 +2627,16 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
-    fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn acvm_type_limbs_to_other_acvm_type<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        limbs: &[Self::AcvmType; 4],
+        limbs: &[Self::AcvmType; NUM_LIMBS],
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
         if limbs.iter().all(|x| !Self::is_shared(x)) {
-            let result: C::BaseField = Utils::field_limbs_to_biguint::<F, 4, 68>(
+            let result: C::BaseField = Utils::field_limbs_to_biguint::<F, NUM_LIMBS, LIMB_BITS>(
                 &limbs
                     .clone()
                     .map(|x| Self::get_public(&x).expect("Already checked it is public")),
@@ -2664,7 +2668,6 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(Rep3AcvmType::Shared(other_acvm_type_share))
     }
 
-    // TODO CESAR: Make all these generic over the number of limbs and limb size
     // TACEO TODO: Optimize this function, also handle mixed public/shared inputs better
     fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
@@ -2691,12 +2694,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect::<Vec<_>>();
 
         let ring_limbs =
-            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)?;
+            casts::field_to_ring_a2b_many::<_, U320, _>(&all_limbs, self.net0, &mut self.state0)?;
 
-        let shifts: Vec<RingElement<U512>> = (0..4)
+        let shifts: Vec<RingElement<U320>> = (0..4)
             .map(|i| {
                 let shift = BigUint::one() << (68 * i);
-                U512::cast_from_biguint(&shift).into()
+                U320::cast_from_biguint(&shift).into()
             })
             .collect::<Vec<_>>();
 
@@ -2712,7 +2715,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         )?;
 
         let mask = (BigUint::one() << 68) - BigUint::one();
-        let mask_ring: RingElement<U512> = U512::cast_from_biguint(&mask).into();
+        let mask_ring: RingElement<U320> = U320::cast_from_biguint(&mask).into();
         let limbs = (0..4)
             .map(|_| {
                 let limb = ring_element & mask_ring;
@@ -2770,13 +2773,13 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             .collect::<Vec<_>>();
 
         let ring_limbs =
-            casts::field_to_ring_a2b_many::<_, U512, _>(&all_limbs, self.net0, &mut self.state0)
+            casts::field_to_ring_a2b_many::<_, U320, _>(&all_limbs, self.net0, &mut self.state0)
                 .expect("Conversion failed");
 
-        let shifts: Vec<RingElement<U512>> = (0..4)
+        let shifts: Vec<RingElement<U320>> = (0..4)
             .map(|i| {
                 let shift = BigUint::one() << (68 * i);
-                U512::cast_from_biguint(&shift).into()
+                U320::cast_from_biguint(&shift).into()
             })
             .collect::<Vec<_>>();
 
@@ -2797,7 +2800,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         .expect("Conversion failed");
 
         let mask = (BigUint::one() << 68) - BigUint::one();
-        let mask_ring: RingElement<U512> = U512::cast_from_biguint(&mask).into();
+        let mask_ring: RingElement<U320> = U320::cast_from_biguint(&mask).into();
         let limbs = (0..4)
             .map(|_| {
                 let limb = ring_element & mask_ring;
@@ -2831,8 +2834,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         lhs: &[Self::AcvmType; 4],
         rhs: &[Self::AcvmType; 4],
     ) -> eyre::Result<[Self::AcvmType; 4]> {
-        let other_acvm_type_lhs = self.acvm_type_limbs_to_other_acvm_type::<C>(lhs)?;
-        let other_acvm_type_rhs = self.acvm_type_limbs_to_other_acvm_type::<C>(rhs)?;
+        let other_acvm_type_lhs = self.acvm_type_limbs_to_other_acvm_type::<4, 68, C>(lhs)?;
+        let other_acvm_type_rhs = self.acvm_type_limbs_to_other_acvm_type::<4, 68, C>(rhs)?;
         let other_acvm_type_mul =
             self.mul_other_acvm_types::<C>(other_acvm_type_lhs, other_acvm_type_rhs)?;
         let limbs_mul =
@@ -2845,7 +2848,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         &mut self,
         a: &[Self::AcvmType; 4],
     ) -> eyre::Result<[Self::AcvmType; 4]> {
-        let other_acvm_type = self.acvm_type_limbs_to_other_acvm_type::<C>(a)?;
+        let other_acvm_type = self.acvm_type_limbs_to_other_acvm_type::<4, 68, C>(a)?;
         let other_acvm_type_inv = self.inverse_other_acvm_type::<C>(other_acvm_type)?;
         let limbs_inv =
             self.other_acvm_type_to_acvm_type_limbs::<4, 68, C>(&other_acvm_type_inv)?;
@@ -2878,12 +2881,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let limbs = a.clone().map(|x| self.get_as_shared(&x));
 
         let ring_limbs =
-            casts::field_to_ring_a2b_many::<_, U512, _>(&limbs, self.net0, &mut self.state0)?;
+            casts::field_to_ring_a2b_many::<_, U320, _>(&limbs, self.net0, &mut self.state0)?;
 
-        let shifts: Vec<RingElement<U512>> = (0..4)
+        let shifts: Vec<RingElement<U320>> = (0..4)
             .map(|i| {
                 let shift = BigUint::one() << (68 * i);
-                U512::cast_from_biguint(&shift).into()
+                U320::cast_from_biguint(&shift).into()
             })
             .collect::<Vec<_>>();
         let mut ring_element = Rep3RingShare::zero();
@@ -2892,7 +2895,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
 
         let modulus = C::BaseField::MODULUS.into();
-        let modulus_ring: RingElement<U512> = U512::cast_from_biguint(&modulus).into();
+        let modulus_ring: RingElement<U320> = U320::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
             modulus_ring,
@@ -2979,14 +2982,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             v
         };
         let ring_limbs =
-            casts::field_to_ring_a2b_many::<_, U1024, _>(&all_limbs, self.net0, &mut self.state0)?;
+            casts::field_to_ring_a2b_many::<_, U576, _>(&all_limbs, self.net0, &mut self.state0)?;
 
         let (a_ring_limbs, rest) = ring_limbs.split_at(4);
         let (b_ring_limbs, to_add_ring_limbs) = rest.split_at(4);
         let shifts = (0..4)
             .map(|i| {
                 let shift = BigUint::one() << (68 * i);
-                U1024::cast_from_biguint(&shift).into()
+                U576::cast_from_biguint(&shift).into()
             })
             .collect::<Vec<RingElement<_>>>();
 
@@ -3017,7 +3020,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         ring_element += to_add_ring;
 
         let modulus = C::BaseField::MODULUS.into();
-        let modulus_ring: RingElement<U1024> = U1024::cast_from_biguint(&modulus).into();
+        let modulus_ring: RingElement<U576> = U576::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
             modulus_ring,
@@ -3122,14 +3125,14 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             v
         };
         let ring_limbs =
-            casts::field_to_ring_a2b_many::<_, U1024, _>(&all_limbs, self.net0, &mut self.state0)?;
+            casts::field_to_ring_a2b_many::<_, U576, _>(&all_limbs, self.net0, &mut self.state0)?;
 
         let (a_ring_limbs, rest) = ring_limbs.split_at(a.len() * 4);
         let (b_ring_limbs, to_add_ring_limbs) = rest.split_at(b.len() * 4);
         let shifts = (0..4)
             .map(|i| {
                 let shift = BigUint::one() << (68 * i);
-                U1024::cast_from_biguint(&shift).into()
+                U576::cast_from_biguint(&shift).into()
             })
             .collect::<Vec<RingElement<_>>>();
         let mut a_rings = Vec::with_capacity(a.len());
@@ -3171,7 +3174,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         ring_element += to_add_ring;
 
         let modulus = C::BaseField::MODULUS.into();
-        let modulus_ring: RingElement<U1024> = U1024::cast_from_biguint(&modulus).into();
+        let modulus_ring: RingElement<U576> = U576::cast_from_biguint(&modulus).into();
         let ring_quotient = mpc_core::protocols::rep3_ring::yao::ring_div_by_public(
             ring_element,
             modulus_ring,
@@ -3189,7 +3192,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         .expect("Conversion failed");
 
         let mask = (BigUint::one() << 68) - BigUint::one();
-        let mask_ring: RingElement<U1024> = U1024::cast_from_biguint(&mask).into();
+        let mask_ring: RingElement<U576> = U576::cast_from_biguint(&mask).into();
         let quotient_limbs = (0..4)
             .map(|_| {
                 let limb = ring_quotient & mask_ring;

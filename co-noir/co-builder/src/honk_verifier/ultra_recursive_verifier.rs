@@ -5,6 +5,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use ark_ff::Field;
 use co_noir_common::constants::{
     BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, NUM_LIBRA_COMMITMENTS,
+    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS, ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK,
 };
 use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{constants::CONST_PROOF_SIZE_LOG_N, honk_curve::HonkCurve};
@@ -40,7 +41,14 @@ impl UltraRecursiveVerifier {
         driver: &mut T,
         has_zk: ZeroKnowledge,
     ) -> eyre::Result<PairingPoints<C, T>> {
-        // TODO CESAR: Assert length of proof
+        debug_assert_eq!(
+            proof.len(),
+            if has_zk == ZeroKnowledge::Yes {
+                ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS
+            } else {
+                ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK
+            } + key.public_inputs.len()
+        );
         let mut transcript = TranscriptCT::<C, H>::new_verifier(proof);
 
         // No IPA accumulator on the UltraRecursiveFlavor

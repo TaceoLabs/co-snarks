@@ -11,6 +11,8 @@ use co_noir_common::{
 };
 use co_noir_types::Rep3Type;
 use co_ultrahonk::prelude::{Rep3CoUltraHonk, UltraHonk};
+use itertools::izip;
+use mpc_core::protocols::rep3::share_field_elements;
 use mpc_net::local::LocalNetwork;
 use sha3::Keccak256;
 use std::{fs::File, sync::Arc};
@@ -30,7 +32,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         .expect("failed to parse witness");
 
     // Will be trivially shared anyways
-    let witness = witness.into_iter().map(Rep3Type::from).collect::<Vec<_>>();
+    let witnesses = share_field_elements(&witness, &mut rand::thread_rng());
+    let witnesses = witnesses.map(|w| w.into_iter().map(Rep3Type::from).collect::<Vec<_>>());
 
     let nets0 = LocalNetwork::new_3_parties();
     let nets1 = LocalNetwork::new_3_parties();
@@ -51,8 +54,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
             Bn254,
         >(CRS_PATH_G2)
         .unwrap();
-    for (net0, net1) in nets0.into_iter().zip(nets1) {
-        let witness = witness.clone();
+    for (net0, net1, witness) in izip!(nets0, nets1, witnesses) {
         let prover_crs = prover_crs.clone();
         let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
         threads.push(std::thread::spawn(move || {
@@ -66,6 +68,8 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
             )
             .unwrap();
             let vk: VerifyingKey<Bn254> = pk.create_vk(&prover_crs, verifier_crs).unwrap();
+
+            println!("Computing proof...");
             let (proof, public_input) =
                 Rep3CoUltraHonk::<_, H>::prove(&net0, pk, &prover_crs, has_zk, &vk.inner_vk)
                     .unwrap();

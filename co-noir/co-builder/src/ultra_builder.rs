@@ -3535,31 +3535,33 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         let limb_shift = P::ScalarField::from(1u128 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
 
-        let lhs = a
-            .into_iter()
-            .flat_map(|limb| vec![limb; 4])
-            .collect::<Vec<_>>();
-        let rhs = b.into_iter().cycle().take(16).collect::<Vec<_>>();
+        let lhs = [
+            a[0].clone(),
+            a[0].clone(),
+            a[0].clone(),
+            a[0].clone(),
+            a[1].clone(),
+            a[1].clone(),
+            a[1].clone(),
+            a[2].clone(),
+            a[2].clone(),
+            a[3].clone(),
+        ];
+        let rhs = [
+            b[0].clone(),
+            b[1].clone(),
+            b[2].clone(),
+            b[3].clone(),
+            b[0].clone(),
+            b[1].clone(),
+            b[2].clone(),
+            b[0].clone(),
+            b[1].clone(),
+            b[0].clone(),
+        ];
 
-        // TODO CESAR: Do not include unused values
-        let [
-            a0b0,
-            a0b1,
-            a0b2,
-            a0b3,
-            a1b0,
-            a1b1,
-            a1b2,
-            _,
-            a2b0,
-            a2b1,
-            _,
-            _,
-            a3b0,
-            _,
-            _,
-            _,
-        ]: [_; 16] = driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
+        let [a0b0, a0b1, a0b2, a0b3, a1b0, a1b1, a1b2, a2b0, a2b1, a3b0]: [_; 10] =
+            driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
 
         let tmp = driver.add(a1b0, a0b1);
         let tmp = driver.mul(tmp, limb_shift.into())?;
@@ -3877,31 +3879,33 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let limb_rshift = limb_shift.inverse().unwrap();
         let limb_rshift_2 = limb_rshift * limb_rshift;
 
-        let lhs = a
-            .into_iter()
-            .flat_map(|limb| vec![limb; 4])
-            .collect::<Vec<_>>();
-        let rhs = b.into_iter().cycle().take(16).collect::<Vec<_>>();
+        let lhs = [
+            a[0].clone(),
+            a[0].clone(),
+            a[0].clone(),
+            a[0].clone(),
+            a[1].clone(),
+            a[1].clone(),
+            a[1].clone(),
+            a[2].clone(),
+            a[2].clone(),
+            a[3].clone(),
+        ];
+        let rhs = [
+            b[0].clone(),
+            b[1].clone(),
+            b[2].clone(),
+            b[3].clone(),
+            b[0].clone(),
+            b[1].clone(),
+            b[2].clone(),
+            b[0].clone(),
+            b[1].clone(),
+            b[0].clone(),
+        ];
 
-        // TODO CESAR: Do not include unused values
-        let [
-            a0b0,
-            a0b1,
-            a0b2,
-            a0b3,
-            a1b0,
-            a1b1,
-            a1b2,
-            _,
-            a2b0,
-            a2b1,
-            _,
-            _,
-            a3b0,
-            _,
-            _,
-            _,
-        ]: [_; 16] = driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
+        let [a0b0, a0b1, a0b2, a0b3, a1b0, a1b1, a1b2, a2b0, a2b1, a3b0]: [_; 10] =
+            driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
 
         // lo_0 = a[0] * b[0] - r[0] + (a[1] * b[0] + a[0] * b[1]) * limb_shift
         let mut lo_0 = driver.sub(a0b0, r[0].clone());
@@ -4280,6 +4284,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         metadata: &ProgramMetadata,
     ) -> eyre::Result<()> {
         tracing::trace!("Builder build constraints");
+        println!("Building constraints...");
 
         // Add arithmetic gates
         for constraint in constraint_system.poly_triple_constraints.iter() {

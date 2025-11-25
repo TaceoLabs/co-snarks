@@ -137,15 +137,29 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> ProvingKeyTra
             &mut circuit,
         )?;
 
-        // Construct the public inputs array
-        let block = circuit.blocks.get_pub_inputs();
-        for var_idx in block.wires[Self::PUBLIC_INPUT_WIRE_INDEX]
+        let public_input_wires = circuit.blocks.get_pub_inputs().wires
+            [Self::PUBLIC_INPUT_WIRE_INDEX]
             .iter()
             .take(proving_key.num_public_inputs as usize)
-            .cloned()
-        {
-            let var = U::get_public(&circuit.get_variable(var_idx as usize))
-                .ok_or(HonkProofError::ExpectedPublicWitness)?;
+            .map(|&wire_idx| circuit.get_variable(wire_idx as usize))
+            .collect::<Vec<_>>();
+
+        let opened_public_inputs = if U::is_shared(&public_input_wires[0]) {
+            driver.open_many(
+                &public_input_wires
+                    .iter()
+                    .map(|var| U::get_shared(var).expect("Should be shared"))
+                    .collect::<Vec<_>>(),
+            )?
+        } else {
+            public_input_wires
+                .iter()
+                .map(|var| U::get_public(var).ok_or(HonkProofError::ExpectedPublicWitness))
+                .collect::<HonkProofResult<Vec<C::ScalarField>>>()?
+        };
+
+        // Construct the public inputs array
+        for var in opened_public_inputs {
             proving_key.public_inputs.push(var);
         }
 

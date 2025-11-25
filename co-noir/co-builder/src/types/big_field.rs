@@ -624,7 +624,7 @@ impl<F: PrimeField> BigField<F> {
             .iter()
             .map(|limb| limb.element.get_value(builder, driver))
             .collect();
-        driver.acvm_type_limbs_to_other_acvm_type::<P>(
+        driver.acvm_type_limbs_to_other_acvm_type::<NUM_LIMBS, NUM_LIMB_BITS, P>(
             &limb_values
                 .try_into()
                 .expect("We provided NUM_LIMBS elements"),
@@ -877,7 +877,6 @@ impl<F: PrimeField> BigField<F> {
 
             let num_quotient_bits = BigField::<F>::get_quotient_max_bits(&[BigUint::zero()]);
 
-            // TODO CESAR: Is this correct?
             let quotient = BigField::<F>::from_acvm_limbs(
                 &quotient_value,
                 false,
@@ -920,7 +919,6 @@ impl<F: PrimeField> BigField<F> {
         // Why would we use this for 2 constants? Turns out, in biggroup
         // Helper function to count how many times modulus fits into maximum_value
         fn get_overload_count(maximum_value: &BigUint) -> usize {
-            // TODO CESAR: Hardcoded for BN254 Fq
             let target_modulus: BigUint = Fq::MODULUS.into();
             let mut target = target_modulus.clone();
             let mut overload_count = 0;
@@ -1039,10 +1037,6 @@ impl<F: PrimeField> BigField<F> {
         }
         quotient.prime_basis_limb = quotient_limb;
 
-        // TODO CESAR: Is this the same as:
-        //    bigfield remainder = bigfield(
-        // witness_t(context, fr(remainder_value.slice(0, NUM_LIMB_BITS * 2).lo)),
-        // witness_t(context, fr(remainder_value.slice(NUM_LIMB_BITS * 2, NUM_LIMB_BITS * 3 + NUM_LAST_LIMB_BITS).lo)));
         let [remainder_lo, remainder_hi] = driver
             .other_acvm_type_to_acvm_type_limbs::<2, { 2 * NUM_LIMB_BITS }, _>(&remainder_value)?;
         let remainder = BigField::from_slices::<P, T>(
@@ -1161,6 +1155,7 @@ impl<F: PrimeField> BigField<F> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<BoolCT<F, T>> {
+        // TODO CESAR / TODO FLORIN: Batch these
         let lhs = self.get_value_fq(builder, driver)?;
         let rhs = other.get_value_fq(builder, driver)?;
         let (is_equal_raw_acvm, is_equal_raw_acvm_other) =
@@ -1687,6 +1682,7 @@ impl<F: PrimeField> BigField<F> {
 
         let lhs_value = self.get_limb_values(builder, driver)?;
         let rhs_value = other.get_limb_values(builder, driver)?;
+        // TODO CESAR / TODO FLORIN: We can use a smaller integer ring here
         let (quotient_value, remainder_value) =
             driver.madd_div_mod_acvm_limbs::<P>(&lhs_value, &rhs_value, &[])?;
 
@@ -1765,8 +1761,6 @@ impl<F: PrimeField> BigField<F> {
         Self::internal_div(numerators, denominator, false, builder, driver)
     }
 
-    // TODO CESAR: This is likely much slower than the bb version. Which works on integer types
-    // Division of a sum with an optional check if divisor is zero. Should not be used outside of class.
     //
     // @param numerators Vector of numerators
     // @param denominator Denominator
@@ -1817,7 +1811,8 @@ impl<F: PrimeField> BigField<F> {
             driver.madd_div_mod_acvm_limbs::<P>(&result_value, &denominator_value, &[tmp])?;
 
         if numerator_constant && denominator.is_constant() {
-            let result_fq = driver.acvm_type_limbs_to_other_acvm_type::<P>(&result_value)?;
+            let result_fq = driver
+                .acvm_type_limbs_to_other_acvm_type::<NUM_LIMBS, NUM_LIMB_BITS, P>(&result_value)?;
             return Ok(BigField::from_constant(
                 &T::get_public_other_acvm_type(&result_fq)
                     .expect("Constants are public")
@@ -2215,6 +2210,7 @@ impl<F: PrimeField> BigField<F> {
         self.reduction_check(builder, driver)?;
 
         let self_value = self.get_limb_values(builder, driver)?;
+        // TODO CESAR / TODO FLORIN: We can use a smaller integer ring type here
         let (quotient_value, remainder_value) =
             driver.madd_div_mod_acvm_limbs::<P>(&self_value, &self_value, &[])?;
 
@@ -2303,6 +2299,7 @@ impl<F: PrimeField> BigField<F> {
                         .into(),
                 ));
             } else {
+                // TODO CESAR / TODO FLORIN: We can use a smaller integer ring type here
                 let (_, r) = driver.madd_div_mod_acvm_limbs(&self_value, &self_value, &[])?;
                 let mut new_to_add = to_add.to_vec();
                 new_to_add.push(BigField::from_constant(
@@ -2493,6 +2490,7 @@ impl<F: PrimeField> BigField<F> {
         }
 
         // Compute the sum of products
+        // TODO CESAR / TODO FLORIN: Batch these
         for i in 0..num_multiplications {
             // Get the native values modulo the field modulus
             let mul_left_native = mul_left[i].get_value_fq(builder, driver)?;
@@ -2508,6 +2506,7 @@ impl<F: PrimeField> BigField<F> {
         // Compute the sum of to_sub
         let mut sub_native = T::OtherAcvmType::default();
         let mut sub_constant = true;
+        // TODO CESAR / TODO FLORIN: Batch these
         for sub in to_sub {
             let sub_value = sub.get_value_fq(builder, driver)?;
             sub_native = driver.add_other_acvm_types(sub_native, sub_value);
@@ -2634,7 +2633,6 @@ impl<F: PrimeField> BigField<F> {
 
                 if fix_remainder_to_zero {
                     result.self_reduce(builder, driver)?;
-                    // TODO CESAR: msg?
                     result.assert_equal(&BigField::default(), builder, driver)?;
                 }
                 return Ok(result);
@@ -2645,13 +2643,13 @@ impl<F: PrimeField> BigField<F> {
         new_to_add.push(BigField::from_constant(&r_const));
 
         // Compute added sum
-        let mut add_right_final_sum = array::from_fn(|_| T::AcvmType::default());
+        let mut add_right_final_limbs = vec![];
         let mut add_right_maximum = BigUint::zero();
         for a in new_to_add.iter_mut() {
             // Technically not needed, but better to leave just in case
             a.reduction_check(builder, driver)?;
             let limbs = a.get_limb_values(builder, driver)?;
-            add_right_final_sum = driver.add_acvm_type_limbs::<P>(&add_right_final_sum, &limbs)?;
+            add_right_final_limbs.push(limbs);
             add_right_maximum += &a.get_maximum_value();
         }
 
@@ -2689,11 +2687,9 @@ impl<F: PrimeField> BigField<F> {
 
         // Compute the final quotient and remainder
         let (quotient, remainder) =
-            driver.madd_div_mod_many_acvm_limbs(&a, &b, &[add_right_final_sum])?;
+            driver.madd_div_mod_many_acvm_limbs(&a, &b, &add_right_final_limbs)?;
 
         // If we are establishing an identity and the remainder has to be zero, we need to check, that it actually is
-        // TODO CESAR
-
         let quotient =
             BigField::from_acvm_limbs(&quotient, false, num_quotient_bits, builder, driver)?;
 
@@ -3071,6 +3067,7 @@ impl<F: PrimeField> BigField<F> {
         let mut limb_2_accumulator: Vec<FieldCT<F>> = Vec::new();
         let mut prime_limb_accumulator: Vec<FieldCT<F>> = Vec::new();
 
+        // TODO CESAR / TODO FLORIN: Use FieldCT::multiply_many
         for i in 0..left.len() {
             let left_i = &mut left[i];
             let right_i = &mut right[i];

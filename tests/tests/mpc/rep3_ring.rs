@@ -21,7 +21,6 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::gadgets;
     use mpc_core::protocols::rep3_ring::ring::bit::Bit;
     use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
-    use mpc_core::protocols::rep3_ring::ring::int_ring::U1024;
     use mpc_core::protocols::rep3_ring::ring::int_ring::U512;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
@@ -1462,7 +1461,7 @@ mod ring_share {
 
     #[test]
     fn rep3_ring_to_field_cast_a2b_wip() {
-        apply_to_all!(rep3_ring_to_field_cast_a2b_t_wip, [U512, U1024]);
+        apply_to_all!(rep3_ring_to_field_cast_a2b_t_wip, [U512]);
     }
 
     fn rep3_field_to_ring_cast_gc_t<T: IntRing2k>()

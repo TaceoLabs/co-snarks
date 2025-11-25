@@ -1025,11 +1025,15 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             .ok_or_else(|| eyre::eyre!("Element has no inverse"))
     }
 
-    fn acvm_type_limbs_to_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+    fn acvm_type_limbs_to_other_acvm_type<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
         &mut self,
-        limbs: &[Self::AcvmType; 4],
+        limbs: &[Self::AcvmType; NUM_LIMBS],
     ) -> eyre::Result<Self::OtherAcvmType<C>> {
-        Ok(Utils::field_limbs_to_biguint::<_, 4, 68>(limbs).into())
+        Ok(Utils::field_limbs_to_biguint::<_, NUM_LIMBS, LIMB_BITS>(limbs).into())
     }
 
     fn other_acvm_type_to_acvm_type_limbs<
@@ -1045,7 +1049,6 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         ))
     }
 
-    // TODO CESAR: Make all these generic over the number of limbs and limb size
     fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         lhs: &[Self::AcvmType; 4],
