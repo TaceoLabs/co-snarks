@@ -148,7 +148,14 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> eyre::Result<(HonkProof<H::DataType>, Vec<H::DataType>)> {
         let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
-        let proof = Self::prove_inner(&(), &mut Default::default(), proving_key, crs, has_zk, verifying_key)?;
+        let proof = Self::prove_inner(
+            &(),
+            &mut Default::default(),
+            proving_key,
+            crs,
+            has_zk,
+            verifying_key,
+        )?;
         Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))
     }
 }
