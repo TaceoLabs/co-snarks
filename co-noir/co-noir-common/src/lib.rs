@@ -284,7 +284,7 @@ mod tests {
             PlainUltraHonkDriver,
             ark_bn254::G1Projective,
             _,
-        >(&(), &mut (), &input)
+        >(&(), &mut Default::default(), &input)
         .unwrap();
         let should_result = {
             let mut out = Vec::with_capacity(vec_size);

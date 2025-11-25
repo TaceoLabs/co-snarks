@@ -33,6 +33,7 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 rand.workspace = true
+rand_chacha.workspace = true
 
 [dev-dependencies]
 mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }

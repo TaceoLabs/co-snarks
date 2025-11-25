@@ -41,3 +41,32 @@ impl MpcState for () {
         Ok(())
     }
 }
+
+#[derive(Default)]
+/// Plain driver used during UltraHonk proofs.
+/// Holds an RNG because, inside recursive verification in the builder,
+/// every party creates mock (zk) proofs which must be identical.
+/// Therefore all parties must use the same RNG.
+pub struct PlainState {
+    /// The RNG used for masking in the ZK setting
+    pub rng: Option<rand_chacha::ChaCha12Rng>,
+}
+
+impl PlainState {
+    /// Creates a new PlainState with a given RNG
+    pub fn new(rng: rand_chacha::ChaCha12Rng) -> Self {
+        Self { rng: Some(rng) }
+    }
+}
+
+impl MpcState for PlainState {
+    type PartyID = usize;
+
+    fn id(&self) -> Self::PartyID {
+        0
+    }
+
+    fn fork(&mut self, _n: usize) -> eyre::Result<Self> {
+        Ok(PlainState { rng: None })
+    }
+}

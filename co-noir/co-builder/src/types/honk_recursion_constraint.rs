@@ -12,7 +12,7 @@ use crate::types::field_ct::BoolCT;
 use crate::types::types::{AddQuad, PairingPoints, RecursionConstraint};
 use crate::{transcript_ct::TranscriptFieldType, types::field_ct::FieldCT};
 use ark_ec::AffineRepr;
-use ark_ff::{One, Zero};
+use ark_ff::{BigInteger, One, PrimeField, Zero};
 use co_acvm::PlainAcvmSolver;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::constants::{
@@ -32,7 +32,8 @@ use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIE
 use co_noir_common::transcript::{Poseidon2Sponge, Transcript};
 use co_noir_common::types::ZeroKnowledge;
 use co_ultrahonk::prelude::CoUltraHonk;
-use mpc_core::MpcState;
+use mpc_core::{MpcState, PlainState};
+use rand::SeedableRng;
 use std::any::Any;
 use std::array;
 
@@ -342,16 +343,17 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> eyre::Result<(Vec<C::ScalarField>, VerifyingKeyBarretenberg<C>)> {
-        let mut random_fields = Vec::with_capacity(3 + num_inner_public_inputs);
-        for _ in 0..num_inner_public_inputs + 3 {
+        let mut random_fields = Vec::with_capacity(3 + 1 + num_inner_public_inputs); // 3 as inputs for the simple circuit, rest for public inputs and one for the shared randomness for initializing the rng for the plaindriver prover
+        for _ in 0..num_inner_public_inputs + 3 + 1 {
             let pi = driver.rand()?;
             random_fields.push(pi);
         }
         let opened = driver.open_many(&random_fields)?;
-        let a = opened[0];
-        let b = opened[1];
-        let c = opened[2];
-        let public_inputs = &opened[3..];
+        let rng_seed = opened[0];
+        let a = opened[1];
+        let b = opened[2];
+        let c = opened[3];
+        let public_inputs = &opened[4..];
         let d = a + b + c;
 
         // TACEO TODO: I think this is fine?
@@ -398,9 +400,19 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             &mut plain_driver,
         )?;
 
+        // Every party needs to use the same RNG for the below proofs to be identical. We derive it from shared randomness.
+        let rng = rand_chacha::ChaCha12Rng::from_seed(
+            rng_seed
+                .into_bigint()
+                .to_bytes_be()
+                .try_into()
+                .expect("field element should fit into seed size"),
+        );
+
+        let mut plain_state = PlainState::new(rng);
         let proof = CoUltraHonk::<PlainUltraHonkDriver, _, Poseidon2Sponge>::prove_inner(
             &(),
-            &mut (),
+            &mut plain_state,
             pk,
             crs,
             has_zk,
