@@ -23,7 +23,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         let pow_size = 1 << log_num_mononmials;
         let current_element_idx = 0;
         let periodicity = 2;
-        let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(P::ScalarField::ONE);
 
         // Barretenberg uses multithreading here and a simpler algorithm with worse complexity
         let mut beta_products = vec![one.clone(); pow_size];
@@ -44,13 +44,10 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         })
     }
 
-    pub fn new_without_products<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        betas: Vec<FieldCT<P::ScalarField>>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> Self {
+    pub fn new_without_products(betas: Vec<FieldCT<P::ScalarField>>) -> Self {
         let current_element_idx = 0;
         let periodicity = 2;
-        let partial_evaluation_result = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let partial_evaluation_result = FieldCT::from(P::ScalarField::ONE);
 
         Self {
             betas,
@@ -71,7 +68,7 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(P::ScalarField::ONE);
 
         let current_univariate_eval = self
             .current_element()
@@ -94,15 +91,15 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        let one = FieldCT::from_witness(P::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(P::ScalarField::ONE);
 
         let lhs = [
-            self.current_element().sub(&one, builder, driver),
+            round_challenge.clone(),
             one.sub(indicator, builder, driver),
             indicator.clone(),
         ];
         let rhs = [
-            round_challenge.clone(),
+            self.current_element().sub(&one, builder, driver),
             self.partial_evaluation_result.clone(),
             self.partial_evaluation_result.clone(),
         ];
@@ -111,12 +108,14 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
                 .try_into()
                 .expect("we have exactly 3 elements");
 
-        let current_univariate_eval = curr_by_challenge.add(&one, builder, driver);
+        let current_univariate_eval = one.add(&curr_by_challenge, builder, driver);
 
         // If dummy round, make no update to the partial_evaluation_result
-        self.partial_evaluation_result = ind_by_partial
-            .multiply(&current_univariate_eval, builder, driver)?
-            .add(&minus_ind_by_partial, builder, driver);
+        self.partial_evaluation_result = minus_ind_by_partial.add(
+            &ind_by_partial.multiply(&current_univariate_eval, builder, driver)?,
+            builder,
+            driver,
+        );
         self.current_element_idx += 1;
         self.periodicity *= 2;
         Ok(())

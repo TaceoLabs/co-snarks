@@ -1,11 +1,10 @@
 use super::univariates::SharedUnivariate;
-use crate::{
-    types::{AllEntities, Polynomials},
-    types_batch::AllEntitiesBatch,
-};
+use crate::types_batch::AllEntitiesBatch;
 use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::PrimeField;
-use co_noir_common::mpc::NoirUltraHonkProver;
+use co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH;
+use co_noir_common::polynomials::entities::AllEntities;
+use co_noir_common::types::RelationParameters;
+use co_noir_common::{mpc::NoirUltraHonkProver, polynomials::entities::Polynomials};
 use itertools::izip;
 use std::iter;
 use ultrahonk::{NUM_ALPHAS, prelude::Univariate};
@@ -16,10 +15,6 @@ pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) alphas: [P::ScalarField; NUM_ALPHAS],
     pub(crate) gate_challenges: Vec<P::ScalarField>,
 }
-
-pub(crate) const MAX_PARTIAL_RELATION_LENGTH: usize = 7;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH: usize = MAX_PARTIAL_RELATION_LENGTH + 1;
-pub(crate) const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_LENGTH + 1;
 
 pub(crate) type ProverUnivariates<T, P> = AllEntities<
     SharedUnivariate<T, P, MAX_PARTIAL_RELATION_LENGTH>,
@@ -32,15 +27,6 @@ pub(crate) type PartiallyEvaluatePolys<T, P> = AllEntities<
     Vec<<P as PrimeGroup>::ScalarField>,
 >;
 pub(crate) type ClaimedEvaluations<F> = AllEntities<F, F>;
-
-pub(crate) struct RelationParameters<F: PrimeField> {
-    pub(crate) eta_1: F,
-    pub(crate) eta_2: F,
-    pub(crate) eta_3: F,
-    pub(crate) beta: F,
-    pub(crate) gamma: F,
-    pub(crate) public_input_delta: F,
-}
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> ProverMemory<T, P> {
     pub(crate) fn from_memory_and_polynomials(

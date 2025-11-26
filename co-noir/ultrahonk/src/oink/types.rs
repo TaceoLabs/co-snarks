@@ -1,7 +1,7 @@
-use crate::{NUM_ALPHAS, types::WitnessEntities};
+use crate::NUM_ALPHAS;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::{entities::WitnessEntities, polynomial::Polynomial};
 
 pub(crate) struct ProverMemory<P: CurveGroup> {
     /// column 3

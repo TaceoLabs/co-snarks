@@ -1,6 +1,7 @@
 mod ring_share {
     use ark_ff::PrimeField;
     use ark_std::UniformRand;
+    use co_noir_common::utils::Utils;
     use itertools::izip;
     use itertools::Itertools;
     use mpc_core::protocols::rep3;
@@ -1430,6 +1431,39 @@ mod ring_share {
         );
     }
 
+    fn rep3_ring_to_field_cast_a2b_big_ring_t<T: IntRing2k>()
+    where
+        Standard: Distribution<T>,
+    {
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let should_result = ark_bn254::Fr::rand(&mut rng);
+        let x = RingElement(T::cast_from_biguint(&BigUint::from(should_result)));
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let y =
+                    casts::ring_to_field_a2b_big_ring::<_, ark_bn254::Fr, _>(x, &net, &mut state)
+                        .unwrap();
+                tx.send(y)
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_field_element(result1, result2, result3);
+        assert_eq!(is_result, should_result);
+    }
+
+    #[test]
+    fn rep3_ring_to_field_cast_a2b_big_ring() {
+        apply_to_all!(rep3_ring_to_field_cast_a2b_big_ring_t, [U512]);
+    }
+
     fn rep3_field_to_ring_cast_gc_t<T: IntRing2k>()
     where
         Standard: Distribution<T>,
@@ -1749,28 +1783,16 @@ mod ring_share {
         apply_to_all!(rep3_bin_div_via_yao_t, [u8, u16, u32, u64, u128]); //Too slow for U512
     }
 
-    fn rep3_translator_remainder_and_quotient_t<T: IntRing2k, F: PrimeField>(divisor: &BigUint)
-    where
+    fn rep3_div_by_public_two_field_output_t<T: IntRing2k, F: PrimeField, K: PrimeField>(
+        divisor: &BigUint,
+    ) where
         Standard: Distribution<T>,
     {
-        const VEC_SIZE: usize = 3;
+        const VEC_SIZE: usize = 5;
         const SLICE_SIZE: u64 = 68;
         const LIMBS_PER_FIELD: usize = 4;
 
-        fn slice_u256(value: &BigUint, start: u64, end: u64) -> BigUint {
-            if end <= start {
-                return BigUint::zero();
-            }
-            let range = end - start;
-            let mask = if range == 256 {
-                (BigUint::from(1u64) << 256) - BigUint::one()
-            } else {
-                (BigUint::one() << range) - BigUint::one()
-            };
-            (value >> start) & mask
-        }
-
-        let nets = LocalNetwork::new_3_parties();
+        let nets = LocalNetwork::new_with_timeout(3, std::time::Duration::from_secs(120));
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| {
@@ -1781,68 +1803,151 @@ mod ring_share {
                 RingElement(T::cast_from_biguint(&biguint))
             })
             .collect_vec();
-        let y = (0..VEC_SIZE)
-            .map(|_| rng.gen::<RingElement<T>>())
-            .collect_vec();
         let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
-        let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
         let mut should_result1: Vec<RingElement<T>> = Vec::with_capacity(VEC_SIZE);
+        let mut should_result_remainders = Vec::with_capacity(VEC_SIZE);
         for x in x.into_iter() {
             should_result1.push(RingElement(T::cast_from_biguint(
                 &(x.0.cast_to_biguint() / divisor),
             )));
+            should_result_remainders.push(K::from(x.0.cast_to_biguint() % divisor));
         }
-        let mut should_result_1 = Vec::with_capacity(VEC_SIZE);
+        let mut should_result_quotients = Vec::with_capacity(VEC_SIZE);
         for x in &should_result1 {
             let x_biguint = x.0.cast_to_biguint();
-            should_result_1.push(F::from(slice_u256(&x_biguint, 0, SLICE_SIZE)));
-            should_result_1.push(F::from(slice_u256(&x_biguint, SLICE_SIZE, 2 * SLICE_SIZE)));
-            should_result_1.push(F::from(slice_u256(
+            should_result_quotients.push(F::from(Utils::slice_u256(&x_biguint, 0, SLICE_SIZE)));
+            should_result_quotients.push(F::from(Utils::slice_u256(
+                &x_biguint,
+                SLICE_SIZE,
+                2 * SLICE_SIZE,
+            )));
+            should_result_quotients.push(F::from(Utils::slice_u256(
                 &x_biguint,
                 2 * SLICE_SIZE,
                 3 * SLICE_SIZE,
             )));
-            should_result_1.push(F::from(slice_u256(
+            should_result_quotients.push(F::from(Utils::slice_u256(
                 &x_biguint,
                 3 * SLICE_SIZE,
                 4 * SLICE_SIZE,
             )));
         }
-        let mut should_result_2 = Vec::with_capacity(VEC_SIZE);
-        for y in y {
-            let y_biguint = y.0.cast_to_biguint();
-            should_result_2.push(F::from(slice_u256(&y_biguint, 0, SLICE_SIZE)));
-            should_result_2.push(F::from(slice_u256(&y_biguint, SLICE_SIZE, 2 * SLICE_SIZE)));
-            should_result_2.push(F::from(slice_u256(
-                &y_biguint,
-                2 * SLICE_SIZE,
-                3 * SLICE_SIZE,
-            )));
-            should_result_2.push(F::from(slice_u256(
-                &y_biguint,
-                3 * SLICE_SIZE,
-                4 * SLICE_SIZE,
-            )));
-        }
+
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net, tx, x, y) in izip!(
-            nets,
-            [tx1, tx2, tx3],
-            x_shares.into_iter(),
-            y_shares.into_iter()
-        ) {
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
             let divisor = divisor.to_owned();
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                let div = yao::compute_remainder_limbs_and_quotient_limbs_many(
+                let div = yao::ring_div_by_public_to_fr_limbs_and_fq_many::<_, _, F, K>(
                     &x,
-                    &y,
                     SLICE_SIZE as usize,
                     &divisor,
+                    LIMBS_PER_FIELD,
+                    &net,
+                    &mut state,
+                )
+                .unwrap();
+                tx.send(div)
+            });
+        }
+
+        let (result1, result1_other) = rx1.recv().unwrap();
+        let (result2, result2_other) = rx2.recv().unwrap();
+        let (result3, result3_other) = rx3.recv().unwrap();
+        let is_result: Vec<F> = rep3::combine_field_elements(&result1, &result2, &result3);
+        let is_result_other: Vec<K> =
+            rep3::combine_field_elements(&result1_other, &result2_other, &result3_other);
+
+        assert_eq!(is_result, should_result_quotients);
+        assert_eq!(is_result_other, should_result_remainders);
+    }
+
+    #[test]
+    fn rep3_div_by_public_two_field_output() {
+        rep3_div_by_public_two_field_output_t::<U512, ark_bn254::Fr, ark_bn254::Fq>(
+            &ark_bn254::Fq::MODULUS.into(),
+        );
+    }
+
+    fn rep3_div_by_public_to_limbs_output_t<T: IntRing2k, F: PrimeField>(divisor: &BigUint)
+    where
+        Standard: Distribution<T>,
+    {
+        const VEC_SIZE: usize = 5;
+        const SLICE_SIZE: u64 = 68;
+        const LIMBS_PER_FIELD: usize = 4;
+
+        let nets = LocalNetwork::new_with_timeout(3, std::time::Duration::from_secs(120));
+        let mut rng = thread_rng();
+        let x = (0..VEC_SIZE)
+            .map(|_| {
+                // we are dividing by the field modulus, so we want this to be large enough (also in bb this is close to 512 bits)
+                let mut bytes = vec![0u8; T::BYTES];
+                rand::RngCore::fill_bytes(&mut rng, &mut bytes);
+                let biguint = BigUint::from_bytes_le(&bytes);
+                RingElement(T::cast_from_biguint(&biguint))
+            })
+            .collect_vec();
+        let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
+        let mut should_result_quotients_ = Vec::with_capacity(VEC_SIZE);
+        let mut should_result_remainders_ = Vec::with_capacity(VEC_SIZE);
+        for x in x.into_iter() {
+            should_result_quotients_.push(x.0.cast_to_biguint() / divisor);
+            should_result_remainders_.push(x.0.cast_to_biguint() % divisor);
+        }
+
+        let mut should_result_quotients = Vec::with_capacity(VEC_SIZE * LIMBS_PER_FIELD);
+        let mut should_result_remainders = Vec::with_capacity(VEC_SIZE * LIMBS_PER_FIELD);
+        for x in &should_result_quotients_ {
+            should_result_quotients.push(F::from(Utils::slice_u256(x, 0, SLICE_SIZE)));
+            should_result_quotients.push(F::from(Utils::slice_u256(x, SLICE_SIZE, 2 * SLICE_SIZE)));
+            should_result_quotients.push(F::from(Utils::slice_u256(
+                x,
+                2 * SLICE_SIZE,
+                3 * SLICE_SIZE,
+            )));
+            should_result_quotients.push(F::from(Utils::slice_u256(
+                x,
+                3 * SLICE_SIZE,
+                4 * SLICE_SIZE,
+            )));
+        }
+        for x in &should_result_remainders_ {
+            should_result_remainders.push(F::from(Utils::slice_u256(x, 0, SLICE_SIZE)));
+            should_result_remainders.push(F::from(Utils::slice_u256(
+                x,
+                SLICE_SIZE,
+                2 * SLICE_SIZE,
+            )));
+            should_result_remainders.push(F::from(Utils::slice_u256(
+                x,
+                2 * SLICE_SIZE,
+                3 * SLICE_SIZE,
+            )));
+            should_result_remainders.push(F::from(Utils::slice_u256(
+                x,
+                3 * SLICE_SIZE,
+                4 * SLICE_SIZE,
+            )));
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
+            let divisor = divisor.to_owned();
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+
+                let div = yao::ring_div_by_public_to_limbs_many::<_, _, F>(
+                    &x,
+                    &divisor,
+                    SLICE_SIZE as usize,
                     LIMBS_PER_FIELD,
                     &net,
                     &mut state,
@@ -1856,22 +1961,21 @@ mod ring_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result: Vec<F> = rep3::combine_field_elements(&result1, &result2, &result3);
-        let mut is_result_1 = Vec::with_capacity(VEC_SIZE * LIMBS_PER_FIELD);
-        let mut is_result_2 = Vec::with_capacity(VEC_SIZE * LIMBS_PER_FIELD);
+
+        let mut is_quotients = Vec::with_capacity(VEC_SIZE);
+        let mut is_remainders = Vec::with_capacity(VEC_SIZE);
         for chunk in is_result.chunks(2 * LIMBS_PER_FIELD) {
-            let (left, right) = chunk.split_at(LIMBS_PER_FIELD);
-            is_result_1.extend_from_slice(left);
-            is_result_2.extend_from_slice(right);
+            is_quotients.extend(chunk[..LIMBS_PER_FIELD].to_vec());
+            is_remainders.extend(chunk[LIMBS_PER_FIELD..].to_vec());
         }
-        assert_eq!(is_result_1, should_result_1);
-        assert_eq!(is_result_2, should_result_2);
+
+        assert_eq!(is_quotients, should_result_quotients);
+        assert_eq!(is_remainders, should_result_remainders);
     }
 
     #[test]
-    fn rep3_rep3_translator_remainder_and_quotient() {
-        rep3_translator_remainder_and_quotient_t::<U512, ark_bn254::Fr>(
-            &ark_bn254::Fq::MODULUS.into(),
-        );
+    fn rep3_div_by_public_to_limbs_output() {
+        rep3_div_by_public_to_limbs_output_t::<U512, ark_bn254::Fr>(&ark_bn254::Fq::MODULUS.into());
     }
 
     fn rep3_bin_div_by_public_via_yao_t<T: IntRing2k>()

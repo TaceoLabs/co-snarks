@@ -9,6 +9,7 @@ use ark_ff::UniformRand;
 use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
 use mpc_core::MpcState;
+use mpc_core::PlainState;
 use mpc_net::Network;
 use num_traits::Zero;
 use rand::thread_rng;
@@ -26,7 +27,7 @@ pub struct PlainUltraHonkDriver;
 impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type ArithmeticShare = P::ScalarField;
     type PointShare = P;
-    type State = ();
+    type State = PlainState;
 
     fn debug(ele: Self::ArithmeticShare) -> String {
         if ele.is_zero() {
@@ -36,9 +37,16 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         }
     }
 
-    fn rand<N: Network>(_: &N, _: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {
-        let mut rng = thread_rng();
-        Ok(Self::ArithmeticShare::rand(&mut rng))
+    fn rand<N: Network>(_: &N, state: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {
+        if state.rng.is_none() {
+            // We mainly use the PlainDriver in tests, so it is fine to use thread_rng here.
+            // In the MPC setting, the PlainDriver is also called when doing recursive proofs, but in that
+            // case we initialize it with a proper RNG.
+            let mut rng = thread_rng();
+            return Ok(Self::ArithmeticShare::rand(&mut rng));
+        }
+        let rng = state.rng.as_mut().expect("Checked is_some");
+        Ok(P::ScalarField::rand(rng))
     }
 
     fn sub(a: Self::ArithmeticShare, b: Self::ArithmeticShare) -> Self::ArithmeticShare {

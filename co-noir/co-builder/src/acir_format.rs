@@ -8,22 +8,59 @@ use acir::{
     native_types::{Expression, Witness, WitnessMap},
 };
 use ark_ff::{PrimeField, Zero};
+use co_noir_common::{constants::MOCK_PROOF_DYADIC_SIZE, honk_curve::HonkCurve};
 use std::{
     array,
+    cmp::max,
     collections::{BTreeMap, HashSet},
 };
 
-use crate::types::types::{
-    AES128Constraint, AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput,
-    Blake3Constraint, Blake3Input, BlockConstraint, BlockType, EcAdd, LogicConstraint, MemOp,
-    MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint, RecursionConstraint,
-    Sha256Compression, WitnessOrConstant,
+use crate::{
+    transcript_ct::TranscriptFieldType,
+    types::types::{
+        AES128Constraint, AcirFormatOriginalOpcodeIndices, Blake2sConstraint, Blake2sInput,
+        Blake3Constraint, Blake3Input, BlockConstraint, BlockType, EcAdd, LogicConstraint, MemOp,
+        MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint, RangeConstraint,
+        RecursionConstraint, Sha256Compression, WitnessOrConstant,
+    },
 };
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum ProofType {
+    Plonk,
+    Honk,
+    Oink,
+    PG,
+    Avm,
+    RollupHonk,
+    RootRollupHonk,
+    HonkZk,
+    PgFinal,
+    PgTail,
+    Chonk,
+}
+
+impl From<u32> for ProofType {
+    fn from(value: u32) -> Self {
+        match value {
+            0 => ProofType::Plonk,
+            1 => ProofType::Honk,
+            2 => ProofType::Oink,
+            3 => ProofType::PG,
+            4 => ProofType::Avm,
+            5 => ProofType::RollupHonk,
+            6 => ProofType::RootRollupHonk,
+            7 => ProofType::HonkZk,
+            8 => ProofType::PgFinal,
+            9 => ProofType::PgTail,
+            10 => ProofType::Chonk,
+            _ => panic!("Invalid proof type"),
+        }
+    }
+}
+
+pub(crate) const _PROOF_TYPE_ROOT_ROLLUP_HONK: u32 = 6; //keep for reference
 #[expect(dead_code)]
 pub struct ProgramMetadata {
-    // An IVC instance; needed to construct a circuit from IVC recursion constraints
-    // ivc: Option<std::sync::Arc<ClientIVC>>,
-    pub(crate) recursive: bool, // Specifies whether a prover that produces SNARK recursion friendly proofs should be used.
     // The proof produced when this flag is true should be friendly for recursive verification
     // inside of another SNARK. For example, a recursive friendly proof may use Blake3Pedersen
     // for hashing in its transcript, while we still want a prove that uses Keccak for its
@@ -66,10 +103,10 @@ pub struct AcirFormat<F: PrimeField> {
     pub(crate) poseidon2_constraints: Vec<Poseidon2Constraint<F>>,
     pub(crate) multi_scalar_mul_constraints: Vec<MultiScalarMul<F>>,
     pub(crate) ec_add_constraints: Vec<EcAdd<F>>,
-    pub(crate) honk_recursion_constraints: Vec<RecursionConstraint>,
-    pub(crate) avm_recursion_constraints: Vec<RecursionConstraint>,
-    pub(crate) pg_recursion_constraints: Vec<RecursionConstraint>,
-    pub(crate) civc_recursion_constraints: Vec<RecursionConstraint>,
+    pub(crate) honk_recursion_constraints: Vec<RecursionConstraint<F>>,
+    pub(crate) avm_recursion_constraints: Vec<RecursionConstraint<F>>,
+    pub(crate) pg_recursion_constraints: Vec<RecursionConstraint<F>>,
+    pub(crate) civc_recursion_constraints: Vec<RecursionConstraint<F>>,
     pub(crate) assert_equalities: Vec<PolyTriple<F>>,
 
     /// A standard plonk arithmetic constraint, as defined in the poly_triple struct, consists of selector values
@@ -112,10 +149,7 @@ impl<F: PrimeField> AcirFormat<F> {
     }
 
     #[expect(clippy::field_reassign_with_default)]
-    pub fn circuit_serde_to_acir_format(
-        circuit: Circuit<GenericFieldElement<F>>,
-        honk_recursion: bool,
-    ) -> Self {
+    pub fn circuit_serde_to_acir_format(circuit: Circuit<GenericFieldElement<F>>) -> Self {
         let mut af = AcirFormat::default();
 
         // `varnum` is the true number of variables, thus we add one to the index which starts at zero
@@ -140,7 +174,7 @@ impl<F: PrimeField> AcirFormat<F> {
                     Self::handle_arithmetic(expression, &mut af, i)
                 }
                 acir::circuit::Opcode::BlackBoxFuncCall(black_box_func_call) => {
-                    Self::handle_blackbox_func_call(black_box_func_call, &mut af, honk_recursion, i)
+                    Self::handle_blackbox_func_call(black_box_func_call, &mut af, i)
                 }
                 acir::circuit::Opcode::MemoryOp { block_id, op } => {
                     let block = block_id_to_block_constraint.get_mut(&block_id.0);
@@ -651,7 +685,6 @@ impl<F: PrimeField> AcirFormat<F> {
     fn handle_blackbox_func_call(
         arg: BlackBoxFuncCall<GenericFieldElement<F>>,
         af: &mut AcirFormat<F>,
-        _honk_recursive: bool,
         opcode_index: usize,
     ) {
         match arg {
@@ -876,13 +909,81 @@ impl<F: PrimeField> AcirFormat<F> {
                     .push(opcode_index);
             }
             BlackBoxFuncCall::RecursiveAggregation {
-                verification_key: _,
-                proof: _,
-                public_inputs: _,
-                key_hash: _,
-                proof_type: _,
-                predicate: _,
-            } => todo!("BlackBoxFuncCall::RecursiveAggregation"),
+                verification_key,
+                proof,
+                public_inputs,
+                key_hash,
+                proof_type,
+                predicate,
+            } => {
+                let input_key = key_hash.to_witness().witness_index();
+
+                let predicate = Self::parse_input(predicate);
+                if predicate.is_constant && predicate.value.is_zero() {
+                    // No constraint if the recursion is disabled
+                    return;
+                }
+                let c = RecursionConstraint {
+                    key: verification_key
+                        .into_iter()
+                        .map(|e| e.to_witness().witness_index())
+                        .collect(),
+                    proof: proof
+                        .into_iter()
+                        .map(|e| e.to_witness().witness_index())
+                        .collect(),
+                    public_inputs: public_inputs
+                        .into_iter()
+                        .map(|e| e.to_witness().witness_index())
+                        .collect(),
+                    key_hash: input_key,
+                    proof_type,
+                    predicate,
+                };
+                let proof_type = ProofType::from(proof_type);
+                // Add the recursion constraint to the appropriate container based on proof type
+                let push_honk_recursion =
+                    |af: &mut AcirFormat<F>, constraint: RecursionConstraint<F>, idx: usize| {
+                        af.honk_recursion_constraints.push(constraint);
+                        af.original_opcode_indices
+                            .honk_recursion_constraints
+                            .push(idx);
+                    };
+                match proof_type {
+                    ProofType::HonkZk => push_honk_recursion(af, c, opcode_index),
+                    ProofType::Honk => push_honk_recursion(af, c, opcode_index),
+                    e => panic!("Proof type {e:?} not implemented for recursion constraints",),
+                }
+            }
         }
+    }
+
+    pub fn get_honk_recursion_public_inputs_size<
+        C: HonkCurve<TranscriptFieldType, ScalarField = F>,
+    >(
+        &self,
+    ) -> usize {
+        let mut total_size = 0;
+        if !self.honk_recursion_constraints.is_empty() {
+            for constraint in &self.honk_recursion_constraints {
+                let mut size =
+                    (constraint.public_inputs.len() + MOCK_PROOF_DYADIC_SIZE).next_power_of_two(); // the circuit is at least size 64 (we take next power of 2 to be safe)
+                assert!(
+                    constraint.proof_type == ProofType::Honk as u32
+                        || constraint.proof_type == ProofType::HonkZk as u32
+                );
+                size = if constraint.proof_type == ProofType::Honk as u32 {
+                    size
+                } else {
+                    max(size, C::SUBGROUP_SIZE * 2)
+                };
+                total_size = max(total_size, size);
+            }
+        }
+        total_size
+    }
+
+    pub fn is_recursive_verification_circuit(&self) -> bool {
+        !self.honk_recursion_constraints.is_empty()
     }
 }

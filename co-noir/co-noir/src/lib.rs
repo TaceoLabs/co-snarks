@@ -5,10 +5,21 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoSolver};
-use co_builder::prelude::{PROVER_WITNESS_ENTITIES_SIZE, ProverWitnessEntities};
+use co_builder::keys::plain_proving_key::PlainPkTrait;
+use co_builder::keys::proving_key::ProvingKeyTrait;
+use co_builder::keys::verification_key::VerifyingKeyTrait;
+use co_builder::prelude::{
+    AcirFormat, HonkRecursion, Rep3CoBuilder, ShamirCoBuilder, UltraCircuitBuilder,
+};
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::keys::plain_proving_key::PlainProvingKey;
+use co_noir_common::keys::proving_key::{Rep3ProvingKey, ShamirProvingKey};
+use co_noir_common::keys::verification_key::{VerifyingKey, VerifyingKeyBarretenberg};
+use co_noir_common::polynomials::entities::{
+    PROVER_WITNESS_ENTITIES_SIZE, Polynomials, ProverWitnessEntities,
+};
 use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_types::{Rep3SharedInput, Rep3SharedWitness, ShamirType};
 use co_noir_types::{Rep3Type, ShamirSharedWitness};
@@ -32,14 +43,7 @@ pub use co_noir_types::merge_input_shares;
 pub use co_noir_types::split_input_rep3;
 pub use co_noir_types::split_witness_rep3;
 pub use co_noir_types::split_witness_shamir;
-pub use co_ultrahonk::{
-    Rep3CoBuilder, ShamirCoBuilder,
-    prelude::{
-        AcirFormat, HonkRecursion, PlainProvingKey, Polynomials, Rep3CoUltraHonk, Rep3ProvingKey,
-        ShamirCoUltraHonk, ShamirProvingKey, UltraCircuitBuilder, UltraHonk, VerifyingKey,
-        VerifyingKeyBarretenberg,
-    },
-};
+pub use co_ultrahonk::prelude::{Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk};
 pub use noir_types::HonkProof;
 pub use noir_types::SerializeF;
 pub use noir_types::program_artifact_from_reader;
@@ -182,13 +186,12 @@ pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
 /// Compute the circuit size that is needed to load the prover crs
 pub fn compute_circuit_size<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
-    recursive: bool,
 ) -> Result<usize> {
     UltraCircuitBuilder::<P>::circuit_size(
         constraint_system,
-        recursive,
         0,
         HonkRecursion::UltraHonk,
+        &ProverCrs::<P>::default(),
         &mut PlainAcvmSolver::new(),
     )
 }
@@ -197,20 +200,25 @@ pub fn compute_circuit_size<P: HonkCurve<TranscriptFieldType>>(
 pub fn generate_proving_key_rep3<N: Network>(
     constraint_system: &AcirFormat<ark_bn254::Fr>,
     witness_share: Rep3SharedWitness<ark_bn254::Fr>,
-    recursive: bool,
     net0: &N,
     net1: &N,
+    prover_crs: &ProverCrs<Bn254G1>,
 ) -> Result<Rep3ProvingKey<Bn254G1>> {
     let id = PartyID::try_from(net0.id())?;
     let mut driver = Rep3AcvmSolver::new(net0, net1, A2BType::default())?;
     let witness_share = witness_share.into_iter().map(Rep3AcvmType::from).collect();
+    let crs = if constraint_system.is_recursive_verification_circuit() {
+        prover_crs // TACEO TODO: Maybe just use a subset of the crs here?
+    } else {
+        &ProverCrs::<Bn254G1>::default()
+    };
     // create the circuit
     let builder = Rep3CoBuilder::create_circuit(
         constraint_system,
-        recursive,
         0,
         witness_share,
         HonkRecursion::UltraHonk,
+        crs,
         &mut driver,
     )?;
     // generate pk
@@ -223,8 +231,8 @@ pub fn generate_proving_key_shamir<N: Network>(
     threshold: usize,
     constraint_system: &AcirFormat<ark_bn254::Fr>,
     witness_share: ShamirSharedWitness<ark_bn254::Fr>,
-    recursive: bool,
     net: &N,
+    prover_crs: &ProverCrs<Bn254G1>,
 ) -> Result<ShamirProvingKey<Bn254G1>> {
     let id = net.id();
     // We have to handle precomputation on the fly, so amount is 0 initially
@@ -235,13 +243,18 @@ pub fn generate_proving_key_shamir<N: Network>(
         .into_iter()
         .map(ShamirAcvmType::from)
         .collect();
+    let crs = if constraint_system.is_recursive_verification_circuit() {
+        prover_crs //TACEO TODO: Maybe just use a subset of the crs here?
+    } else {
+        &ProverCrs::<Bn254G1>::default()
+    };
     // create the circuit
     let builder = ShamirCoBuilder::create_circuit(
         constraint_system,
-        recursive,
         0,
         witness_share,
         HonkRecursion::UltraHonk,
+        crs,
         &mut driver,
     )?;
     // generate pk
@@ -253,15 +266,19 @@ pub fn generate_proving_key_plain<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
     witness: Vec<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
-    recursive: bool,
 ) -> Result<PlainProvingKey<P>> {
     let mut driver = PlainAcvmSolver::new();
+    let crs = if constraint_system.is_recursive_verification_circuit() {
+        &prover_crs //TACEO TODO: Maybe just use a subset of the crs here?
+    } else {
+        &Arc::new(ProverCrs::<P>::default())
+    };
     let builder = UltraCircuitBuilder::create_circuit(
         constraint_system,
-        recursive,
         0,
         witness,
         HonkRecursion::UltraHonk,
+        crs,
         &mut driver,
     )?;
     Ok(PlainProvingKey::create::<PlainAcvmSolver<_>>(
@@ -276,7 +293,6 @@ pub fn generate_vk<P: Pairing>(
     constraint_system: &AcirFormat<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P::G1>>,
     verifier_crs: P::G2Affine,
-    recursive: bool,
 ) -> Result<VerifyingKey<P>>
 where
     P::G1: HonkCurve<TranscriptFieldType>,
@@ -284,10 +300,10 @@ where
     let mut driver = PlainAcvmSolver::new();
     let circuit = UltraCircuitBuilder::<P::G1>::create_circuit(
         constraint_system,
-        recursive,
         0,
         vec![],
         HonkRecursion::UltraHonk,
+        &prover_crs,
         &mut driver,
     )?;
 
@@ -303,15 +319,14 @@ where
 pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
     constraint_system: &AcirFormat<P::ScalarField>,
     prover_crs: Arc<ProverCrs<P>>,
-    recursive: bool,
 ) -> Result<VerifyingKeyBarretenberg<P>> {
     let mut driver = PlainAcvmSolver::new();
     let circuit = UltraCircuitBuilder::create_circuit(
         constraint_system,
-        recursive,
         0,
         vec![],
         HonkRecursion::UltraHonk,
+        &prover_crs,
         &mut driver,
     )?;
     Ok(circuit.create_vk_barretenberg(prover_crs, &mut driver)?)

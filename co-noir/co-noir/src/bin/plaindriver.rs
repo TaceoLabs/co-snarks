@@ -3,13 +3,15 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
-use co_noir::{Bn254G1, HonkRecursion};
+use co_builder::keys::proving_key::ProvingKeyTrait;
+use co_builder::prelude::{HonkRecursion, UltraCircuitBuilder};
+use co_noir::Bn254G1;
+use co_noir_common::crs::ProverCrs;
+use co_noir_common::keys::proving_key::ProvingKey;
+use co_noir_common::keys::verification_key::VerifyingKey;
 use co_noir_common::{crs::parse::CrsParser, types::ZeroKnowledge};
 use co_noir_common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
-use co_ultrahonk::{
-    PlainCoBuilder,
-    prelude::{CoUltraHonk, ProvingKey, UltraHonk, VerifyingKey},
-};
+use co_ultrahonk::prelude::{CoUltraHonk, UltraHonk};
 use color_eyre::eyre::Context;
 use figment::{
     Figment,
@@ -183,7 +185,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     // Read circuit
     let program_artifact = co_noir::program_artifact_from_reader(File::open(&circuit_path)?)
         .context("while parsing program artifact")?;
-    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact, true);
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
 
     // Create witness
     let witness = if let Some(witness_path) = witness_file {
@@ -197,17 +199,29 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     // Build the circuit
     let mut driver = PlainAcvmSolver::new();
-    let builder = PlainCoBuilder::<Bn254G1>::create_circuit(
+
+    let recursion_crs_size = constraint_system.get_honk_recursion_public_inputs_size::<ark_ec::short_weierstrass::Projective<ark_bn254::g1::Config>>();
+    let recursion_crs = if recursion_crs_size > 0 {
+        CrsParser::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::get_crs_g1(
+                    &prover_crs_path,
+                    recursion_crs_size,
+                    has_zk,
+                )
+                .unwrap()
+    } else {
+        ProverCrs::default()
+    };
+    let builder = UltraCircuitBuilder::<Bn254G1>::create_circuit(
         &constraint_system,
-        false, // We don't support recursive atm
         0,
         witness,
         HonkRecursion::UltraHonk,
+        &recursion_crs,
         &mut driver,
     )
     .context("while creating the circuit")?;
     // Read the Crs
-    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system, false)?;
+    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
     let crs =
         CrsParser::<<ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairing>::G1>::get_crs::<
             Bn254,

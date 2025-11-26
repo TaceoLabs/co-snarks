@@ -1,0 +1,113 @@
+use crate::prelude::GenericUltraCircuitBuilder;
+use crate::types::field_ct::FieldCT;
+use ark_ff::AdditiveGroup;
+use ark_ff::fields::Field;
+use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::barycentric::Barycentric;
+use co_noir_common::honk_curve::HonkCurve;
+use co_noir_common::honk_proof::HonkProofResult;
+use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::types::ZeroKnowledge;
+
+/**
+ * @brief For a small integer N = `virtual_log_n` and a given witness x = `log_n`, compute in-circuit an
+ * `indicator_padding_array` of size \f$ N \f$, such that
+ * \f{align}{ \text{indicator_padding_array}[i] = \text{"} i < x \text{"}. \f}. To achieve the strict ineqaulity, we
+ * evaluate all Lagranges at (x-1) and compute step functions. More concretely
+ *
+ * 1) Constrain x to be in the range \f$ [1, \ldots, N] \f$ by asserting
+ *    \f{align}{ \prod_{i=0}^{N-1} (x - 1 - i) = 0 \f}.
+ *
+ * 2) For \f$ i = 0, ..., N-1 \f$, evaluate \f$ L_i(x) \f$.
+ *    Since \f$ 1 < x <= N \f$, \f$ L_i(x - 1) = 1 \f$ if and only if \f$  x - 1 =  i  \f$.
+ *
+ * 3) Starting at \f$ b_{N-1} = L_{N-1}(x - 1)\f$, compute the step functions
+ *    \f{align}{
+ *    b_i(x - 1) = \sum_{i}^{N-1} L_i(x - 1) = L_i(x - 1) + b_{i+1}(x - 1) \f}.
+ *
+ * We compute the Lagrange coefficients out-of-circuit, since \f$ N \f$ is a circuit constant.
+ *
+ * The resulting array is being used to pad the number of Verifier rounds in Sumcheck and Shplemini to a fixed constant
+ * and turn Recursive Verifier circuits into constant circuits. Note that the number of gates required to compute
+ * \f$ [b_0(x-1), \ldots, b_{N-1}(x-1)] \f$ only depends on \f$ N \f$ adding ~\f$ 4\cdot N \f$ gates to the circuit.
+ *
+ */
+pub fn padding_indicator_array<
+    C: HonkCurve<TranscriptFieldType>,
+    T: NoirWitnessExtensionProtocol<C::ScalarField>,
+    const VIRTUAL_LOG_N: usize,
+>(
+    log_n: &FieldCT<C::ScalarField>,
+    builder: &mut GenericUltraCircuitBuilder<C, T>,
+    driver: &mut T,
+    has_zk: ZeroKnowledge,
+) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
+    let one = FieldCT::from(C::ScalarField::ONE);
+    if has_zk == ZeroKnowledge::No {
+        Ok(vec![one.clone(); VIRTUAL_LOG_N])
+    } else {
+        let zero = FieldCT::from(C::ScalarField::ZERO);
+
+        // Create a domain of size `virtual_log_n` and compute Lagrange denominators
+        let big_domain: Vec<C::ScalarField> = Barycentric::construct_big_domain(VIRTUAL_LOG_N, 1);
+        let precomputed_denominator_inverses = Barycentric::construct_denominator_inverses_runtime(
+            1,
+            &big_domain,
+            &Barycentric::construct_lagrange_denominators(VIRTUAL_LOG_N, &big_domain),
+        );
+
+        let mut result = vec![zero.clone(); VIRTUAL_LOG_N];
+
+        // 1) Build prefix products:
+        //    prefix[i] = ∏_{m=0..(i-1)} (x - 1 - big_domain[m]), with prefix[0] = 1.
+        let mut prefix = vec![one.clone(); VIRTUAL_LOG_N];
+        for i in 1..VIRTUAL_LOG_N {
+            prefix[i] = prefix[i - 1].multiply(
+                &log_n.sub(&one, builder, driver).sub(
+                    &FieldCT::from(big_domain[i - 1]),
+                    builder,
+                    driver,
+                ),
+                builder,
+                driver,
+            )?;
+        }
+
+        // 2) Build suffix products:
+        //    suffix[i] = ∏_{m=i..(N-1)} (x - 1 - big_domain[m]),
+        //    but we'll store it in reverse:
+        //    suffix[virtual_log_n] = 1.
+        let mut suffix = vec![one.clone(); VIRTUAL_LOG_N + 1];
+        for i in (1..=VIRTUAL_LOG_N).rev() {
+            suffix[i - 1] = suffix[i].multiply(
+                &log_n.sub(&one, builder, driver).sub(
+                    &FieldCT::from(big_domain[i - 1]),
+                    builder,
+                    driver,
+                ),
+                builder,
+                driver,
+            )?;
+        }
+
+        // To ensure 0 < log_n < N, note that suffix[1] = \prod_{i=1}^{N-1} (x - 1 - i), therefore we just need to ensure
+        // that this product is 0.
+        suffix[0].assert_equal(&zero, builder, driver);
+
+        // 3) Combine prefixes & suffixes to get L_i(x-1):
+        //    L_i(x-1) = (1 / lagrange_denominators[i]) * prefix[i] * suffix[i+1].
+        //    (We skip factor (x - big_domain[i]) by splitting into prefix & suffix.)
+        for i in 0..VIRTUAL_LOG_N {
+            result[i] = FieldCT::from(precomputed_denominator_inverses[i])
+                .multiply(&prefix[i], builder, driver)?
+                .multiply(&suffix[i + 1], builder, driver)?;
+        }
+
+        // Convert result into the array of step function evaluations sums b_i.
+        for i in (1..=VIRTUAL_LOG_N - 1).rev() {
+            result[i - 1] = result[i - 1].add(&result[i], builder, driver);
+        }
+
+        Ok(result)
+    }
+}

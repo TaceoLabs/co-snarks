@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 // Des describes the PrimeField used for the Transcript
 pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
-    type CycleGroup: CurveGroup<BaseField = Self::ScalarField> + HonkCurve<Des>;
+    type CycleGroup: CurveGroup<BaseField = Self::ScalarField>;
 
     const NUM_BASEFIELD_ELEMENTS: usize;
     const NUM_SCALARFIELD_ELEMENTS: usize;
@@ -21,6 +21,8 @@ pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
 
     fn convert_basefield_into(src: &Self::BaseField) -> Vec<Des>;
     fn convert_basefield_back(src: &[Des]) -> Self::BaseField;
+
+    fn convert_basefield_to_scalarfield(src: &Self::BaseField) -> Vec<Self::ScalarField>;
 
     // For the challenge
     fn convert_destinationfield_to_scalarfield(des: &Des) -> Self::ScalarField;
@@ -66,6 +68,11 @@ impl HonkCurve<ark_bn254::Fr> for ark_ec::short_weierstrass::Projective<ark_bn25
     }
 
     fn convert_basefield_into(src: &ark_bn254::Fq) -> Vec<ark_bn254::Fr> {
+        let (a, b) = bn254_fq_to_fr(src);
+        vec![a, b]
+    }
+
+    fn convert_basefield_to_scalarfield(src: &Self::BaseField) -> Vec<Self::ScalarField> {
         let (a, b) = bn254_fq_to_fr(src);
         vec![a, b]
     }
@@ -208,6 +215,10 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
             BigUint::one() << (ark_grumpkin::Fq::MODULUS_BIT_SIZE.next_power_of_two() - 1);
         let mont_r = ark_grumpkin::Fq::from(ark_grumpkin::Fq::MODULUS.montgomery_r());
         ark_grumpkin::Fq::from(set_bit) / mont_r
+    }
+
+    fn convert_basefield_to_scalarfield(_src: &Self::BaseField) -> Vec<Self::ScalarField> {
+        unimplemented!("Not needed for grumpkin")
     }
 }
 

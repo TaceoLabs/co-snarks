@@ -1,10 +1,10 @@
 use crate::{
-    NUM_LIBRA_COMMITMENTS, Utils,
-    decider::types::{
-        BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, VerifierMemory,
-    },
-    ultra_verifier::HonkVerifyResult,
+    NUM_LIBRA_COMMITMENTS, Utils, decider::types::VerifierMemory, ultra_verifier::HonkVerifyResult,
 };
+use co_noir_common::constants::{
+    BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+};
+
 use ark_ec::{AffineRepr, pairing::Pairing};
 use ark_ff::{One, Zero};
 use co_noir_common::{

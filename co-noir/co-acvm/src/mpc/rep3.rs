@@ -1,10 +1,12 @@
 use super::plain::PlainAcvmSolver;
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, MontConfig, One, PrimeField, Zero};
+use ark_ff::{BigInteger, Field, MontConfig, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
+use co_noir_common::utils::Utils;
 use co_noir_types::Rep3Type;
+use core::panic;
 use itertools::{Itertools, izip};
 use libaes::Cipher;
 use mpc_core::MpcState as _;
@@ -357,8 +359,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     type Lookup = Rep3FieldLookupTable<F>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        Rep3PrimeFieldShare<C::BaseField>;
 
     type AcvmType = Rep3AcvmType<F>;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        Rep3AcvmType<C::BaseField>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = Rep3AcvmPoint<C>;
 
     type BrilligDriver = Rep3BrilligDriver<'a, F, N>;
@@ -395,6 +401,22 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Ok(self.add(falsy, d))
             }
         }
+    }
+
+    fn cmux_many(
+        &mut self,
+        conds: &[Self::AcvmType],
+        truthies: &[Self::AcvmType],
+        falsies: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        let b_min_a: Vec<Self::AcvmType> = izip!(truthies, falsies)
+            .map(|(truthy, falsy)| self.sub(truthy.clone(), falsy.clone()))
+            .collect();
+        let ds: Vec<Self::AcvmType> = self.mul_many(conds, &b_min_a)?;
+        let results: Vec<Self::AcvmType> = izip!(falsies, ds)
+            .map(|(falsy, d)| self.add(falsy.clone(), d))
+            .collect();
+        Ok(results)
     }
 
     fn shared_zeros(&mut self, len: usize) -> eyre::Result<Vec<Self::AcvmType>> {
@@ -838,6 +860,15 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         }
     }
 
+    fn get_public_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::BaseField> {
+        match a {
+            Rep3AcvmType::Public(public) => Some(*public),
+            _ => None,
+        }
+    }
+
     fn get_public_point<C: CurveGroup<BaseField = F>>(a: &Self::AcvmPoint<C>) -> Option<C> {
         match a {
             Rep3AcvmPoint::Public(public) => Some(*public),
@@ -852,6 +883,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 
         Ok(cs)
+    }
+
+    fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
+        Ok(arithmetic::rand(&mut self.state0))
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
@@ -939,17 +974,36 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         msb: u8,
         lsb: u8,
         bitsize: usize,
-    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
+    ) -> eyre::Result<[Self::ArithmeticShare; 2]> {
         let res = yao::slice_arithmetic(
             input,
             self.net0,
             &mut self.state0,
-            msb as usize,
             lsb as usize,
+            msb as usize,
             bitsize,
         )?;
-        debug_assert_eq!(res.len(), 3);
-        Ok([res[0], res[1], res[2]])
+        debug_assert_eq!(res.len(), 2);
+        Ok([res[0], res[1]])
+    }
+
+    fn slice_many(
+        &mut self,
+        input: &[Self::ArithmeticShare],
+        msb: u8,
+        lsb: u8,
+        bitsize: usize,
+    ) -> eyre::Result<Vec<[Self::ArithmeticShare; 2]>> {
+        let res = yao::slice_arithmetic_many(
+            input,
+            self.net0,
+            &mut self.state0,
+            lsb as usize,
+            msb as usize,
+            bitsize,
+        )?;
+        debug_assert!(res.len() == input.len() * 2);
+        Ok(res.chunks(2).map(|chunk| [chunk[0], chunk[1]]).collect())
     }
 
     fn integer_bitwise_and(
@@ -2278,5 +2332,469 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                 Self::get_public(value).expect("Already checked it is public"),
             )
         }
+    }
+
+    fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        cond: Self::OtherAcvmType<C>,
+        truthy: Self::OtherAcvmType<C>,
+        falsy: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        match (cond, truthy, falsy) {
+            (Rep3AcvmType::Public(cond), truthy, falsy) => {
+                assert!(cond.is_one() || cond.is_zero());
+                if cond.is_one() { Ok(truthy) } else { Ok(falsy) }
+            }
+            (Rep3AcvmType::Shared(cond), truthy, falsy) => {
+                let b_min_a = self.sub_other_acvm_types::<C>(truthy, falsy.clone());
+                let d = self.mul_other_acvm_types::<C>(cond.into(), b_min_a)?;
+                Ok(self.add_other_acvm_types::<C>(falsy, d))
+            }
+        }
+    }
+
+    // TACEO TODO: we could make the equality check return the basefield element here
+    fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &Self::OtherAcvmType<C>,
+        b: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<(Self::AcvmType, Self::OtherAcvmType<C>)> {
+        let res = match (a, b) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => {
+                return Ok((
+                    Rep3AcvmType::Public(F::from(a == b)),
+                    Rep3AcvmType::Public(C::BaseField::from(a == b)),
+                ));
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared)) => {
+                arithmetic::eq_public(*shared, *public, self.net0, &mut self.state0)?
+            }
+
+            (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                arithmetic::eq_public(*shared, *public, self.net0, &mut self.state0)?
+            }
+
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => {
+                arithmetic::eq(*a, *b, self.net0, &mut self.state0)?
+            }
+        };
+
+        let res_bin = conversion::a2b_selector(res, self.net0, &mut self.state0)?;
+
+        let res_fr = conversion::b2a(
+            &Rep3BigUintShare::new(res_bin.a, res_bin.b),
+            self.net0,
+            &mut self.state0,
+        )?;
+        Ok((res_fr.into(), res.into()))
+    }
+
+    fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<C::BaseField>> {
+        let a = a
+            .iter()
+            .map(|x| match x {
+                Rep3AcvmType::Public(public) => {
+                    arithmetic::promote_to_trivial_share(self.id, *public)
+                }
+                Rep3AcvmType::Shared(shared) => *shared,
+            })
+            .collect_vec();
+        let bs = a.iter().map(|x| x.b).collect_vec();
+        let mut cs = self.net0.reshare(bs)?;
+
+        izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
+
+        Ok(cs)
+    }
+
+    fn compute_naf_entries(
+        &mut self,
+        scalar: &Self::AcvmType,
+        max_num_bits: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        // Public case
+        if let Some(scalar_public) = Self::get_public(scalar) {
+            return PlainAcvmSolver::new()
+                .compute_naf_entries(&scalar_public, max_num_bits)
+                .map(|entries| {
+                    entries
+                        .into_iter()
+                        .map(|x| Rep3AcvmType::Public(x))
+                        .collect()
+                });
+        }
+        unimplemented!(
+            "Functionality compute_naf_entries not implemented for Rep3 in the shared case"
+        )
+    }
+
+    fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Rep3AcvmType::Public(lhs + rhs)
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::add_public(shared, public, self.id))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let result = arithmetic::add(lhs, rhs);
+                Rep3AcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn sub_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Rep3AcvmType::Public(lhs - rhs)
+            }
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(public, shared, self.id))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let result = arithmetic::sub(lhs, rhs);
+                Rep3AcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn neg_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match a {
+            Rep3AcvmType::Public(public) => Rep3AcvmType::Public(-public),
+            Rep3AcvmType::Shared(shared) => {
+                let result = arithmetic::neg(shared);
+                Rep3AcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn mul_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Ok(Rep3AcvmType::Public(lhs * rhs))
+            }
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Shared(rhs)) => {
+                Ok(Rep3AcvmType::Shared(arithmetic::mul_public(rhs, lhs)))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Public(rhs)) => {
+                Ok(Rep3AcvmType::Shared(arithmetic::mul_public(lhs, rhs)))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let result = arithmetic::mul(lhs, rhs, self.net0, &mut self.state0)?;
+                Ok(Rep3AcvmType::Shared(result))
+            }
+        }
+    }
+
+    fn div_unchecked_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        match (lhs, rhs) {
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
+                Ok(Rep3AcvmType::Public(lhs / rhs))
+            }
+            (Rep3AcvmType::Public(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let rhs_inv = arithmetic::inv(rhs, self.net0, &mut self.state0)?;
+                self.mul_other_acvm_types::<C>(
+                    Rep3AcvmType::Public(lhs),
+                    Rep3AcvmType::Shared(rhs_inv),
+                )
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Public(rhs)) => {
+                Ok(Rep3AcvmType::Shared(arithmetic::mul_public(
+                    lhs,
+                    rhs.inverse()
+                        .ok_or_else(|| eyre::eyre!("Element has no inverse"))?,
+                )))
+            }
+            (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
+                let rhs_inv = arithmetic::inv(rhs, self.net0, &mut self.state0)?;
+                self.mul_other_acvm_types::<C>(
+                    Rep3AcvmType::Shared(lhs),
+                    Rep3AcvmType::Shared(rhs_inv),
+                )
+            }
+        }
+    }
+
+    fn inverse_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        match a {
+            Rep3AcvmType::Public(public) => Ok(Rep3AcvmType::Public(
+                public
+                    .inverse()
+                    .ok_or_else(|| eyre::eyre!("Element has no inverse"))?,
+            )),
+            Rep3AcvmType::Shared(shared) => {
+                let inv = arithmetic::inv(shared, self.net0, &mut self.state0)?;
+                Ok(Rep3AcvmType::Shared(inv))
+            }
+        }
+    }
+
+    fn acvm_type_limbs_to_other_acvm_type<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        limbs: &[Self::AcvmType; NUM_LIMBS],
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        if limbs.iter().all(|x| !Self::is_shared(x)) {
+            let result: C::BaseField = Utils::field_limbs_to_biguint::<F, NUM_LIMBS, LIMB_BITS>(
+                &limbs
+                    .clone()
+                    .map(|x| Self::get_public(&x).expect("Already checked it is public")),
+            )
+            .into();
+            return Ok(result.into());
+        }
+        unimplemented!(
+            "functionality acvm_type_limbs_to_other_acvm_type not implemented for Rep3 in the shared case"
+        )
+    }
+
+    fn other_acvm_type_to_acvm_type_limbs<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        input: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]> {
+        if let Rep3AcvmType::Public(public) = input {
+            let limbs = PlainAcvmSolver::new()
+                .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, LIMB_BITS, C>(public)?;
+            let limbs = limbs
+                .into_iter()
+                .map(|x| Rep3AcvmType::Public(x))
+                .collect::<Vec<_>>();
+            return Ok(limbs.try_into().expect("We have NUM_LIMBS elements"));
+        }
+        unimplemented!(
+            "functionality other_acvm_type_to_acvm_type_limbs not implemented for Rep3 in the shared case"
+        )
+    }
+
+    fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
+            let lhs_limbs = lhs
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let rhs_limbs = rhs
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let result_limbs =
+                PlainAcvmSolver::new().add_acvm_type_limbs::<C>(&lhs_limbs, &rhs_limbs)?;
+            return Ok(result_limbs.map(Rep3AcvmType::Public));
+        }
+        unimplemented!(
+            "functionality add_acvm_type_limbs not implemented for Rep3 in the shared case"
+        )
+    }
+
+    fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        if lhs.iter().all(|x| !Self::is_shared(x)) && rhs.iter().all(|x| !Self::is_shared(x)) {
+            let lhs_limbs = lhs
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let rhs_limbs = rhs
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let result_limbs =
+                PlainAcvmSolver::new().sub_acvm_type_limbs::<C>(&lhs_limbs, &rhs_limbs)?;
+            return Ok(result_limbs
+                .into_iter()
+                .map(|x| Rep3AcvmType::Public(x))
+                .collect::<Vec<_>>()
+                .try_into()
+                .expect("We have 4 elements"));
+        }
+        unimplemented!(
+            "functionality sub_acvm_type_limbs not implemented for Rep3 in the shared case"
+        )
+    }
+
+    fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: &[Self::AcvmType; 4],
+        rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        let other_acvm_type_lhs = self.acvm_type_limbs_to_other_acvm_type::<4, 68, C>(lhs)?;
+        let other_acvm_type_rhs = self.acvm_type_limbs_to_other_acvm_type::<4, 68, C>(rhs)?;
+        let other_acvm_type_mul =
+            self.mul_other_acvm_types::<C>(other_acvm_type_lhs, other_acvm_type_rhs)?;
+        let limbs_mul =
+            self.other_acvm_type_to_acvm_type_limbs::<4, 68, C>(&other_acvm_type_mul)?;
+        Ok(limbs_mul)
+    }
+
+    fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        let other_acvm_type = self.acvm_type_limbs_to_other_acvm_type::<4, 68, C>(a)?;
+        let other_acvm_type_inv = self.inverse_other_acvm_type::<C>(other_acvm_type)?;
+        let limbs_inv =
+            self.other_acvm_type_to_acvm_type_limbs::<4, 68, C>(&other_acvm_type_inv)?;
+        Ok(limbs_inv)
+    }
+
+    fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        if a.iter().all(|x| !Self::is_shared(x)) {
+            let limbs = a
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            return PlainAcvmSolver::new().div_mod_acvm_limbs::<C>(&limbs).map(
+                |(limbs_res, other_res)| {
+                    let limbs_res = limbs_res
+                        .into_iter()
+                        .map(|x| Rep3AcvmType::Public(x))
+                        .collect::<Vec<_>>();
+                    (
+                        limbs_res.try_into().expect("We have 4 elements"),
+                        Rep3AcvmType::Public(other_res),
+                    )
+                },
+            );
+        }
+        unimplemented!(
+            "functionality div_mod_acvm_limbs not implemented for Rep3 in the shared case"
+        )
+    }
+
+    fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[Self::AcvmType; 4],
+        b: &[Self::AcvmType; 4],
+        to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        if a.iter().all(|x| !Self::is_shared(x))
+            && b.iter().all(|x| !Self::is_shared(x))
+            && to_add
+                .iter()
+                .all(|arr| arr.iter().all(|x| !Self::is_shared(x)))
+        {
+            let a_limbs = a
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let b_limbs = b
+                .clone()
+                .map(|x| Self::get_public(&x).expect("Already checked it is public"));
+            let to_add_limbs: Vec<[F; 4]> = to_add
+                .iter()
+                .map(|arr| {
+                    arr.clone()
+                        .map(|x| Self::get_public(&x).expect("Already checked it is public"))
+                })
+                .collect();
+            let limbs = PlainAcvmSolver::new().madd_div_mod_acvm_limbs::<C>(
+                &a_limbs,
+                &b_limbs,
+                &to_add_limbs,
+            );
+            return limbs.map(|(limbs_res, other_res)| {
+                let limbs_res = limbs_res
+                    .into_iter()
+                    .map(|x| Rep3AcvmType::Public(x))
+                    .collect::<Vec<_>>();
+                (
+                    limbs_res.try_into().expect("We have 4 elements"),
+                    Rep3AcvmType::Public(other_res),
+                )
+            });
+        }
+        unimplemented!(
+            "functionality madd_div_mod_acvm_limbs not implemented for Rep3 in the shared case"
+        )
+    }
+
+    fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: &[[Self::AcvmType; 4]],
+        b: &[[Self::AcvmType; 4]],
+        to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        let a_public = a.iter().all(|arr| arr.iter().all(|x| !Self::is_shared(x)));
+        let b_public = b.iter().all(|arr| arr.iter().all(|x| !Self::is_shared(x)));
+        let to_add_public = to_add
+            .iter()
+            .all(|arr| arr.iter().all(|x| !Self::is_shared(x)));
+        if a_public && b_public && to_add_public {
+            let a_limbs: Vec<[F; 4]> = a
+                .iter()
+                .map(|arr| {
+                    arr.clone()
+                        .map(|x| Self::get_public(&x).expect("Already checked it is public"))
+                })
+                .collect();
+            let b_limbs: Vec<[F; 4]> = b
+                .iter()
+                .map(|arr| {
+                    arr.clone()
+                        .map(|x| Self::get_public(&x).expect("Already checked it is public"))
+                })
+                .collect();
+            let to_add_limbs: Vec<[F; 4]> = to_add
+                .iter()
+                .map(|arr| {
+                    arr.clone()
+                        .map(|x| Self::get_public(&x).expect("Already checked it is public"))
+                })
+                .collect();
+            let limbs = PlainAcvmSolver::new().madd_div_mod_many_acvm_limbs::<C>(
+                &a_limbs,
+                &b_limbs,
+                &to_add_limbs,
+            );
+            return limbs.map(|(limbs_res, other_res)| {
+                let limbs_res = limbs_res
+                    .into_iter()
+                    .map(|x| Rep3AcvmType::Public(x))
+                    .collect::<Vec<_>>();
+                (
+                    limbs_res.try_into().expect("We have 4 elements"),
+                    Rep3AcvmType::Public(other_res),
+                )
+            });
+        }
+        unimplemented!(
+            "functionality madd_div_mod_many_acvm_limbs not implemented for Rep3 in the shared case"
+        )
     }
 }

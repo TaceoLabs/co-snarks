@@ -39,7 +39,8 @@ echo "Using nargo version $NARGO_VERSION"
 echo "Using bb version $BARRETENBERG_VERSION"
 echo ""
 
-test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size" "pedersen_hash" "pedersen_commitment" "bb_sha256_compression" "blake2s" "blake3" "embedded_curve_add" "aes128")
+test_cases=("add3u64" "mul3u64" "assert" "get_bytes" "if_then" "negative" "poseidon_assert" "quantized" "add3" "add3_assert" "poseidon" "poseidon_input2" "approx_sigmoid" "addition_multiplication" "unconstrained_fn" "unconstrained_fn_field" "blackbox_not" "blackbox_and" "blackbox_xor" "ram" "rom_shared" "poseidon2" "blackbox_poseidon2" "assert_max_bit_size" "pedersen_hash" "pedersen_commitment" "bb_sha256_compression" "blake2s" "blake3" "embedded_curve_add" "aes128" "recursion" "recursion_zk")
+
 
 run_proof_verification() {
   local name=$1
@@ -70,7 +71,7 @@ run_proof_verification() {
   bash -c "$BARRETENBERG_BINARY $prove_command -b test_vectors/${name}/target/${name}.json -w test_vectors/${name}/target/${name}.gz -k test_vectors/${name}/vk -o test_vectors/${name}/ $PIPE"
 
 
-  if [[ "$algorithm" == "poseidon" ]] || [[ "$algorithm" == "keccak" ]]; then
+  if [[ ( "$algorithm" == "poseidon" || "$algorithm" == "keccak" ) && "$name" != "recursion" && "$name" != "recursion_zk" ]]; then
     diff test_vectors/${name}/proof test_vectors/${name}/proof_plaindriver
     if [[ $? -ne 0 ]]; then
       exit_code=1
@@ -122,7 +123,7 @@ for f in "${test_cases[@]}"; do
   bash -c "(cd test_vectors/${f} && nargo execute) $PIPE"
 
   # -e to exit on first error
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} $PIPE" || failed=1
+  bash -c "${PLAINDRIVER} --prover-crs ../../co-noir-common/src/crs/bn254_g1.dat --verifier-crs ../../co-noir-common/src/crs/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} $PIPE" || failed=1
 
   if [ "$failed" -ne 0 ]
   then
@@ -132,7 +133,8 @@ for f in "${test_cases[@]}"; do
   run_proof_verification "$f" "poseidon"
 
   # Run with ZK:
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} --zk $PIPE" || failed=1
+
+  bash -c "${PLAINDRIVER} --prover-crs ../../co-noir-common/src/crs/bn254_g1.dat --verifier-crs ../../co-noir-common/src/crs/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher poseidon2 --out-dir test_vectors/${f} --zk $PIPE" || failed=1
 
   if [ "$failed" -ne 0 ]
   then
@@ -143,7 +145,7 @@ for f in "${test_cases[@]}"; do
   bash cleanup.sh
 
    # -e to exit on first error
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher keccak --out-dir test_vectors/${f} $PIPE"  || failed=1
+  bash -c "${PLAINDRIVER} --prover-crs ../../co-noir-common/src/crs/bn254_g1.dat --verifier-crs ../../co-noir-common/src/crs/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher keccak --out-dir test_vectors/${f} $PIPE"  || failed=1
 
   if [ "$failed" -ne 0 ]
   then
@@ -153,7 +155,7 @@ for f in "${test_cases[@]}"; do
   run_proof_verification "$f" "keccak"
    bash cleanup.sh
   # Run with ZK:
-  bash -c "${PLAINDRIVER} --prover-crs test_vectors/bn254_g1.dat --verifier-crs test_vectors/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher keccak --out-dir test_vectors/${f} --zk $PIPE" || failed=1
+  bash -c "${PLAINDRIVER} --prover-crs ../../co-noir-common/src/crs/bn254_g1.dat --verifier-crs ../../co-noir-common/src/crs/bn254_g2.dat --input test_vectors/${f}/Prover.toml --circuit test_vectors/${f}/target/${f}.json --hasher keccak --out-dir test_vectors/${f} --zk $PIPE" || failed=1
   if [ "$failed" -ne 0 ]
   then
     exit_code=1

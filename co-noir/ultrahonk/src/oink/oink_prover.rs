@@ -20,14 +20,12 @@
 use super::types::ProverMemory;
 use crate::{NUM_ALPHAS, Utils};
 use ark_ff::{One, Zero};
-use co_builder::{
-    PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
-    prelude::{ProvingKey, VerifyingKeyBarretenberg},
-};
 use co_noir_common::{
+    constants::PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    keys::{plain_proving_key::PlainProvingKey, verification_key::VerifyingKeyBarretenberg},
     polynomials::polynomial::Polynomial,
     transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
@@ -85,7 +83,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Ok(())
     }
 
-    fn compute_w4(&mut self, proving_key: &ProvingKey<C>) {
+    fn compute_w4(&mut self, proving_key: &PlainProvingKey<C>) {
         tracing::trace!("compute w4");
         // The memory record values are computed at the indicated indices as
         // w4 = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag;
@@ -126,7 +124,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
     }
 
-    fn compute_read_term(&self, proving_key: &ProvingKey<C>, i: usize) -> C::ScalarField {
+    fn compute_read_term(&self, proving_key: &PlainProvingKey<C>, i: usize) -> C::ScalarField {
         tracing::trace!("compute read term");
 
         let gamma = &self.memory.challenges.gamma;
@@ -160,7 +158,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     /// Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term(&self, proving_key: &ProvingKey<C>, i: usize) -> C::ScalarField {
+    fn compute_write_term(&self, proving_key: &PlainProvingKey<C>, i: usize) -> C::ScalarField {
         tracing::trace!("compute write term");
 
         let gamma = &self.memory.challenges.gamma;
@@ -175,7 +173,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
     }
 
-    fn compute_logderivative_inverses(&mut self, proving_key: &ProvingKey<C>) {
+    fn compute_logderivative_inverses(&mut self, proving_key: &PlainProvingKey<C>) {
         tracing::trace!("compute logderivative inverse");
 
         debug_assert_eq!(
@@ -264,7 +262,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     fn compute_grand_product_numerator(
         &self,
-        proving_key: &ProvingKey<C>,
+        proving_key: &PlainProvingKey<C>,
         i: usize,
     ) -> C::ScalarField {
         tracing::trace!("compute grand product numerator");
@@ -287,7 +285,11 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             * (*w_4 + *id_4 * beta + gamma)
     }
 
-    fn grand_product_denominator(&self, proving_key: &ProvingKey<C>, i: usize) -> C::ScalarField {
+    fn grand_product_denominator(
+        &self,
+        proving_key: &PlainProvingKey<C>,
+        i: usize,
+    ) -> C::ScalarField {
         tracing::trace!("compute grand product denominator");
 
         let w_1 = &proving_key.polynomials.witness.w_l()[i];
@@ -308,7 +310,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             * (*w_4 + *sigma_4 * beta + gamma)
     }
 
-    fn compute_grand_product(&mut self, proving_key: &ProvingKey<C>) {
+    fn compute_grand_product(&mut self, proving_key: &PlainProvingKey<C>) {
         tracing::trace!("compute grand product");
 
         let has_active_ranges = proving_key.active_region_data.size() > 0;
@@ -411,7 +413,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_preamble_round(
         &self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &ProvingKey<C>,
+        proving_key: &PlainProvingKey<C>,
         verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
@@ -436,7 +438,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_wire_commitments_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<C>,
+        proving_key: &mut PlainProvingKey<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing wire commitments round");
 
@@ -474,7 +476,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_sorted_list_accumulator_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<C>,
+        proving_key: &mut PlainProvingKey<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
@@ -514,7 +516,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_log_derivative_inverse_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<C>,
+        proving_key: &mut PlainProvingKey<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
 
@@ -542,7 +544,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn execute_grand_product_computation_round(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        proving_key: &mut ProvingKey<C>,
+        proving_key: &mut PlainProvingKey<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing grand product computation round");
 
@@ -562,7 +564,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
     pub(crate) fn prove(
         mut self,
-        proving_key: &mut ProvingKey<C>,
+        proving_key: &mut PlainProvingKey<C>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> HonkProofResult<ProverMemory<C>> {
