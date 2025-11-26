@@ -1,4 +1,7 @@
-use crate::utils::Utils;
+use crate::{
+    polynomials::entities::{PrecomputedEntities, ProverWitnessEntities},
+    utils::Utils,
+};
 use ark_ff::PrimeField;
 use ark_poly::{DenseUVPolynomial, Polynomial as _, univariate::DensePolynomial};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -34,6 +37,29 @@ impl<'a, F: CanonicalDeserialize> Deserialize<'a> for Polynomial<F> {
     fn deserialize<D: Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
         let coefficients: Vec<F> = mpc_core::serde_compat::ark_de(deserializer)?;
         Ok(Self { coefficients })
+    }
+}
+
+// This is what we get from the proving key, we shift at a later point
+#[derive(Default, Serialize, Deserialize)]
+pub struct Polynomials<F: PrimeField> {
+    pub witness: ProverWitnessEntities<Polynomial<F>>,
+    pub precomputed: PrecomputedEntities<Polynomial<F>>,
+}
+
+impl<F: PrimeField> Polynomials<F> {
+    pub fn new(circuit_size: usize) -> Self {
+        let mut polynomials = Self::default();
+        // Shifting is done at a later point
+        polynomials
+            .iter_mut()
+            .for_each(|el| el.resize(circuit_size, Default::default()));
+
+        polynomials
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Polynomial<F>> {
+        self.witness.iter_mut().chain(self.precomputed.iter_mut())
     }
 }
 

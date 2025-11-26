@@ -161,8 +161,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     type Lookup = Rep3FieldLookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;
+    type OtherArithmeticShare<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        ShamirPrimeFieldShare<C::BaseField>;
 
     type AcvmType = ShamirAcvmType<F>;
+    type OtherAcvmType<C: CurveGroup<ScalarField = F, BaseField: PrimeField>> =
+        ShamirAcvmType<C::BaseField>;
     type AcvmPoint<C: CurveGroup<BaseField = F>> = ShamirAcvmPoint<C>;
 
     type BrilligDriver = ShamirBrilligDriver<'a, F, N>;
@@ -229,6 +233,15 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
                 Ok(self.add(falsy, d))
             }
         }
+    }
+
+    fn cmux_many(
+        &mut self,
+        _conds: &[Self::AcvmType],
+        _truthies: &[Self::AcvmType],
+        _falsies: &[Self::AcvmType],
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        panic!("cmux_many not implemented for Shamir");
     }
 
     fn add_assign_with_public(&mut self, public: F, target: &mut Self::AcvmType) {
@@ -518,6 +531,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         arithmetic::open_vec(a, self.net, &mut self.state)
     }
 
+    fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
+        self.state.rand(self.net)
+    }
+
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(public_value)
     }
@@ -577,8 +594,18 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         _msb: u8,
         _lsb: u8,
         _bitsize: usize,
-    ) -> eyre::Result<[Self::ArithmeticShare; 3]> {
+    ) -> eyre::Result<[Self::ArithmeticShare; 2]> {
         panic!("functionality slice not feasible for Shamir")
+    }
+
+    fn slice_many(
+        &mut self,
+        _input: &[Self::ArithmeticShare],
+        _msb: u8,
+        _lsb: u8,
+        _bitsize: usize,
+    ) -> eyre::Result<Vec<[Self::ArithmeticShare; 2]>> {
+        panic!("functionality slice_many not feasible for Shamir")
     }
 
     fn right_shift(
@@ -1024,5 +1051,208 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
                 Self::get_public(value).expect("Already checked it is public"),
             )
         }
+    }
+
+    fn cmux_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _cond: Self::OtherAcvmType<C>,
+        _truthy: Self::OtherAcvmType<C>,
+        _falsy: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        panic!("functionality cmux_other_acvm_type not feasible for Shamir")
+    }
+
+    fn get_public_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        a: &Self::OtherAcvmType<C>,
+    ) -> Option<C::BaseField> {
+        match a {
+            ShamirAcvmType::Public(public) => Some(*public),
+            _ => None,
+        }
+    }
+
+    fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &Self::OtherAcvmType<C>,
+        _b: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<(Self::AcvmType, Self::OtherAcvmType<C>)> {
+        panic!("functionality equals_other_acvm_type not feasible for Shamir")
+    }
+
+    fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &[Self::OtherAcvmType<C>],
+    ) -> eyre::Result<Vec<C::BaseField>> {
+        panic!("functionality open_many_other not feasible for Shamir")
+    }
+
+    fn compute_naf_entries(
+        &mut self,
+        _scalar: &Self::AcvmType,
+        _max_num_bits: usize,
+    ) -> eyre::Result<Vec<Self::AcvmType>> {
+        panic!("functionality compute_naf_entries not feasible for Shamir")
+    }
+
+    fn acvm_type_limbs_to_other_acvm_type<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _limbs: &[Self::AcvmType; NUM_LIMBS],
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        panic!("functionality acvm_type_limbs_to_other_acvm_type not feasible for Shamir")
+    }
+
+    fn neg_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        a: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match a {
+            ShamirAcvmType::<C::BaseField>::Public(public) => {
+                ShamirAcvmType::<C::BaseField>::Public(-public)
+            }
+            ShamirAcvmType::<C::BaseField>::Shared(shared) => {
+                ShamirAcvmType::<C::BaseField>::Shared(arithmetic::neg(shared))
+            }
+        }
+    }
+
+    fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match (lhs, rhs) {
+            (
+                ShamirAcvmType::<C::BaseField>::Public(lhs),
+                ShamirAcvmType::<C::BaseField>::Public(rhs),
+            ) => ShamirAcvmType::<C::BaseField>::Public(lhs + rhs),
+            (
+                ShamirAcvmType::<C::BaseField>::Public(public),
+                ShamirAcvmType::<C::BaseField>::Shared(shared),
+            )
+            | (
+                ShamirAcvmType::<C::BaseField>::Shared(shared),
+                ShamirAcvmType::<C::BaseField>::Public(public),
+            ) => ShamirAcvmType::<C::BaseField>::Shared(arithmetic::add_public(shared, public)),
+            (
+                ShamirAcvmType::<C::BaseField>::Shared(lhs),
+                ShamirAcvmType::<C::BaseField>::Shared(rhs),
+            ) => ShamirAcvmType::<C::BaseField>::Shared(arithmetic::add(lhs, rhs)),
+        }
+    }
+
+    fn sub_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        lhs: Self::OtherAcvmType<C>,
+        rhs: Self::OtherAcvmType<C>,
+    ) -> Self::OtherAcvmType<C> {
+        match (lhs, rhs) {
+            (ShamirAcvmType::Public(share_1), ShamirAcvmType::Public(share_2)) => {
+                ShamirAcvmType::Public(share_1 - share_2)
+            }
+            (ShamirAcvmType::Public(share_1), ShamirAcvmType::Shared(share_2)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(-share_2, share_1))
+            }
+            (ShamirAcvmType::Shared(share_1), ShamirAcvmType::Public(share_2)) => {
+                ShamirAcvmType::Shared(arithmetic::add_public(share_1, -share_2))
+            }
+            (ShamirAcvmType::Shared(share_1), ShamirAcvmType::Shared(share_2)) => {
+                let result = arithmetic::sub(share_1, share_2);
+                ShamirAcvmType::Shared(result)
+            }
+        }
+    }
+
+    fn inverse_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        panic!("functionality inverse_other_acvm_type not feasible for Shamir")
+    }
+
+    fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        panic!("functionality inverse_acvm_type_limbs not feasible for Shamir")
+    }
+
+    fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _lhs: &[Self::AcvmType; 4],
+        _rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        panic!("functionality add_acvm_type_limbs not feasible for Shamir")
+    }
+
+    fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _lhs: &[Self::AcvmType; 4],
+        _rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        panic!("functionality sub_acvm_type_limbs not feasible for Shamir")
+    }
+
+    fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _lhs: &[Self::AcvmType; 4],
+        _rhs: &[Self::AcvmType; 4],
+    ) -> eyre::Result<[Self::AcvmType; 4]> {
+        panic!("functionality mul_mod_acvm_type_limbs not feasible for Shamir")
+    }
+
+    fn div_unchecked_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _lhs: Self::OtherAcvmType<C>,
+        _rhs: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        panic!("functionality div_unchecked_other_acvm_types not feasible for Shamir")
+    }
+
+    fn mul_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _lhs: Self::OtherAcvmType<C>,
+        _rhs: Self::OtherAcvmType<C>,
+    ) -> eyre::Result<Self::OtherAcvmType<C>> {
+        panic!("functionality mul_other_acvm_types not feasible for Shamir")
+    }
+
+    fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &[Self::AcvmType; 4],
+        _b: &[Self::AcvmType; 4],
+        _to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        panic!("functionality madd_div_mod_acvm_limbs not feasible for Shamir")
+    }
+
+    fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &[[Self::AcvmType; 4]],
+        _b: &[[Self::AcvmType; 4]],
+        _to_add: &[[Self::AcvmType; 4]],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        panic!("functionality madd_div_mod_many_acvm_limbs not feasible for Shamir")
+    }
+
+    fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
+        &mut self,
+        _a: &[Self::AcvmType; 4],
+    ) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        panic!("functionality div_mod_acvm_limbs not feasible for Shamir")
+    }
+
+    fn other_acvm_type_to_acvm_type_limbs<
+        const NUM_LIMBS: usize,
+        const LIMB_BITS: usize,
+        C: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+    >(
+        &mut self,
+        _input: &Self::OtherAcvmType<C>,
+    ) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]> {
+        panic!("functionality other_acvm_type_to_acvm_type_limbs not feasible for Shamir")
     }
 }

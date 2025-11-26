@@ -1,11 +1,10 @@
 use super::Relation;
 use crate::decider::{
-    types::{
-        ClaimedEvaluations, MAX_PARTIAL_RELATION_LENGTH, ProverUnivariates, RelationParameters,
-    },
+    types::{ClaimedEvaluations, ProverUnivariates, RelationParameters},
     univariate::Univariate,
 };
 use ark_ff::{PrimeField, Zero};
+use co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH;
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LogDerivLookupRelationAcc<F: PrimeField> {

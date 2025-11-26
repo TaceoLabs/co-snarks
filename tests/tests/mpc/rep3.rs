@@ -1440,20 +1440,15 @@ mod field_share {
 
         let mut should_result = Vec::with_capacity(VEC_SIZE * 3);
         let big_mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+        let lo_mask = (BigUint::one() << (msb - lsb)) - BigUint::one();
         let hi_mask = (BigUint::one() << (bitsize - msb)) - BigUint::one();
-        let lo_mask = (BigUint::one() << lsb) - BigUint::one();
-        let slice_mask = (BigUint::one() << ((msb - lsb) as u32 + 1)) - BigUint::one();
-        let msb_plus_one = msb as u32 + 1;
 
         for x in x.into_iter() {
             let mut x: BigUint = x.into();
             x &= &big_mask;
-            let hi = (&x >> msb_plus_one) & &hi_mask;
-            let lo = &x & &lo_mask;
-            let slice = (&x >> lsb) & &slice_mask;
-            assert_eq!(x, &lo + (&slice << lsb) + (&hi << msb_plus_one));
+            let lo = (&x >> lsb) & &lo_mask;
+            let hi = (&x >> msb) & &hi_mask;
             should_result.push(ark_bn254::Fr::from(lo));
-            should_result.push(ark_bn254::Fr::from(slice));
             should_result.push(ark_bn254::Fr::from(hi));
         }
 
@@ -1466,7 +1461,7 @@ mod field_share {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let decomposed =
-                    yao::slice_arithmetic_many(&x, &net, &mut state, msb, lsb, bitsize).unwrap();
+                    yao::slice_arithmetic_many(&x, &net, &mut state, lsb, msb, bitsize).unwrap();
                 tx.send(decomposed)
             });
         }
@@ -1480,9 +1475,11 @@ mod field_share {
 
     #[test]
     fn rep3_slice_shared_field_many_via_yao() {
-        rep3_slice_shared_field_many_via_yao_inner(253, 0, 254);
+        rep3_slice_shared_field_many_via_yao_inner(123, 68, 254);
         rep3_slice_shared_field_many_via_yao_inner(100, 10, 254);
-        rep3_slice_shared_field_many_via_yao_inner(100, 10, 110);
+        rep3_slice_shared_field_many_via_yao_inner(100, 10, 254);
+        rep3_slice_shared_field_many_via_yao_inner(125, 60, 180);
+        rep3_slice_shared_field_many_via_yao_inner(68, 0, 136);
     }
 
     #[test]

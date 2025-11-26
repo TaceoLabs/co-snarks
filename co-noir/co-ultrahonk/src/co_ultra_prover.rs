@@ -1,12 +1,19 @@
+use crate::co_decider::relations::CRAND_PAIRS_FACTOR;
+use crate::co_oink::{
+    CRAND_PAIRS_CONST, CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE, CRAND_PAIRS_FACTOR_N,
+};
 use crate::{
     CONST_PROOF_SIZE_LOG_N, co_decider::co_decider_prover::CoDecider,
-    co_decider::types::ProverMemory, co_oink::co_oink_prover::CoOink, key::proving_key::ProvingKey,
+    co_decider::types::ProverMemory, co_oink::co_oink_prover::CoOink,
 };
-use co_builder::prelude::PAIRING_POINT_ACCUMULATOR_SIZE;
+use co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH;
+use co_noir_common::keys::verification_key::VerifyingKeyBarretenberg;
 use co_noir_common::{
+    constants::PAIRING_POINT_ACCUMULATOR_SIZE,
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
+    keys::proving_key::ProvingKey,
     mpc::{
         NoirUltraHonkProver, plain::PlainUltraHonkDriver, rep3::Rep3UltraHonkDriver,
         shamir::ShamirUltraHonkDriver,
@@ -21,7 +28,6 @@ use mpc_core::protocols::{
 use mpc_net::Network;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
-use ultrahonk::prelude::VerifyingKeyBarretenberg;
 
 pub type Rep3CoUltraHonk<P, H> = CoUltraHonk<Rep3UltraHonkDriver, P, H>;
 pub type ShamirCoUltraHonk<P, H> = CoUltraHonk<ShamirUltraHonkDriver, P, H>;
@@ -119,7 +125,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let num_pairs = if num_parties == 3 {
             0 // Precomputation is done on the fly since it requires no communication
         } else {
-            proving_key.ultrahonk_num_randomness(has_zk)
+            ultrahonk_num_randomness(&proving_key, has_zk)
         };
         let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)?;
         let mut state = ShamirState::from(preprocessing);
@@ -142,7 +148,55 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> eyre::Result<(HonkProof<H::DataType>, Vec<H::DataType>)> {
         let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
-        let proof = Self::prove_inner(&(), &mut (), proving_key, crs, has_zk, verifying_key)?;
+        let proof = Self::prove_inner(
+            &(),
+            &mut Default::default(),
+            proving_key,
+            crs,
+            has_zk,
+            verifying_key,
+        )?;
         Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))
     }
+}
+
+fn ultrahonk_num_randomness<C, T>(proving_key: &ProvingKey<T, C>, has_zk: ZeroKnowledge) -> usize
+where
+    C: HonkCurve<TranscriptFieldType>,
+    T: NoirUltraHonkProver<C>,
+{
+    // TODO because a lot is skipped in sumcheck prove, we generate a lot more than we really need
+    let active_domain_size_mul = if proving_key.active_region_data.size() > 0 {
+        proving_key.active_region_data.size() - 1
+    } else {
+        proving_key.final_active_wire_idx
+    };
+
+    let n = proving_key.circuit_size as usize;
+    let num_pairs_oink_prove = CRAND_PAIRS_FACTOR_N * n
+        + CRAND_PAIRS_FACTOR_DOMAIN_SIZE_MINUS_ONE * active_domain_size_mul
+        + CRAND_PAIRS_CONST;
+    // log2(n) * ((n >>= 1) / 2) == n - 1
+    let num_pairs_sumcheck_prove = CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH * (n - 1);
+
+    let num_pairs_sumcheck_disabled_contributions = if has_zk == ZeroKnowledge::No {
+        0
+    } else {
+        // compute_disabled_contribution: log2(n) rounds, each once relation, plus additional in round 0
+        (n.ilog(2) as usize + 1) * CRAND_PAIRS_FACTOR * MAX_PARTIAL_RELATION_LENGTH
+    };
+
+    let num_zk_randomness = if has_zk == ZeroKnowledge::No {
+        0
+    } else {
+        n // compute_batched_polys
+        + 1 // ZKData::new
+        + n.ilog2() as usize * C::LIBRA_UNIVARIATES_LENGTH // generate_libra_univariates
+        + 2 // compute_concatenated_libra_polynomial
+        + 3 // compute_grand_sum_polynomial
+    };
+    num_pairs_oink_prove
+        + num_pairs_sumcheck_prove
+        + num_pairs_sumcheck_disabled_contributions
+        + num_zk_randomness
 }

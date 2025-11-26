@@ -520,6 +520,8 @@ where
                 key,
                 outputs,
             )?,
+            // Recursive aggregation will be entirely handled by the backend and is not solved by the ACVM
+            BlackBoxFuncCall::RecursiveAggregation { .. } => (),
             _ => todo!("solve blackbox function {} not supported", bb_func.name()),
         }
 

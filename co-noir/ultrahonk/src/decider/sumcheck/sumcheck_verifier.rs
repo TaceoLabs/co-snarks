@@ -9,11 +9,11 @@ use crate::{
         },
     },
     prelude::GateSeparatorPolynomial,
-    types::NUM_ALL_ENTITIES,
     ultra_verifier::HonkVerifyResult,
 };
 use ark_ff::One;
 use co_noir_common::{
+    constants::NUM_ALL_ENTITIES,
     honk_curve::HonkCurve,
     honk_proof::TranscriptFieldType,
     polynomials::polynomial::RowDisablingPolynomial,

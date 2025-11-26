@@ -15,7 +15,7 @@ use super::{
 use ark_ff::{PrimeField, Zero};
 use circuits::{GarbledCircuits, SHA256Table};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2, hash_wires, util::tweak2};
-use itertools::Itertools;
+use itertools::{Itertools, izip};
 use mpc_net::Network;
 use num_bigint::BigUint;
 use rand::{CryptoRng, Rng};
@@ -218,7 +218,11 @@ impl GCUtils {
             res += *bit as u64;
         }
         if res >= F::MODULUS.into() {
-            eyre::bail!("Invalid field element");
+            eyre::bail!(
+                "Invalid field element, got {:?}, modulus is {:?}",
+                res,
+                F::MODULUS
+            );
         }
         Ok(F::from(res))
     }
@@ -548,7 +552,7 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Network>(
     Ok([x01, x2])
 }
 
-/// Lets the party with id2 input a vector field elements, which gets shared as Yao wires to the other parties.
+/// Lets the party with id2 input a vector field elements, which get shared as Yao wires to the other parties.
 pub fn input_field_id2_many<F: PrimeField, N: Network>(
     x: Option<Vec<F>>,
     delta: Option<WireMod2>,
@@ -569,7 +573,11 @@ pub fn input_field_id2_many<F: PrimeField, N: Network>(
             let x = x.ok_or(eyre::eyre!("No input provided"))?;
 
             if x.len() != n_inputs {
-                eyre::bail!("Invalid number of inputs",);
+                eyre::bail!(
+                    "Invalid number of inputs, expected {}, but got {}",
+                    n_inputs,
+                    x.len()
+                );
             }
 
             let mut garbler_bundle = Vec::with_capacity(bits);
@@ -583,6 +591,79 @@ pub fn input_field_id2_many<F: PrimeField, N: Network>(
                 garbler_bundle.extend(garbler);
                 evaluator_bundle.extend(evaluator);
             }
+            let x = GCUtils::wires_to_gcinput(garbler_bundle, evaluator_bundle, delta);
+
+            // Send x to the other parties
+            GCUtils::send_inputs(&x, net, PartyID::ID1)?;
+            x.garbler_wires
+        }
+    };
+    Ok(x)
+}
+
+/// Lets the party with id2 input a vectors of field elements over two different fields, which get shared as Yao wires to the other parties.
+#[expect(clippy::too_many_arguments)]
+pub fn input_two_field_id2_many<F: PrimeField, K: PrimeField, N: Network>(
+    x_f: Option<Vec<F>>,
+    x_k: Option<Vec<K>>,
+    delta: Option<WireMod2>,
+    output_size_1: usize,
+    output_size_2: usize,
+    n_inputs_total: usize,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryBundle<WireMod2>> {
+    let f_bits = F::MODULUS_BIT_SIZE as usize;
+    let k_bits = K::MODULUS_BIT_SIZE as usize;
+    let n_inputs_1 = output_size_1 * n_inputs_total;
+    let n_inputs_2 = output_size_2 * n_inputs_total;
+    let bits = n_inputs_1 * f_bits + n_inputs_2 * k_bits;
+
+    let x = match state.id {
+        PartyID::ID0 | PartyID::ID1 => {
+            // Receive x
+            GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?
+        }
+        PartyID::ID2 => {
+            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let x_f = x_f.ok_or(eyre::eyre!("No input provided"))?;
+            let x_k = x_k.ok_or(eyre::eyre!("No input provided"))?;
+
+            if x_f.len() != n_inputs_1 {
+                eyre::bail!(
+                    "Invalid number of inputs, expected {}, but got {}",
+                    n_inputs_1,
+                    x_f.len()
+                );
+            }
+            if x_k.len() != n_inputs_2 {
+                eyre::bail!(
+                    "Invalid number of inputs, expected {}, but got {}",
+                    n_inputs_2,
+                    x_k.len()
+                );
+            }
+
+            let mut garbler_bundle = Vec::with_capacity(bits);
+            let mut evaluator_bundle = Vec::with_capacity(bits);
+
+            for (x_f_, x_k_) in izip!(x_f.chunks(output_size_1), x_k.chunks(output_size_2)) {
+                for x in x_f_ {
+                    let bits = GCUtils::field_to_bits_as_u16(*x);
+                    let (garbler, evaluator) =
+                        GCUtils::encode_bits_as_wires(bits, &mut state.rng, delta);
+                    garbler_bundle.extend(garbler);
+                    evaluator_bundle.extend(evaluator);
+                }
+                for x in x_k_ {
+                    let bits = GCUtils::field_to_bits_as_u16(*x);
+                    let (garbler, evaluator) =
+                        GCUtils::encode_bits_as_wires(bits, &mut state.rng, delta);
+                    garbler_bundle.extend(garbler);
+                    evaluator_bundle.extend(evaluator);
+                }
+            }
+
             let x = GCUtils::wires_to_gcinput(garbler_bundle, evaluator_bundle, delta);
 
             // Send x to the other parties
@@ -639,18 +720,18 @@ pub fn decompose_arithmetic_to_other_field<F: PrimeField, K: PrimeField, N: Netw
     )
 }
 
-/// Slices a shared field element at given indices (msb, lsb), both included in the slice.
+/// Slices a value at given indices (lo, mid).
 /// Only considers bitsize bits.
-/// Result  is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
+/// Result is thus [lo, hi], where lo has all bits from lo to (excluding) mid and hi all bits from mid up to bitsize.
 pub fn slice_arithmetic<F: PrimeField, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
-    msb: usize,
-    lsb: usize,
+    lo: usize,
+    mid: usize,
     bitsize: usize,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    slice_arithmetic_many(&[input], net, state, msb, lsb, bitsize)
+    slice_arithmetic_many(&[input], net, state, lo, mid, bitsize)
 }
 
 /// Computes input % 2^divisor_bit.
@@ -1145,26 +1226,26 @@ pub fn decompose_arithmetic_to_other_field_many<F: PrimeField, K: PrimeField, N:
     )
 }
 
-/// Slices a vector of shared field elements at given indices (msb, lsb), both included in the slice.
-/// Only consideres bitsize bits.
-/// Result (per input) is thus [lo, slice, hi], where slice has all bits from lsb to msb, lo all bits smaller than lsb, and hi all bits greater msb up to bitsize.
+/// Slices a vector of shared field elements at given indices (lo, mid).
+/// Only considers bitsize bits.
+/// Result is thus [lo, hi], where lo has all bits from lo to (excluding) mid and hi all bits from mid up to bitsize.
 pub fn slice_arithmetic_many<F: PrimeField, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
-    msb: usize,
-    lsb: usize,
+    lo: usize,
+    mid: usize,
     bitsize: usize,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     let num_inputs = inputs.len();
-    let total_output_elements = 3 * num_inputs;
+    let total_output_elements = 2 * num_inputs;
     decompose_circuit_compose_blueprint!(
         inputs,
         net,
         state,
         total_output_elements,
         GarbledCircuits::slice_field_element_many::<_, F>,
-        (msb, lsb, bitsize)
+        (lo, mid, bitsize)
     )
 }
 

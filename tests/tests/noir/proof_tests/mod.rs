@@ -1,4 +1,5 @@
 mod plain;
+mod plaindriver;
 mod rep3;
 mod shamir;
 

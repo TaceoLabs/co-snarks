@@ -1,10 +1,7 @@
-use crate::{
-    co_decider::{
-        co_decider_prover::CoDecider,
-        co_shplemini::types::{PolyF, PolyG},
-        co_sumcheck::SumcheckOutput,
-    },
-    types::AllEntities,
+use crate::co_decider::{
+    co_decider_prover::CoDecider,
+    co_shplemini::types::{PolyF, PolyG},
+    co_sumcheck::SumcheckOutput,
 };
 use ark_ff::{Field, One};
 use co_noir_common::{
@@ -14,7 +11,9 @@ use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     mpc::NoirUltraHonkProver,
-    polynomials::{polynomial::Polynomial, shared_polynomial::SharedPolynomial},
+    polynomials::{
+        entities::AllEntities, polynomial::Polynomial, shared_polynomial::SharedPolynomial,
+    },
     transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
 };

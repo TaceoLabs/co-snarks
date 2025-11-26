@@ -2,7 +2,7 @@
 my_id = 1
 bind_addr = "0.0.0.0:10001"
 key_path = "data/key1.der"
-max_frame_length = 100_000_000
+max_frame_length = 469_762_056
 [[network.parties]]
 id = 0
 # normally we would use DNS name here such as localhost, but localhost under windows is resolved to ::1, which causes problems since we bind to ipv4 above

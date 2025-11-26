@@ -18,14 +18,17 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use crate::key::proving_key::ProvingKey;
 use ark_ff::{One, Zero};
-use co_builder::{PERMUTATION_ARGUMENT_VALUE_SEPARATOR, prelude::ActiveRegionData};
 use co_noir_common::{
     CoUtils,
+    constants::PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
+    keys::{
+        proving_key::ProvingKey, types::ActiveRegionData,
+        verification_key::VerifyingKeyBarretenberg,
+    },
     mpc::NoirUltraHonkProver,
     polynomials::polynomial::{NUM_MASKED_ROWS, Polynomial},
     transcript::{Transcript, TranscriptHasher},
@@ -35,7 +38,7 @@ use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use std::marker::PhantomData;
-use ultrahonk::{NUM_ALPHAS, prelude::VerifyingKeyBarretenberg};
+use ultrahonk::NUM_ALPHAS;
 
 pub(crate) struct CoOink<
     'a,

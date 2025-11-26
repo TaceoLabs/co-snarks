@@ -32,6 +32,7 @@ noirc-artifacts.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+rand.workspace = true
 libaes.workspace = true
 num-bigint.workspace = true
 rayon.workspace = true

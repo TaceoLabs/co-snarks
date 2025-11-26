@@ -1,6 +1,6 @@
-use co_builder::prelude::PrecomputedEntities;
-
-use crate::types::{ShiftedWitnessEntities, WitnessEntities};
+use co_noir_common::polynomials::entities::{
+    PrecomputedEntities, ShiftedWitnessEntities, WitnessEntities,
+};
 
 pub(crate) struct PolyF<'a, T: Default> {
     pub(crate) precomputed: &'a PrecomputedEntities<T>,

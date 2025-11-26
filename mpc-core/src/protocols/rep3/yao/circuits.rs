@@ -1026,56 +1026,46 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Slices a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (msb, lsb), both included in the slice. For the bitcomposition, wires_c are used.
+    /// Slices a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (lo, mid), into lo and hi, where lo has all bits from lsb to (excluding) msb and hi all bits from msb up to bitsize.. For the bitcomposition, wires_c are used.
     fn slice_field_element<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
         wires_c: &[G::Item],
-        msb: usize,
-        lsb: usize,
+        lo: usize,
+        mid: usize,
         bitsize: usize,
     ) -> Result<Vec<G::Item>, G::Error> {
         debug_assert_eq!(wires_a.len(), wires_b.len());
         let input_bitlen = wires_a.len();
         debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
         debug_assert!(input_bitlen >= bitsize);
-        debug_assert!(msb >= lsb);
-        debug_assert!(msb < bitsize);
-        debug_assert_eq!(wires_c.len(), input_bitlen * 3);
+        debug_assert!(mid >= lo);
+        debug_assert!(mid < bitsize);
+        debug_assert_eq!(wires_c.len(), input_bitlen * 2);
 
         let input_bits = Self::adder_mod_p_with_output_size::<_, F>(g, wires_a, wires_b, bitsize)?;
         let mut rands = wires_c.chunks(input_bitlen);
 
-        let lo = Self::compose_field_element::<_, F>(g, &input_bits[..lsb], rands.next().unwrap())?;
-        let slice =
-            Self::compose_field_element::<_, F>(g, &input_bits[lsb..=msb], rands.next().unwrap())?;
+        let lo =
+            Self::compose_field_element::<_, F>(g, &input_bits[lo..mid], rands.next().unwrap())?;
 
-        let hi = if msb == bitsize {
-            Self::compose_field_element::<_, F>(g, &[], rands.next().unwrap())?
-        } else {
-            Self::compose_field_element::<_, F>(
-                g,
-                &input_bits[msb + 1..bitsize],
-                rands.next().unwrap(),
-            )?
-        };
+        let hi = Self::compose_field_element::<_, F>(g, &input_bits[mid..], rands.next().unwrap())?;
 
         let mut results = lo;
-        results.extend(slice);
         results.extend(hi);
 
         Ok(results)
     }
 
-    /// Slices a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (msb, lsb), both included in the slice. For the bitcomposition, wires_c are used.
+    /// Slices a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (lo, mid), into lo and hi, where lo has all bits from lsb to (excluding) msb and hi all bits from msb up to bitsize.. For the bitcomposition, wires_c are used.
     pub(crate) fn slice_field_element_many<G: FancyBinary, F: PrimeField>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
-        msb: usize,
-        lsb: usize,
+        lo: usize,
+        mid: usize,
         bitsize: usize,
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
         debug_assert_eq!(wires_a.size(), wires_b.size());
@@ -1083,12 +1073,12 @@ impl GarbledCircuits {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let num_inputs = input_size / input_bitlen;
 
-        let total_output_elements = 3 * num_inputs;
+        let total_output_elements = 2 * num_inputs;
 
         debug_assert_eq!(input_size % input_bitlen, 0);
         debug_assert!(input_bitlen >= bitsize);
-        debug_assert!(msb >= lsb);
-        debug_assert!(msb < bitsize);
+        debug_assert!(lo <= mid);
+        debug_assert!(lo < bitsize);
         debug_assert_eq!(wires_c.size(), input_bitlen * total_output_elements);
 
         let mut results = Vec::with_capacity(wires_c.size());
@@ -1096,10 +1086,10 @@ impl GarbledCircuits {
         for (chunk_a, chunk_b, chunk_c) in izip!(
             wires_a.wires().chunks(input_bitlen),
             wires_b.wires().chunks(input_bitlen),
-            wires_c.wires().chunks(input_bitlen * 3)
+            wires_c.wires().chunks(input_bitlen * 2)
         ) {
             let sliced =
-                Self::slice_field_element::<_, F>(g, chunk_a, chunk_b, chunk_c, msb, lsb, bitsize)?;
+                Self::slice_field_element::<_, F>(g, chunk_a, chunk_b, chunk_c, lo, mid, bitsize)?;
             results.extend(sliced);
         }
 
@@ -1799,84 +1789,190 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(results))
     }
 
-    /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs. The field elements are composed using wires_c. This is needed in the Translator builder.
+    /// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
     #[expect(clippy::too_many_arguments)]
-    pub fn compute_translator_limbs_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    pub fn ring_div_by_public_to_fr_limbs_and_fq_many<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+        K: PrimeField,
+    >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         input_bitlen: usize,
-        output_bitlen: usize,
-        limbs_per_field: usize,
+        limb_size: usize,
+        num_limbs_per_field: usize,
         divisor: &[bool],
     ) -> Result<BinaryBundle<G::Item>, G::Error> {
-        debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
-        debug_assert_eq!(length % 2, 0);
 
-        debug_assert_eq!(length / 2 % input_bitlen, 0);
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        debug_assert_eq!(length % input_bitlen, 0);
+        debug_assert_eq!(
+            wires_c.size(),
+            num_limbs_per_field * F::MODULUS_BIT_SIZE as usize * (length / input_bitlen)
+                + K::MODULUS_BIT_SIZE as usize * (length / input_bitlen)
+        );
 
         let mut results = Vec::with_capacity(wires_c.size());
-        let num_outputs_per_chunk = limbs_per_field * 2;
 
-        for (chunk_x1, chunk_x2, chunk_y1, chunk_y2, chunk_c) in izip!(
-            wires_x1.wires()[0..length / 2].chunks(input_bitlen),
-            wires_x2.wires()[0..length / 2].chunks(input_bitlen),
-            wires_x1.wires()[length / 2..].chunks(input_bitlen),
-            wires_x2.wires()[length / 2..].chunks(input_bitlen),
-            wires_c
-                .wires()
-                .chunks(num_outputs_per_chunk * F::MODULUS_BIT_SIZE as usize),
+        let num_outputs_per_chunk =
+            num_limbs_per_field * F::MODULUS_BIT_SIZE as usize + K::MODULUS_BIT_SIZE as usize;
+
+        for (chunk_x1, chunk_x2, chunk_c) in izip!(
+            wires_x1.wires().chunks(input_bitlen),
+            wires_x2.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(num_outputs_per_chunk),
         ) {
-            results.extend(Self::compute_translator_limbs::<_, F>(
+            let res = Self::ring_div_by_public_to_fr_limbs_and_fq::<G, F, K>(
                 g,
                 chunk_x1,
                 chunk_x2,
-                chunk_y1,
-                chunk_y2,
                 chunk_c,
                 divisor,
                 input_bitlen,
-                output_bitlen,
-                limbs_per_field,
-            )?);
+                limb_size,
+                num_limbs_per_field,
+            )?;
+            results.extend(res);
         }
         Ok(BinaryBundle::new(results))
     }
 
-    /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs. The field elements are composed using wires_c. This is needed in the Translator builder.
+    /// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
     #[expect(clippy::too_many_arguments)]
-    fn compute_translator_limbs<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    fn ring_div_by_public_to_fr_limbs_and_fq<
+        G: FancyBinary + FancyBinaryConstant,
+        F: PrimeField,
+        K: PrimeField,
+    >(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
-        y1s: &[G::Item],
-        y2s: &[G::Item],
         wires_c: &[G::Item],
         divisor: &[bool],
         input_bitlen: usize,
         output_bitlen: usize,
         limbs_per_field: usize,
     ) -> Result<Vec<G::Item>, G::Error> {
-        let quotient = Self::bin_addition_no_carry(g, x1s, x2s)?;
-        let remainder = Self::bin_addition_no_carry(g, y1s, y2s)?;
+        let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
 
-        debug_assert_eq!(quotient.len(), input_bitlen);
-        debug_assert_eq!(quotient.len(), divisor.len());
-        let quotient = Self::bin_div_by_public(g, &quotient, divisor)?.to_vec();
+        debug_assert_eq!(dividend.len(), input_bitlen);
+        debug_assert_eq!(dividend.len(), divisor.len());
+        debug_assert_eq!(
+            wires_c.len(),
+            F::MODULUS_BIT_SIZE as usize * limbs_per_field + K::MODULUS_BIT_SIZE as usize
+        );
+        let quotient = Self::bin_div_by_public(g, &dividend, divisor)?;
+        let km = Self::bin_mul_with_public(g, &quotient, divisor)?;
+        let remainder = &Self::bin_subtraction(g, &dividend, &km[..dividend.len()])?.0;
 
-        let mut results = Vec::with_capacity(F::MODULUS_BIT_SIZE as usize * 2 * limbs_per_field);
+        let mut results = Vec::with_capacity(
+            F::MODULUS_BIT_SIZE as usize * limbs_per_field + K::MODULUS_BIT_SIZE as usize,
+        );
+
+        let (wires_c_f, wires_c_k) =
+            wires_c.split_at(F::MODULUS_BIT_SIZE as usize * limbs_per_field);
+
+        for (xs, ys) in izip!(
+            quotient.chunks(output_bitlen),
+            wires_c_f.chunks(F::MODULUS_BIT_SIZE as usize),
+        ) {
+            let result = Self::compose_field_element::<_, F>(g, xs, ys)?;
+            results.extend(result);
+        }
+        results.extend(Self::compose_field_element::<_, K>(
+            g,
+            remainder[..K::MODULUS_BIT_SIZE as usize].as_ref(),
+            wires_c_k,
+        )?);
+        Ok(results)
+    }
+
+    /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
+    #[expect(clippy::too_many_arguments)]
+    pub fn ring_div_by_public_to_limbs_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        wires_x1: &BinaryBundle<G::Item>,
+        wires_x2: &BinaryBundle<G::Item>,
+        wires_c: &BinaryBundle<G::Item>,
+        input_bitlen: usize,
+        divisor: &[bool],
+        limb_size: usize,
+        num_limbs_per_field: usize,
+    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+        let length = wires_x1.size();
+
+        debug_assert_eq!(wires_x1.size(), wires_x2.size());
+        debug_assert_eq!(length % input_bitlen, 0);
+        debug_assert_eq!(
+            wires_c.size(),
+            2 * F::MODULUS_BIT_SIZE as usize * num_limbs_per_field * (length / input_bitlen)
+        );
+
+        let mut results = Vec::with_capacity(wires_c.size());
+
+        let num_outputs_per_chunk = 2 * F::MODULUS_BIT_SIZE as usize * num_limbs_per_field;
+
+        for (chunk_x1, chunk_x2, chunk_c) in izip!(
+            wires_x1.wires().chunks(input_bitlen),
+            wires_x2.wires().chunks(input_bitlen),
+            wires_c.wires().chunks(num_outputs_per_chunk),
+        ) {
+            let res = Self::ring_div_by_public_to_limbs::<G, F>(
+                g,
+                chunk_x1,
+                chunk_x2,
+                chunk_c,
+                divisor,
+                input_bitlen,
+                limb_size,
+                num_limbs_per_field,
+            )?;
+            results.extend(res);
+        }
+        Ok(BinaryBundle::new(results))
+    }
+
+    /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
+    #[expect(clippy::too_many_arguments)]
+    fn ring_div_by_public_to_limbs<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+        g: &mut G,
+        x1s: &[G::Item],
+        x2s: &[G::Item],
+        wires_c: &[G::Item],
+        divisor: &[bool],
+        input_bitlen: usize,
+        limb_size: usize,
+        num_limbs_per_field: usize,
+    ) -> Result<Vec<G::Item>, G::Error> {
+        let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
+
+        debug_assert_eq!(dividend.len(), input_bitlen);
+        debug_assert_eq!(dividend.len(), divisor.len());
+        debug_assert_eq!(
+            wires_c.len(),
+            F::MODULUS_BIT_SIZE as usize * 2 * num_limbs_per_field
+        );
+        let quotient = Self::bin_div_by_public(g, &dividend, divisor)?;
+        let km = Self::bin_mul_with_public(g, &quotient, divisor)?;
+        let remainder = &Self::bin_subtraction(g, &dividend, &km[..dividend.len()])?.0;
+
+        let mut results = Vec::with_capacity(F::MODULUS_BIT_SIZE as usize * 2);
         let mut rands = wires_c.chunks(F::MODULUS_BIT_SIZE as usize);
 
-        for inp in quotient
-            .chunks(output_bitlen)
-            .take(limbs_per_field)
-            .chain(remainder.chunks(output_bitlen).take(limbs_per_field))
-        {
+        for xs in quotient.chunks(limb_size).take(num_limbs_per_field) {
             results.extend(Self::compose_field_element::<_, F>(
                 g,
-                inp,
+                xs,
+                rands.next().unwrap(),
+            )?);
+        }
+        for xs in remainder.chunks(limb_size).take(num_limbs_per_field) {
+            results.extend(Self::compose_field_element::<_, F>(
+                g,
+                xs,
                 rands.next().unwrap(),
             )?);
         }

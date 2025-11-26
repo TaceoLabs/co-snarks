@@ -1,5 +1,6 @@
 use ark_ff::One;
 use ark_ff::Zero;
+use co_noir_common::constants::BATCHED_RELATION_PARTIAL_LENGTH_ZK;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::TranscriptFieldType;
 use co_noir_common::polynomials::polynomial::RowDisablingPolynomial;
@@ -10,10 +11,8 @@ use crate::decider::decider_prover::Decider;
 use crate::decider::sumcheck::SumcheckOutput;
 use crate::decider::sumcheck::sumcheck_round_prover::{SumcheckProverRound, SumcheckRoundOutput};
 use crate::decider::sumcheck::zk_data::ZKSumcheckData;
-use crate::decider::types::{
-    BATCHED_RELATION_PARTIAL_LENGTH_ZK, ClaimedEvaluations, GateSeparatorPolynomial,
-    PartiallyEvaluatePolys,
-};
+use crate::decider::types::{ClaimedEvaluations, GateSeparatorPolynomial, PartiallyEvaluatePolys};
+
 use crate::types::AllEntities;
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK

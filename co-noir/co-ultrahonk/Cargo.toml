@@ -14,20 +14,16 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 ark-bn254.workspace = true
 ark-poly.workspace = true
-co-acvm = { version = "0.7.0", path = "../co-acvm" }
-co-builder = { version = "0.5.0", path = "../co-builder" }
 noir-types = { version = "0.1.1", path = "../noir-types" }
 eyre.workspace = true
 itertools.workspace = true
 mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 num-bigint.workspace = true
-num-traits.workspace = true
 tracing.workspace = true
 ultrahonk = { version = "0.6.0", path = "../ultrahonk" }
 rand.workspace = true
 rayon.workspace = true
-serde.workspace = true
 co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
 
 [dev-dependencies]

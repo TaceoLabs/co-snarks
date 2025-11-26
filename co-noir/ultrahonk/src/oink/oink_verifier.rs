@@ -1,7 +1,7 @@
 use crate::oink::{oink_prover::Oink, types::VerifierMemory};
 use crate::ultra_verifier::HonkVerifyResult;
 use ark_ec::pairing::Pairing;
-use co_builder::prelude::VerifyingKey;
+use co_noir_common::keys::verification_key::VerifyingKey;
 use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::TranscriptFieldType,

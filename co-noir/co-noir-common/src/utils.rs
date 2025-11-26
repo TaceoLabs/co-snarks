@@ -145,4 +145,29 @@ impl Utils {
 
         output
     }
+
+    pub fn field_limbs_to_biguint<F: PrimeField, const NUM_LIMBS: usize, const LIMB_SIZE: usize>(
+        limbs: &[F; NUM_LIMBS],
+    ) -> BigUint {
+        let mut result = BigUint::zero();
+        for (i, limb) in limbs.iter().enumerate() {
+            let limb_value: BigUint = limb.into_bigint().into();
+            result += limb_value << (i * LIMB_SIZE);
+        }
+        result
+    }
+
+    pub fn biguint_to_field_limbs<F: PrimeField, const NUM_LIMBS: usize, const LIMB_SIZE: usize>(
+        value: &BigUint,
+    ) -> [F; NUM_LIMBS] {
+        let mut limbs = [F::zero(); NUM_LIMBS];
+        let limb_mask = (BigUint::one() << LIMB_SIZE) - BigUint::one();
+
+        for (i, item) in limbs.iter_mut().enumerate().take(NUM_LIMBS) {
+            let limb_value = (value >> (i * LIMB_SIZE)) & &limb_mask;
+            *item = F::from(limb_value);
+        }
+
+        limbs
+    }
 }

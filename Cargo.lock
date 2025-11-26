@@ -1191,6 +1191,7 @@ dependencies = [
  "noirc_artifacts",
  "num-bigint 0.4.6",
  "paste",
+ "rand 0.8.5",
  "rayon",
  "serde",
  "sha2",
@@ -1227,10 +1228,10 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-grumpkin",
  "ark-poly",
- "ark-serialize 0.5.0",
  "blake3",
  "co-acvm",
  "co-noir-common",
+ "co-ultrahonk",
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
@@ -1239,9 +1240,8 @@ dependencies = [
  "num-bigint 0.4.6",
  "num-traits",
  "rand 0.8.5",
- "serde",
+ "rand_chacha 0.3.1",
  "serde_json",
- "thiserror 2.0.14",
  "tracing",
 ]
 
@@ -1421,8 +1421,6 @@ dependencies = [
  "ark-ec",
  "ark-ff 0.5.0",
  "ark-poly",
- "co-acvm",
- "co-builder",
  "co-noir-common",
  "criterion",
  "eyre",
@@ -1431,10 +1429,8 @@ dependencies = [
  "mpc-net",
  "noir-types",
  "num-bigint 0.4.6",
- "num-traits",
  "rand 0.8.5",
  "rayon",
- "serde",
  "sha3",
  "tracing",
  "ultrahonk",
@@ -2477,29 +2473,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589533453244b0995c858700322199b2becb13b627df2851f64a2775d024abcf"
 dependencies = [
  "windows-sys 0.59.0",
-]
-
-[[package]]
-name = "honk-verifier"
-version = "0.1.0"
-dependencies = [
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.5.0",
- "co-acvm",
- "co-builder",
- "co-noir-common",
- "co-ultrahonk",
- "flate2",
- "itertools 0.14.0",
- "mpc-core",
- "mpc-net",
- "num-bigint 0.4.6",
- "rand 0.8.5",
- "rayon",
- "serde",
- "serde_json",
- "ultrahonk",
 ]
 
 [[package]]
@@ -5148,7 +5121,6 @@ dependencies = [
  "ark-ff 0.5.0",
  "ark-grumpkin",
  "ark-std 0.5.0",
- "bincode 1.3.3",
  "blake2",
  "blake3",
  "circom-mpc-compiler",
@@ -5558,21 +5530,17 @@ dependencies = [
 name = "ultrahonk"
 version = "0.6.0"
 dependencies = [
- "ark-bn254",
  "ark-ec",
  "ark-ff 0.5.0",
  "ark-poly",
- "co-builder",
  "co-noir-common",
  "eyre",
  "itertools 0.14.0",
  "mpc-core",
  "noir-types",
  "num-bigint 0.4.6",
- "num-traits",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "sha3",
  "tracing",
 ]
 

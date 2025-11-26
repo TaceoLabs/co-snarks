@@ -165,7 +165,7 @@ impl<F: PrimeField> RamTable<F> {
             index.to_owned()
         };
 
-        let wit_index = index_wire.get_normalized_witness_index(builder, driver);
+        let wit_index = index_wire.get_witness_index(builder, driver);
         let output_idx = builder.read_ram_array(self.ram_id, wit_index, driver)?;
         Ok(FieldCT::from_witness_index(output_idx))
     }
@@ -219,8 +219,8 @@ impl<F: PrimeField> RamTable<F> {
         }
 
         // else
-        let index_ = index_wire.get_normalized_witness_index(builder, driver);
-        let value_ = value_wire.get_normalized_witness_index(builder, driver);
+        let index_ = index_wire.get_witness_index(builder, driver);
+        let value_ = value_wire.get_witness_index(builder, driver);
         builder.write_ram_array(driver, self.ram_id, index_, value_)?;
         Ok(())
     }
@@ -443,5 +443,125 @@ impl<U: Clone + Default, F: PrimeField, L: LookupTableProvider<F>> RamTranscript
             records: Vec::new(),
             access_count: 0,
         }
+    }
+}
+
+pub(crate) struct TwinRomTable<F: PrimeField> {
+    pub(crate) raw_entries: Vec<[FieldCT<F>; 2]>,
+    pub(crate) entries: Vec<[FieldCT<F>; 2]>,
+    pub(crate) length: usize,
+    pub(crate) rom_id: usize, // Builder identifier for this ROM table
+    pub(crate) initialized: bool,
+}
+
+impl<F: PrimeField> TwinRomTable<F> {
+    pub(crate) fn new(table_entries: Vec<[FieldCT<F>; 2]>) -> Self {
+        let raw_entries = table_entries;
+        let length = raw_entries.len();
+
+        // do not initialize the table yet. The input entries might all be constant,
+        // if this is the case we might not have a valid pointer to a Builder
+        // We get around this, by initializing the table when `operator[]` is called
+        // with a non-const field element.
+
+        Self {
+            raw_entries,
+            entries: Vec::new(),
+            length,
+            rom_id: 0,
+            initialized: false,
+        }
+    }
+
+    // initialize the table once we perform a read. This ensures we always have a valid
+    // pointer to a Builder.
+    // (if both the table entries and the index are constant, we don't need a builder as we
+    // can directly extract the desired value from `raw_entries`)
+    pub(crate) fn initialize_table<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) {
+        if self.initialized {
+            return;
+        }
+
+        // Populate table. Table entries must be normalized and cannot be constants
+        for entry in self.raw_entries.iter() {
+            let first = if entry[0].is_constant() {
+                FieldCT::from_witness_index(
+                    builder.put_constant_variable(
+                        T::get_public(&entry[0].get_value(builder, driver))
+                            .expect("Constant should be public"),
+                    ),
+                )
+            } else {
+                entry[0].clone()
+            };
+
+            let second = if entry[1].is_constant() {
+                FieldCT::from_witness_index(
+                    builder.put_constant_variable(
+                        T::get_public(&entry[1].get_value(builder, driver))
+                            .expect("Constant should be public"),
+                    ),
+                )
+            } else {
+                entry[1].clone()
+            };
+            self.entries.push([first, second]);
+        }
+        self.rom_id = builder.create_rom_array(self.length);
+
+        for i in 0..self.length {
+            let indices = [
+                self.entries[i][0].get_witness_index(builder, driver),
+                self.entries[i][1].get_witness_index(builder, driver),
+            ];
+            builder.set_rom_element_pair(self.rom_id, i, indices);
+        }
+
+        self.initialized = true;
+    }
+
+    pub(crate) fn get<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &mut self,
+        index: &FieldCT<F>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<[FieldCT<F>; 2]> {
+        if index.is_constant() {
+            let value = T::get_public(&index.get_value(builder, driver))
+                .expect("Constant should be public");
+            let val: BigUint = value.into();
+            let val: usize = val.try_into().expect("Invalid index");
+            return Ok(self.entries[val].to_owned());
+        }
+        self.initialize_table(builder, driver);
+
+        if !T::is_shared(&builder.get_variable(index.witness_index as usize)) {
+            // Sanity check, only doable in plain
+            let value = T::get_public(&index.get_value(builder, driver))
+                .expect("Already checked it is public");
+            let val: BigUint = value.into();
+            assert!(val < BigUint::from(self.length));
+        }
+
+        let normalized_witness_index = index.get_witness_index(builder, driver);
+        let output_indices =
+            builder.read_rom_array_pair(self.rom_id, normalized_witness_index, driver)?;
+
+        let pair = [
+            FieldCT::from_witness_index(output_indices[0]),
+            FieldCT::from_witness_index(output_indices[1]),
+        ];
+
+        Ok(pair)
     }
 }

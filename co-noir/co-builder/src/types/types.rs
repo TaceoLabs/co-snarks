@@ -1,17 +1,19 @@
-use super::big_field::BigGroup;
+use super::big_group::BigGroup;
 use super::field_ct::{CycleGroupCT, FieldCT};
-use crate::keys::proving_key::ProvingKey;
-use crate::prelude::{GenericUltraCircuitBuilder, PrecomputedEntities, ProverWitnessEntities};
+use crate::prelude::GenericUltraCircuitBuilder;
+use crate::transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT};
 use crate::types::field_ct::BoolCT;
 use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
+use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE};
 use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::honk_proof::TranscriptFieldType;
+use co_noir_common::keys::plain_proving_key::PlainProvingKey;
+use co_noir_common::keys::types::ActiveRegionData;
+use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
 use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
-use serde::{Deserialize, Serialize};
 use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -148,7 +150,7 @@ pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) multi_scalar_mul_constraints: Vec<usize>,
     pub(crate) ec_add_constraints: Vec<usize>,
     // pub(crate) recursion_constraints: Vec<usize>,
-    // pub(crate) honk_recursion_constraints: Vec<usize>,
+    pub(crate) honk_recursion_constraints: Vec<usize>,
     // pub(crate) avm_recursion_constraints: Vec<usize>,
     // pub(crate) ivc_recursion_constraints: Vec<usize>,
     // pub(crate) bigint_from_le_bytes_constraints: Vec<usize>,
@@ -207,8 +209,6 @@ impl<T: Default> UltraTraceBlocks<T> {
     }
 }
 
-pub const NUM_WIRES: usize = 4;
-pub const NUM_SELECTORS: usize = 14;
 pub type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS>;
 
 pub struct ExecutionTraceBlock<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> {
@@ -387,6 +387,10 @@ impl<F: PrimeField> UltraTraceBlock<F> {
     pub fn len(&self) -> usize {
         self.wires[Self::W_L].len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 pub(crate) struct RangeConstraint {
@@ -480,18 +484,18 @@ impl<F: PrimeField> LogicConstraint<F> {
     }
 }
 
-#[expect(dead_code)]
-pub(crate) struct RecursionConstraint {
+pub(crate) struct RecursionConstraint<F: PrimeField> {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
-    key: Vec<u32>,
-    proof: Vec<u32>,
-    public_inputs: Vec<u32>,
-    key_hash: u32,
-    proof_type: u32,
+    pub(crate) key: Vec<u32>,
+    pub(crate) proof: Vec<u32>,
+    pub(crate) public_inputs: Vec<u32>,
+    pub(crate) key_hash: u32,
+    pub(crate) proof_type: u32,
+    pub(crate) predicate: WitnessOrConstant<F>,
 }
 
-impl RecursionConstraint {
+impl<F: PrimeField> RecursionConstraint<F> {
     #[expect(dead_code)]
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
 }
@@ -516,40 +520,142 @@ pub(crate) struct Blake3Constraint<F: PrimeField> {
     pub(crate) result: [u32; 32],
 }
 
-#[derive(Default)]
-#[expect(dead_code)]
-pub(crate) struct PairingPoints<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
-    p0: BigGroup<P, T>,
-    p1: BigGroup<P, T>,
+#[derive(Clone)]
+pub struct PairingPoints<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> {
+    p0: BigGroup<C::ScalarField, T>,
+    p1: BigGroup<C::ScalarField, T>,
     has_data: bool,
 }
-#[expect(dead_code)]
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
-    pub(crate) fn new(p0: BigGroup<P, T>, p1: BigGroup<P, T>) -> Self {
+
+impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> Default
+    for PairingPoints<C, T>
+{
+    fn default() -> Self {
+        Self {
+            p0: BigGroup::default(),
+            p1: BigGroup::default(),
+            has_data: false,
+        }
+    }
+}
+// An aggregation state is represented by two G1 affine elements. Each G1 point has
+// two field element coordinates (x, y). Thus, four base field elements
+// Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
+
+impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoints<C, T> {
+    pub fn new(p0: BigGroup<C::ScalarField, T>, p1: BigGroup<C::ScalarField, T>) -> Self {
         Self {
             p0,
             p1,
             has_data: true,
         }
     }
-}
 
-// An aggregation state is represented by two G1 affine elements. Each G1 point has
-// two field element coordinates (x, y). Thus, four base field elements
-// Four limbs are used when simulating a non-native field using the bigfield class, so 16 total field elements.
-pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
+    pub fn reconstruct_from_public(
+        public_inputs: &[FieldCT<C::ScalarField>],
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        // Assumes that the app-io public inputs are at the end of the public_inputs vector
+        let index = public_inputs.len() - PAIRING_POINT_ACCUMULATOR_SIZE as usize;
+        let (p0_limbs, p1_limbs) =
+            public_inputs[index..].split_at(PAIRING_POINT_ACCUMULATOR_SIZE as usize / 2);
 
-impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PairingPoints<P, T> {
-    #[expect(dead_code)]
+        Ok(Self {
+            p0: BigGroup::reconstruct_from_public(p0_limbs, builder, driver)?,
+            p1: BigGroup::reconstruct_from_public(p1_limbs, builder, driver)?,
+            has_data: true,
+        })
+    }
+
     pub fn set_public(
         &mut self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> usize {
         let start_idx = self.p0.set_public(driver, builder);
         self.p1.set_public(driver, builder);
 
         start_idx
+    }
+}
+impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>
+    PairingPoints<C, T>
+{
+    pub fn update<H: TranscriptHasherCT<C>>(
+        &mut self,
+        other: Self,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        if self.has_data {
+            self.aggregate::<H>(other, builder, driver)
+        } else {
+            *self = other;
+            Ok(())
+        }
+    }
+    pub fn aggregate<H: TranscriptHasherCT<C>>(
+        &mut self,
+        other: PairingPoints<C, T>,
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        assert!(other.has_data, "Cannot aggregate null pairing points.");
+
+        // If LHS is empty, simply set it equal to the incoming pairing points
+        if !self.has_data && other.has_data {
+            *self = other;
+            return Ok(());
+        }
+        let mut transcript = TranscriptCT::<C, H>::new();
+
+        transcript.send_point_to_verifier(
+            "Accumulator_P0".to_string(),
+            &self.p0,
+            builder,
+            driver,
+        )?;
+        transcript.send_point_to_verifier(
+            "Accumulator_P1".to_string(),
+            &self.p1,
+            builder,
+            driver,
+        )?;
+        transcript.send_point_to_verifier(
+            "Aggregated_P0".to_string(),
+            &other.p0,
+            builder,
+            driver,
+        )?;
+        transcript.send_point_to_verifier(
+            "Aggregated_P1".to_string(),
+            &other.p1,
+            builder,
+            driver,
+        )?;
+        let recursion_separator =
+            transcript.get_challenge("recursion_separator".to_string(), builder, driver)?;
+
+        // Save gates using short scalars. We don't apply `bn254_endo_batch_mul` to the vector {1,
+        // recursion_separator} directly to avoid edge cases.
+        let mut point_to_aggregate =
+            other
+                .p0
+                .clone()
+                .scalar_mul(&recursion_separator, 128, builder, driver)?;
+        self.p0
+            .add_assign(&mut point_to_aggregate, builder, driver)?;
+
+        point_to_aggregate =
+            other
+                .p1
+                .clone()
+                .scalar_mul(&recursion_separator, 128, builder, driver)?;
+        self.p1
+            .add_assign(&mut point_to_aggregate, builder, driver)?;
+
+        Ok(())
     }
 }
 
@@ -566,7 +672,6 @@ pub(crate) enum MemorySelectors {
     RamWrite,
 }
 
-#[expect(dead_code)]
 #[derive(PartialEq, Eq, Debug)]
 pub(crate) enum NnfSelectors {
     NnfNone,
@@ -586,15 +691,15 @@ pub(crate) struct RangeList {
 }
 
 #[derive(Clone)]
-pub(crate) struct CachedPartialNonNativeFieldMultiplication<F: PrimeField> {
-    pub(crate) a: [u32; 5],
-    pub(crate) b: [u32; 5],
-    pub(crate) lo_0: F,
-    pub(crate) hi_0: F,
-    pub(crate) hi_1: F,
+pub(crate) struct CachedPartialNonNativeFieldMultiplication {
+    pub(crate) a: [u32; 4],
+    pub(crate) b: [u32; 4],
+    pub(crate) lo_0: u32,
+    pub(crate) hi_0: u32,
+    pub(crate) hi_1: u32,
 }
 
-impl<F: PrimeField> CachedPartialNonNativeFieldMultiplication<F> {
+impl CachedPartialNonNativeFieldMultiplication {
     fn equal(&self, other: &Self) -> bool {
         self.a == other.a && self.b == other.b
     }
@@ -612,26 +717,41 @@ impl<F: PrimeField> CachedPartialNonNativeFieldMultiplication<F> {
         other.b < self.b
     }
 
-    pub(crate) fn deduplicate(inp: &[Self]) -> Vec<Self> {
+    pub(crate) fn deduplicate<
+        F: PrimeField,
+        C: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        builder: &mut GenericUltraCircuitBuilder<C, T>,
+    ) -> Vec<Self> {
         let mut hash_set = HashSet::new();
         let mut unique_vec = Vec::new();
 
-        for element in inp.iter() {
+        for element in builder
+            .cached_partial_non_native_field_multiplications
+            .clone()
+            .iter()
+        {
             if hash_set.insert(element.clone()) {
                 unique_vec.push(element.clone());
+            } else {
+                let existing_entry = hash_set.get(element).unwrap();
+                builder.assert_equal(element.lo_0 as usize, existing_entry.lo_0 as usize);
+                builder.assert_equal(element.hi_0 as usize, existing_entry.hi_0 as usize);
+                builder.assert_equal(element.hi_1 as usize, existing_entry.hi_1 as usize);
             }
         }
         unique_vec
     }
 }
 
-impl<F: PrimeField> PartialOrd for CachedPartialNonNativeFieldMultiplication<F> {
+impl PartialOrd for CachedPartialNonNativeFieldMultiplication {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<F: PrimeField> Ord for CachedPartialNonNativeFieldMultiplication<F> {
+impl Ord for CachedPartialNonNativeFieldMultiplication {
     fn cmp(&self, other: &Self) -> Ordering {
         if self.eq(other) {
             Ordering::Equal
@@ -643,15 +763,15 @@ impl<F: PrimeField> Ord for CachedPartialNonNativeFieldMultiplication<F> {
     }
 }
 
-impl<F: PrimeField> PartialEq for CachedPartialNonNativeFieldMultiplication<F> {
+impl PartialEq for CachedPartialNonNativeFieldMultiplication {
     fn eq(&self, other: &Self) -> bool {
         self.equal(other)
     }
 }
 
-impl<F: PrimeField> Eq for CachedPartialNonNativeFieldMultiplication<F> {}
+impl Eq for CachedPartialNonNativeFieldMultiplication {}
 
-impl<F: PrimeField> Hash for CachedPartialNonNativeFieldMultiplication<F> {
+impl Hash for CachedPartialNonNativeFieldMultiplication {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.a.hash(state);
         self.b.hash(state);
@@ -676,7 +796,7 @@ pub(crate) struct TraceData<'a, P: CurveGroup> {
 impl<'a, P: CurveGroup> TraceData<'a, P> {
     pub(crate) fn new(
         builder: &UltraCircuitBuilder<P>,
-        proving_key: &'a mut ProvingKey<P>,
+        proving_key: &'a mut PlainProvingKey<P>,
     ) -> Self {
         let copy_cycles = vec![vec![]; builder.variables.len()];
 
@@ -808,9 +928,9 @@ impl PermutationMapping {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct WitnessOrConstant<F: PrimeField> {
-    index: u32,
-    value: F,
-    is_constant: bool,
+    pub(crate) index: u32,
+    pub(crate) value: F,
+    pub(crate) is_constant: bool,
 }
 
 impl<F: PrimeField> WitnessOrConstant<F> {
@@ -850,7 +970,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         input_x: &Self,
         input_y: &Self,
         input_infinity: &Self,
-        predicate: &BoolCT<P, T>,
+        predicate: &BoolCT<P::ScalarField, T>,
         has_valid_witness_assignments: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -901,49 +1021,16 @@ impl<F: PrimeField> WitnessOrConstant<F> {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
-pub struct ActiveRegionData {
-    pub ranges: Vec<(usize, usize)>, // active ranges [start_i, end_i) of the execution trace
-    pub idxs: Vec<usize>,            // full set of poly indices corresposponding to active ranges
-    pub current_end: usize,          // end of last range; for ensuring monotonicity of ranges
-}
-impl ActiveRegionData {
-    pub fn new() -> Self {
-        Self {
-            ranges: Vec::new(),
-            idxs: Vec::new(),
-            current_end: 0,
-        }
-    }
+pub(crate) type AddSimple<F> = (
+    (u32, F), // Scaled witness
+    (u32, F), // Scaled witness
+    F,
+);
 
-    pub fn add_range(&mut self, start: usize, end: usize) {
-        assert!(
-            start >= self.current_end,
-            "Ranges should be non-overlapping and increasing"
-        );
-
-        self.ranges.push((start, end));
-        self.idxs.extend(start..end);
-        self.current_end = end;
-    }
-
-    pub fn get_ranges(&self) -> &Vec<(usize, usize)> {
-        &self.ranges
-    }
-
-    pub fn get_idx(&self, idx: usize) -> usize {
-        self.idxs[idx]
-    }
-
-    pub fn get_range(&self, idx: usize) -> (usize, usize) {
-        self.ranges[idx]
-    }
-
-    pub fn size(&self) -> usize {
-        self.idxs.len()
-    }
-
-    pub fn num_ranges(&self) -> usize {
-        self.ranges.len()
-    }
+pub(crate) struct NonNativeMultiplicationFieldWitnesses<F: PrimeField> {
+    pub(crate) a: [u32; 4],
+    pub(crate) b: [u32; 4],
+    pub(crate) q: [u32; 4],
+    pub(crate) r: [u32; 4],
+    pub(crate) neg_modulus: [F; 4],
 }

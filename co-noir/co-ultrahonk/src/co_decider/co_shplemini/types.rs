@@ -1,5 +1,4 @@
-use co_builder::prelude::PrecomputedEntities;
-use ultrahonk::prelude::WitnessEntities;
+use co_noir_common::polynomials::entities::{PrecomputedEntities, WitnessEntities};
 
 pub(crate) struct PolyF<'a, Shared: Default, Public: Default> {
     pub(crate) precomputed: &'a PrecomputedEntities<Public>,

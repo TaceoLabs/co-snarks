@@ -1,21 +1,21 @@
 use crate::acir_format::{HonkRecursion, ProgramMetadata};
-use crate::prelude::PrecomputedEntities;
+use crate::keys::plain_proving_key::PlainPkTrait;
+use crate::transcript_ct::Poseidon2SpongeCT;
 use crate::types::aes128;
 use crate::types::big_field::BigField;
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
 use crate::types::sha_compression::SHA256;
-use crate::types::types::{AES128Constraint, MemorySelectors, NnfSelectors};
+use crate::types::types::{
+    AES128Constraint, AddSimple, MemorySelectors, NnfSelectors,
+    NonNativeMultiplicationFieldWitnesses, PairingPoints,
+};
 use crate::types::types::{
     EcAdd, EccAddGate, MultiScalarMul, Sha256Compression, WitnessOrConstant,
 };
 use crate::{
     acir_format::AcirFormat,
-    keys::{
-        proving_key::ProvingKey,
-        verification_key::{VerifyingKey, VerifyingKeyBarretenberg},
-    },
     types::{
         field_ct::{ByteArray, FieldCT},
         plookup::{BasicTableId, ColumnIdx, MultiTableId, Plookup, PlookupBasicTable, ReadData},
@@ -26,18 +26,24 @@ use crate::{
         types::{
             AddQuad, AddTriple, Blake2sConstraint, Blake3Constraint, BlockConstraint, BlockType,
             CachedPartialNonNativeFieldMultiplication, EccDblGate, LogicConstraint, MulQuad,
-            NUM_WIRES, PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate,
-            Poseidon2InternalGate, RangeList, UltraTraceBlock, UltraTraceBlocks,
+            PolyTriple, Poseidon2Constraint, Poseidon2ExternalGate, Poseidon2InternalGate,
+            RangeList, UltraTraceBlock, UltraTraceBlocks,
         },
     },
 };
 use ark_ec::pairing::Pairing;
 use ark_ec::{CurveGroup, PrimeGroup};
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{Field, One, PrimeField, Zero};
+use co_acvm::Rep3AcvmSolver;
+use co_acvm::ShamirAcvmSolver;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
+use co_noir_common::constants::NUM_WIRES;
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::{HonkProofResult, TranscriptFieldType};
+use co_noir_common::keys::plain_proving_key::PlainProvingKey;
+use co_noir_common::keys::verification_key::{VerifyingKey, VerifyingKeyBarretenberg};
+use co_noir_common::polynomials::entities::PrecomputedEntities;
 use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::utils::Utils;
 use itertools::izip;
@@ -53,6 +59,10 @@ type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
 pub type UltraCircuitBuilder<P> =
     GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as PrimeGroup>::ScalarField>>;
+pub type Rep3CoBuilder<'a, P, N> =
+    GenericUltraCircuitBuilder<P, Rep3AcvmSolver<'a, <P as PrimeGroup>::ScalarField, N>>;
+pub type ShamirCoBuilder<'a, P, N> =
+    GenericUltraCircuitBuilder<P, ShamirAcvmSolver<'a, <P as PrimeGroup>::ScalarField, N>>;
 
 impl<C: CurveGroup> UltraCircuitBuilder<C> {
     pub fn create_vk_barretenberg(
@@ -60,7 +70,8 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         crs: Arc<ProverCrs<C>>,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
     ) -> HonkProofResult<VerifyingKeyBarretenberg<C>> {
-        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
+        let pk: PlainProvingKey<C> =
+            PlainProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -87,8 +98,9 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         prover_crs: Arc<ProverCrs<C>>,
         verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(ProvingKey<C>, VerifyingKey<P>)> {
-        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
+    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKey<P>)> {
+        let pk: PlainProvingKey<C> =
+            PlainProvingKey::create::<PlainAcvmSolver<_>>(self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -118,8 +130,9 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         self,
         crs: Arc<ProverCrs<C>>,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(ProvingKey<C>, VerifyingKeyBarretenberg<C>)> {
-        let pk = ProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
+    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKeyBarretenberg<C>)> {
+        let pk: PlainProvingKey<C> =
+            PlainProvingKey::create::<PlainAcvmSolver<_>>(self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 
         let mut commitments = PrecomputedEntities::default();
@@ -155,7 +168,6 @@ pub struct GenericUltraCircuitBuilder<
     pub(crate) real_variable_tags: Vec<u32>,
     pub(crate) current_tag: u32,
     pub public_inputs: Vec<u32>,
-    is_recursive_circuit: bool,
     pub(crate) tau: BTreeMap<u32, u32>,
     constant_variable_indices: BTreeMap<P::ScalarField, u32>,
     pub(crate) zero_idx: u32,
@@ -168,8 +180,8 @@ pub struct GenericUltraCircuitBuilder<
     pub(crate) lookup_tables: Vec<PlookupBasicTable<P, T>>,
     pub(crate) plookup: Plookup<P::ScalarField>,
     range_lists: BTreeMap<u64, RangeList>,
-    cached_partial_non_native_field_multiplications:
-        Vec<CachedPartialNonNativeFieldMultiplication<P::ScalarField>>,
+    pub(crate) cached_partial_non_native_field_multiplications:
+        Vec<CachedPartialNonNativeFieldMultiplication>,
     // Stores gate index of ROM and RAM reads (required by proving key)
     pub(crate) memory_read_records: Vec<u32>,
     // Stores gate index of RAM writes (required by proving key)
@@ -182,11 +194,12 @@ pub struct GenericUltraCircuitBuilder<
 // This workaround is required due to mutability issues
 macro_rules! create_unconstrained_gate {
     ($builder:expr, $block:expr, $ixd_1:expr, $ixd_2:expr, $ixd_3:expr, $ixd_4:expr) => {
-        Self::create_unconstrained_gate($block, $ixd_1, $ixd_2, $ixd_3, $ixd_4);
+    GenericUltraCircuitBuilder::<P, T>::create_unconstrained_gate($block, $ixd_1, $ixd_2, $ixd_3, $ixd_4);
         $builder.check_selector_length_consistency();
         $builder.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
     };
 }
+pub(crate) use create_unconstrained_gate;
 
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     GenericUltraCircuitBuilder<P, T>
@@ -202,6 +215,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
     // number of gates created per non-native field operation in process_non_native_field_multiplications
     pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
+    pub(crate) const DEFAULT_NON_NATIVE_FIELD_LIMB_BITS: usize = 68;
 
     pub(crate) fn assert_if_has_witness(&self, input: bool) {
         if self.has_dummy_witnesses {
@@ -218,6 +232,16 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.prev_var_index.push(Self::FIRST_VARIABLE_IN_CLASS);
         self.real_variable_tags.push(Self::DUMMY_TAG);
         idx
+    }
+
+    pub(crate) fn add_public_variable(&mut self, value: T::AcvmType) -> u32 {
+        let index = self.add_variable(value);
+        assert!(
+            !self.circuit_finalized,
+            "Cannot add to public inputs after they have been finalized."
+        );
+        self.public_inputs.push(index);
+        index
     }
 
     pub(crate) fn set_variable(&mut self, index: u32, value: T::AcvmType) {
@@ -902,18 +926,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         Ok((bits_locations, decomposed, decompose_indices))
     }
 
-    fn process_honk_recursion_constraints(
-        &mut self,
-        constraint_system: &AcirFormat<P::ScalarField>,
-        _has_valid_witness_assignments: bool,
-    ) {
-        {
-            for _constraint in constraint_system.honk_recursion_constraints.iter() {
-                todo!("Honk recursion");
-            }
-        }
-    }
-
     fn process_avm_recursion_constraints(
         &mut self,
         constraint_system: &AcirFormat<P::ScalarField>,
@@ -1079,7 +1091,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.public_inputs.push(witness_index);
     }
 
-    fn add_default_to_public_inputs(&mut self, driver: &mut T) -> eyre::Result<()>
+    pub(crate) fn add_default_to_public_inputs(&mut self, driver: &mut T) -> eyre::Result<()>
     where
         P::BaseField: PrimeField,
     {
@@ -1159,7 +1171,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             // In case of invalid witness assignment, we set the value of index value to zero to not hit out of bound in
             // ROM table
             if !has_valid_witness_assignments {
-                self.set_variable(index.witness_index, T::AcvmType::default());
+                let index_nwi = index.get_witness_index(self, driver);
+                self.set_variable(index_nwi, T::AcvmType::default());
             }
             let val = table.index_field_ct(&index, self, driver);
             value.assert_equal(&val, self, driver);
@@ -1182,7 +1195,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             // In case of invalid witness assignment, we set the value of index value to zero to not hit out of bound in
             // RAM table
             if !has_valid_witness_assignments {
-                self.set_variable(index.witness_index, T::AcvmType::default());
+                let index_nwi = index.get_witness_index(self, driver);
+                self.set_variable(index_nwi, T::AcvmType::default());
             }
 
             if op.access_type == 0 {
@@ -2649,14 +2663,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .cached_partial_non_native_field_multiplications
             .iter_mut()
         {
-            for i in 0..5 {
+            for i in 0..c.a.len() {
                 c.a[i] = self.real_variable_index[c.a[i] as usize];
                 c.b[i] = self.real_variable_index[c.b[i] as usize];
             }
         }
-        let mut dedup = CachedPartialNonNativeFieldMultiplication::deduplicate(
-            &self.cached_partial_non_native_field_multiplications,
-        );
+
+        let mut dedup = CachedPartialNonNativeFieldMultiplication::deduplicate(self);
 
         // iterate over the cached items and create constraints
         for input in dedup.iter() {
@@ -2681,7 +2694,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             self.blocks
                 .nnf
                 .populate_wires(input.a[2], input.b[2], self.zero_idx, input_hi_0);
-            self.apply_nnf_selectors(NnfSelectors::NonNativeField2);
+            self.apply_nnf_selectors(NnfSelectors::NonNativeField3);
             self.num_gates += 1;
 
             let input_hi_1: BigUint = input.hi_1.into();
@@ -2732,7 +2745,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         }
     }
 
-    fn create_range_constraint(
+    pub(crate) fn create_range_constraint(
         &mut self,
         driver: &mut T,
         variable_index: u32,
@@ -3013,34 +3026,47 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         &mut self,
         limb_idx: u32,
         num_limb_bits: usize,
+        driver: &mut T,
     ) -> eyre::Result<[u32; 2]> {
         // we skip this assert
         // ASSERT(uint256_t(this->get_variable_reference(limb_idx)) < (uint256_t(1) << num_limb_bits));
 
-        const DEFAULT_NON_NATIVE_FIELD_LIMB_BITS: usize = 68;
-        let limb_mask = (BigUint::one() << DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) - BigUint::one();
+        let limb_mask =
+            (BigUint::one() << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) - BigUint::one();
         let value = self.get_variable(limb_idx as usize);
-        if T::is_shared(&value) {
-            panic!("This function should not have been called on a shared value");
+        let (low, hi) = if T::is_shared(&value) {
+            let value = T::get_shared(&value).expect("Already checked it is shared");
+            let [low, hi] = driver.slice(
+                value,
+                Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS as u8,
+                0,
+                P::ScalarField::MODULUS_BIT_SIZE as usize,
+            )?;
+            (low.into(), hi.into())
         } else {
             let value: BigUint = T::get_public(&value)
                 .expect("Already checked it is public")
                 .into();
             let low = &value & &limb_mask;
-            let hi = &value >> DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+            let hi = &value >> Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
 
-            assert!(&low + (&hi << DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) == value);
+            assert!(&low + (&hi << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) == value);
 
-            let low_idx = self.add_variable(P::ScalarField::from(low).into());
-            let hi_idx = self.add_variable(P::ScalarField::from(hi).into());
+            (
+                P::ScalarField::from(low).into(),
+                P::ScalarField::from(hi).into(),
+            )
+        };
 
-            assert!(num_limb_bits > DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+        let low_idx = self.add_variable(low);
+        let hi_idx = self.add_variable(hi);
 
-            let lo_bits = DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
-            let hi_bits = num_limb_bits - DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
-            self.range_constrain_two_limbs(low_idx, hi_idx, lo_bits, hi_bits)?;
-            Ok([low_idx, hi_idx])
-        }
+        assert!(num_limb_bits > Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+
+        let lo_bits = Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+        let hi_bits = num_limb_bits - Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+        self.range_constrain_two_limbs(low_idx, hi_idx, lo_bits, hi_bits, driver)?;
+        Ok([low_idx, hi_idx])
     }
 
     // for now we only need this function for public values
@@ -3050,6 +3076,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         hi_idx: u32,
         lo_limb_bits: usize,
         hi_limb_bits: usize,
+        driver: &mut T,
     ) -> eyre::Result<()> {
         // Validate limbs are <= 70 bits. If limbs are larger we require more witnesses and cannot use our limb accumulation
         // custom gate
@@ -3057,10 +3084,27 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         assert!(hi_limb_bits <= (14 * 5));
 
         // Sometimes we try to use limbs that are too large. It's easier to catch this issue here
-        let mut get_sublimbs = |limb_idx: u32, sublimb_masks: [u64; 5]| -> [u32; 5] {
+        let mut get_sublimbs = |limb_idx: u32, sublimb_masks: [u64; 5]| -> eyre::Result<[u32; 5]> {
             let limb = self.get_variable(limb_idx as usize);
             if T::is_shared(&limb) {
-                panic!("This function should not have been called on a shared value");
+                let mut sublimb_indices = [self.zero_idx; 5];
+                let all_masks_zero = sublimb_masks.iter().all(|&mask| mask == 0);
+                if all_masks_zero {
+                    return Ok(sublimb_indices);
+                }
+                let slices = driver.decompose_arithmetic(
+                    T::get_shared(&limb).expect("Checked it is shared"),
+                    56,
+                    14,
+                )?;
+                for (val, (i, mask)) in slices.into_iter().zip(sublimb_masks.iter().enumerate()) {
+                    sublimb_indices[i] = if *mask != 0 {
+                        self.add_variable(val.into())
+                    } else {
+                        self.zero_idx
+                    };
+                }
+                Ok(sublimb_indices)
             } else {
                 // we can use constant 2^14 - 1 mask here. If the sublimb value exceeds the expected value then witness will
                 // fail the range check below
@@ -3108,7 +3152,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 } else {
                     self.zero_idx
                 };
-                sublimb_indices
+                Ok(sublimb_indices)
             }
         };
 
@@ -3150,8 +3194,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         let lo_masks = get_limb_masks(lo_limb_bits);
         let hi_masks = get_limb_masks(hi_limb_bits);
-        let lo_sublimbs = get_sublimbs(lo_idx, lo_masks);
-        let hi_sublimbs = get_sublimbs(hi_idx, hi_masks);
+        //TACEO TODO: Could batch the decompositions in there
+        let lo_sublimbs = get_sublimbs(lo_idx, lo_masks)?;
+        let hi_sublimbs = get_sublimbs(hi_idx, hi_masks)?;
 
         self.blocks
             .nnf
@@ -3463,6 +3508,559 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.check_selector_length_consistency();
         self.num_gates += 1;
     }
+
+    /// Compute the limb-multiplication part of a non native field mul
+    ///
+    /// i.e. compute the low 204 and high 204 bit components of `a * b` where `a, b` are nnf elements composed of 4
+    /// limbs with size DEFAULT_NON_NATIVE_FIELD_LIMB_BITS
+    pub(crate) fn queue_partial_non_native_field_multiplication(
+        &mut self,
+        input: ([u32; 4], [u32; 4]), // a, b
+        driver: &mut T,
+    ) -> eyre::Result<[u32; 2]> {
+        let (a_in, b_in) = input;
+
+        let a = [
+            self.get_variable(a_in[0] as usize),
+            self.get_variable(a_in[1] as usize),
+            self.get_variable(a_in[2] as usize),
+            self.get_variable(a_in[3] as usize),
+        ];
+        let b = [
+            self.get_variable(b_in[0] as usize),
+            self.get_variable(b_in[1] as usize),
+            self.get_variable(b_in[2] as usize),
+            self.get_variable(b_in[3] as usize),
+        ];
+
+        let limb_shift = P::ScalarField::from(1u128 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+
+        let lhs = [
+            a[0].clone(),
+            a[0].clone(),
+            a[0].clone(),
+            a[0].clone(),
+            a[1].clone(),
+            a[1].clone(),
+            a[1].clone(),
+            a[2].clone(),
+            a[2].clone(),
+            a[3].clone(),
+        ];
+        let rhs = [
+            b[0].clone(),
+            b[1].clone(),
+            b[2].clone(),
+            b[3].clone(),
+            b[0].clone(),
+            b[1].clone(),
+            b[2].clone(),
+            b[0].clone(),
+            b[1].clone(),
+            b[0].clone(),
+        ];
+
+        let [a0b0, a0b1, a0b2, a0b3, a1b0, a1b1, a1b2, a2b0, a2b1, a3b0]: [_; 10] =
+            driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
+
+        let tmp = driver.add(a1b0, a0b1);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        let lo_0 = driver.add(a0b0, tmp);
+
+        let tmp = driver.add(a0b3, a3b0);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        let tmp2 = driver.add(a2b0, a0b2);
+        let hi_0 = driver.add(tmp, tmp2);
+
+        let tmp = driver.add(a1b2, a2b1);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        let tmp2 = driver.add(a1b1, hi_0.clone());
+        let hi_1 = driver.add(tmp, tmp2);
+
+        let lo_0 = self.add_variable(lo_0);
+        let hi_0 = self.add_variable(hi_0);
+        let hi_1 = self.add_variable(hi_1);
+
+        // Add witnesses into the multiplication cache
+        // (when finalising the circuit, we will remove duplicates; several dups produced by biggroup methods)
+        let cache_entry = CachedPartialNonNativeFieldMultiplication {
+            a: a_in,
+            b: b_in,
+            lo_0,
+            hi_0,
+            hi_1,
+        };
+        self.cached_partial_non_native_field_multiplications
+            .push(cache_entry);
+
+        Ok([lo_0, hi_1])
+    }
+
+    pub(crate) fn evaluate_non_native_field_addition(
+        &mut self,
+        limb0: AddSimple<P::ScalarField>,
+        limb1: AddSimple<P::ScalarField>,
+        limb2: AddSimple<P::ScalarField>,
+        limb3: AddSimple<P::ScalarField>,
+        limbp: (u32, u32, P::ScalarField),
+        driver: &mut T,
+    ) -> eyre::Result<[u32; 5]> {
+        let x_0 = limb0.0.0;
+        let x_1 = limb1.0.0;
+        let x_2 = limb2.0.0;
+        let x_3 = limb3.0.0;
+        let x_p = limbp.0;
+
+        let x_mulconst0 = limb0.0.1;
+        let x_mulconst1 = limb1.0.1;
+        let x_mulconst2 = limb2.0.1;
+        let x_mulconst3 = limb3.0.1;
+
+        let y_0 = limb0.1.0;
+        let y_1 = limb1.1.0;
+        let y_2 = limb2.1.0;
+        let y_3 = limb3.1.0;
+        let y_p = limbp.1;
+
+        let y_mulconst0 = limb0.1.1;
+        let y_mulconst1 = limb1.1.1;
+        let y_mulconst2 = limb2.1.1;
+        let y_mulconst3 = limb3.1.1;
+
+        // constant additive terms
+        let addconst0 = limb0.2;
+        let addconst1 = limb1.2;
+        let addconst2 = limb2.2;
+        let addconst3 = limb3.2;
+        let addconstp = limbp.2;
+
+        let x_var_0_scaled = driver.mul_with_public(x_mulconst0, self.get_variable(x_0 as usize));
+        let x_var_1_scaled = driver.mul_with_public(x_mulconst1, self.get_variable(x_1 as usize));
+        let x_var_2_scaled = driver.mul_with_public(x_mulconst2, self.get_variable(x_2 as usize));
+        let x_var_3_scaled = driver.mul_with_public(x_mulconst3, self.get_variable(x_3 as usize));
+
+        let y_var_0_scaled = driver.mul_with_public(y_mulconst0, self.get_variable(y_0 as usize));
+        let y_var_1_scaled = driver.mul_with_public(y_mulconst1, self.get_variable(y_1 as usize));
+        let y_var_2_scaled = driver.mul_with_public(y_mulconst2, self.get_variable(y_2 as usize));
+        let y_var_3_scaled = driver.mul_with_public(y_mulconst3, self.get_variable(y_3 as usize));
+
+        // get value of result limbs
+        let z_0value = driver.add(driver.add(x_var_0_scaled, addconst0.into()), y_var_0_scaled);
+        let z_1value = driver.add(driver.add(x_var_1_scaled, addconst1.into()), y_var_1_scaled);
+        let z_2value = driver.add(driver.add(x_var_2_scaled, addconst2.into()), y_var_2_scaled);
+        let z_3value = driver.add(driver.add(x_var_3_scaled, addconst3.into()), y_var_3_scaled);
+        let z_pvalue = driver.add(
+            driver.add(self.get_variable(x_p as usize), addconstp.into()),
+            self.get_variable(y_p as usize),
+        );
+
+        let z_0 = self.add_variable(z_0value);
+        let z_1 = self.add_variable(z_1value);
+        let z_2 = self.add_variable(z_2value);
+        let z_3 = self.add_variable(z_3value);
+        let z_p = self.add_variable(z_pvalue);
+
+        // GATE 1
+        // |  1  |  2  |  3  |  4  |
+        // |-----|-----|-----|-----|
+        // | y.p | x.0 | y.0 | z.p | (b.p + b.p - c.p = 0) AND (a.0 + b.0 - c.0 = 0)
+        // | x.p | x.1 | y.1 | z.0 | (a.1  + b.1 - c.1 = 0)
+        // | x.2 | y.2 | z.2 | z.1 | (a.2  + b.2 - c.2 = 0)
+        // | x.3 | y.3 | z.3 | --- | (a.3  + b.3 - c.3 = 0)
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/896): descrepency between above comment and the actual
+        // implementation below.
+        let block = &mut self.blocks.arithmetic;
+        block.populate_wires(y_p, x_0, y_0, x_p);
+        block.populate_wires(z_p, x_1, y_1, z_0);
+        block.populate_wires(x_2, y_2, z_2, z_1);
+        block.populate_wires(x_3, y_3, z_3, self.zero_idx);
+
+        block.q_m().push(addconstp);
+        block.q_1().push(P::ScalarField::zero());
+        block.q_2().push(-x_mulconst0 * P::ScalarField::from(2u64));
+        block.q_3().push(-y_mulconst0 * P::ScalarField::from(2u64)); // z_0 + (x_0 * -xmulconst0) + (y_0 * ymulconst0) = 0 => z_0 = x_0 - y_0
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst0 * P::ScalarField::from(2u64));
+        block.q_arith().push(P::ScalarField::from(3u64));
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(P::ScalarField::zero());
+        block.q_2().push(-x_mulconst1);
+        block.q_3().push(-y_mulconst1);
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst1);
+        block.q_arith().push(P::ScalarField::from(2u64));
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(-x_mulconst2);
+        block.q_2().push(-y_mulconst2);
+        block.q_3().push(P::ScalarField::one());
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst2);
+        block.q_arith().push(P::ScalarField::one());
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(-x_mulconst3);
+        block.q_2().push(-y_mulconst3);
+        block.q_3().push(P::ScalarField::one());
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst3);
+        block.q_arith().push(P::ScalarField::one());
+
+        for _ in 0..4 {
+            block.q_delta_range().push(P::ScalarField::zero());
+            block.q_lookup_type().push(P::ScalarField::zero());
+            block.q_elliptic().push(P::ScalarField::zero());
+            block.q_memory().push(P::ScalarField::zero());
+            block.q_nnf().push(P::ScalarField::zero());
+            block.q_poseidon2_external().push(P::ScalarField::zero());
+            block.q_poseidon2_internal().push(P::ScalarField::zero());
+        }
+        self.check_selector_length_consistency();
+
+        self.num_gates += 4;
+        Ok([z_0, z_1, z_2, z_3, z_p])
+    }
+
+    pub(crate) fn evaluate_non_native_field_subtraction(
+        &mut self,
+        limb0: AddSimple<P::ScalarField>,
+        limb1: AddSimple<P::ScalarField>,
+        limb2: AddSimple<P::ScalarField>,
+        limb3: AddSimple<P::ScalarField>,
+        limbp: (u32, u32, P::ScalarField),
+        driver: &mut T,
+    ) -> eyre::Result<[u32; 5]> {
+        let x_0 = limb0.0.0;
+        let x_1 = limb1.0.0;
+        let x_2 = limb2.0.0;
+        let x_3 = limb3.0.0;
+        let x_p = limbp.0;
+
+        let x_mulconst0 = limb0.0.1;
+        let x_mulconst1 = limb1.0.1;
+        let x_mulconst2 = limb2.0.1;
+        let x_mulconst3 = limb3.0.1;
+
+        let y_0 = limb0.1.0;
+        let y_1 = limb1.1.0;
+        let y_2 = limb2.1.0;
+        let y_3 = limb3.1.0;
+        let y_p = limbp.1;
+
+        let y_mulconst0 = limb0.1.1;
+        let y_mulconst1 = limb1.1.1;
+        let y_mulconst2 = limb2.1.1;
+        let y_mulconst3 = limb3.1.1;
+
+        // constant additive terms
+        let addconst0 = limb0.2;
+        let addconst1 = limb1.2;
+        let addconst2 = limb2.2;
+        let addconst3 = limb3.2;
+        let addconstp = limbp.2;
+
+        let x_var_0_scaled = driver.mul_with_public(x_mulconst0, self.get_variable(x_0 as usize));
+        let x_var_1_scaled = driver.mul_with_public(x_mulconst1, self.get_variable(x_1 as usize));
+        let x_var_2_scaled = driver.mul_with_public(x_mulconst2, self.get_variable(x_2 as usize));
+        let x_var_3_scaled = driver.mul_with_public(x_mulconst3, self.get_variable(x_3 as usize));
+
+        let y_var_0_scaled = driver.mul_with_public(y_mulconst0, self.get_variable(y_0 as usize));
+        let y_var_1_scaled = driver.mul_with_public(y_mulconst1, self.get_variable(y_1 as usize));
+        let y_var_2_scaled = driver.mul_with_public(y_mulconst2, self.get_variable(y_2 as usize));
+        let y_var_3_scaled = driver.mul_with_public(y_mulconst3, self.get_variable(y_3 as usize));
+
+        // get value of result limbs
+        let z_0value = driver.sub(driver.add(x_var_0_scaled, addconst0.into()), y_var_0_scaled);
+        let z_1value = driver.sub(driver.add(x_var_1_scaled, addconst1.into()), y_var_1_scaled);
+        let z_2value = driver.sub(driver.add(x_var_2_scaled, addconst2.into()), y_var_2_scaled);
+        let z_3value = driver.sub(driver.add(x_var_3_scaled, addconst3.into()), y_var_3_scaled);
+        let z_pvalue = driver.sub(
+            driver.add(self.get_variable(x_p as usize), addconstp.into()),
+            self.get_variable(y_p as usize),
+        );
+
+        let z_0 = self.add_variable(z_0value);
+        let z_1 = self.add_variable(z_1value);
+        let z_2 = self.add_variable(z_2value);
+        let z_3 = self.add_variable(z_3value);
+        let z_p = self.add_variable(z_pvalue);
+
+        // GATE 1
+        // |  1  |  2  |  3  |  4  |
+        // |-----|-----|-----|-----|
+        // | y.p | x.0 | y.0 | z.p | (b.p + c.p - a.p = 0) AND (a.0 - b.0 - c.0 = 0)
+        // | x.p | x.1 | y.1 | z.0 | (a.1 - b.1 - c.1 = 0)
+        // | x.2 | y.2 | z.2 | z.1 | (a.2 - b.2 - c.2 = 0)
+        // | x.3 | y.3 | z.3 | --- | (a.3 - b.3 - c.3 = 0)
+        let block = &mut self.blocks.arithmetic;
+        block.populate_wires(y_p, x_0, y_0, z_p);
+        block.populate_wires(x_p, x_1, y_1, z_0);
+        block.populate_wires(x_2, y_2, z_2, z_1);
+        block.populate_wires(x_3, y_3, z_3, self.zero_idx);
+
+        block.q_m().push(-addconstp);
+        block.q_1().push(P::ScalarField::zero());
+        block.q_2().push(-x_mulconst0 * P::ScalarField::from(2u64));
+        block.q_3().push(y_mulconst0 * P::ScalarField::from(2u64)); // z_0 + (x_0 * -xmulconst0) + (y_0 * ymulconst0) = 0 => z_0 = x_0 - y_0
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst0 * P::ScalarField::from(2u64));
+        block.q_arith().push(P::ScalarField::from(3u64));
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(P::ScalarField::zero());
+        block.q_2().push(-x_mulconst1);
+        block.q_3().push(y_mulconst1);
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst1);
+        block.q_arith().push(P::ScalarField::from(2u64));
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(-x_mulconst2);
+        block.q_2().push(y_mulconst2);
+        block.q_3().push(P::ScalarField::one());
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst2);
+        block.q_arith().push(P::ScalarField::one());
+
+        block.q_m().push(P::ScalarField::zero());
+        block.q_1().push(-x_mulconst3);
+        block.q_2().push(y_mulconst3);
+        block.q_3().push(P::ScalarField::one());
+        block.q_4().push(P::ScalarField::zero());
+        block.q_c().push(-addconst3);
+        block.q_arith().push(P::ScalarField::one());
+
+        for _ in 0..4 {
+            block.q_delta_range().push(P::ScalarField::zero());
+            block.q_lookup_type().push(P::ScalarField::zero());
+            block.q_elliptic().push(P::ScalarField::zero());
+            block.q_memory().push(P::ScalarField::zero());
+            block.q_nnf().push(P::ScalarField::zero());
+            block.q_poseidon2_external().push(P::ScalarField::zero());
+            block.q_poseidon2_internal().push(P::ScalarField::zero());
+        }
+        self.check_selector_length_consistency();
+
+        self.num_gates += 4;
+        Ok([z_0, z_1, z_2, z_3, z_p])
+    }
+
+    /**
+     * @brief Queue up non-native field multiplication data.
+     *
+     * @details The data queued represents a non-native field multiplication identity a * b = q * p + r,
+     * where a, b, q, r are all emulated non-native field elements that are each split across 4 distinct witness variables.
+     *
+     * Without this queue some functions, such as bb::stdlib::element::multiple_montgomery_ladder, would
+     * duplicate non-native field operations, which can be quite expensive. We queue up these operations, and remove
+     * duplicates in the circuit finishing stage of the proving key computation.
+     *
+     * The non-native field modulus, p, is a circuit constant
+     *
+     * The return value are the witness indices of the two remainder limbs `lo_1, hi_2`
+     *
+     * N.B.: This method does NOT evaluate the prime field component of non-native field multiplications.
+     **/
+    pub(crate) fn evaluate_non_native_field_multiplication(
+        &mut self,
+        input: &NonNativeMultiplicationFieldWitnesses<P::ScalarField>,
+        driver: &mut T,
+    ) -> eyre::Result<[u32; 2]> {
+        let a: [<T as NoirWitnessExtensionProtocol<<P as PrimeGroup>::ScalarField>>::AcvmType; 4] =
+            input.a.map(|limb| self.get_variable(limb as usize));
+        let b = input.b.map(|limb| self.get_variable(limb as usize));
+        let q = input.q.map(|limb| self.get_variable(limb as usize));
+        let r = input.r.map(|limb| self.get_variable(limb as usize));
+        let neg_modulus = input.neg_modulus;
+
+        let limb_shift = P::ScalarField::from(1u128 << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
+        let limb_shift_2 = limb_shift * limb_shift;
+        let limb_rshift = limb_shift.inverse().unwrap();
+        let limb_rshift_2 = limb_rshift * limb_rshift;
+
+        let lhs = [
+            a[0].clone(),
+            a[0].clone(),
+            a[0].clone(),
+            a[0].clone(),
+            a[1].clone(),
+            a[1].clone(),
+            a[1].clone(),
+            a[2].clone(),
+            a[2].clone(),
+            a[3].clone(),
+        ];
+        let rhs = [
+            b[0].clone(),
+            b[1].clone(),
+            b[2].clone(),
+            b[3].clone(),
+            b[0].clone(),
+            b[1].clone(),
+            b[2].clone(),
+            b[0].clone(),
+            b[1].clone(),
+            b[0].clone(),
+        ];
+
+        let [a0b0, a0b1, a0b2, a0b3, a1b0, a1b1, a1b2, a2b0, a2b1, a3b0]: [_; 10] =
+            driver.mul_many(&lhs, &rhs)?.try_into().unwrap();
+
+        // lo_0 = a[0] * b[0] - r[0] + (a[1] * b[0] + a[0] * b[1]) * limb_shift
+        let mut lo_0 = driver.sub(a0b0, r[0].clone());
+        let tmp = driver.add(a1b0, a0b1);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        lo_0 = driver.add(lo_0, tmp);
+
+        // lo_1 = (lo_0 + q[0] * neg_modulus[0] +
+        //         (q[1] * neg_modulus[0] + q[0] * neg_modulus[1] - r[1]) * limb_shift) * limb_rshift_2
+        let tmp = driver.mul(q[0].clone(), neg_modulus[0].into())?;
+        let mut lo_1 = driver.add(lo_0.clone(), tmp);
+        let lhs = driver.mul(q[1].clone(), neg_modulus[0].into())?;
+        let rhs = driver.mul(q[0].clone(), neg_modulus[1].into())?;
+        let tmp = driver.add(lhs, rhs);
+        let tmp = driver.sub(tmp, r[1].clone());
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        lo_1 = driver.add(lo_1, tmp);
+        lo_1 = driver.mul(lo_1, limb_rshift_2.into())?;
+
+        // hi_0 = a[2] * b[0] + a[0] * b[2] + (a[0] * b[3] + a[3] * b[0] - r[3]) * limb_shift
+        let hi_0 = driver.add(a2b0, a0b2);
+        let tmp = driver.add(a0b3, a3b0);
+        let tmp = driver.sub(tmp, r[3].clone());
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        let hi_0 = driver.add(hi_0, tmp);
+
+        // hi_1 = hi_0 + a[1] * b[1] - r[2] + (a[1] * b[2] + a[2] * b[1]) * limb_shift
+        let mut hi_1 = driver.add(hi_0.clone(), a1b1);
+        hi_1 = driver.sub(hi_1, r[2].clone());
+        let tmp = driver.add(a1b2, a2b1);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        hi_1 = driver.add(hi_1, tmp);
+
+        // hi_2 = (hi_1 + lo_1 + q[2] * neg_modulus[0] +
+        //         (q[3] * neg_modulus[0] + q[2] * neg_modulus[1]) * limb_shift)
+        let mut hi_2 = driver.add(hi_1.clone(), lo_1.clone());
+        let tmp = driver.mul(q[2].clone(), neg_modulus[0].into())?;
+        hi_2 = driver.add(hi_2, tmp);
+        let lhs = driver.mul(q[3].clone(), neg_modulus[0].into())?;
+        let rhs = driver.mul(q[2].clone(), neg_modulus[1].into())?;
+        let tmp = driver.add(lhs, rhs);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        hi_2 = driver.add(hi_2, tmp);
+
+        // hi_3 = (hi_2 + (q[0] * neg_modulus[3] + q[1] * neg_modulus[2]) * limb_shift +
+        //         (q[0] * neg_modulus[2] + q[1] * neg_modulus[1])) * limb_rshift_2
+        let mut hi_3 = hi_2.clone();
+        let lhs = driver.mul(q[0].clone(), neg_modulus[3].into())?;
+        let rhs = driver.mul(q[1].clone(), neg_modulus[2].into())?;
+        let tmp = driver.add(lhs, rhs);
+        let tmp = driver.mul(tmp, limb_shift.into())?;
+        hi_3 = driver.add(hi_3, tmp);
+        let lhs = driver.mul(q[0].clone(), neg_modulus[2].into())?;
+        let rhs = driver.mul(q[1].clone(), neg_modulus[1].into())?;
+        let tmp = driver.add(lhs, rhs);
+        hi_3 = driver.add(hi_3, tmp);
+        hi_3 = driver.mul(hi_3, limb_rshift_2.into())?;
+
+        let lo_0_idx = self.add_variable(lo_0);
+        let lo_1_idx = self.add_variable(lo_1);
+        let hi_0_idx = self.add_variable(hi_0);
+        let hi_1_idx = self.add_variable(hi_1);
+        let hi_2_idx = self.add_variable(hi_2);
+        let hi_3_idx = self.add_variable(hi_3);
+
+        // TODO(https://github.com/AztecProtocol/barretenberg/issues/879): Originally this was a single arithmetic gate.
+        // With trace sorting, we must add a dummy gate since the add gate would otherwise try to read into an aux gate that
+        // has been sorted out of sequence.
+        // product gate 1
+        // (lo_0 + q_0(p_0 + p_1*2^b) + q_1(p_0*2^b) - (r_1)2^b)2^-2b - lo_1 = 0
+        self.create_big_add_gate(
+            &AddQuad {
+                a: input.q[0],
+                b: input.q[1],
+                c: input.r[1],
+                d: lo_1_idx,
+                a_scaling: input.neg_modulus[0] + input.neg_modulus[1] * limb_shift,
+                b_scaling: input.neg_modulus[0] * limb_shift,
+                c_scaling: -limb_shift,
+                d_scaling: -limb_shift_2,
+                const_scaling: P::ScalarField::zero(),
+            },
+            true,
+        );
+        create_unconstrained_gate!(
+            self,
+            &mut self.blocks.arithmetic,
+            self.zero_idx,
+            self.zero_idx,
+            self.zero_idx,
+            lo_0_idx
+        );
+
+        self.blocks
+            .nnf
+            .populate_wires(input.a[1], input.b[1], input.r[0], lo_0_idx);
+        self.apply_nnf_selectors(NnfSelectors::NonNativeField1);
+        self.num_gates += 1;
+
+        self.blocks
+            .nnf
+            .populate_wires(input.a[0], input.b[0], input.a[3], input.b[3]);
+        self.apply_nnf_selectors(NnfSelectors::NonNativeField2);
+        self.num_gates += 1;
+
+        self.blocks
+            .nnf
+            .populate_wires(input.a[2], input.b[2], input.r[3], hi_0_idx);
+        self.apply_nnf_selectors(NnfSelectors::NonNativeField3);
+        self.num_gates += 1;
+
+        self.blocks
+            .nnf
+            .populate_wires(input.a[1], input.b[1], input.r[2], hi_1_idx);
+        self.apply_nnf_selectors(NnfSelectors::NnfNone);
+        self.num_gates += 1;
+
+        // product gate 6
+        // hi_2 - hi_1 - lo_1 - q[2](p[1].2^b + p[0]) - q[3](p[0].2^b) = 0
+        self.create_big_add_gate(
+            &AddQuad {
+                a: input.q[2],
+                b: input.q[3],
+                c: lo_1_idx,
+                d: hi_1_idx,
+                a_scaling: -input.neg_modulus[1] * limb_shift - input.neg_modulus[0],
+                b_scaling: -input.neg_modulus[0] * limb_shift,
+                c_scaling: -P::ScalarField::one(),
+                d_scaling: -P::ScalarField::one(),
+                const_scaling: P::ScalarField::zero(),
+            },
+            true,
+        );
+
+        // product gate 7
+        // hi_3 - (hi_2 - q[0](p[3].2^b + p[2]) - q[1](p[2].2^b + p[1])).2^-2b
+        self.create_big_add_gate(
+            &AddQuad {
+                a: hi_3_idx,
+                b: input.q[0],
+                c: input.q[1],
+                d: hi_2_idx,
+                a_scaling: -P::ScalarField::one(),
+                b_scaling: input.neg_modulus[3] * limb_rshift
+                    + input.neg_modulus[2] * limb_rshift_2,
+                c_scaling: input.neg_modulus[2] * limb_rshift
+                    + input.neg_modulus[1] * limb_rshift_2,
+                d_scaling: limb_rshift_2,
+                const_scaling: P::ScalarField::zero(),
+            },
+            false,
+        );
+
+        Ok([lo_1_idx, hi_3_idx])
+    }
 }
 
 impl<P: HonkCurve<TranscriptFieldType>> UltraCircuitBuilder<P> {
@@ -3498,7 +4096,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         witness_values: Vec<T::AcvmType>,
         public_inputs: Vec<u32>,
         varnum: usize,
-        recursive: bool,
     ) -> Self {
         tracing::trace!("Builder init");
         let mut builder = Self::new(size_hint);
@@ -3525,14 +4122,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder.zero_idx = builder.put_constant_variable(P::ScalarField::zero());
         builder.tau.insert(Self::DUMMY_TAG, Self::DUMMY_TAG); // AZTEC TODO(luke): explain this
 
-        builder.is_recursive_circuit = recursive;
         builder
     }
 
-    fn new(size_hint: usize) -> Self {
+    pub fn new(size_hint: usize) -> Self {
         tracing::trace!("Builder new");
         let variables = Vec::with_capacity(size_hint * 3);
-        // let _variable_names = BTreeMap::with_capacity(size_hint * 3);
+
         let next_var_index = Vec::with_capacity(size_hint * 3);
         let prev_var_index = Vec::with_capacity(size_hint * 3);
         let real_variable_index = Vec::with_capacity(size_hint * 3);
@@ -3546,7 +4142,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             real_variable_index,
             real_variable_tags,
             public_inputs: Vec::new(),
-            is_recursive_circuit: false,
             tau: BTreeMap::new(),
             constant_variable_indices: BTreeMap::new(),
             zero_idx: 0,
@@ -3568,12 +4163,19 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
     }
 
+    pub(crate) fn new_minimal(size_hint: usize) -> Self {
+        let mut builder = Self::new(size_hint);
+        builder.zero_idx = builder.put_constant_variable(P::ScalarField::zero());
+        builder.tau.insert(Self::DUMMY_TAG, Self::DUMMY_TAG); // AZTEC TODO(luke): explain this
+        builder
+    }
+
     pub fn create_circuit(
         constraint_system: &AcirFormat<P::ScalarField>,
-        recursive: bool,
         size_hint: usize,
         witness: Vec<T::AcvmType>,
         honk_recursion: HonkRecursion, // 1 for ultrahonk
+        crs: &ProverCrs<P>, // We need the CRS because in recursive verification, we need to generate a placeholder proof
         driver: &mut T,
     ) -> eyre::Result<Self> {
         tracing::trace!("Builder create circuit");
@@ -3585,10 +4187,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             witness,
             constraint_system.public_inputs.to_owned(),
             constraint_system.varnum as usize,
-            recursive,
         );
         let metadata = ProgramMetadata {
-            recursive,
             honk_recursion,
             size_hint,
         };
@@ -3596,6 +4196,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             driver,
             constraint_system,
             has_valid_witness_assignments,
+            crs,
             &metadata,
         )?;
 
@@ -3606,9 +4207,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
     pub fn circuit_size(
         constraint_system: &AcirFormat<P::ScalarField>,
-        recursive: bool,
         size_hint: usize,
         honk_recursion: HonkRecursion, // 1 for ultrahonk
+        crs: &ProverCrs<P>,
         driver: &mut T,
     ) -> eyre::Result<usize> {
         tracing::trace!("Builder create circuit");
@@ -3618,14 +4219,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             vec![],
             constraint_system.public_inputs.to_owned(),
             constraint_system.varnum as usize,
-            recursive,
         );
         let metadata = ProgramMetadata {
-            recursive,
             honk_recursion,
             size_hint,
         };
-        builder.build_constraints(driver, constraint_system, false, &metadata)?;
+        builder.build_constraints(driver, constraint_system, false, crs, &metadata)?;
 
         builder.finalize_circuit(true, driver)?;
 
@@ -3681,6 +4280,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         driver: &mut T,
         constraint_system: &AcirFormat<P::ScalarField>,
         has_valid_witness_assignments: bool,
+        crs: &ProverCrs<P>,
         metadata: &ProgramMetadata,
     ) -> eyre::Result<()> {
         tracing::trace!("Builder build constraints");
@@ -3855,7 +4455,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         self.process_avm_recursion_constraints(constraint_system, has_valid_witness_assignments);
         let is_recursive_circuit = metadata.honk_recursion != HonkRecursion::NotHonk;
-        let _has_pairing_points = has_honk_recursion_constraints
+        let has_pairing_points = has_honk_recursion_constraints
             || has_civc_recursion_constraints
             || has_avm_recursion_constraints;
 
@@ -3878,13 +4478,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         );
 
         // Container for data to be propagated
-        // HonkRecursionConstraintsOutput<Builder> honk_output;
+        // Initialize to default to avoid using an uninitialized value when only CIVC/AVM recursion constraints are present.
+        let mut honk_output: PairingPoints<P, T> = PairingPoints::default();
 
         if has_honk_recursion_constraints {
-            self.process_honk_recursion_constraints(
+            honk_output = self.process_honk_recursion_constraints(
                 constraint_system,
                 has_valid_witness_assignments,
-            );
+                crs,
+                driver,
+            )?;
         }
 
         if has_civc_recursion_constraints {
@@ -3894,43 +4497,34 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
-        if metadata.honk_recursion == HonkRecursion::UltraRollup {
-            todo!("Implement UltraRollupFlavor recursion handling");
-            // Proving with UltraRollupFlavor
-
-            // // Propagate pairing points
-            // if (has_pairing_points) {
-            //     honk_output.points_accumulator.set_public();
-            // } else {
-            //     PairingPoints::add_default_to_public_inputs(builder);
-            // }
-
-            // // Handle IPA
-            // auto [ipa_claim, ipa_proof] =
-            //     handle_IPA_accumulation(builder, honk_output.nested_ipa_claims, honk_output.nested_ipa_proofs);
-
-            // // Set proof
-            // builder.ipa_proof = ipa_proof;
-
-            // // Propagate IPA claim
-            // ipa_claim.set_public();
+        if has_pairing_points {
+            honk_output.set_public(self, driver);
         } else {
-            // // If it is a recursive circuit, propagate pairing points
-            // if metadata.honk_recursion == HonkRecursion::UltraHonk {
-            //     using IO = bb::stdlib::recursion::honk::DefaultIO<Builder>;
-
-            //     if (has_pairing_points) {
-            //         IO inputs;
-            //         inputs.pairing_inputs = honk_output.points_accumulator;
-            //         inputs.set_public();
-            //     } else {
-
             self.add_default_to_public_inputs(driver)?;
-            //     }
-            // }
         }
 
         Ok(())
+    }
+
+    fn process_honk_recursion_constraints(
+        &mut self,
+        constraint_system: &AcirFormat<P::ScalarField>,
+        has_valid_witness_assignments: bool,
+        crs: &ProverCrs<P>,
+        driver: &mut T,
+    ) -> eyre::Result<PairingPoints<P, T>> {
+        let mut output = PairingPoints::default();
+        // Add recursion constraints
+        for constraint in constraint_system.honk_recursion_constraints.iter() {
+            let honk_recursion_constraint = self.create_honk_recursion_constraints(
+                constraint,
+                has_valid_witness_assignments,
+                crs,
+                driver,
+            )?;
+            output.update::<Poseidon2SpongeCT<P>>(honk_recursion_constraint, self, driver)?;
+        }
+        Ok(output)
     }
 
     fn get_table(&mut self, id: BasicTableId) -> &mut PlookupBasicTable<P, T> {
