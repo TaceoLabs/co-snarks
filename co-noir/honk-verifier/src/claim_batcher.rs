@@ -63,7 +63,7 @@ impl<
         builder: &mut MegaCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
         let inverse_vanishing_eval_pos = &inverted_vanishing_evals[0];
         let inverse_vanishing_eval_neg = &inverted_vanishing_evals[1];
 

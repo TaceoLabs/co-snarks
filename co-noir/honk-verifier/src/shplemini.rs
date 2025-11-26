@@ -43,7 +43,7 @@ impl ShpleminiVerifier {
         driver: &mut T,
     ) -> HonkProofResult<BatchOpeningClaim<C, T>> {
         let virtual_log_n = multivariate_challenge.len();
-        let mut batched_evaluation = FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+        let mut batched_evaluation = FieldCT::from(C::ScalarField::ZERO);
 
         // Get the challenge ρ to batch commitments to multilinear polynomials and their shifts
         let gemini_batching_challenge =
@@ -95,7 +95,7 @@ impl ShpleminiVerifier {
         // univariate opening claims.
         let num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
         let shplonk_batching_challenge_powers = std::iter::successors(
-            Some(FieldCT::from_witness(C::ScalarField::ONE.into(), builder)),
+            Some(FieldCT::from(C::ScalarField::ONE)),
             |last| {
                 Some(
                     last.multiply(&shplonk_batching_challenge, builder, driver)
@@ -119,10 +119,9 @@ impl ShpleminiVerifier {
             transcript.get_challenge("Shplonk:z".to_string(), builder, driver)?;
 
         // Start computing the scalar to be multiplied by [1]₁
-        let mut constant_term_accumulator =
-            FieldCT::from_witness(C::ScalarField::ZERO.into(), builder);
+        let mut constant_term_accumulator = FieldCT::from(C::ScalarField::ZERO);
 
-        let mut scalars = vec![FieldCT::from_witness(C::ScalarField::ONE.into(), builder)];
+        let mut scalars = vec![FieldCT::from(C::ScalarField::ONE)];
 
         // Compute 1/(z − r), 1/(z + r), 1/(z - r²),  1/(z + r²), … , 1/(z - r^{2^{d-1}}), 1/(z + r^{2^{d-1}})
         // These represent the denominators of the summand terms in Shplonk partially evaluated polynomial Q_z
@@ -153,7 +152,7 @@ impl ShpleminiVerifier {
             &mut scalars,
             &mut batched_evaluation,
             &gemini_batching_challenge,
-            &mut FieldCT::from_witness(C::ScalarField::ONE.into(), builder),
+            &mut FieldCT::from(C::ScalarField::ONE),
             builder,
             driver,
         )?;
@@ -261,7 +260,7 @@ impl ShpleminiVerifier {
             ));
         }
 
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
 
         // TACEO TODO: Batch invert
         for denom in denominators.iter_mut() {
@@ -318,7 +317,7 @@ impl ShpleminiVerifier {
         let virtual_log_n = evaluation_point.len();
         let evals = fold_neg_evals.to_vec();
         let mut eval_pos_prev = batched_evaluation.clone();
-        let one = FieldCT::from_witness(C::ScalarField::ONE.into(), builder);
+        let one = FieldCT::from(C::ScalarField::ONE);
 
         let mut fold_pos_evaluations = Vec::with_capacity(virtual_log_n);
 
@@ -351,11 +350,7 @@ impl ShpleminiVerifier {
             // Compute the numerator
             let lhs = challenge_power
                 .multiply(&eval_pos_prev, builder, driver)?
-                .multiply(
-                    &FieldCT::from_witness((C::ScalarField::from(2u64)).into(), builder),
-                    builder,
-                    driver,
-                )?;
+                .multiply(&FieldCT::from(C::ScalarField::from(2u64)), builder, driver)?;
             let rhs = &challs_by_one_sub_u_add_u_by_eval_neg[l - 1];
             let mut eval_pos = lhs.sub(rhs, builder, driver);
 
