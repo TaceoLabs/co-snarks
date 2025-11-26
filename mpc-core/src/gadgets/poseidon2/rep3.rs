@@ -444,7 +444,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(res)
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     fn rep3_external_round_precomp_additive<N: Network>(
         &self,
         state: &mut [F; T],
@@ -461,7 +461,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     fn rep3_internal_round_precomp_additive<N: Network>(
         &self,
         state: &mut [F; T],
@@ -478,7 +478,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     pub fn rep3_external_round_precomp<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>; T],
@@ -493,7 +493,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     pub fn rep3_internal_round_precomp<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>; T],
@@ -512,7 +512,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     fn rep3_external_round_precomp_packed<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>],
@@ -548,7 +548,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     fn rep3_internal_round_precomp_packed<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>],
@@ -574,7 +574,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One external round of the Poseidon2 permuation. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation. Implemented for the Rep3 MPC protocol.
     fn rep3_external_round<N: Network>(
         &self,
         state: &mut [F; T],
@@ -591,7 +591,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// One internal round of the Poseidon2 permuation. Implemented for the Rep3 MPC protocol.
+    /// One internal round of the Poseidon2 permutation. Implemented for the Rep3 MPC protocol.
     fn rep3_internal_round<N: Network>(
         &self,
         state: &mut [F; T],
@@ -608,7 +608,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes multiple Poseidon2 permuations in parallel using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes multiple Poseidon2 permutations in parallel using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn rep3_permutation_in_place_with_precomputation_packed<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>],
@@ -647,7 +647,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes the Poseidon2 permutation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn rep3_permutation_in_place_with_precomputation<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>; T],
@@ -681,7 +681,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation. Furthermore, the whole state is processed as additive shares, i.e., less CPU at the cost of more network communication.
+    /// Computes the Poseidon2 permutation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation. Furthermore, the whole state is processed as additive shares, i.e., less CPU at the cost of more network communication.
     pub fn rep3_permutation_additive_in_place_with_precomputation<N: Network>(
         &self,
         state_: &mut [Rep3PrimeFieldShare<F>; T],
@@ -721,7 +721,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol while overwriting the input.
+    /// Computes the Poseidon2 permutation using the Rep3 MPC protocol while overwriting the input.
     pub fn rep3_permutation_in_place<N: Network>(
         &self,
         state_: &mut [Rep3PrimeFieldShare<F>; T],
@@ -760,7 +760,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(())
     }
 
-    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol.
+    /// Computes the Poseidon2 permutation using the Rep3 MPC protocol.
     pub fn rep3_permutation<N: Network>(
         &self,
         state: &[Rep3PrimeFieldShare<F>; T],
@@ -772,7 +772,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(state)
     }
 
-    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes the Poseidon2 permutation using the Rep3 MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn rep3_permutation_with_precomputation<N: Network>(
         &self,
         state: &[Rep3PrimeFieldShare<F>; T],
@@ -785,7 +785,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(state)
     }
 
-    /// Computes multiple Poseidon2 permuations in paralllel using the Rep3 MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes multiple Poseidon2 permutations in paralllel using the Rep3 MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn rep3_permutation_with_precomputation_packed<N: Network>(
         &self,
         state: &[Rep3PrimeFieldShare<F>],
@@ -798,7 +798,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(state)
     }
 
-    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation. Furthermore, the whole state is processed as additive shares, i.e., less CPU at the cost of more network communication.
+    /// Computes the Poseidon2 permutation using the Rep3 MPC protocol. Thereby, a preprocessing technique is used to reduce the depth of the computation. Furthermore, the whole state is processed as additive shares, i.e., less CPU at the cost of more network communication.
     pub fn rep3_permutation_additive_with_precomputation<N: Network>(
         &self,
         state: &[Rep3PrimeFieldShare<F>; T],
