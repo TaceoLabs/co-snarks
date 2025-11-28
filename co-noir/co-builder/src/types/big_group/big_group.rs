@@ -627,7 +627,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 // We want to make sure that at the final iteration, `y_previous.is_negative = false`
                 // Each iteration flips the sign of y_previous.is_negative.
                 // i.e. whether we store y_4 or -y_4 depends on the number of points we have
-                let num_points_even = add.len() % 2 == 0;
+                let num_points_even = add.len().is_multiple_of(2);
                 y_4.add.push(if num_points_even {
                     self.y.clone()
                 } else {
