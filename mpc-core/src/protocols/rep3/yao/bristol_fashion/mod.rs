@@ -27,7 +27,7 @@ pub enum CircuitExecutionError {
     /// An IO-Error has occured
     #[error("{0}")]
     IoError(#[from] std::io::Error),
-    /// The provided input was not the correct format for the circuit
+    /// The provided input was not in the correct format for the circuit
     #[error("{0}")]
     InvalidInput(String),
 }
