@@ -2346,7 +2346,7 @@ impl<F: PrimeField> BigField<F> {
             )?;
             i += 2;
         }
-        if terms.len() % 2 == 0 {
+        if terms.len().is_multiple_of(2) {
             acc = acc.add(&mut terms[terms.len() - 1].clone(), builder, driver)?;
         }
         Ok(acc)
