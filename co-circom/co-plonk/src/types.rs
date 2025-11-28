@@ -1,6 +1,6 @@
 use ark_ec::AffineRepr;
 use ark_poly::{EvaluationDomain, Radix2EvaluationDomain};
-use circom_types::plonk::ZKey;
+use circom_types::plonk::Zkey;
 use co_circom_types::SharedWitness;
 use std::marker::PhantomData;
 
@@ -43,7 +43,7 @@ pub(super) struct PlonkWitness<P: Pairing, T: CircomPlonkProver<P>> {
 
 pub(super) struct PlonkData<'a, P: Pairing, T: CircomPlonkProver<P>> {
     pub(super) witness: PlonkWitness<P, T>,
-    pub(super) zkey: &'a ZKey<P>,
+    pub(super) zkey: &'a Zkey<P>,
 }
 
 /// Computes the roots of unity over the provided prime field. This method

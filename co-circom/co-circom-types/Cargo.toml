@@ -14,7 +14,7 @@ rust-version.workspace = true
 [dependencies]
 ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
-circom-types = { version = "0.10.0", path = "../circom-types" }
+circom-types.workspace = true
 eyre = { workspace = true }
 mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 num-traits = { workspace = true }

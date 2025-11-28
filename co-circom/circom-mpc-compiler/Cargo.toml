@@ -13,7 +13,7 @@ readme.workspace = true
 [dependencies]
 ark-ec.workspace = true
 ark-ff.workspace = true
-circom-types = { version = "0.10.0", path = "../circom-types" }
+circom-types.workspace = true
 circom-mpc-vm = { version = "0.9.0", path = "../circom-mpc-vm" }
 clap.workspace = true
 eyre.workspace = true

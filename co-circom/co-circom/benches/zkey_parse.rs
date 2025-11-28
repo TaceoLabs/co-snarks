@@ -1,5 +1,5 @@
 use ark_bn254::Bn254;
-use circom_types::traits::CheckElement;
+use circom_types::CheckElement;
 use criterion::{Criterion, criterion_group, criterion_main};
 use std::path::PathBuf;
 
@@ -9,7 +9,7 @@ fn groth16_zkey_parse_check_elements(c: &mut Criterion) {
     let zkey = std::fs::read(d).unwrap();
     c.bench_function("groth16 zkey parse", |b| {
         b.iter(|| {
-            circom_types::groth16::ZKey::<Bn254>::from_reader(&zkey[..], CheckElement::Yes)
+            circom_types::groth16::Zkey::<Bn254>::from_reader(&zkey[..], CheckElement::Yes)
                 .unwrap();
         })
     });
@@ -21,7 +21,7 @@ fn plonk_zkey_parse_check_elements(c: &mut Criterion) {
     let zkey = std::fs::read(d).unwrap();
     c.bench_function("plonk zkey parse", |b| {
         b.iter(|| {
-            circom_types::plonk::ZKey::<Bn254>::from_reader(&zkey[..], CheckElement::Yes).unwrap();
+            circom_types::plonk::Zkey::<Bn254>::from_reader(&zkey[..], CheckElement::Yes).unwrap();
         })
     });
 }
@@ -32,7 +32,7 @@ fn groth16_zkey_parse_dont_check_elements(c: &mut Criterion) {
     let zkey = std::fs::read(d).unwrap();
     c.bench_function("groth16 zkey parse", |b| {
         b.iter(|| {
-            circom_types::groth16::ZKey::<Bn254>::from_reader(&zkey[..], CheckElement::No).unwrap();
+            circom_types::groth16::Zkey::<Bn254>::from_reader(&zkey[..], CheckElement::No).unwrap();
         })
     });
 }
@@ -43,7 +43,7 @@ fn plonk_zkey_parse_dont_check_elements(c: &mut Criterion) {
     let zkey = std::fs::read(d).unwrap();
     c.bench_function("plonk zkey parse", |b| {
         b.iter(|| {
-            circom_types::plonk::ZKey::<Bn254>::from_reader(&zkey[..], CheckElement::No).unwrap();
+            circom_types::plonk::Zkey::<Bn254>::from_reader(&zkey[..], CheckElement::No).unwrap();
         })
     });
 }

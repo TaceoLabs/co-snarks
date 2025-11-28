@@ -8,7 +8,7 @@ use crate::{
 };
 use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
-use circom_types::plonk::ZKey;
+use circom_types::plonk::Zkey;
 use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::One;
@@ -96,7 +96,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
     fn compute_z(
         nets: &[N; 8],
         state: &mut T::State,
-        zkey: &ZKey<P>,
+        zkey: &Zkey<P>,
         domains: &Domains<P::ScalarField>,
         challenges: &Round2Challenges<P, T>,
         polys: &Round1Polys<P, T>,
@@ -257,7 +257,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::Witness;
-    use circom_types::plonk::ZKey;
+    use circom_types::plonk::Zkey;
     use co_circom_types::SharedWitness;
 
     use crate::mpc::plain::PlainPlonkDriver;
@@ -273,7 +273,7 @@ pub mod tests {
 
     use super::Round1Challenges;
     use ark_ec::pairing::Pairing;
-    use circom_types::traits::CheckElement;
+    use circom_types::CheckElement;
     use std::str::FromStr;
 
     #[test]
@@ -282,7 +282,7 @@ pub mod tests {
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
-            let zkey = ZKey::<Bn254>::from_reader(&mut reader, check).unwrap();
+            let zkey = Zkey::<Bn254>::from_reader(&mut reader, check).unwrap();
             let witness_file =
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
