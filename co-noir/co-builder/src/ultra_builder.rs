@@ -2885,7 +2885,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         //  *     return { variable_index };
         //  * }
         //  **/
-        let has_remainder_bits = num_bits % target_range_bitnum != 0;
+        let has_remainder_bits = !num_bits.is_multiple_of(target_range_bitnum);
         let num_limbs = num_bits / target_range_bitnum + if has_remainder_bits { 1 } else { 0 };
         let last_limb_size = num_bits - (num_bits / target_range_bitnum * target_range_bitnum);
         let last_limb_range = (1u64 << last_limb_size) - 1;
@@ -2933,8 +2933,12 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             }
         }
 
-        let num_limb_triples = num_limbs / 3 + if num_limbs % 3 != 0 { 1 } else { 0 };
-        let leftovers = if num_limbs % 3 == 0 { 3 } else { num_limbs % 3 };
+        let num_limb_triples = num_limbs.div_ceil(3);
+        let leftovers = if num_limbs.is_multiple_of(3) {
+            3
+        } else {
+            num_limbs % 3
+        };
 
         let mut accumulator_idx = variable_index;
         let mut accumulator = val;
@@ -3320,7 +3324,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // Convenient to assume size is at least 8 (gate_width = 4) for separate gates for start and end conditions
         const GATE_WIDTH: usize = NUM_WIRES;
         assert!(
-            variable_index.len() % GATE_WIDTH == 0 && variable_index.len() > GATE_WIDTH,
+            variable_index.len().is_multiple_of(GATE_WIDTH) && variable_index.len() > GATE_WIDTH,
             "Variable index size ({}) must be a multiple of {} and greater than {}",
             variable_index.len(),
             GATE_WIDTH,
@@ -4978,7 +4982,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // 32-bit range constraint on each chunk. However, if `num_bits` is not a multiple of 32, the last chunk will be
         // smaller than 32 bits. Therefore, the last chunk needs to be explicitly range-constrained to ensure it is in the
         // correct range. The result is then reconstructed from the chunks, and checked against the original value.
-        let num_chunks = (num_bits / 32) + if num_bits % 32 == 0 { 0 } else { 1 };
+        let num_chunks = num_bits.div_ceil(32);
         let left = a.get_value(self, driver);
         let right = b.get_value(self, driver);
 

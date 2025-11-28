@@ -9,10 +9,7 @@ use crate::{
 use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use ark_ff::Field;
-use circom_types::{
-    plonk::PlonkProof,
-    traits::{CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
-};
+use circom_types::{plonk::PlonkProof, traits::CircomArkworksPairingBridge};
 use mpc_core::MpcState;
 use mpc_net::Network;
 use num_traits::One;
@@ -49,11 +46,7 @@ impl<P: Pairing> Round5Challenges<P> {
     }
 }
 
-impl<P: Pairing + CircomArkworksPairingBridge> Round4Proof<P>
-where
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-{
+impl<P: Pairing + CircomArkworksPairingBridge> Round4Proof<P> {
     fn into_final_proof(self, commit_wxi: P::G1, commit_wxiw: P::G1) -> PlonkProof<P> {
         PlonkProof {
             a: P::G1Affine::from(self.commit_a),
@@ -81,8 +74,6 @@ where
 impl<P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round5<'_, P, T, N>
 where
     P: CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     fn div_by_zerofier(inout: &mut Vec<T::ArithmeticShare>, n: usize, beta: P::ScalarField) {
         let inv_beta = beta.inverse().expect("Highly unlikely to be zero");
@@ -358,7 +349,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::Witness;
-    use circom_types::{plonk::ZKey, traits::CheckElement};
+    use circom_types::{CheckElement, plonk::Zkey};
     use co_circom_types::SharedWitness;
 
     use crate::{
@@ -383,7 +374,7 @@ pub mod tests {
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
-            let zkey = ZKey::<Bn254>::from_reader(&mut reader, check).unwrap();
+            let zkey = Zkey::<Bn254>::from_reader(&mut reader, check).unwrap();
             let witness_file =
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();

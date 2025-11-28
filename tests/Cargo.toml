@@ -17,7 +17,7 @@ blake2.workspace = true
 blake3.workspace = true
 circom-mpc-compiler = { version = "0.10.0", path = "../co-circom/circom-mpc-compiler" }
 circom-mpc-vm = { version = "0.9.0", path = "../co-circom/circom-mpc-vm" }
-circom-types = { version = "0.10.0", path = "../co-circom/circom-types" }
+circom-types = { workspace = true, features = ["full"] }
 co-acvm = { version = "0.7.0", path = "../co-noir/co-acvm" }
 co-circom-types = { version = "0.6.0", path = "../co-circom/co-circom-types" }
 co-builder = { version = "0.5.0", path = "../co-noir/co-builder" }

@@ -1,6 +1,6 @@
 use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
-use circom_types::plonk::ZKey;
+use circom_types::plonk::Zkey;
 use co_circom_types::SharedWitness;
 use mpc_core::MpcState;
 use mpc_net::Network;
@@ -25,7 +25,7 @@ pub(super) struct Round1<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
 
 pub(super) struct PlonkDataRound1<'a, P: Pairing, T: CircomPlonkProver<P>> {
     witness: PlonkWitness<P, T>,
-    zkey: &'a ZKey<P>,
+    zkey: &'a Zkey<P>,
 }
 
 impl<'a, P: Pairing, T: CircomPlonkProver<P>> From<PlonkDataRound1<'a, P, T>>
@@ -106,7 +106,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         witness: &PlonkWitness<P, T>,
         domains: &Domains<P::ScalarField>,
         blind_factors: &[T::ArithmeticShare],
-        zkey: &ZKey<P>,
+        zkey: &Zkey<P>,
         map: &[usize],
     ) -> PlonkProofResult<(Vec<T::ArithmeticShare>, PolyEval<P, T>)> {
         let mut buffer = Vec::with_capacity(zkey.n_constraints);
@@ -136,7 +136,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         id: <T::State as MpcState>::PartyID,
         domains: &Domains<P::ScalarField>,
         challenges: &Round1Challenges<P, T>,
-        zkey: &ZKey<P>,
+        zkey: &Zkey<P>,
         witness: &PlonkWitness<P, T>,
     ) -> PlonkProofResult<Round1Polys<P, T>> {
         let (wire_a, wire_b, wire_c) = rayon_join3!(
@@ -191,7 +191,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
     fn calculate_additions(
         id: <T::State as MpcState>::PartyID,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
-        zkey: &ZKey<P>,
+        zkey: &Zkey<P>,
     ) -> PlonkProofResult<PlonkWitness<P, T>> {
         let mut witness = PlonkWitness::new(witness, zkey.n_additions);
         // This is hard to multithread as we have to add the results
@@ -224,7 +224,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
     pub(super) fn init_round(
         nets: &'a [N; 8],
         state: &'a mut T::State,
-        zkey: &'a ZKey<P>,
+        zkey: &'a Zkey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
         let plonk_witness = Self::calculate_additions(state.id(), private_witness, zkey)?;
@@ -297,7 +297,7 @@ pub mod tests {
 
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
-    use circom_types::{plonk::ZKey, traits::CheckElement};
+    use circom_types::{CheckElement, plonk::Zkey};
     use co_circom_types::SharedWitness;
 
     use crate::mpc::plain::PlainPlonkDriver;
@@ -331,7 +331,7 @@ pub mod tests {
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
-            let zkey = ZKey::<Bn254>::from_reader(&mut reader, check).unwrap();
+            let zkey = Zkey::<Bn254>::from_reader(&mut reader, check).unwrap();
             let witness_file =
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
@@ -375,7 +375,7 @@ pub mod tests {
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bls12_381/poseidon/circuit.zkey").unwrap(),
             );
-            let zkey = ZKey::<Bls12_381>::from_reader(&mut reader, check).unwrap();
+            let zkey = Zkey::<Bls12_381>::from_reader(&mut reader, check).unwrap();
             let witness_file =
                 File::open("../../test_vectors/Plonk/bls12_381/poseidon/witness.wtns").unwrap();
             let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();

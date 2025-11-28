@@ -24,9 +24,11 @@ mod tests {
     use ark_relations::r1cs::{ConstraintMatrices, Matrix};
     use ark_serialize::CanonicalDeserialize;
     use circom_types::{
-        Witness,
-        groth16::{CircomGroth16Proof, JsonPublicInput, JsonVerificationKey, ZKey},
-        traits::CheckElement,
+        CheckElement, Witness,
+        groth16::{
+            Proof as CircomGroth16Proof, PublicInput as JsonPublicInput,
+            VerificationKey as JsonVerificationKey, Zkey,
+        },
     };
     use co_circom_types::SharedWitness;
     use std::fs::{self, File};
@@ -45,7 +47,7 @@ mod tests {
                     .unwrap();
 
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-            let zkey = ZKey::<Bn254>::from_reader(zkey_file, check).unwrap();
+            let zkey = Zkey::<Bn254>::from_reader(zkey_file, check).unwrap();
             let (matrices, pkey) = zkey.into();
             let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
             let vk = vk.into();
@@ -82,7 +84,7 @@ mod tests {
         let proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&proof_string).unwrap();
         let proof = proof.into();
 
-        Groth16::<Bn254>::verify(&vk, &proof, &public_input.values).expect("can verify");
+        Groth16::<Bn254>::verify(&vk, &proof, &public_input.0).expect("can verify");
     }
 
     #[test]
@@ -96,7 +98,7 @@ mod tests {
                 File::open("../../test_vectors/Groth16/bn254/poseidon/verification_key.json")
                     .unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-            let zkey = ZKey::<Bn254>::from_reader(zkey_file, check).unwrap();
+            let zkey = Zkey::<Bn254>::from_reader(zkey_file, check).unwrap();
             let (matrices, pkey) = zkey.into();
             let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
             let vk = vk.into();
@@ -132,7 +134,7 @@ mod tests {
             serde_json::from_str::<JsonPublicInput<ark_bn254::Fr>>(public_string).unwrap();
         let proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&proof_string).unwrap();
         let proof = proof.into();
-        Groth16::verify(&vk, &proof, &public_input.values).expect("can verify");
+        Groth16::verify(&vk, &proof, &public_input.0).expect("can verify");
     }
 
     #[test]
@@ -152,7 +154,7 @@ mod tests {
             serde_json::from_str::<JsonPublicInput<ark_bls12_381::Fr>>(public_string).unwrap();
         let proof = serde_json::from_str::<CircomGroth16Proof<Bls12_381>>(&proof_string).unwrap();
         let proof = proof.into();
-        Groth16::<Bls12_381>::verify(&vk, &proof, &public_input.values).expect("can verify");
+        Groth16::<Bls12_381>::verify(&vk, &proof, &public_input.0).expect("can verify");
     }
 
     #[test]
@@ -169,7 +171,7 @@ mod tests {
             )
             .unwrap();
             let witness = Witness::<ark_bls12_381::Fr>::from_reader(witness_file).unwrap();
-            let zkey = ZKey::<Bls12_381>::from_reader(zkey_file, check).unwrap();
+            let zkey = Zkey::<Bls12_381>::from_reader(zkey_file, check).unwrap();
             let (matrices, pkey) = zkey.into();
             let vk: JsonVerificationKey<Bls12_381> = serde_json::from_reader(vk_file).unwrap();
             let vk = vk.into();
@@ -203,7 +205,7 @@ mod tests {
                 File::open("../../test_vectors/Groth16/bn254/multiplier2/verification_key.json")
                     .unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
-            let zkey = ZKey::<Bn254>::from_reader(zkey_file, check).unwrap();
+            let zkey = Zkey::<Bn254>::from_reader(zkey_file, check).unwrap();
             let (matrices, pkey) = zkey.into();
             let vk: JsonVerificationKey<Bn254> = serde_json::from_reader(vk_file).unwrap();
             let vk = vk.into();

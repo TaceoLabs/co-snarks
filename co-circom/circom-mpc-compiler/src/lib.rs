@@ -38,7 +38,6 @@ use circom_program_structure::{
 };
 use circom_type_analysis::check_types;
 use circom_types::traits::CircomArkworksPairingBridge;
-use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use eyre::eyre;
 use eyre::{Result, bail};
 use itertools::Itertools;
@@ -122,8 +121,6 @@ pub struct CoCircomCompiler<P: Pairing> {
 impl<P: Pairing> CoCircomCompiler<P>
 where
     P: CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     // only internally to hold the state
     fn new<Pth>(file: Pth, config: CompilerConfig) -> Self
@@ -180,10 +177,10 @@ where
         let initial_node = vcp.get_main_id();
         let main = &vcp.templates[initial_node];
         for s in &main.wires {
-            if let Wire::TSignal(s) = s {
-                if s.xtype == SignalType::Output {
-                    output_mappings.insert(s.name.clone(), (s.dag_local_id, s.size));
-                }
+            if let Wire::TSignal(s) = s
+                && s.xtype == SignalType::Output
+            {
+                output_mappings.insert(s.name.clone(), (s.dag_local_id, s.size));
             }
             // TODO: Can buses be outputs?
         }

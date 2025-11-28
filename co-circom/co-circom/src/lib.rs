@@ -18,12 +18,13 @@ pub use ark_ec::pairing::Pairing;
 pub use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig, SimplificationLevel};
 pub use circom_mpc_vm::{mpc_vm::VMConfig, types::CoCircomCompilerParsed};
 pub use circom_types::{
-    R1CS, Witness,
+    CheckElement, R1CS, Witness,
     groth16::{
-        CircomGroth16Proof, JsonVerificationKey as Groth16JsonVerificationKey, ZKey as Groth16ZKey,
+        Proof as CircomGroth16Proof, VerificationKey as Groth16JsonVerificationKey,
+        Zkey as Groth16ZKey,
     },
-    plonk::{JsonVerificationKey as PlonkJsonVerificationKey, PlonkProof, ZKey as PlonkZKey},
-    traits::{CheckElement, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge},
+    plonk::{PlonkProof, VerificationKey as PlonkJsonVerificationKey, Zkey as PlonkZKey},
+    traits::CircomArkworksPairingBridge,
 };
 pub use co_circom_types::{
     Compression, Input, Rep3SharedInput, Rep3SharedWitness, ShamirSharedWitness,

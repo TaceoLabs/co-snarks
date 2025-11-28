@@ -16,7 +16,7 @@ ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-poly = { workspace = true }
 ark-serialize = { workspace = true }
-circom-types = { version = "0.10.0", path = "../circom-types" }
+circom-types = { workspace = true, features = ["plonk", "zkey", "verification-key"] }
 co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
 eyre = { workspace = true }
 itertools = { workspace = true }

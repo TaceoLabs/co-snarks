@@ -109,7 +109,7 @@ impl<P: HonkCurve<TranscriptFieldType>> FileProcessor<P> for NewFileStructure<P>
         path: impl AsRef<Path>,
     ) -> Result<()> {
         let g1_file_size = get_file_size(&path)? as usize;
-        assert!(g1_file_size % 64 == 0); //g1_file_size >= num_points * 64 &&
+        assert!(g1_file_size.is_multiple_of(64)); //g1_file_size >= num_points * 64 &&
         let num_to_read = degree; //g1_file_size / 64;
         let g1_buffer_size = std::mem::size_of::<P::BaseField>() * 2 * num_to_read;
         let mut buffer = vec![0_u8; g1_buffer_size];

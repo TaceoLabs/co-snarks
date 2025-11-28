@@ -3,14 +3,15 @@ use ark_bn254::Bn254;
 use circom_types::Witness;
 use circom_types::{
     groth16::{
-        CircomGroth16Proof, JsonPublicInput, JsonVerificationKey as Groth16VK, ZKey as Groth16ZK,
+        Proof as CircomGroth16Proof, PublicInput as JsonPublicInput, VerificationKey as Groth16VK,
+        Zkey as Groth16ZK,
     },
-    plonk::{JsonVerificationKey as PlonkVK, PlonkProof, ZKey as PlonkZK},
+    plonk::{PlonkProof, VerificationKey as PlonkVK, Zkey as PlonkZK},
     R1CS,
 };
 use std::sync::Arc;
 
-use circom_types::traits::CheckElement;
+use circom_types::CheckElement;
 use co_circom_types::SharedWitness;
 use co_groth16::ShamirCoGroth16;
 use co_groth16::{CircomReduction, ConstraintMatrices, Groth16, ProvingKey};
@@ -100,7 +101,7 @@ macro_rules! add_test_impl_g16 {
                 let public_input: JsonPublicInput::<[< ark_ $curve:lower >]::Fr> = serde_json::from_reader(public_input_file).unwrap();
                 let snarkjs_proof: CircomGroth16Proof<$curve> = serde_json::from_reader(&snarkjs_proof_file).unwrap();
                 let proof = snarkjs_proof.into();
-                Groth16::<$curve>::verify(&vk, &proof, &public_input.values).expect("can verify");
+                Groth16::<$curve>::verify(&vk, &proof, &public_input.0).expect("can verify");
             }
         }
     };
@@ -175,7 +176,7 @@ macro_rules! add_test_impl_plonk {
                 .unwrap();
                 let public_input: JsonPublicInput::<[< ark_ $curve:lower >]::Fr> = serde_json::from_reader(public_input_file).unwrap();
                 let snarkjs_proof: PlonkProof<$curve> = serde_json::from_reader(&snarkjs_proof_file).unwrap();
-                Plonk::<$curve>::verify(&vk, &snarkjs_proof, &public_input.values).expect("can verify");
+                Plonk::<$curve>::verify(&vk, &snarkjs_proof, &public_input.0).expect("can verify");
             }
         }
     };

@@ -3,9 +3,8 @@
 #![warn(missing_docs)]
 use ark_ec::pairing::Pairing;
 use circom_types::plonk::PlonkProof;
-use circom_types::plonk::ZKey;
+use circom_types::plonk::Zkey;
 use circom_types::traits::CircomArkworksPairingBridge;
-use circom_types::traits::CircomArkworksPrimeFieldBridge;
 use co_circom_types::Rep3SharedWitness;
 use co_circom_types::ShamirSharedWitness;
 use co_circom_types::SharedWitness;
@@ -77,14 +76,12 @@ impl<P, T> CoPlonk<P, T>
 where
     T: CircomPlonkProver<P>,
     P: Pairing + CircomArkworksPairingBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
 {
     /// Execute the PLONK prover using the internal MPC driver.
     fn prove_inner<N: Network + 'static>(
         nets: &[N; 8],
         state: &mut T::State,
-        zkey: Arc<ZKey<P>>,
+        zkey: Arc<Zkey<P>>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<PlonkProof<P>> {
         tracing::debug!("starting PLONK prove!");
@@ -117,7 +114,7 @@ where
 
 mod plonk_utils {
     use ark_ec::pairing::Pairing;
-    use circom_types::plonk::ZKey;
+    use circom_types::plonk::Zkey;
     use mpc_core::MpcState;
     use rayon::prelude::*;
 
@@ -140,7 +137,7 @@ mod plonk_utils {
     pub(crate) fn get_witness<P: Pairing, T: CircomPlonkProver<P>>(
         id: <T::State as MpcState>::PartyID,
         witness: &PlonkWitness<P, T>,
-        zkey: &ZKey<P>,
+        zkey: &Zkey<P>,
         index: usize,
     ) -> PlonkProofResult<T::ArithmeticShare> {
         tracing::trace!("get witness on {index}");
@@ -220,13 +217,11 @@ impl<P: Pairing> Rep3CoPlonk<P> {
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
         nets: &[N; 8],
-        zkey: Arc<ZKey<P>>,
+        zkey: Arc<Zkey<P>>,
         witness: Rep3SharedWitness<P::ScalarField>,
     ) -> eyre::Result<PlonkProof<P>>
     where
         P: Pairing + CircomArkworksPairingBridge,
-        P::BaseField: CircomArkworksPrimeFieldBridge,
-        P::ScalarField: CircomArkworksPrimeFieldBridge,
     {
         let mut state = Rep3State::new(&nets[0], A2BType::default())?;
         // execute prover in MPC
@@ -240,13 +235,11 @@ impl<P: Pairing> ShamirCoPlonk<P> {
         nets: &[N; 8],
         num_parties: usize,
         threshold: usize,
-        zkey: Arc<ZKey<P>>,
+        zkey: Arc<Zkey<P>>,
         witness: ShamirSharedWitness<P::ScalarField>,
     ) -> eyre::Result<PlonkProof<P>>
     where
         P: Pairing + CircomArkworksPairingBridge,
-        P::BaseField: CircomArkworksPrimeFieldBridge,
-        P::ScalarField: CircomArkworksPrimeFieldBridge,
     {
         let domain_size = zkey.domain_size;
         // TODO check and explain numbers
@@ -261,15 +254,13 @@ impl<P: Pairing> ShamirCoPlonk<P> {
 impl<P: Pairing> Plonk<P>
 where
     P: CircomArkworksPairingBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
 {
     /// *Locally* create a `Plonk` proof. This is just the [`CoPlonk`] prover
     /// initialized with the [`PlainPlonkDriver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
     pub fn plain_prove(
-        zkey: Arc<ZKey<P>>,
+        zkey: Arc<Zkey<P>>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> eyre::Result<PlonkProof<P>> {
         Self::prove_inner(&[(); 8], &mut (), zkey, private_witness).context("while prove inner")
@@ -280,10 +271,10 @@ where
 mod tests {
     use super::Plonk;
     use ark_bn254::Bn254;
+    use circom_types::CheckElement;
     use circom_types::Witness;
-    use circom_types::groth16::JsonPublicInput;
-    use circom_types::plonk::{JsonVerificationKey, ZKey};
-    use circom_types::traits::CheckElement;
+    use circom_types::groth16::PublicInput as JsonPublicInput;
+    use circom_types::plonk::{VerificationKey as JsonVerificationKey, Zkey};
     use co_circom_types::SharedWitness;
     use std::sync::Arc;
     use std::{fs::File, io::BufReader};
@@ -293,7 +284,7 @@ mod tests {
         for check in [CheckElement::Yes, CheckElement::No] {
             let zkey_file = "../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey";
             let witness_file = "../../test_vectors/Plonk/bn254/multiplier2/witness.wtns";
-            let zkey = Arc::new(ZKey::<Bn254>::from_reader(File::open(zkey_file)?, check)?);
+            let zkey = Arc::new(Zkey::<Bn254>::from_reader(File::open(zkey_file)?, check)?);
             let witness = Witness::<ark_bn254::Fr>::from_reader(File::open(witness_file)?)?;
 
             let witness = SharedWitness {
@@ -312,7 +303,7 @@ mod tests {
             )
             .unwrap();
             let proof = Plonk::<Bn254>::plain_prove(zkey, witness).unwrap();
-            Plonk::<Bn254>::verify(&vk, &proof, &public_input.values).unwrap();
+            Plonk::<Bn254>::verify(&vk, &proof, &public_input.0).unwrap();
         }
         Ok(())
     }
@@ -323,7 +314,7 @@ mod tests {
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/poseidon/circuit.zkey").unwrap(),
             );
-            let zkey = Arc::new(ZKey::<Bn254>::from_reader(&mut reader, check).unwrap());
+            let zkey = Arc::new(Zkey::<Bn254>::from_reader(&mut reader, check).unwrap());
             let witness_file =
                 File::open("../../test_vectors/Plonk/bn254/poseidon/witness.wtns").unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
@@ -349,7 +340,7 @@ mod tests {
             let mut proof_bytes = vec![];
             serde_json::to_writer(&mut proof_bytes, &proof).unwrap();
             let proof = serde_json::from_reader(proof_bytes.as_slice()).unwrap();
-            Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.values).unwrap();
+            Plonk::<Bn254>::verify(&vk, &proof, &public_inputs.0).unwrap();
         }
     }
 }

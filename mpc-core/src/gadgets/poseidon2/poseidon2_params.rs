@@ -25,7 +25,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2Params<F, T, D> {
         round_constants_external: &'static Vec<[F; T]>,
         round_constants_internal: &'static Vec<F>,
     ) -> Self {
-        assert!(T == 2 || T == 3 || ((T <= 24) && (T % 4 == 0)));
+        assert!(T == 2 || T == 3 || ((T <= 24) && (T.is_multiple_of(4))));
         assert!(D % 2 == 1);
         assert_eq!(rounds_f % 2, 0);
         assert_eq!(round_constants_external.len(), rounds_f);

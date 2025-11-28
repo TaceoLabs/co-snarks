@@ -166,7 +166,7 @@ pub mod tests {
 
     use ark_bn254::Bn254;
     use circom_types::Witness;
-    use circom_types::plonk::ZKey;
+    use circom_types::plonk::Zkey;
     use co_circom_types::SharedWitness;
 
     use crate::{
@@ -174,7 +174,7 @@ pub mod tests {
         round1::{Round1, Round1Challenges},
     };
 
-    use circom_types::traits::CheckElement;
+    use circom_types::CheckElement;
     use std::str::FromStr;
 
     #[test]
@@ -183,7 +183,7 @@ pub mod tests {
             let mut reader = BufReader::new(
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/circuit.zkey").unwrap(),
             );
-            let zkey = ZKey::<Bn254>::from_reader(&mut reader, check).unwrap();
+            let zkey = Zkey::<Bn254>::from_reader(&mut reader, check).unwrap();
             let witness_file =
                 File::open("../../test_vectors/Plonk/bn254/multiplier2/witness.wtns").unwrap();
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
