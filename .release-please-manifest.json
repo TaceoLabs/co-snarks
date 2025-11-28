@@ -1,7 +1,6 @@
 {
   "co-circom/circom-mpc-compiler": "0.10.0",
   "co-circom/circom-mpc-vm": "0.9.0",
-  "co-circom/circom-types": "0.10.0",
   "co-circom/co-circom-types": "0.6.0",
   "co-circom/co-circom": "0.10.0",
   "co-circom/co-groth16": "0.10.0",

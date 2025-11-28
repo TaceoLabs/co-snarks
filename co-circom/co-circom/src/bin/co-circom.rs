@@ -1,11 +1,11 @@
-use circom_types::traits::CheckElement;
+use circom_types::CheckElement;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
-    Bls12_381, Bn254, CircomArkworksPairingBridge, CircomArkworksPrimeFieldBridge,
-    CircomGroth16Proof, CoCircomCompiler, CompilerConfig, Compression, Groth16,
-    Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk, PlonkJsonVerificationKey, PlonkProof,
-    PlonkZKey, R1CS, Rep3CoGroth16, Rep3CoPlonk, Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk,
-    ShamirSharedWitness, SimplificationLevel, VMConfig, Witness,
+    Bls12_381, Bn254, CircomArkworksPairingBridge, CircomGroth16Proof, CoCircomCompiler,
+    CompilerConfig, Compression, Groth16, Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk,
+    PlonkJsonVerificationKey, PlonkProof, PlonkZKey, R1CS, Rep3CoGroth16, Rep3CoPlonk,
+    Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk, ShamirSharedWitness, SimplificationLevel,
+    VMConfig, Witness,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
 use co_groth16::CircomReduction;
@@ -624,11 +624,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 #[instrument(level = "debug", skip(config))]
 fn run_split_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: SplitWitnessConfig,
-) -> color_eyre::Result<ExitCode>
-where
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-{
+) -> color_eyre::Result<ExitCode> {
     let witness_path = config.witness;
     let r1cs = config.r1cs;
     let protocol = config.protocol;
@@ -710,11 +706,7 @@ where
 #[instrument(level = "debug", skip(config))]
 fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
     config: SplitInputConfig,
-) -> color_eyre::Result<ExitCode>
-where
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-{
+) -> color_eyre::Result<ExitCode> {
     let input_path = config.input;
     let circuit = config.circuit;
     let protocol = config.protocol;
@@ -758,11 +750,7 @@ where
 #[instrument(level = "debug", skip(config))]
 fn run_merge_input_shares<P: Pairing + CircomArkworksPairingBridge>(
     config: MergeInputSharesConfig,
-) -> color_eyre::Result<ExitCode>
-where
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-{
+) -> color_eyre::Result<ExitCode> {
     let circuit = config.circuit;
     let inputs = config.inputs;
     let protocol = config.protocol;
@@ -808,11 +796,7 @@ where
 #[instrument(level = "debug", skip(config))]
 fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateWitnessConfig,
-) -> color_eyre::Result<ExitCode>
-where
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-{
+) -> color_eyre::Result<ExitCode> {
     let input = config.input;
     let circuit = config.circuit;
     let protocol = config.protocol;
@@ -857,11 +841,7 @@ where
 #[instrument(level = "debug", skip(config))]
 fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: TranslateWitnessConfig,
-) -> color_eyre::Result<ExitCode>
-where
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-{
+) -> color_eyre::Result<ExitCode> {
     let witness = config.witness;
     let src_protocol = config.src_protocol;
     let target_protocol = config.target_protocol;
@@ -897,11 +877,7 @@ where
 #[instrument(level = "debug", skip(config))]
 fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
-) -> color_eyre::Result<ExitCode>
-where
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-{
+) -> color_eyre::Result<ExitCode> {
     let proof_system = config.proof_system;
     let witness = config.witness;
     let zkey = config.zkey;
@@ -1076,11 +1052,7 @@ where
 #[instrument(level = "debug", skip(config))]
 fn run_verify<P: Pairing + CircomArkworksPairingBridge>(
     config: VerifyConfig,
-) -> color_eyre::Result<ExitCode>
-where
-    P::ScalarField: CircomArkworksPrimeFieldBridge,
-    P::BaseField: CircomArkworksPrimeFieldBridge,
-{
+) -> color_eyre::Result<ExitCode> {
     let proofsystem = config.proof_system;
     let proof = config.proof;
     let vk = config.vk;

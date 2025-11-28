@@ -1,162 +1,154 @@
 {
-  "packages": {
-    "co-circom/circom-mpc-compiler": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
+    "packages": {
+        "co-circom/circom-mpc-compiler": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-circom/circom-mpc-vm": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-circom/co-circom-types": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-circom/co-circom": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-circom/co-groth16": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-circom/co-plonk": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/co-noir-common": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/co-acvm": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/co-brillig": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/co-goblin": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/co-builder": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/co-noir": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/co-ultrahonk": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/honk-verifier": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/ultrahonk": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "co-noir/goblin": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "mpc-core": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        },
+        "mpc-net": {
+            "changelog-path": "CHANGELOG.md",
+            "release-type": "rust",
+            "bump-minor-pre-major": true,
+            "bump-patch-for-minor-pre-major": false,
+            "draft": false,
+            "prerelease": false
+        }
     },
-    "co-circom/circom-mpc-vm": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-circom/circom-types": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-circom/co-circom-types": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-circom/co-circom": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-circom/co-groth16": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-circom/co-plonk": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/co-noir-common": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/co-acvm": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/co-brillig": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/co-goblin": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/co-builder": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/co-noir": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/co-ultrahonk": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/honk-verifier": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/ultrahonk": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "co-noir/goblin": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "mpc-core": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    },
-    "mpc-net": {
-      "changelog-path": "CHANGELOG.md",
-      "release-type": "rust",
-      "bump-minor-pre-major": true,
-      "bump-patch-for-minor-pre-major": false,
-      "draft": false,
-      "prerelease": false
-    }
-  },
-  "plugins": [
-    {
-      "type": "cargo-workspace"
-    }
-  ],
-  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
+    "plugins": [
+        {
+            "type": "cargo-workspace"
+        }
+    ],
+    "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json"
 }
