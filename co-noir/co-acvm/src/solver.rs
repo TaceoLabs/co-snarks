@@ -395,9 +395,9 @@ where
                 }
                 Opcode::BrilligCall {
                     id,
-                    inputs: _,
-                    outputs: _,
-                    predicate: _,
+                    inputs,
+                    outputs,
+                    predicate,
                 } => {
                     match id.as_usize() {
                         0 => {
@@ -433,10 +433,11 @@ where
                             manual_trace = false;
                         }
                         _ => {
-                            Err(eyre::eyre!(
-                                "Brillig call with id {} is not supported in R1CS solving",
-                                id
-                            ))?;
+                            tracing::info!(
+                                "Solving Brillig call id {} in R1CS solving",
+                                id.as_usize()
+                            );
+                            self.brillig_call(id, inputs, outputs, predicate)?;
                         }
                     }
                 }
