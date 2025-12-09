@@ -1102,7 +1102,6 @@ macro_rules! decompose_circuit_compose_blueprint_to_other_field {
         Ok(res)
     }};
 }
-pub(crate) use decompose_circuit_compose_blueprint_to_other_field;
 
 // Returns the output as binary share
 #[expect(unused_macros)]

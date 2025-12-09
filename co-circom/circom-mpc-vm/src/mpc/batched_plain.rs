@@ -280,4 +280,11 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for BatchedCircomPlainVmWitnessE
     fn log(&mut self, a: Self::VmType, _: bool) -> eyre::Result<String> {
         Ok(format!("[{}]", a.iter().map(|a| a.to_string()).join(", ")))
     }
+
+    fn poseidon2_accelerator<const T: usize>(
+        &mut self,
+        _inputs: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        todo!()
+    }
 }

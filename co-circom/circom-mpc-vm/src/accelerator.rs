@@ -42,6 +42,9 @@ pub struct MpcAcceleratorConfig {
     /// Whether to use the pre-defined ISZERO accelerator
     /// Default: true
     pub(crate) iszero: bool,
+    /// Whether to use the pre-defined POSEIDON2 accelerator
+    /// Default: true
+    pub(crate) poseidon2: bool,
 }
 
 impl Default for MpcAcceleratorConfig {
@@ -51,6 +54,7 @@ impl Default for MpcAcceleratorConfig {
             num2bits: true,
             addbits: true,
             iszero: true,
+            poseidon2: true,
         }
     }
 }
@@ -97,6 +101,9 @@ impl MpcAcceleratorConfig {
             iszero: std::env::var("CIRCOM_MPC_ACCELERATOR_ISZERO")
                 .map(|x| map_env_string_to_bool(&x))
                 .unwrap_or(true),
+            poseidon2: std::env::var("CIRCOM_MPC_ACCELERATOR_POSEIDON2")
+                .map(|x| map_env_string_to_bool(&x))
+                .unwrap_or(true),
         }
     }
 }
@@ -133,6 +140,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         }
         if config.iszero {
             accelerator.register_iszero();
+        }
+        if config.poseidon2 {
+            accelerator.register_poseidon2();
         }
         accelerator
     }
@@ -219,6 +229,32 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
                 intermediate: vec![helper],
             })
         });
+    }
+
+    fn register_poseidon2(&mut self) {
+        self.register_component(
+            "Poseidon2".to_string(),
+            |protocol, args, _amount_outputs| {
+                tracing::debug!("calling pre-defined Poseidon2 accelerator");
+                let args_len = args.len();
+                let (state, traces) = if args_len == 2 {
+                    protocol.poseidon2_accelerator::<2>(args.to_vec())?
+                } else if args_len == 3 {
+                    protocol.poseidon2_accelerator::<3>(args.to_vec())?
+                } else if args_len == 4 {
+                    protocol.poseidon2_accelerator::<4>(args.to_vec())?
+                } else {
+                    bail!(
+                        "Poseidon2 accelerator currently only supports input lengths 2, 3 or 4, got {}",
+                        args_len
+                    );
+                };
+                Ok(ComponentAcceleratorOutput {
+                    output: state,
+                    intermediate: traces,
+                })
+            },
+        );
     }
 
     pub(crate) fn run_cmp_accelerator(

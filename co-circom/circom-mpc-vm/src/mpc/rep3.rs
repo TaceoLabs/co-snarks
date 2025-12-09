@@ -9,6 +9,7 @@ use eyre::bail;
 use itertools::Itertools;
 use mpc_core::{
     MpcState,
+    gadgets::poseidon2::Poseidon2,
     protocols::rep3::{
         Rep3PrimeFieldShare, Rep3State,
         arithmetic::{self, promote_to_trivial_share},
@@ -660,6 +661,41 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
                 }
             }
         }
+    }
+
+    fn poseidon2_accelerator<const T: usize>(
+        &mut self,
+        inputs: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        let inputs_len = inputs.len();
+        let poseidon = Poseidon2::<_, T, 5>::default();
+        let mut precomp = poseidon.precompute_rep3(inputs_len, self.net0, &mut self.state0)?;
+        let mut inputs = inputs
+            .into_iter()
+            .map(|x| match x {
+                Rep3VmType::Public(x) => promote_to_trivial_share(self.id, x),
+                Rep3VmType::Arithmetic(x) => x,
+            })
+            .collect_vec(); //TODO FLORIN
+        let mut inputs: [Rep3PrimeFieldShare<F>; T] = inputs
+            .drain(..T)
+            .collect::<Vec<Rep3PrimeFieldShare<F>>>()
+            .try_into()
+            .unwrap();
+        let trace = poseidon.rep3_permutation_in_place_with_precomputation_intermediate(
+            &mut inputs,
+            &mut precomp,
+            self.net0,
+        )?;
+        let outputs = inputs
+            .into_iter()
+            .map(|x| Rep3VmType::Arithmetic(x))
+            .collect_vec();
+        let trace = trace
+            .into_iter()
+            .map(|x| Rep3VmType::Arithmetic(x))
+            .collect_vec();
+        Ok((outputs, trace))
     }
 }
 
