@@ -1,0 +1,3 @@
+[compiler]
+allow_leaky_loops = true
+link_library = ["../lib"]

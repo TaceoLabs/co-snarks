@@ -678,7 +678,6 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
         Ok(res)
     }};
 }
-pub(crate) use decompose_circuit_compose_to_fields_blueprint;
 
 macro_rules! decompose_circuit_compose_to_two_fields_blueprint {
     ($inputs:expr, $net:expr, $state:expr, $output_size:expr, $output_size_other:expr, $num_inputs:expr, $t:ty, $circuit:expr, ($( $args:expr ),*)) => {{
@@ -802,7 +801,6 @@ macro_rules! decompose_circuit_compose_to_two_fields_blueprint {
         Ok((res, res_other))
     }};
 }
-pub(crate) use decompose_circuit_compose_to_two_fields_blueprint;
 
 /// An upcast of a vector Rep3RingShares from a smaller ring to a larger ring
 pub fn upcast_many<T: IntRing2k, U: IntRing2k, N: Network>(
