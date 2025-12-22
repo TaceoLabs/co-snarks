@@ -1,11 +1,11 @@
 # UltraHonk
 
-This crate is a MPC version of Atec's UltraHonk prover in Rust. It is compatible with Barretenberg v0.86.0. To get Barretenberg with this version, use the following commands:
+This crate is a MPC version of Atec's UltraHonk prover in Rust. It is compatible with Barretenberg v3.0.0-nightly.20251104. To get Barretenberg with this version, use the following commands:
 
 ```bash
 git clone https://github.com/AztecProtocol/aztec-packages.git
 cd aztec-packages
-git checkout tags/aztec-package-v0.86.0
+git checkout tags/v3.0.0-nightly.20251104
 ```
 
 To compile Barretenberg, one can use:
