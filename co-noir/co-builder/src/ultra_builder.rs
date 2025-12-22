@@ -199,7 +199,6 @@ macro_rules! create_unconstrained_gate {
         $builder.num_gates += 1; // necessary because create dummy gate cannot increment num_gates itself
     };
 }
-pub(crate) use create_unconstrained_gate;
 
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     GenericUltraCircuitBuilder<P, T>
