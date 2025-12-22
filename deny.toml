@@ -77,17 +77,17 @@ exceptions = [
     # Each entry is the crate and version constraint, and its specific allow
     { crate = "webpki-roots", allow = ["MPL-2.0", "CDLA-Permissive-2.0"] },
     { crate = "webpki-root-certs", allow = ["MPL-2.0", "CDLA-Permissive-2.0"] },
-    { crate = "type_analysis", allow = ["GPL-3.0-only"] },
-    { crate = "program_structure", allow = ["GPL-3.0-only"] },
-    { crate = "parser", allow = ["GPL-3.0-only"] },
-    { crate = "dag", allow = ["GPL-3.0-only"] },
-    { crate = "constraint_writers", allow = ["GPL-3.0-only"] },
-    { crate = "constraint_list", allow = ["GPL-3.0-only"] },
-    { crate = "constraint_generation", allow = ["GPL-3.0-only"] },
-    { crate = "constant_tracking", allow = ["GPL-3.0-only"] },
-    { crate = "compiler", allow = ["GPL-3.0-only"] },
-    { crate = "code_producers", allow = ["GPL-3.0-only"] },
-    { crate = "circom_algebra", allow = ["GPL-3.0-only"] },
+    { crate = "type_analysis", allow = ["GPL-3.0-or-later"] },
+    { crate = "program_structure", allow = ["GPL-3.0-or-later"] },
+    { crate = "parser", allow = ["GPL-3.0-or-later"] },
+    { crate = "dag", allow = ["GPL-3.0-or-later"] },
+    { crate = "constraint_writers", allow = ["GPL-3.0-or-later"] },
+    { crate = "constraint_list", allow = ["GPL-3.0-or-later"] },
+    { crate = "constraint_generation", allow = ["GPL-3.0-or-later"] },
+    { crate = "constant_tracking", allow = ["GPL-3.0-or-later"] },
+    { crate = "compiler", allow = ["GPL-3.0-or-later"] },
+    { crate = "code_producers", allow = ["GPL-3.0-or-later"] },
+    { crate = "circom_algebra", allow = ["GPL-3.0-or-later"] },
     { crate = "sized-chunks", allow = ["MPL-2.0"] },
     { crate = "bitmaps", allow = ["MPL-2.0"] },
     { crate = "im", allow = ["MPL-2.0"] },
@@ -115,77 +115,77 @@ license-files = [
 # Start of circom related license section
 [[licenses.clarify]]
 name = "circom_algebra"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "code_producers"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "compiler"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "dag"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "constraint_list"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "constraint_generation"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "constant_tracking"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "constraint_writers"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "parser"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "program_structure"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
 ]
 [[licenses.clarify]]
 name = "type_analysis"
-expression = "GPL-3.0-only"
+expression = "GPL-3.0-or-later"
 license-files = [
     # Each entry is a crate relative path, and the (opaque) hash of its contents
     { path = "../COPYING", hash = 0 },
