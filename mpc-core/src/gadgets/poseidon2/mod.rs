@@ -6,6 +6,7 @@ pub(crate) mod poseidon2_bn254_t2;
 pub(crate) mod poseidon2_bn254_t3;
 pub(crate) mod poseidon2_bn254_t4;
 pub(crate) mod poseidon2_circom_accelerator;
+pub(crate) mod poseidon2_circom_plain_accelerator;
 pub(crate) mod poseidon2_params;
 pub(crate) mod poseidon2_permutation;
 pub(crate) mod rep3;
