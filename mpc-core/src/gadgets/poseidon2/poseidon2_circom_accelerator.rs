@@ -69,12 +69,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // Precompute the maximum number of elements needed for each vector
         let num_states = match T {
-            2 => {
-                T * (self.params.rounds_f_beginning - 1)
-                    + T * self.params.rounds_f_end
-                    + self.params.rounds_p
-            }
-            3 => {
+            2 | 3 => {
                 T * (self.params.rounds_f_beginning - 1)
                     + T * self.params.rounds_f_end
                     + self.params.rounds_p
@@ -140,18 +135,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             }
         }
 
-        let wtns_indices: &[u16] = match T {
-            2 => WITNESS_INDICES_T2,
-            3 => WITNESS_INDICES_T3,
-            4 => WITNESS_INDICES_T4,
-            _ => {
-                return Err(eyre::eyre!(
-                    "Current implementation does not support state size {T}"
-                ));
-            }
-        };
-        let mut wtns_indices_iter = wtns_indices.iter().copied();
-
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
@@ -165,6 +148,18 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             }
             states.extend_from_slice(state);
         }
+
+        let wtns_indices: &[u16] = match T {
+            2 => WITNESS_INDICES_T2,
+            3 => WITNESS_INDICES_T3,
+            4 => WITNESS_INDICES_T4,
+            _ => {
+                return Err(eyre::eyre!(
+                    "Current implementation does not support state size {T}"
+                ));
+            }
+        };
+        let mut wtns_indices_iter = wtns_indices.iter().copied();
 
         for s in &states {
             if let Some(idx) = wtns_indices_iter.next() {
