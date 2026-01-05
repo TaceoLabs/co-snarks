@@ -13,9 +13,21 @@ type AcceleratorFunction<F, C> = Box<
         + Send,
 >;
 
+/// Output of a component accelerator for Co-Circom witness extension
+#[derive(Clone)]
 pub struct ComponentAcceleratorOutput<T> {
     pub(crate) output: Vec<T>,
     pub(crate) intermediate: Vec<T>,
+}
+
+impl<T> ComponentAcceleratorOutput<T> {
+    /// Creates a new ComponentAcceleratorOutput
+    pub fn new(output: Vec<T>, intermediate: Vec<T>) -> Self {
+        Self {
+            output,
+            intermediate,
+        }
+    }
 }
 
 type AcceleratorComponent<F, C> = Box<
@@ -85,6 +97,7 @@ impl MpcAcceleratorConfig {
     /// - NUM2BITS
     /// - ADDBITS
     /// - ISZERO
+    /// - POSEIDON2
     ///
     /// Possible values for the boolean variables are: "1", "true", "on", "0", "false", "off"
     pub fn from_env() -> Self {

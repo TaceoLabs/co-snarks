@@ -1,4 +1,4 @@
-use crate::accelerator::MpcAcceleratorConfig;
+use crate::accelerator::{ComponentAcceleratorOutput, MpcAcceleratorConfig};
 use crate::mpc::batched_plain::BatchedCircomPlainVmWitnessExtension;
 use crate::mpc::batched_rep3::{BatchedCircomRep3VmWitnessExtension, BatchedRep3VmType};
 use crate::mpc::plain::CircomPlainVmWitnessExtension;
@@ -307,6 +307,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         protocol: &mut C,
         ctx: &mut WitnessExtensionCtx<F, C>,
         config: &VMConfig,
+        traces: &mut Option<Vec<ComponentAcceleratorOutput<C::VmType>>>,
     ) -> Result<()> {
         let mut ip = 0;
         let mut current_body = Arc::clone(&self.component_body);
@@ -470,7 +471,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     //check if we can run it instantly
                     for mut component in new_components {
                         if component.input_signals == 0 {
-                            component.run(protocol, ctx, config)?;
+                            component.run(protocol, ctx, config, traces)?;
                         }
                         self.sub_components.push(component);
                     }
@@ -509,7 +510,36 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         .clone_from_slice(&input_signals);
                     component.provided_input_signals += amount;
                     if component.provided_input_signals == component.input_signals {
-                        component.run(protocol, ctx, config)?;
+                        // Whenever we have precomputed traces and we hit a component with prefix TACEO_PRECOMPUTATION, we just
+                        // insert the precomputed outputs and intermediate values into the signals and return.
+                        if self.component_name.starts_with("TACEO_PRECOMPUTATION")
+                            && traces.is_some()
+                        {
+                            tracing::debug!(
+                                "using pre-computed traces for component {}",
+                                component.symbol
+                            );
+                            let component_input_signals_start =
+                                component.my_offset + component.output_signals;
+                            let component_intermediate_signals_start =
+                                component_input_signals_start + component.input_signals;
+                            let result = traces
+                                .as_mut()
+                                .expect("We checked traces is some above")
+                                .remove(0);
+
+                            // insert outputs into the signals
+                            let start = component.my_offset;
+                            let end = start + component.output_signals;
+                            ctx.signals[start..end].clone_from_slice(&result.output);
+
+                            // insert intermediate values into the signals
+                            let start = component_intermediate_signals_start;
+                            let end = start + result.intermediate.len();
+                            ctx.signals[start..end].clone_from_slice(&result.intermediate);
+                        } else {
+                            component.run(protocol, ctx, config, traces)?;
+                        }
                     }
                 }
                 op_codes::MpcOpCode::Assert(line) => {
@@ -934,7 +964,22 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
             .get(&self.main)
             .ok_or(eyre!("cannot find main template: {}", self.main))?;
         let mut main_component = Component::init(main_templ, 1);
-        main_component.run(&mut self.driver, &mut self.ctx, &self.config)?;
+        main_component.run(&mut self.driver, &mut self.ctx, &self.config, &mut None)?;
+        Ok(())
+    }
+
+    /// See [`run_with_helper_trace()`](WitnessExtension::run_with_helper_trace) for more details.
+    fn call_main_component_with_helper_trace(
+        &mut self,
+        traces: &mut Option<Vec<ComponentAcceleratorOutput<C::VmType>>>,
+    ) -> Result<()> {
+        let main_templ = self
+            .ctx
+            .templ_decls
+            .get(&self.main)
+            .ok_or(eyre!("cannot find main template: {}", self.main))?;
+        let mut main_component = Component::init(main_templ, 1);
+        main_component.run(&mut self.driver, &mut self.ctx, &self.config, traces)?;
         Ok(())
     }
 
@@ -992,6 +1037,27 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.set_flat_input_signals(input_signals);
         self.call_main_component()?;
+        self.post_processing(amount_public_inputs)
+    }
+
+    /// Same as [`run()`](WitnessExtension::run) but with the possibility to use precomputed traces.
+    /// The template being called in the Circom code should look similar to this:
+    /// ```circom
+    /// template TACEO_PRECOMPUTATION_Poseidon2(n) {
+    ///     signal input in[n];
+    ///     signal output out[n];
+    ///     out <== Poseidon2(n)(in);
+    /// }
+    /// ```
+    pub fn run_with_helper_trace(
+        mut self,
+        input_signals: BTreeMap<String, C::VmType>,
+        amount_public_inputs: usize,
+        traces: &mut Option<Vec<ComponentAcceleratorOutput<C::VmType>>>,
+    ) -> Result<FinalizedWitnessExtension<F, C>> {
+        self.driver.compare_vm_config(&self.config)?;
+        self.set_input_signals(input_signals)?;
+        self.call_main_component_with_helper_trace(traces)?;
         self.post_processing(amount_public_inputs)
     }
 }
