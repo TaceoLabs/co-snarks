@@ -13,9 +13,20 @@ type AcceleratorFunction<F, C> = Box<
         + Send,
 >;
 
+/// TODO FLORIN DOCS
 pub struct ComponentAcceleratorOutput<T> {
     pub(crate) output: Vec<T>,
     pub(crate) intermediate: Vec<T>,
+}
+
+impl<T> ComponentAcceleratorOutput<T> {
+    /// TODO FLORIN DOCS
+    pub fn new(output: Vec<T>, intermediate: Vec<T>) -> Self {
+        Self {
+            output,
+            intermediate,
+        }
+    }
 }
 
 type AcceleratorComponent<F, C> = Box<
