@@ -27,6 +27,7 @@ ignore = [
     { id = "RUSTSEC-2024-0436", reason = "ignore paste unmaintained" },
     { id = "RUSTSEC-2025-0055", reason = "ignore vulnerability in tracing-subscriber < 0.3.20, used by ark-relation in examples but as normal dependency" },
     { id = "RUSTSEC-2025-0057", reason = "ignore fxhash unmaintained, dependency of acvm" },
+    { id = "RUSTSEC-2025-0141", reason = "ignore bincode unmaintained" },
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
