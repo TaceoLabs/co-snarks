@@ -13,14 +13,14 @@ type AcceleratorFunction<F, C> = Box<
         + Send,
 >;
 
-/// TODO FLORIN DOCS
+/// Output of a component accelerator for Co-Circom witness extension
 pub struct ComponentAcceleratorOutput<T> {
     pub(crate) output: Vec<T>,
     pub(crate) intermediate: Vec<T>,
 }
 
 impl<T> ComponentAcceleratorOutput<T> {
-    /// TODO FLORIN DOCS
+    /// Creates a new ComponentAcceleratorOutput
     pub fn new(output: Vec<T>, intermediate: Vec<T>) -> Self {
         Self {
             output,

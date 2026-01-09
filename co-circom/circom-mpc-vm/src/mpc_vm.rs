@@ -314,6 +314,27 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         let mut current_vars = vec![protocol.public_zero(); self.amount_vars];
         let mut current_shared_ret_vals = vec![];
 
+        // Whenever we have precomputed traces and we hit a TACEO_PRECOMPUTATION component, we just
+        // insert the precomputed outputs and intermediate values into the signals and return.
+        if self.component_name.starts_with("TACEO_PRECOMPUTATION") && traces.is_some() {
+            let component_input_signals_start = self.my_offset + self.output_signals;
+            let component_intermediate_signals_start =
+                component_input_signals_start + self.input_signals;
+            let result = traces
+                .as_mut()
+                .expect("We checked traces is some above")
+                .remove(0);
+            // insert outputs into the signals
+            let start = self.my_offset;
+            let end = start + self.output_signals;
+            ctx.signals[start..end].clone_from_slice(&result.output);
+            // insert intermediate values into the signals
+            let start = component_intermediate_signals_start;
+            let end = start + result.intermediate.len();
+            ctx.signals[start..end].clone_from_slice(&result.intermediate);
+            return Ok(());
+        }
+
         let name = self.symbol.clone();
         tracing::trace!("running component {name}");
         // check if we have an accelerator for this
@@ -328,19 +349,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                 component_input_signals_start + self.input_signals;
             let inputs =
                 &ctx.signals[component_input_signals_start..component_intermediate_signals_start];
-            let result = if self.component_name == "Poseidon2" && traces.is_some() {
-                traces
-                    .as_mut()
-                    .expect("traces must be present for Poseidon2 accelerator")
-                    .remove(0)
-            } else {
-                ctx.mpc_accelerator.run_cmp_accelerator(
-                    &self.component_name,
-                    protocol,
-                    inputs,
-                    self.output_signals,
-                )?
-            };
+            let result = ctx.mpc_accelerator.run_cmp_accelerator(
+                &self.component_name,
+                protocol,
+                inputs,
+                self.output_signals,
+            )?;
             // insert outputs into the signals
             let start = self.my_offset;
             let end = start + self.output_signals;
@@ -1017,7 +1031,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
         self.post_processing(amount_public_inputs)
     }
 
-    /// TODO FLORIN: Docs
+    /// Same as [`run()`](WitnessExtension::run) but with the possibility to use precomputed traces (at the moment only for Poseidon2).
     pub fn run_with_helper_trace(
         mut self,
         input_signals: BTreeMap<String, C::VmType>,

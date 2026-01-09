@@ -3,7 +3,7 @@ use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
 use eyre::Result;
 use eyre::eyre;
-use mpc_core::gadgets::poseidon2::CircomTracePlainPoseidon2;
+use mpc_core::gadgets::poseidon2::CircomTracePlainHasher;
 use mpc_core::gadgets::poseidon2::Poseidon2;
 use num_bigint::BigUint;
 

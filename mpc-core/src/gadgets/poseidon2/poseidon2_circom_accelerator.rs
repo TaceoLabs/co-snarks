@@ -284,10 +284,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         [Vec<Rep3PrimeFieldShare<F>>; T2],
     )> {
         assert!(input.len().is_multiple_of(T));
-        //TODO FLORIN ASSERTS ARE WRONG
-        // let num_parallel = input.len() / T;
-        // assert_eq!(num_parallel, T2);
-        // assert_eq!(D, 5);
         for (i, inp) in input.iter_mut().enumerate() {
             *inp -= precomp.r[precomp.offset + i];
         }
@@ -452,10 +448,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         net: &N,
     ) -> eyre::Result<(Vec<Rep3PrimeFieldShare<F>>, Vec<Rep3PrimeFieldShare<F>>)> {
         let num_parallel = input.len() / T;
-        //TODO FLORIN ASSERTS ARE WRONG
-        // assert_eq!(num_parallel, T2);
-        // assert_eq!(input.len() % num_parallel, 0);
-
         assert_eq!(D, 5);
 
         for (i, inp) in input.iter_mut().enumerate() {
@@ -483,9 +475,9 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 }
 
-/// TODO FLORIN DOCS and name
-pub trait CircomTracePlainPoseidon2<F: PrimeField, const T: usize> {
-    /// TODO FLORIN DOCS and name
+/// A trait for computing the trace of a Circom hash component with public inputs (i.e. in plain).
+pub trait CircomTracePlainHasher<F: PrimeField, const T: usize> {
+    /// Computes the intermediate values needed for the witness extension for Circom.
     fn plain_permutation_intermediate(&self, state: [F; T]) -> eyre::Result<([F; T], Vec<F>)>;
 }
 impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
@@ -546,7 +538,7 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
     }
 }
 
-impl<F: PrimeField, const T: usize> CircomTracePlainPoseidon2<F, T> for Poseidon2<F, T, 5> {
+impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F, T, 5> {
     fn plain_permutation_intermediate(&self, state: [F; T]) -> eyre::Result<([F; T], Vec<F>)> {
         assert!(T == 2 || T == 3 || T == 4);
         let mut state = state;
@@ -680,13 +672,13 @@ impl<F: PrimeField, const T: usize> CircomTracePlainPoseidon2<F, T> for Poseidon
     }
 }
 
-/// TODO FLORIN DOCS
-pub trait CircomTraceBatchPoseidon2<F: PrimeField, const T: usize> {
-    /// The type holding data required for preprocessing the Sbox of the Poseidon2 permutation.
+/// A trait for computing the trace of a Circom hash component in a batched MPC setting.
+pub trait CircomTraceBatchedHasher<F: PrimeField, const T: usize> {
+    /// The type holding data required for preprocessing the Sbox of the permutation.
     type Precomputation;
 
     #[expect(clippy::type_complexity)]
-    /// TODO FLORIN DOCS
+    /// Computes the intermediate values needed for the witness extension for Circom in a batched MPC setting.
     fn rep3_permutation_in_place_with_precomputation_intermediate_packed<
         N: Network,
         const T2: usize,
@@ -701,7 +693,7 @@ pub trait CircomTraceBatchPoseidon2<F: PrimeField, const T: usize> {
     )>;
 }
 
-impl<F: PrimeField, const T: usize> CircomTraceBatchPoseidon2<F, T> for Poseidon2<F, T, 5> {
+impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2<F, T, 5> {
     type Precomputation = Poseidon2Precomputations<Rep3PrimeFieldShare<F>>;
 
     fn rep3_permutation_in_place_with_precomputation_intermediate_packed<
