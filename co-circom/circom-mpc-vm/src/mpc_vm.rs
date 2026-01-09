@@ -314,27 +314,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         let mut current_vars = vec![protocol.public_zero(); self.amount_vars];
         let mut current_shared_ret_vals = vec![];
 
-        // Whenever we have precomputed traces and we hit a TACEO_PRECOMPUTATION component, we just
-        // insert the precomputed outputs and intermediate values into the signals and return.
-        if self.component_name.starts_with("TACEO_PRECOMPUTATION") && traces.is_some() {
-            let component_input_signals_start = self.my_offset + self.output_signals;
-            let component_intermediate_signals_start =
-                component_input_signals_start + self.input_signals;
-            let result = traces
-                .as_mut()
-                .expect("We checked traces is some above")
-                .remove(0);
-            // insert outputs into the signals
-            let start = self.my_offset;
-            let end = start + self.output_signals;
-            ctx.signals[start..end].clone_from_slice(&result.output);
-            // insert intermediate values into the signals
-            let start = component_intermediate_signals_start;
-            let end = start + result.intermediate.len();
-            ctx.signals[start..end].clone_from_slice(&result.intermediate);
-            return Ok(());
-        }
-
         let name = self.symbol.clone();
         tracing::trace!("running component {name}");
         // check if we have an accelerator for this
@@ -531,7 +510,36 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         .clone_from_slice(&input_signals);
                     component.provided_input_signals += amount;
                     if component.provided_input_signals == component.input_signals {
-                        component.run(protocol, ctx, config, traces)?;
+                        // Whenever we have precomputed traces and we hit a TACEO_PRECOMPUTATION component, we just
+                        // insert the precomputed outputs and intermediate values into the signals and return.
+                        if self.component_name.starts_with("TACEO_PRECOMPUTATION")
+                            && traces.is_some()
+                        {
+                            tracing::debug!(
+                                "using pre-computed traces for component {}",
+                                component.symbol
+                            );
+                            let component_input_signals_start =
+                                component.my_offset + component.output_signals;
+                            let component_intermediate_signals_start =
+                                component_input_signals_start + component.input_signals;
+                            let result = traces
+                                .as_mut()
+                                .expect("We checked traces is some above")
+                                .remove(0);
+
+                            // insert outputs into the signals
+                            let start = component.my_offset;
+                            let end = start + component.output_signals;
+                            ctx.signals[start..end].clone_from_slice(&result.output);
+
+                            // insert intermediate values into the signals
+                            let start = component_intermediate_signals_start;
+                            let end = start + result.intermediate.len();
+                            ctx.signals[start..end].clone_from_slice(&result.intermediate);
+                        } else {
+                            component.run(protocol, ctx, config, traces)?;
+                        }
                     }
                 }
                 op_codes::MpcOpCode::Assert(line) => {
