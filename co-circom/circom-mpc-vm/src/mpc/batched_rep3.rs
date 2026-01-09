@@ -430,4 +430,11 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             }
         }
     }
+
+    fn poseidon2_accelerator<const T: usize>(
+        &mut self,
+        inputs: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        todo!()
+    }
 }

@@ -136,4 +136,11 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
     /// **DANGEROUS**: If enabled by the second parameter, the implementation
     /// will open secret values. Otherwise will return the string `secret`.
     fn log(&mut self, a: Self::VmType, allow_leaky_logs: bool) -> eyre::Result<String>;
+
+    /// Computes the Poseidon2 permutation on the provided inputs while also returning intermediate values needed for the Circom witness extension.
+    #[expect(clippy::type_complexity)]
+    fn poseidon2_accelerator<const T: usize>(
+        &mut self,
+        inputs: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)>;
 }

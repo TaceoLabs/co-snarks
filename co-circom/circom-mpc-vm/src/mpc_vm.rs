@@ -319,12 +319,14 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
         if ctx
             .mpc_accelerator
             .has_cmp_accelerator(&self.component_name)
+            && !(self.component_name == "Poseidon2" && self.input_signals > 4)
+        // State size > 4 not supported yet
         {
             let component_input_signals_start = self.my_offset + self.output_signals;
             let component_intermediate_signals_start =
                 component_input_signals_start + self.input_signals;
-            let inputs = &ctx.signals
-                [component_input_signals_start..component_input_signals_start + self.input_signals];
+            let inputs =
+                &ctx.signals[component_input_signals_start..component_intermediate_signals_start];
             let result = ctx.mpc_accelerator.run_cmp_accelerator(
                 &self.component_name,
                 protocol,
