@@ -85,6 +85,7 @@ impl MpcAcceleratorConfig {
     /// - NUM2BITS
     /// - ADDBITS
     /// - ISZERO
+    /// - POSEIDON2
     ///
     /// Possible values for the boolean variables are: "1", "true", "on", "0", "false", "off"
     pub fn from_env() -> Self {
