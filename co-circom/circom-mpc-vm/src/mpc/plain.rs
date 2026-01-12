@@ -3,6 +3,8 @@ use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
 use eyre::Result;
 use eyre::eyre;
+use mpc_core::gadgets::poseidon2::CircomTracePlainHasher;
+use mpc_core::gadgets::poseidon2::Poseidon2;
 use num_bigint::BigUint;
 
 /// Transforms a field element into an usize if possible.
@@ -298,8 +300,13 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
 
     fn poseidon2_accelerator<const T: usize>(
         &mut self,
-        _inputs: Vec<Self::VmType>,
+        inputs: Vec<Self::VmType>,
     ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
-        todo!()
+        let inputs_len = inputs.len();
+        assert_eq!(inputs_len, T);
+        let poseidon = Poseidon2::<_, T, 5>::default();
+        let state: [F; T] = inputs.try_into().expect("we checked state size");
+        let (state, trace) = poseidon.plain_permutation_intermediate(state)?;
+        Ok((state.to_vec(), trace.to_vec()))
     }
 }

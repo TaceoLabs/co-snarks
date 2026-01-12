@@ -12,6 +12,8 @@ pub(crate) mod rep3;
 pub(crate) mod shamir;
 
 pub use poseidon2_bn254_t4::POSEIDON2_BN254_T4_PARAMS;
+pub use poseidon2_circom_accelerator::CircomTraceBatchedHasher;
+pub use poseidon2_circom_accelerator::CircomTracePlainHasher;
 pub use poseidon2_params::Poseidon2Params;
 pub use poseidon2_permutation::Poseidon2;
 
