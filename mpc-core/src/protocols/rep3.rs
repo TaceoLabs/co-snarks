@@ -625,7 +625,7 @@ pub fn combine_binary_elements<F: PrimeField>(
     assert_eq!(share2.len(), share3.len());
 
     itertools::multizip((share1, share2, share3))
-        .map(|(x1, x2, x3)| x1.a.clone() ^ x2.a.clone() ^ x3.a.clone())
+        .map(|(x1, x2, x3)| &x1.a ^ &x2.a ^ &x3.a)
         .collect::<Vec<_>>()
 }
 
