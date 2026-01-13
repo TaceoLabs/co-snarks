@@ -491,6 +491,34 @@ pub fn a2y_streaming<F: PrimeField, N: Network>(
     Ok(converted)
 }
 
+/// A variant of [a2y] that operates on vectors of shared values instead.
+pub fn a2y_many<F: PrimeField, N: Network>(
+    x: &[Rep3PrimeFieldShare<F>],
+    delta: Option<WireMod2>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<BinaryBundle<WireMod2>>> {
+    let [x01, x2] = yao::joint_input_arithmetic_added_many(x, delta, net, state)?;
+
+    let converted = match state.id {
+        PartyID::ID0 => {
+            let mut evaluator = Rep3Evaluator::new(net);
+            evaluator.receive_circuit()?;
+            let res = GarbledCircuits::adder_mod_p_many::<_, F>(&mut evaluator, &x01, &x2);
+            GCUtils::garbled_circuits_error(res)?
+        }
+        PartyID::ID1 | PartyID::ID2 => {
+            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
+            let res = GarbledCircuits::adder_mod_p_many::<_, F>(&mut garbler, &x01, &x2);
+            let res = GCUtils::garbled_circuits_error(res)?;
+            garbler.send_circuit()?;
+            res
+        }
+    };
+    Ok(converted)
+}
+
 macro_rules! y2a_impl_p1 {
     ($garbler:ty,$x:expr,$delta:expr,$net:expr,$state:expr,$res:expr) => {{
         let delta = $delta.ok_or(eyre::eyre!("No delta provided"))?;
@@ -695,7 +723,7 @@ pub fn y2b_many<F: PrimeField, N: Network>(
 
             net.send_many(PartyID::ID2, &r_xor_x_xor_px)?;
             for (r_xor_x_xor_px_, r_) in izip!(r_xor_x_xor_px, r) {
-                result.push(Rep3BigUintShare::new(r_xor_x_xor_px_, r_));
+                result.push(Rep3BigUintShare::new(r_, r_xor_x_xor_px_));
             }
         }
         PartyID::ID1 => {
@@ -710,7 +738,7 @@ pub fn y2b_many<F: PrimeField, N: Network>(
             let r_xor_x_xor_px = net.recv_many(PartyID::ID0)?;
 
             for (px, r_xor_x_xor_px_) in izip!(collapsed, r_xor_x_xor_px) {
-                result.push(Rep3BigUintShare::new(px, r_xor_x_xor_px_));
+                result.push(Rep3BigUintShare::new(r_xor_x_xor_px_, px));
             }
         }
     };
@@ -738,6 +766,17 @@ pub fn a2y2b_streaming<F: PrimeField, N: Network>(
     let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = a2y_streaming(x, delta, net, state)?;
     y2b(y, net, state)
+}
+
+/// A variant of [a2y2b] that operates on vectors of shared values instead.
+pub fn a2y2b_many<F: PrimeField, N: Network>(
+    x: &[Rep3PrimeFieldShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3BigUintShare<F>>> {
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
+    let y = a2y_many(x, delta, net, state)?;
+    y2b_many(y, net, state)
 }
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementations goes through the yao protocol and currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.

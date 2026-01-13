@@ -731,6 +731,46 @@ mod field_share {
     }
 
     #[test]
+    fn rep3_a2y2b_many_zero() {
+        const VEC_SIZE: usize = 10;
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        let mut x0_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x1_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x2_shares = Vec::with_capacity(VEC_SIZE);
+        for _ in 0..VEC_SIZE {
+            let x = ark_bn254::Fr::zero();
+            should_result.push(x);
+            let x_shares = rep3::share_field_element(x, &mut rng);
+            x0_shares.push(x_shares[0].to_owned());
+            x1_shares.push(x_shares[1].to_owned());
+            x2_shares.push(x_shares[2].to_owned());
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for ((net, tx), x) in nets
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip([x0_shares, x1_shares, x2_shares].into_iter())
+        {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                tx.send(conversion::a2y2b_many(&x, &net, &mut state).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_binary_elements(&result1, &result2, &result3);
+        let is_result_f: Vec<ark_bn254::Fr> = is_result.into_iter().map(|e| e.into()).collect();
+        assert_eq!(is_result_f, should_result);
+    }
+
+    #[test]
     fn rep3_a2b() {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
@@ -821,6 +861,46 @@ mod field_share {
         assert_eq!(is_result, should_result);
         let is_result_f: ark_bn254::Fr = is_result.into();
         assert_eq!(is_result_f, x);
+    }
+
+    #[test]
+    fn rep3_a2y2b_many() {
+        const VEC_SIZE: usize = 10;
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        let mut x0_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x1_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x2_shares = Vec::with_capacity(VEC_SIZE);
+        for _ in 0..VEC_SIZE {
+            let x = ark_bn254::Fr::rand(&mut rng);
+            should_result.push(x);
+            let x_shares = rep3::share_field_element(x, &mut rng);
+            x0_shares.push(x_shares[0].to_owned());
+            x1_shares.push(x_shares[1].to_owned());
+            x2_shares.push(x_shares[2].to_owned());
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+        for ((net, tx), x) in nets
+            .into_iter()
+            .zip([tx1, tx2, tx3])
+            .zip([x0_shares, x1_shares, x2_shares].into_iter())
+        {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                tx.send(conversion::a2y2b_many(&x, &net, &mut state).unwrap())
+            });
+        }
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let is_result = rep3::combine_binary_elements(&result1, &result2, &result3);
+        let is_result_f: Vec<ark_bn254::Fr> = is_result.into_iter().map(|e| e.into()).collect();
+        assert_eq!(is_result_f, should_result);
     }
 
     #[test]
@@ -1127,6 +1207,71 @@ mod field_share {
     }
 
     #[test]
+    fn rep3_a2y_many() {
+        const VEC_SIZE: usize = 10;
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        let mut x0_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x1_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x2_shares = Vec::with_capacity(VEC_SIZE);
+        for _ in 0..VEC_SIZE {
+            let x = ark_bn254::Fr::rand(&mut rng);
+            should_result.push(x);
+            let x_shares = rep3::share_field_element(x, &mut rng);
+            x0_shares.push(x_shares[0].to_owned());
+            x1_shares.push(x_shares[1].to_owned());
+            x2_shares.push(x_shares[2].to_owned());
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            nets.into_iter(),
+            [tx1, tx2, tx3],
+            [x0_shares, x1_shares, x2_shares].into_iter()
+        ) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let id = state.id;
+                let delta = state.rngs.generate_random_garbler_delta(id);
+
+                let converted = conversion::a2y_many(&x, delta, &net, &mut state).unwrap();
+                let mut results = Vec::with_capacity(VEC_SIZE);
+                for converted in converted {
+                    let output = match id {
+                        PartyID::ID0 => {
+                            let mut evaluator = StreamingRep3Evaluator::new(&net);
+                            evaluator.output_all_parties(converted.wires()).unwrap()
+                        }
+                        PartyID::ID1 | PartyID::ID2 => {
+                            let mut garbler = StreamingRep3Garbler::new_with_delta(
+                                &net,
+                                &mut state,
+                                delta.unwrap(),
+                            );
+                            garbler.output_all_parties(converted.wires()).unwrap()
+                        }
+                    };
+                    results.push(GCUtils::bits_to_field::<ark_bn254::Fr>(&output).unwrap());
+                }
+
+                tx.send(results).unwrap();
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        assert_eq!(result1, should_result);
+        assert_eq!(result2, should_result);
+        assert_eq!(result3, should_result);
+    }
+
+    #[test]
     fn rep3_y2a() {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
@@ -1320,6 +1465,51 @@ mod field_share {
         assert_eq!(is_result, should_result);
         let is_result_f: ark_bn254::Fr = is_result.into();
         assert_eq!(is_result_f, x);
+    }
+
+    #[test]
+    fn rep3_y2b_many() {
+        const VEC_SIZE: usize = 10;
+
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        let mut should_result = Vec::with_capacity(VEC_SIZE);
+        let mut x0_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x1_shares = Vec::with_capacity(VEC_SIZE);
+        let mut x2_shares = Vec::with_capacity(VEC_SIZE);
+        for _ in 0..VEC_SIZE {
+            let x = ark_bn254::Fr::rand(&mut rng);
+            should_result.push(x);
+            let delta = GCUtils::random_delta(&mut rng);
+            let x_shares = GCUtils::encode_field(x, &mut rng, delta);
+            x0_shares.push(x_shares.evaluator_wires);
+            x1_shares.push(x_shares.garbler_wires.to_owned());
+            x2_shares.push(x_shares.garbler_wires);
+        }
+
+        let (tx1, rx1) = mpsc::channel();
+        let (tx2, rx2) = mpsc::channel();
+        let (tx3, rx3) = mpsc::channel();
+
+        for (net, tx, x) in izip!(
+            nets.into_iter(),
+            [tx1, tx2, tx3],
+            [x0_shares, x1_shares, x2_shares].into_iter()
+        ) {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let results =
+                    conversion::y2b_many::<ark_bn254::Fr, _>(x, &net, &mut state).unwrap();
+                tx.send(results).unwrap();
+            });
+        }
+
+        let result1 = rx1.recv().unwrap();
+        let result2 = rx2.recv().unwrap();
+        let result3 = rx3.recv().unwrap();
+        let result = rep3::combine_binary_elements(&result1, &result2, &result3);
+        let result_f: Vec<ark_bn254::Fr> = result.into_iter().map(|b| b.into()).collect();
+        assert_eq!(result_f, should_result);
     }
 
     #[test]

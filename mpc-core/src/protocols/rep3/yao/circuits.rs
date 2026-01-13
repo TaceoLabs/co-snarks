@@ -668,6 +668,25 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(res))
     }
 
+    /// Adds two vectors of shared field elements mod p. The field elements are encoded as Yao shared wires.
+    pub fn adder_mod_p_many<G: FancyBinary, F: PrimeField>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+    ) -> Result<Vec<BinaryBundle<G::Item>>, G::Error> {
+        let input_bitlen = F::MODULUS_BIT_SIZE as usize;
+        let mut results = Vec::with_capacity(wires_a.size() / input_bitlen);
+        for (chunk_a, chunk_b) in izip!(
+            wires_a.wires().chunks(input_bitlen),
+            wires_b.wires().chunks(input_bitlen),
+        ) {
+            results.push(BinaryBundle::new(
+                Self::adder_mod_p_with_output_size::<_, F>(g, chunk_a, chunk_b, input_bitlen)?,
+            ));
+        }
+        Ok(results)
+    }
+
     /// Adds two shared ring elements mod 2^k. The ring elements are encoded as Yao shared wires.
     pub fn adder_mod_2k<G: FancyBinary>(
         g: &mut G,

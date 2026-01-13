@@ -615,6 +615,20 @@ pub fn combine_binary_element<F: PrimeField>(
     share1.a ^ share2.a ^ share3.a
 }
 
+/// Reconstructs a vector of values (represented as [BigUint]) from its binary replicated shares. Since binary operations can lead to results >= p, the results are not guaranteed to be valid field elements.
+pub fn combine_binary_elements<F: PrimeField>(
+    share1: &[Rep3BigUintShare<F>],
+    share2: &[Rep3BigUintShare<F>],
+    share3: &[Rep3BigUintShare<F>],
+) -> Vec<BigUint> {
+    assert_eq!(share1.len(), share2.len());
+    assert_eq!(share2.len(), share3.len());
+
+    itertools::multizip((share1, share2, share3))
+        .map(|(x1, x2, x3)| &x1.a ^ &x2.a ^ &x3.a)
+        .collect::<Vec<_>>()
+}
+
 /// Reconstructs a curve point from its arithmetic replicated shares.
 pub fn combine_curve_point<C: CurveGroup>(
     share1: Rep3PointShare<C>,
