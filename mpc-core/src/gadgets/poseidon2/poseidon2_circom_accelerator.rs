@@ -247,6 +247,32 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((squares, quads, sboxes_0))
     }
 
+    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    #[expect(clippy::type_complexity)]
+    pub fn rep3_external_round_precomp_intermediate_vec<N: Network>(
+        &self,
+        state: &mut [Rep3PrimeFieldShare<F>],
+        r: usize,
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
+        net: &N,
+    ) -> eyre::Result<(
+        Vec<Vec<Rep3PrimeFieldShare<F>>>,
+        Vec<Vec<Rep3PrimeFieldShare<F>>>,
+        Vec<Rep3PrimeFieldShare<F>>,
+    )> {
+        assert!(state.len().is_multiple_of(T));
+        let id = PartyID::try_from(net.id())?;
+        for s in state.chunks_exact_mut(T) {
+            self.add_rc_external_rep3(s.try_into().expect("we checked sizes"), r, id);
+        }
+        let sboxes_0 = state.iter().step_by(T).cloned().collect::<Vec<_>>();
+        let (squares, quads) = Self::sbox_rep3_precomp_intermediate_vec(state, precomp, net)?;
+        for s in state.chunks_exact_mut(T) {
+            Self::matmul_external_rep3(s.try_into().expect("we checked sizes"));
+        }
+        Ok((squares, quads, sboxes_0))
+    }
+
     #[expect(clippy::type_complexity)]
     fn sbox_rep3_precomp_intermediate<N: Network>(
         input: &mut [Rep3PrimeFieldShare<F>],
@@ -298,6 +324,54 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         let mut squares: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(input.len()));
         let mut quads: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(input.len()));
+        let mut squ;
+        let mut quad;
+        let mut count = 0;
+        for (inp, y, squares_, quads_) in izip!(
+            input.chunks_exact_mut(T),
+            y.chunks_exact(T),
+            squares.iter_mut(),
+            quads.iter_mut()
+        ) {
+            for (inp, y) in inp.iter_mut().zip(y) {
+                (*inp, squ, quad) = Self::sbox_rep3_precomp_post_intermediate(
+                    y,
+                    precomp,
+                    precomp.offset + count,
+                    id,
+                );
+                squares_.push(squ);
+                quads_.push(quad);
+                count += 1;
+            }
+        }
+
+        precomp.offset += input.len();
+
+        Ok((squares, quads))
+    }
+
+    #[expect(clippy::type_complexity)]
+    fn sbox_rep3_precomp_intermediate_vec<N: Network>(
+        input: &mut [Rep3PrimeFieldShare<F>],
+        precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
+        net: &N,
+    ) -> eyre::Result<(
+        Vec<Vec<Rep3PrimeFieldShare<F>>>,
+        Vec<Vec<Rep3PrimeFieldShare<F>>>,
+    )> {
+        let t2 = input.len() / T;
+        assert!(input.len().is_multiple_of(T));
+        for (i, inp) in input.iter_mut().enumerate() {
+            *inp -= precomp.r[precomp.offset + i];
+        }
+
+        // Open
+        let y = arithmetic::open_vec(input, net)?;
+        let id = PartyID::try_from(net.id())?;
+
+        let mut squares = vec![Vec::with_capacity(input.len()); t2];
+        let mut quads = vec![Vec::with_capacity(input.len()); t2];
         let mut squ;
         let mut quad;
         let mut count = 0;
@@ -695,6 +769,18 @@ pub trait CircomTraceBatchedHasher<F: PrimeField, const T: usize> {
         [Rep3PrimeFieldShare<F>; T2],
         [Vec<Rep3PrimeFieldShare<F>>; BATCH_SIZE],
     )>;
+
+    #[expect(clippy::type_complexity)]
+    /// Computes the intermediate values needed for the witness extension for Circom in a batched MPC setting, where the size of the batch is dynamic.
+    fn rep3_permutation_in_place_with_precomputation_intermediate_vec<N: Network>(
+        &self,
+        state: Vec<Rep3PrimeFieldShare<F>>,
+        precomp: &mut Self::Precomputation,
+        net: &N,
+    ) -> eyre::Result<(
+        Vec<Rep3PrimeFieldShare<F>>,
+        Vec<Vec<Rep3PrimeFieldShare<F>>>,
+    )>;
 }
 
 impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2<F, T, 5> {
@@ -850,6 +936,215 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         {
             let (squares_, quads_, sboxes_0): ([_; BATCH_SIZE], [_; BATCH_SIZE], [_; BATCH_SIZE]) =
                 self.rep3_external_round_precomp_intermediate_packed(&mut state, r, precomp, net)?;
+            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+                for (squares_3_, sbox_0) in squares_3.iter_mut().zip(sboxes_0.iter()) {
+                    squares_3_.push(*sbox_0);
+                }
+                for quads_3_ in quads_3.iter_mut() {
+                    quads_3_.push(Rep3PrimeFieldShare::<F>::default());
+                }
+            }
+            for (squares_3_, squares__, quads_3_, quads__) in izip!(
+                squares_3.iter_mut(),
+                squares_.iter(),
+                quads_3.iter_mut(),
+                quads_.iter()
+            ) {
+                squares_3_.extend(squares__);
+                quads_3_.extend(quads__);
+            }
+            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+                break;
+            }
+            for (states_, state_) in states.iter_mut().zip(state.chunks(T)) {
+                states_.extend_from_slice(state_);
+            }
+        }
+
+        let mut counter = 0;
+        for (i, state) in states.iter().enumerate() {
+            for (j, s) in state.iter().enumerate() {
+                traces[i][wtns_indices[j] as usize] = *s;
+            }
+        }
+        counter += states[0].len();
+
+        for (i, (squares_1_, quads_1_)) in izip!(squares_1.iter(), quads_1.iter()).enumerate() {
+            for (j, (sq, qu)) in squares_1_.iter().zip(quads_1_.iter()).enumerate() {
+                let idx = counter + 2 * j;
+                traces[i][wtns_indices[idx] as usize] = *sq;
+                traces[i][wtns_indices[idx + 1] as usize] = *qu;
+            }
+        }
+        counter += 2 * squares_1[0].len();
+
+        for (i, (squares_3_, quads_3_)) in izip!(squares_3.iter(), quads_3.iter()).enumerate() {
+            for (j, (sq, qu)) in squares_3_.iter().zip(quads_3_.iter()).enumerate() {
+                let idx = counter + 2 * j;
+                traces[i][wtns_indices[idx] as usize] = *sq;
+                traces[i][wtns_indices[idx + 1] as usize] = *qu;
+            }
+        }
+        counter += 2 * squares_3[0].len();
+
+        for (i, (squares_2_, quads_2_)) in izip!(squares_2.iter(), quads_2.iter()).enumerate() {
+            for (j, (sq, qu)) in squares_2_.iter().zip(quads_2_.iter()).enumerate() {
+                let idx = counter + 2 * j;
+                traces[i][wtns_indices[idx] as usize] = *sq;
+                traces[i][wtns_indices[idx + 1] as usize] = *qu;
+            }
+        }
+        counter += 2 * squares_2[0].len();
+
+        if T == 4 {
+            for (i, final_mul_) in final_mul.iter().enumerate() {
+                if let Some(val) = final_mul_ {
+                    traces[i][wtns_indices[counter] as usize] = *val;
+                }
+            }
+        }
+
+        Ok((state, traces))
+    }
+
+    fn rep3_permutation_in_place_with_precomputation_intermediate_vec<N: Network>(
+        &self,
+        state: Vec<Rep3PrimeFieldShare<F>>,
+        precomp: &mut Self::Precomputation,
+        net: &N,
+    ) -> eyre::Result<(
+        Vec<Rep3PrimeFieldShare<F>>,
+        Vec<Vec<Rep3PrimeFieldShare<F>>>,
+    )> {
+        let t2 = state.len();
+
+        let mut state = state;
+        // Precompute the maximum number of elements needed for each vector
+        let num_states = match T {
+            2 => {
+                T * (self.params.rounds_f_beginning - 1)
+                    + T * self.params.rounds_f_end
+                    + self.params.rounds_p
+            }
+            3 => {
+                T * (self.params.rounds_f_beginning - 1)
+                    + T * self.params.rounds_f_end
+                    + self.params.rounds_p
+            }
+            4 => {
+                T * (self.params.rounds_f_beginning - 1) + T * self.params.rounds_f_end - 1
+                    + self.params.rounds_p
+            }
+            _ => 0,
+        };
+        let mut final_mul = vec![None; t2];
+        let mut squares_1 = vec![Vec::with_capacity(T * self.params.rounds_f_beginning); t2];
+        let mut quads_1 = vec![Vec::with_capacity(T * self.params.rounds_f_beginning); t2];
+        let mut squares_2 = vec![Vec::with_capacity(self.params.rounds_p); t2];
+        let mut quads_2 = vec![Vec::with_capacity(self.params.rounds_p); t2];
+        let mut squares_3 = vec![Vec::with_capacity(T * self.params.rounds_f_end); t2];
+        let mut quads_3 = vec![Vec::with_capacity(T * self.params.rounds_f_end); t2];
+        let mut states = vec![Vec::with_capacity(num_states); t2];
+
+        let mut traces = if T == 2 {
+            vec![vec![Rep3PrimeFieldShare::<F>::default(); WITNESS_INDICES_SIZE_T2]; t2]
+        } else if T == 3 {
+            vec![vec![Rep3PrimeFieldShare::<F>::default(); WITNESS_INDICES_SIZE_T3]; t2]
+        } else {
+            vec![vec![Rep3PrimeFieldShare::<F>::default(); WITNESS_INDICES_SIZE_T4]; t2]
+        };
+
+        // Linear layer at beginning
+        for s in state.chunks_exact_mut(T) {
+            Self::matmul_external_rep3(s.try_into().unwrap());
+        }
+
+        for (states_, state_) in states.iter_mut().zip(state.chunks(T)) {
+            states_.push(state_[1]);
+        }
+
+        // First set of external rounds
+        for r in 0..self.params.rounds_f_beginning {
+            let (squares_, quads_, _) =
+                self.rep3_external_round_precomp_intermediate_vec(&mut state, r, precomp, net)?;
+            if r != self.params.rounds_f_beginning - 1 || T != 4 {
+                for (states_, state_) in states.iter_mut().zip(state.chunks(T)) {
+                    states_.extend_from_slice(state_);
+                }
+            } else if r == self.params.rounds_f_beginning - 1 && T == 4 {
+                for (states_, state_) in states.iter_mut().zip(state.chunks(T)) {
+                    states_.push(state_[0]);
+                    states_.push(state_[3]);
+                }
+            }
+            for (squares_1_, squares__, quads_1_, quads__) in izip!(
+                squares_1.iter_mut(),
+                squares_.iter(),
+                quads_1.iter_mut(),
+                quads_.iter()
+            ) {
+                squares_1_.extend(squares__);
+                quads_1_.extend(quads__);
+            }
+        }
+
+        // Internal rounds
+        for r in 0..self.params.rounds_p {
+            let (sum, squares_, quads_) = self
+                .rep3_internal_round_precomp_intermediate_packed::<N>(
+                    &mut state, r, precomp, net,
+                )?;
+            for (squares_2_, squares__, quads_2_, quads__) in izip!(
+                squares_2.iter_mut(),
+                squares_.iter(),
+                quads_2.iter_mut(),
+                quads_.iter()
+            ) {
+                squares_2_.push(*squares__);
+                quads_2_.push(*quads__);
+            }
+            if T == 4 && r == self.params.rounds_p - 1 {
+                for (final_mul, sum_) in final_mul
+                    .iter_mut()
+                    .zip(sum.expect("T=4 means sum should be Some").iter())
+                {
+                    *final_mul = Some(*sum_);
+                }
+            }
+            if T != 4 {
+                for (states_, state_) in states.iter_mut().zip(state.chunks(T)) {
+                    states_.push(*state_.first().unwrap());
+                }
+            } else if T == 4 && (r < self.params.rounds_p - 2) {
+                for (states_, state_) in states.iter_mut().zip(state.chunks(T)) {
+                    states_.push(*state_.last().unwrap());
+                }
+            } else if T == 4 && r == self.params.rounds_p - 2 {
+                for (states_, state_) in states.iter_mut().zip(state.chunks(T)) {
+                    states_.push(state_[1]);
+                    states_.push(state_[2]);
+                    states_.push(state_[3]);
+                }
+            }
+        }
+
+        let wtns_indices: &[u16] = match T {
+            2 => WITNESS_INDICES_T2,
+            3 => WITNESS_INDICES_T3,
+            4 => WITNESS_INDICES_T4,
+            _ => {
+                return Err(eyre::eyre!(
+                    "Current implementation does not support state size {T}"
+                ));
+            }
+        };
+
+        // Remaining external rounds
+        for r in self.params.rounds_f_beginning
+            ..self.params.rounds_f_beginning + self.params.rounds_f_end
+        {
+            let (squares_, quads_, sboxes_0) =
+                self.rep3_external_round_precomp_intermediate_vec(&mut state, r, precomp, net)?;
             if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
                 for (squares_3_, sbox_0) in squares_3.iter_mut().zip(sboxes_0.iter()) {
                     squares_3_.push(*sbox_0);
