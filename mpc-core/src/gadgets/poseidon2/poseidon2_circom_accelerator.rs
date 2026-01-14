@@ -239,8 +239,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         for s in state.chunks_exact_mut(T) {
             self.add_rc_external_rep3(s.try_into().expect("we checked sizes"), r, id);
         }
-        let sboxes_0: [_; BATCH_SIZE] = array::from_fn(|i| state[i * T]);
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_packed(state, precomp, net)?;
+        let sboxes_0: [_; BATCH_SIZE] = array::from_fn(|i| state[i * T]);
         for s in state.chunks_exact_mut(T) {
             Self::matmul_external_rep3(s.try_into().expect("we checked sizes"));
         }
@@ -265,8 +265,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         for s in state.chunks_exact_mut(T) {
             self.add_rc_external_rep3(s.try_into().expect("we checked sizes"), r, id);
         }
-        let sboxes_0 = state.iter().step_by(T).cloned().collect::<Vec<_>>();
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_vec(state, precomp, net)?;
+        let sboxes_0 = state.iter().step_by(T).cloned().collect::<Vec<_>>();
         for s in state.chunks_exact_mut(T) {
             Self::matmul_external_rep3(s.try_into().expect("we checked sizes"));
         }
