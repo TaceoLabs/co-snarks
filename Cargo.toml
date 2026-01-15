@@ -82,7 +82,7 @@ ruint = "1.17.0"
 subtle = "2.6"
 thiserror = "2"
 toml = "0.8.13"
-tracing = { version = "0.1.40" }
+tracing = { version = "0.1.43" }
 tracing-subscriber = "0.3"
 
 # This profile can be used for CI in pull requests.
