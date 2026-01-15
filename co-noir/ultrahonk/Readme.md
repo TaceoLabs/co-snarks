@@ -21,4 +21,4 @@ The prover in this repository, i.e., ``UltraHonk::prove`` in `src/prover.rs`, is
 
 ## Usage
 
-For examples and corresponding Barretenberg operations we refer to `collaborative-circom/co-noir/co-noir/Readme.md`.
+For examples and corresponding Barretenberg operations we refer to [this README.md](../co-noir/Readme.md).
