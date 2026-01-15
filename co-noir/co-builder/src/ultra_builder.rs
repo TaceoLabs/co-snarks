@@ -1000,7 +1000,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 }
             }
             *romcount += rom_array.records.len();
-            *romcount += 1; // we add an addition gate after procesing a rom array
+            *romcount += 1; // we add an addition gate after processing a rom array
         }
 
         // each RAM gate adds +2 extra gates due to the ram reads being copied to a sorted list set,
@@ -1009,7 +1009,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let mut ram_range_sizes = Vec::with_capacity(self.ram_arrays.len());
         let mut ram_range_exists = Vec::with_capacity(self.ram_arrays.len());
         for ram_array in self.ram_arrays.iter() {
-            // If the LUT is not public, then it is definetly not uninitialized, since it gets initialized with every read/write
+            // If the LUT is not public, then it is definitely not uninitialized, since it gets initialized with every read/write
             if T::is_public_lut(&ram_array.state) {
                 let lut_pub =
                     T::get_public_lut(&ram_array.state).expect("Already checked it is public");
@@ -1020,7 +1020,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 }
             }
             *ramcount += ram_array.records.len() * Self::NUMBER_OF_GATES_PER_RAM_ACCESS;
-            *ramcount += Self::NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY; // we add an addition gate after procesing a ram array
+            *ramcount += Self::NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY; // we add an addition gate after processing a ram array
 
             // there will be 'max_timestamp' number of range checks, need to calculate.
             let max_timestamp = ram_array.access_count - 1;
@@ -2562,7 +2562,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     ) {
         record.record_witness = self.add_variable(T::public_zero());
         // Note: record the index into the block that contains the RAM/ROM gates
-        record.gate_index = self.blocks.memory.len(); // no -1 since we havent added the gate yet
+        record.gate_index = self.blocks.memory.len(); // no -1 since we haven't added the gate yet
 
         // Aztec TODO(https://github.com/AztecProtocol/barretenberg/issues/879): This method used to add a single arithmetic gate
         // with two purposes: (1) to provide wire values to the previous RAM gate via shifts, and (2) to perform a
@@ -2629,7 +2629,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             Utils::get_msb64((list.target_range + 1).next_power_of_two()) as usize,
         )?;
 
-        // list must be padded to a multipe of 4 and larger than 4 (gate_width)
+        // list must be padded to a multiple of 4 and larger than 4 (gate_width)
         const GATE_WIDTH: usize = NUM_WIRES;
         let mut padding = (GATE_WIDTH - (list.variable_indices.len() % GATE_WIDTH)) % GATE_WIDTH;
         let mut indices = Vec::with_capacity(padding + sorted_list.len());
@@ -4089,7 +4089,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
      * @param varnum number of known witness
      *
      * @note The size of witness_values may be less than varnum. The former is the set of actual witness values known at
-     * the time of acir generation. The latter may be larger and essentially acounts for placeholders for witnesses that
+     * the time of acir generation. The latter may be larger and essentially accounts for placeholders for witnesses that
      * we know will exist but whose values are not known during acir generation. Both are in general less than the total
      * number of variables/witnesses that might be present for a circuit generated from acir, since many gates will
      * depend on the details of the bberg implementation (or more generally on the backend used to process acir).

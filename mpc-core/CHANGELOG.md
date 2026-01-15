@@ -118,7 +118,7 @@
 * Add blackbox_poseidon2 handling to co-noir ([3c2e811](https://github.com/Taceolabs/co-snarks/commit/3c2e81133b2a5b3a360918bc7d597277d091fb15))
 * Add extra functionality to rewrite the lookup_read_counts_tags to shared LUTs ([6fc80f7](https://github.com/Taceolabs/co-snarks/commit/6fc80f7a1a3a2a4f65180edccf03b6ef6b247c37))
 * Add lookup table based on MAESTRO to the MPC core ([#307](https://github.com/Taceolabs/co-snarks/issues/307)) ([2eb6916](https://github.com/Taceolabs/co-snarks/commit/2eb691604c431fa19affe7812e135e5e7dcf5f2e))
-* Add Merkle tree implemenations using Poseidon2 ([08b26a8](https://github.com/Taceolabs/co-snarks/commit/08b26a8e1d69ab9a1b2d1f081d37f7ebed482431))
+* Add Merkle tree implementations using Poseidon2 ([08b26a8](https://github.com/Taceolabs/co-snarks/commit/08b26a8e1d69ab9a1b2d1f081d37f7ebed482431))
 * Add more poseidon2 instances (t=2, t=3, t=4) ([70b389e](https://github.com/Taceolabs/co-snarks/commit/70b389eedae3c7075f015f8ff86f155d4064cd3d))
 * Add MPC functionality to slice a shared value ([595e33b](https://github.com/Taceolabs/co-snarks/commit/595e33bd0c6ca1b9dbbef9f3d41906b1e22ddfbb))
 * Add packed rep3 version of poseidon2 ([027782f](https://github.com/Taceolabs/co-snarks/commit/027782f48618e68b732e0cf36b9cdf03072452f3))
@@ -166,7 +166,7 @@
 ### ⚠ BREAKING CHANGES
 
 * **!:** Added functionality to traits of brillig/acvm
-* Added docs for brillig. Also updated the trait to better match the functionallity
+* Added docs for brillig. Also updated the trait to better match the functionality
 * modified traits for ACVM
 * Start adding replicated secret sharing for rings
 
@@ -191,7 +191,7 @@
 
 ### Documentation
 
-* Added docs for brillig. Also updated the trait to better match the functionallity ([a2df63a](https://github.com/TaceoLabs/co-snarks/commit/a2df63aa1048364e484bde31013a1c5bbe4a9da3))
+* Added docs for brillig. Also updated the trait to better match the functionality ([a2df63a](https://github.com/TaceoLabs/co-snarks/commit/a2df63aa1048364e484bde31013a1c5bbe4a9da3))
 
 
 ### Dependencies
