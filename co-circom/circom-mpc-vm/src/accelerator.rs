@@ -256,9 +256,11 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
                     protocol.poseidon2_accelerator::<3>(args.to_vec())?
                 } else if args_len == 4 {
                     protocol.poseidon2_accelerator::<4>(args.to_vec())?
+                } else if args_len == 16 {
+                    protocol.poseidon2_accelerator::<16>(args.to_vec())?
                 } else {
                     bail!(
-                        "Poseidon2 accelerator currently only supports input lengths 2, 3 or 4, got {}",
+                        "Poseidon2 accelerator currently only supports input lengths 2, 3, 4 or 16, got {}",
                         args_len
                     );
                 };

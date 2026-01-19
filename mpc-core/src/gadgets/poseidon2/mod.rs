@@ -2,6 +2,7 @@
 //!
 //! This module contains implementations of the Poseidon2 permutation.
 
+pub(crate) mod poseidon2_bn254_t16;
 pub(crate) mod poseidon2_bn254_t2;
 pub(crate) mod poseidon2_bn254_t3;
 pub(crate) mod poseidon2_bn254_t4;

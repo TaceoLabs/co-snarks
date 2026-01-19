@@ -64,7 +64,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
      *
      * Algorithm is taken directly from the Poseidon2 paper.
      */
-    fn matmul_m4(input: &mut [F; 4]) {
+    pub(crate) fn matmul_m4(input: &mut [F; 4]) {
         let t_0 = input[0] + input[1]; // A + B
         let t_1 = input[2] + input[3]; // C + D
         let t_2 = input[1].double() + t_1; // 2B + C + D
@@ -251,6 +251,16 @@ impl<F: PrimeField, const T: usize> Default for Poseidon2<F, T, 5> {
                     // Safety: We checked that the types match
                     unsafe {
                         std::mem::transmute::<Poseidon2<ark_bn254::Fr, 4, 5>, Poseidon2<F, T, 5>>(
+                            poseidon2,
+                        )
+                    }
+                }
+                16 => {
+                    let params = &super::poseidon2_bn254_t16::POSEIDON2_BN254_T16_PARAMS;
+                    let poseidon2 = Poseidon2::new(params);
+                    // Safety: We checked that the types match
+                    unsafe {
+                        std::mem::transmute::<Poseidon2<ark_bn254::Fr, 16, 5>, Poseidon2<F, T, 5>>(
                             poseidon2,
                         )
                     }
