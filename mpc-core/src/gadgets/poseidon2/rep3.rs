@@ -79,7 +79,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
      *
      * Algorithm is taken directly from the Poseidon2 paper.
      */
-    fn matmul_m4_rep3(input: &mut [Rep3PrimeFieldShare<F>; 4]) {
+    pub(crate) fn matmul_m4_rep3(input: &mut [Rep3PrimeFieldShare<F>; 4]) {
         let t_0 = input[0] + input[1]; // A + B
         let t_1 = input[2] + input[3]; // C + D
         let t_2 = input[1].double() + t_1; // 2B + C + D
