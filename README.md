@@ -52,7 +52,7 @@ for other coSNARKs:
 - **mpc-net**: Network library for MPC protocols.
 
 The `co-circom` and `co-noir` binaries are CLI tools that use these libraries to build a **coSNARK**.
-Both libraries also expose all functionality used by the binaries, so that you can integrate them into you projects.
+Both libraries also expose all functionality used by the binaries, so that you can integrate them into your projects.
 Checkout the [coCircom examples](./co-circom/co-circom/examples) and [coNoir examples](./co-noir/co-noir/examples) to see more.
 
 ## Installation
