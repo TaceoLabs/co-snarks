@@ -74,7 +74,7 @@ impl<F: PrimeField> Relation<F> for UltraArithmeticRelation {
 
     /**
      * @brief Expression for the Ultra Arithmetic gate.
-     * @details This relation encapsulates several idenitities, toggled by the value of q_arith in [0, 1, 2, 3, ...].
+     * @details This relation encapsulates several identities, toggled by the value of q_arith in [0, 1, 2, 3, ...].
      * The following description is reproduced from the Plonk analog 'plookup_arithmetic_widget':
      * The whole formula is:
      *
