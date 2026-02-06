@@ -5,6 +5,16 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.7.1](https://github.com/TaceoLabs/co-snarks/compare/co-plonk-v0.7.0...co-plonk-v0.7.1) (2026-02-06)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-types bumped from 0.6.0 to 0.6.1
+    * mpc-core bumped from 0.10.0 to 0.11.0
+
 ## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-plonk-v0.6.1...co-plonk-v0.7.0) (2025-11-06)
 
 

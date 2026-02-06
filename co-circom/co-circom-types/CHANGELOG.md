@@ -2,6 +2,15 @@
 
 ## renamed to co-circom-types
 
+## [0.6.1](https://github.com/TaceoLabs/co-snarks/compare/co-circom-types-v0.6.0...co-circom-types-v0.6.1) (2026-02-06)
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.10.0 to 0.11.0
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-types-v0.5.0...co-circom-types-v0.6.0) (2025-11-06)
 
 

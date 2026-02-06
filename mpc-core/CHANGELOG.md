@@ -2,6 +2,30 @@
 
 
 
+## [0.11.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.10.0...mpc-core-v0.11.0) (2026-02-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* edge case and some constants in poseidon2 accelerator
+* Batched and plain Poseidon trace computation for Circom ([#502](https://github.com/TaceoLabs/co-snarks/issues/502))
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491))
+
+### Features
+
+* add a2y2b_many ([#503](https://github.com/TaceoLabs/co-snarks/issues/503)) ([a9a29c8](https://github.com/TaceoLabs/co-snarks/commit/a9a29c83e32392877c8b2d5dcf6d1bfe15c5c5d4))
+* add Poseidon2 accelerator for circom ([d6eab3b](https://github.com/TaceoLabs/co-snarks/commit/d6eab3b4bf36b7c6ace6c81bf9842d2762f92074))
+* add vec version of poseidon2 trace computation ([e1bb6d7](https://github.com/TaceoLabs/co-snarks/commit/e1bb6d7b2cc02064cb537c3a401bd8f337bbf739))
+* Batched and plain Poseidon trace computation for Circom ([#502](https://github.com/TaceoLabs/co-snarks/issues/502)) ([c243d3b](https://github.com/TaceoLabs/co-snarks/commit/c243d3b6d5214adf171cd7dcdb2bba027bf6940c))
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491)) ([7ce7200](https://github.com/TaceoLabs/co-snarks/commit/7ce720060794b9d878b6cf412c493c4e3461b87d))
+* t=16 for Poseidon2 accelerator ([4daa904](https://github.com/TaceoLabs/co-snarks/commit/4daa9049f943d534b7b718bd9d2c1a86d48128c3))
+
+
+### Bug Fixes
+
+* edge case and some constants in poseidon2 accelerator ([eb8e783](https://github.com/TaceoLabs/co-snarks/commit/eb8e7835ca52045aab94d9205cf698f46abeea22))
+* packed poseidon2 trace computation ([d83b6b7](https://github.com/TaceoLabs/co-snarks/commit/d83b6b713db20ca0368f7393d92303c2dfaabf36))
+
 ## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-core-v0.9.0...mpc-core-v0.10.0) (2025-11-06)
 
 

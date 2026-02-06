@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.8.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.7.0...co-acvm-v0.8.0) (2026-02-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491))
+
+### Features
+
+* Allow brillig in R1CS helper ([24bb6be](https://github.com/TaceoLabs/co-snarks/commit/24bb6be6d19d6cc0a2ef5addaec904c795f1ae1f))
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491)) ([7ce7200](https://github.com/TaceoLabs/co-snarks/commit/7ce720060794b9d878b6cf412c493c4e3461b87d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-brillig bumped from 0.4.0 to 0.4.1
+    * co-noir-types bumped from 0.1.1 to 0.1.2
+    * noir-types bumped from 0.1.1 to 0.1.2
+    * co-noir-common bumped from 0.2.0 to 0.3.0
+    * mpc-core bumped from 0.10.0 to 0.11.0
+
 ## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/co-acvm-v0.6.0...co-acvm-v0.7.0) (2025-11-06)
 
 

@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.5.0...co-builder-v0.6.0) (2026-02-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491))
+
+### Features
+
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491)) ([7ce7200](https://github.com/TaceoLabs/co-snarks/commit/7ce720060794b9d878b6cf412c493c4e3461b87d))
+* upgrade to Noir 1.0.0-beta.15 and BB 3.0.0-nightly.20251104 ([#485](https://github.com/TaceoLabs/co-snarks/issues/485)) ([cd1fb5b](https://github.com/TaceoLabs/co-snarks/commit/cd1fb5b260ba80b81eba2a37e036d180eedc090a))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-acvm bumped from 0.7.0 to 0.8.0
+    * noir-types bumped from 0.1.1 to 0.1.2
+    * mpc-core bumped from 0.10.0 to 0.11.0
+    * co-noir-common bumped from 0.2.0 to 0.3.0
+    * co-ultrahonk bumped from 0.6.0 to 0.7.0
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-builder-v0.4.0...co-builder-v0.5.0) (2025-11-06)
 
 

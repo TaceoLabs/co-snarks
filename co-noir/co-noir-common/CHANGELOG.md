@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.0](https://github.com/TaceoLabs/co-snarks/compare/co-noir-common-v0.2.0...co-noir-common-v0.3.0) (2026-02-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491))
+
+### Features
+
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491)) ([7ce7200](https://github.com/TaceoLabs/co-snarks/commit/7ce720060794b9d878b6cf412c493c4e3461b87d))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.10.0 to 0.11.0
+    * noir-types bumped from 0.1.1 to 0.1.2
+
 ## [0.2.0](https://github.com/TaceoLabs/co-snarks/compare/co-noir-common-v0.1.0...co-noir-common-v0.2.0) (2025-11-06)
 
 
