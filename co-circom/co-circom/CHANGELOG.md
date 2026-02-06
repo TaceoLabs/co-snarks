@@ -9,6 +9,26 @@
     * co-plonk bumped from 0.3.0 to 0.3.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.11.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-v0.10.0...co-circom-v0.11.0) (2026-02-06)
+
+
+### Features
+
+* add Poseidon2 accelerator for circom ([d6eab3b](https://github.com/TaceoLabs/co-snarks/commit/d6eab3b4bf36b7c6ace6c81bf9842d2762f92074))
+* t=16 for Poseidon2 accelerator ([4daa904](https://github.com/TaceoLabs/co-snarks/commit/4daa9049f943d534b7b718bd9d2c1a86d48128c3))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-compiler bumped from 0.10.0 to 0.10.1
+    * circom-mpc-vm bumped from 0.9.0 to 0.10.0
+    * co-circom-types bumped from 0.6.0 to 0.6.1
+    * co-groth16 bumped from 0.10.0 to 0.10.1
+    * co-plonk bumped from 0.7.0 to 0.7.1
+    * mpc-core bumped from 0.10.0 to 0.11.0
+
 ## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/co-circom-v0.9.0...co-circom-v0.10.0) (2025-11-06)
 
 

@@ -10,6 +10,27 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.9.0...circom-mpc-vm-v0.10.0) (2026-02-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* Batched and plain Poseidon trace computation for Circom ([#502](https://github.com/TaceoLabs/co-snarks/issues/502))
+
+### Features
+
+* add Poseidon2 accelerator for circom ([d6eab3b](https://github.com/TaceoLabs/co-snarks/commit/d6eab3b4bf36b7c6ace6c81bf9842d2762f92074))
+* Batched and plain Poseidon trace computation for Circom ([#502](https://github.com/TaceoLabs/co-snarks/issues/502)) ([c243d3b](https://github.com/TaceoLabs/co-snarks/commit/c243d3b6d5214adf171cd7dcdb2bba027bf6940c))
+* t=16 for Poseidon2 accelerator ([4daa904](https://github.com/TaceoLabs/co-snarks/commit/4daa9049f943d534b7b718bd9d2c1a86d48128c3))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-types bumped from 0.6.0 to 0.6.1
+    * mpc-core bumped from 0.10.0 to 0.11.0
+
 ## [0.9.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-vm-v0.8.0...circom-mpc-vm-v0.9.0) (2025-11-06)
 
 

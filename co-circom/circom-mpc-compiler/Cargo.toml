@@ -1,6 +1,6 @@
 [package]
 name = "circom-mpc-compiler"
-version = "0.10.0"
+version = "0.10.1"
 edition.workspace = true
 rust-version.workspace = true
 authors.workspace = true
@@ -14,7 +14,7 @@ readme.workspace = true
 ark-ec.workspace = true
 ark-ff.workspace = true
 circom-types.workspace = true
-circom-mpc-vm = { version = "0.9.0", path = "../circom-mpc-vm" }
+circom-mpc-vm = { version = "0.10.0", path = "../circom-mpc-vm" }
 clap.workspace = true
 eyre.workspace = true
 itertools.workspace = true
@@ -31,6 +31,6 @@ circom-type_analysis = { version = "2.2.2", git = "https://github.com/TaceoLabs/
 
 [dev-dependencies]
 ark-bn254.workspace = true
-co-groth16 = { version = "0.10.0", path = "../co-groth16" }
-mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+co-groth16 = { version = "0.10.1", path = "../co-groth16" }
+mpc-core = { version = "0.11.0", path = "../../mpc-core" }
 tracing.workspace = true

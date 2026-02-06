@@ -1,6 +1,6 @@
 [package]
 name = "co-circom-types"
-version = "0.6.0"
+version = "0.6.1"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -16,7 +16,7 @@ ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
 circom-types.workspace = true
 eyre = { workspace = true }
-mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-core = { version = "0.11.0", path = "../../mpc-core" }
 num-traits = { workspace = true }
 num-bigint = { workspace = true }
 rand = { workspace = true }
