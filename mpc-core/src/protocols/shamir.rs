@@ -179,7 +179,7 @@ impl<F: PrimeField> MpcState for ShamirState<F> {
             open_lagrange_2t: self.open_lagrange_2t.clone(),
             mul_lagrange_2t: self.mul_lagrange_2t.clone(),
             mul_reconstruct_with_zeros: self.mul_reconstruct_with_zeros.clone(),
-            rng_buffer: self.rng_buffer.fork_with_pairs(n),
+            rng_buffer: self.rng_buffer.fork_with_pairs(n)?,
             generation_amount: self.generation_amount,
         })
     }

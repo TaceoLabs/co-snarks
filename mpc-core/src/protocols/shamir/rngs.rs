@@ -71,17 +71,19 @@ impl<F: PrimeField> ShamirRng<F> {
     }
 
     /// Create a forked [`ShamirRng`] that consumes `amount` number of corr rand pairs from its parent
-    pub(super) fn fork_with_pairs(&mut self, amount: usize) -> Self {
+    pub(super) fn fork_with_pairs(&mut self, amount: usize) -> eyre::Result<Self> {
         let rng = RngType::from_seed(self.rng.r#gen());
         let mut shared_rngs = Vec::with_capacity(self.shared_rngs.len());
         for rng in self.shared_rngs.iter_mut() {
             shared_rngs.push(RngType::from_seed(rng.r#gen()));
         }
-        // TODO return err? pass in net and generate more?
         if amount > self.r_t.len() {
-            panic!("not enough corr rand pairs");
+            eyre::bail!(
+                "not enough corr rand pairs: need {amount} but only {} available",
+                self.r_t.len()
+            );
         }
-        Self {
+        Ok(Self {
             id: self.id,
             rng,
             threshold: self.threshold,
@@ -92,7 +94,7 @@ impl<F: PrimeField> ShamirRng<F> {
             matrix: self.matrix.clone(),
             r_t: self.r_t.drain(..amount).collect(),
             r_2t: self.r_2t.drain(..amount).collect(),
-        }
+        })
     }
 
     fn get_shared_rngs<N: Network>(
