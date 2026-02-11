@@ -18,7 +18,7 @@ pub mod tls;
 /// The default connection timeout
 pub const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
 /// The default max frame length for sending messages
-pub const DEFAULT_MAX_FRAME_LENTH: usize = 64 * 1024 * 1024; // 64MB
+pub const DEFAULT_MAX_FRAME_LENGTH: usize = 64 * 1024 * 1024; // 64MB
 
 /// A MPC network that can be used to send and receive data to and from other parties
 ///
