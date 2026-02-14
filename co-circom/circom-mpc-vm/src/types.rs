@@ -149,8 +149,6 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
     }
 }
 
-//TODO: Add another builder step here?
-//ParserCompiler -> into Rep3/Shamir -> build
 impl<F: PrimeField> CoCircomCompilerParsed<F> {
     /// Consumes `self` and constructs an instance of [`PlainWitnessExtension`].
     ///
