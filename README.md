@@ -43,7 +43,7 @@ The project is built with pure Rust and consists of multiple libraries:
   - **co-brillig**: A MPC version of Noir's Brillig VM that executes unconstrained functions.
   - **co-builder**: A library that transforms the generated shared witness into a shared proving key.
   - **co-ultrahonk**: A MPC version of Aztec's UltraHonk prover, compatible with Barretenberg.
-  - **ultrahonk**: A a Rust rewrite of Aztec's UltraHonk prover, compatible with Barretenberg.
+  - **ultrahonk**: A Rust rewrite of Aztec's UltraHonk prover, compatible with Barretenberg.
 
 The following libraries are agnostic to **coCircom**/**coNoir** and will be used in the future
 for other coSNARKs:
@@ -52,7 +52,7 @@ for other coSNARKs:
 - **mpc-net**: Network library for MPC protocols.
 
 The `co-circom` and `co-noir` binaries are CLI tools that use these libraries to build a **coSNARK**.
-Both libraries also expose all functionality used by the binaries, so that you can integrate them into you projects.
+Both libraries also expose all functionality used by the binaries, so that you can integrate them into your projects.
 Checkout the [coCircom examples](./co-circom/co-circom/examples) and [coNoir examples](./co-noir/co-noir/examples) to see more.
 
 ## Installation
