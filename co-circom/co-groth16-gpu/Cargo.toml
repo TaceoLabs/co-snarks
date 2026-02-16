@@ -1,0 +1,44 @@
+[package]
+name = "co-groth16-gpu"
+version = "0.10.0"
+publish.workspace = true
+authors.workspace = true
+edition.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = []
+verifier = []
+
+[dependencies]
+ark-bn254 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-groth16 = { workspace = true }
+ark-poly = { workspace = true }
+ark-relations = { workspace = true }
+ark-serialize = { workspace = true }
+co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
+eyre = { workspace = true }
+icicle-core = { workspace = true }
+icicle-snark = { workspace = true }
+icicle-bn254 = { workspace = true }
+icicle-runtime = { workspace = true }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-net = { version = "0.5.0", path = "../../mpc-net" }
+num-traits = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+ark-bls12-377 = { workspace = true }
+ark-bls12-381 = { workspace = true }
+circom-types = { workspace = true, features = ["bls12-381"] }

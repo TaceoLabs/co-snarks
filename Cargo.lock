@@ -1281,6 +1281,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "co-groth16-gpu"
+version = "0.10.0"
+dependencies = [
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-groth16",
+ "ark-poly",
+ "ark-relations",
+ "ark-serialize 0.5.0",
+ "co-circom-types",
+ "eyre",
+ "icicle-bn254 4.0.0",
+ "icicle-core 4.0.0",
+ "icicle-runtime 4.0.0",
+ "icicle-snark",
+ "mpc-core",
+ "mpc-net",
+ "num-traits",
+ "rand 0.8.5",
+ "rayon",
+ "serde_json",
+ "taceo-circom-types",
+ "tracing",
+]
+
+[[package]]
 name = "co-noir"
 version = "0.7.0"
 dependencies = [
@@ -2478,6 +2507,102 @@ dependencies = [
 ]
 
 [[package]]
+name = "icicle-bn254"
+version = "3.8.0"
+source = "git+https://github.com/ingonyama-zk/icicle-snark#bf00385db19087a8a3f6d754b43b006254b1b465"
+dependencies = [
+ "cmake",
+ "icicle-core 3.8.0",
+ "icicle-runtime 3.8.0",
+ "serde",
+]
+
+[[package]]
+name = "icicle-bn254"
+version = "4.0.0"
+source = "git+https://github.com/ingonyama-zk/icicle.git#625532a624e5aaa6e9d31a1c92587f1fcc30dc76"
+dependencies = [
+ "cmake",
+ "icicle-core 4.0.0",
+ "icicle-hash",
+ "icicle-runtime 4.0.0",
+ "serde",
+]
+
+[[package]]
+name = "icicle-core"
+version = "3.8.0"
+source = "git+https://github.com/ingonyama-zk/icicle-snark#bf00385db19087a8a3f6d754b43b006254b1b465"
+dependencies = [
+ "hex",
+ "icicle-runtime 3.8.0",
+ "once_cell",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+]
+
+[[package]]
+name = "icicle-core"
+version = "4.0.0"
+source = "git+https://github.com/ingonyama-zk/icicle.git#625532a624e5aaa6e9d31a1c92587f1fcc30dc76"
+dependencies = [
+ "cmake",
+ "hex",
+ "icicle-runtime 4.0.0",
+ "once_cell",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+]
+
+[[package]]
+name = "icicle-hash"
+version = "4.0.0"
+source = "git+https://github.com/ingonyama-zk/icicle.git#625532a624e5aaa6e9d31a1c92587f1fcc30dc76"
+dependencies = [
+ "cmake",
+ "icicle-core 4.0.0",
+ "icicle-runtime 4.0.0",
+ "rand 0.8.5",
+]
+
+[[package]]
+name = "icicle-runtime"
+version = "3.8.0"
+source = "git+https://github.com/ingonyama-zk/icicle-snark#bf00385db19087a8a3f6d754b43b006254b1b465"
+dependencies = [
+ "cmake",
+ "once_cell",
+]
+
+[[package]]
+name = "icicle-runtime"
+version = "4.0.0"
+source = "git+https://github.com/ingonyama-zk/icicle.git#625532a624e5aaa6e9d31a1c92587f1fcc30dc76"
+dependencies = [
+ "cmake",
+ "once_cell",
+]
+
+[[package]]
+name = "icicle-snark"
+version = "0.1.0"
+source = "git+https://github.com/ingonyama-zk/icicle-snark#bf00385db19087a8a3f6d754b43b006254b1b465"
+dependencies = [
+ "bincode 1.3.3",
+ "clap",
+ "icicle-bn254 3.8.0",
+ "icicle-core 3.8.0",
+ "icicle-runtime 3.8.0",
+ "memmap",
+ "num-bigint 0.4.6",
+ "rayon",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "ident_case"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2868,6 +2993,16 @@ name = "memchr"
 version = "2.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a282da65faaf38286cf3be983213fcf1d2e2a58700e808f83f4ea9a4804bc0"
+
+[[package]]
+name = "memmap"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6585fd95e7bb50d6cc31e20d4cf9afb4e2ba16c5846fc76793f11218da9c475b"
+dependencies = [
+ "libc",
+ "winapi",
+]
 
 [[package]]
 name = "merlin"
