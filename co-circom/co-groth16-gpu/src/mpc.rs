@@ -1,21 +1,16 @@
 use std::{
     fmt::Debug,
-    ops::{AddAssign, Index, IndexMut, MulAssign, Range, RangeBounds, RangeFrom, RangeTo, SubAssign},
 };
 
-use ark_poly::domain::{self, DomainCoeff};
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 
 pub(crate) mod plain;
 // pub(crate) mod rep3;
 // pub(crate) mod shamir;
 
-use icicle_bn254::curve::ScalarField;
 use icicle_core::{affine::Affine, ecntt::Projective, field::Field, msm::MSM, ntt::ntt_inplace, ntt::{NTTConfig, NTT,  ntt}, pairing::Pairing, vec_ops::VecOps};
 use icicle_runtime::{Device, memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice}};
 use mpc_core::MpcState;
 use mpc_net::Network;
-use num_traits::bounds;
 pub use plain::PlainGroth16Driver;
 
 use crate::{ bridges::ArkIcicleBridge, gpu_utils::DeviceMatrix};

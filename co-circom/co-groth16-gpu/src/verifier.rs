@@ -3,7 +3,7 @@
 //! We use [arkworks Groth16 implementation](https://docs.rs/ark-groth16/latest/ark_groth16/struct.Groth16.html#method.verify_proof)
 //! for verification.
 
-use crate::groth16::Groth16;
+use crate::groth16_gpu::Groth16;
 use ark_ec::pairing::Pairing;
 use ark_groth16::Proof;
 use ark_groth16::VerifyingKey;

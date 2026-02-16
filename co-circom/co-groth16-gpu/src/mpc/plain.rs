@@ -1,15 +1,13 @@
 use std::ops::{Index, IndexMut};
 
 use ark_ff::UniformRand;
-use ark_poly::domain;
-use icicle_bn254::curve::{G1Affine, ScalarField};
-use icicle_core::{affine::Affine, ecntt::Projective, field::Field, matrix_ops::{MatMulConfig, MatrixOps, matmul}, msm::{MSM, MSMConfig, msm}, ntt::NTT, pairing::Pairing, vec_ops::{VecOps, VecOpsConfig, accumulate_scalars, mul_scalars, sub_scalars, sum_scalars}};
-use icicle_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
+use icicle_core::{ecntt::Projective, field::Field, matrix_ops::{MatMulConfig, MatrixOps, matmul}, msm::{MSM, MSMConfig, msm}, ntt::NTT, vec_ops::{VecOps, VecOpsConfig, mul_scalars, sub_scalars, sum_scalars}};
+use icicle_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice};
 use mpc_core::MpcState;
 use mpc_net::Network;
 use rand::thread_rng;
 
-use crate::{bridges::ArkIcicleBridge, gpu_utils::{DeviceMatrix, DeviceSliceWrapper, DeviceVecWrapper, fft_inplace, ifft_inplace}};
+use crate::{bridges::ArkIcicleBridge, gpu_utils::{DeviceMatrix,fft_inplace, ifft_inplace}};
 
 use super::CircomGroth16Prover;
 
@@ -35,8 +33,8 @@ impl<F: Field + VecOps<F> + NTT<F, F> + MatrixOps<F>> CircomGroth16Prover<F> for
     ) -> Self::DeviceShares {
         let b_rows = public_inputs.len() + private_witness.len();
         let mut b = DeviceVec::device_malloc(b_rows).expect("Failed to allocate device vector");
-        b.copy(public_inputs);
-        b.index_mut(public_inputs.len()..).copy(private_witness);
+        b.copy(public_inputs).unwrap();
+        b.index_mut(public_inputs.len()..).copy(private_witness).unwrap();
 
         let DeviceMatrix {
             data,
@@ -45,8 +43,9 @@ impl<F: Field + VecOps<F> + NTT<F, F> + MatrixOps<F>> CircomGroth16Prover<F> for
         } = matrix;
 
         // TODO CESAR: Maybe this alloc trick doesn't work
-        let mut result = DeviceVec::device_malloc(domain_size).expect("Failed to allocate device vector");
-        matmul(data, *rows, *cols, &b, b_rows as u32, 1, &MatMulConfig::default(), &mut result);
+        let mut result = DeviceVec::zeros(domain_size);
+        matmul(data, *rows, *cols, &b, b_rows as u32, 1, &MatMulConfig::default(), result.index_mut(..(*rows as usize))).unwrap();
+
         result
     }
 
@@ -85,7 +84,7 @@ impl<F: Field + VecOps<F> + NTT<F, F> + MatrixOps<F>> CircomGroth16Prover<F> for
     // TODO CESAR: Avoid copy
     fn to_half_share_vec(a: &Self::DeviceShares) -> DeviceVec<F> {
         let mut result = DeviceVec::device_malloc(a.len()).expect("Failed to allocate device vector");
-        result.copy(a);
+        result.copy(a).unwrap() ;
         result
     }
 
@@ -94,7 +93,7 @@ impl<F: Field + VecOps<F> + NTT<F, F> + MatrixOps<F>> CircomGroth16Prover<F> for
         scalars: &DeviceSlice<F>,
     ) -> P::Affine
     {
-        let mut results = DeviceVec::device_malloc(points.len()).expect("Failed to allocate device vector");
+        let mut results = DeviceVec::device_malloc(1).expect("Failed to allocate device vector");
         msm::<P>(scalars, points, &MSMConfig::default(), results.index_mut(..)).unwrap();
         results.to_host_vec().pop().unwrap().into()
     }
@@ -104,7 +103,7 @@ impl<F: Field + VecOps<F> + NTT<F, F> + MatrixOps<F>> CircomGroth16Prover<F> for
         public_values: &DeviceSlice<F>,
     ) -> Self::DeviceShares {
        let mut result = DeviceVec::device_malloc(public_values.len()).expect("Failed to allocate device vector");
-       result.copy( public_values);
+       result.copy( public_values).unwrap();
        result
     }
 
@@ -192,7 +191,7 @@ impl<F: Field + VecOps<F> + NTT<F, F> + MatrixOps<F>> CircomGroth16Prover<F> for
     }
 
     fn copy_to_device_shares(src: &Self::DeviceShares, dst: &mut Self::DeviceShares, start: usize, end: usize) {
-        dst.index_mut(start..end).copy(src);
+        dst.index_mut(start..end).copy(src).unwrap();
     }
 
     fn rand<N: Network, B: ArkIcicleBridge<IcicleScalarField = F>>(_: &N, _: &mut Self::State) -> eyre::Result<Self::ArithmeticShare> {

@@ -1,14 +1,11 @@
-use std::{mem::transmute, ops::{Index, IndexMut}, sync::Arc};
+use std::{mem::transmute};
 
-use ark_ec::AffineRepr;
-use ark_ff::{BigInteger, PrimeField};
+use ark_ff::{ PrimeField};
 use ark_relations::r1cs::ConstraintMatrices;
 use icicle_bn254::curve::ScalarField;
-use icicle_core::{affine::Affine, ecntt::Projective, field::Field, ntt::{self, NTT, NTTConfig, ntt_inplace}, traits::MontgomeryConvertible};
-use icicle_runtime::{memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice}, stream::IcicleStream};
+use icicle_core::{ ecntt::Projective, field::Field, ntt::{self, NTT, NTTConfig, NTTDir, ntt_inplace}, traits::MontgomeryConvertible};
+use icicle_runtime::{memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice}, stream::IcicleStream};
 use icicle_core::{ vec_ops::VecOps};
-use rayon::vec;
-use num_traits::Zero;
 
 use crate::bridges::ArkIcicleBridge;
 
@@ -49,7 +46,7 @@ pub struct VerifyingKey<F: Field + VecOps<F> + NTT<F, F>, G1: Projective<ScalarF
 impl<F: Field + VecOps<F> + NTT<F, F>, G1: Projective<ScalarField = F>, G2: Projective<ScalarField =F>> Clone for VerifyingKey<F, G1, G2> {
     fn clone(&self) -> Self {
         let mut copy_gamma_abc_g1 = DeviceVec::device_malloc(self.gamma_abc_g1.len()).expect("Failed to allocate device vector");
-        copy_gamma_abc_g1.copy(&self.gamma_abc_g1);
+        copy_gamma_abc_g1.copy(&self.gamma_abc_g1).unwrap();
         Self {
             alpha_g1: self.alpha_g1,
             beta_g2: self.beta_g2,
@@ -178,82 +175,35 @@ pub struct DeviceMatrix<F: Field> {
     pub(crate) rows: u32,
 }
 
-// // TODO CESAR: No copies
-// impl<F: Field> DeviceMatrix<F> {
-//     // TODO CESAR: No copies
-//     pub fn copy_row(&self, index: usize) -> (DeviceVec<F>, DeviceVec<usize>) {
-//         let values_slice = self.data.index(self.cummulative_row_lengths[index]..self.cummulative_row_lengths[index + 1]);
-//         let mut values = DeviceVec::device_malloc(values_slice.len()).expect("Failed to allocate device vector");
-//         values.copy(values_slice);
-
-//         let indices_slice = self.indices.index(self.cummulative_row_lengths[index]..self.cummulative_row_lengths[index + 1]);
-//         let mut indices = DeviceVec::device_malloc(indices_slice.len()).expect("Failed to allocate device vector");
-//         indices.copy(indices_slice);
-
-//         (values, indices)
-//     }
-//     // TODO CESAR: No copies
-//     pub fn rows_iter(&self) -> impl Iterator<Item = (DeviceVec<F>, DeviceVec<usize>)> {
-//         (0..self.row_lengths.len()).map(move |i| self.copy_row(i))
-//     }
-// }
-
-pub struct DeviceVecWrapper<F: PrimeField> {
-    inner: DeviceVec<F>,
-}
-
-impl<F: PrimeField> DeviceVecWrapper< F> {
-    pub fn new(inner: DeviceVec<F>) -> Self {
-        Self { inner }
-    }
-
-    pub unsafe fn transmute<I: Field + MontgomeryConvertible>(self) -> eyre::Result<DeviceVec<I>> {
-
-        // SAFETY: Reinterpreting Arkworks field elements as Icicle-specific scalars
-        let mut icicle_scalars = unsafe {
-            transmute::<DeviceVec<F>, DeviceVec<I>>(self.inner)
-        };
-
-        // Convert from Montgomery representation using the Icicle type's conversion method
-        I::from_mont(&mut icicle_scalars, &IcicleStream::default())?;
-
-        Ok(icicle_scalars)
-    }
-}
-
-
-pub struct DeviceSliceWrapper<'a, F: PrimeField> {
-    inner: &'a mut DeviceSlice<F>,
-}
-
-impl<'a, F: PrimeField> DeviceSliceWrapper<'a, F> {
-    pub fn new(inner: &'a mut DeviceSlice<F>) -> Self {
-        Self { inner }
-    }
-
-    pub unsafe fn transmute<I: Field + MontgomeryConvertible>(&mut self) -> eyre::Result<&mut DeviceSlice<I>> {
-        // SAFETY: Reinterpreting Arkworks field elements as Icicle-specific scalars
-        let icicle_scalars = unsafe { &mut *(self.inner as *mut _ as *mut DeviceSlice<I>) };
-
-        // Convert from Montgomery representation using the Icicle type's conversion method
-        I::from_mont(icicle_scalars, &IcicleStream::default())?;
-
-        Ok(icicle_scalars)
-    }
-}
-
 // TODO CESAR: Compute batch of ntts
-// TODO CESAR: Do not hardcode for bn254
 pub fn fft_inplace<F: Field + NTT<F, F>>(input: &mut DeviceSlice<F>) -> eyre::Result<()> {
+
+    // TODO CESAR: Handle better
+    ntt::initialize_domain(
+        ntt::get_root_of_unity::<ScalarField>(
+            input.len().try_into().unwrap()
+        ).unwrap(),
+        &ntt::NTTInitDomainConfig::default(),
+    )
+    .unwrap();
+
     let ntt_config = NTTConfig::<F>::default();
-    ntt_inplace(input, ntt::NTTDir::kForward, &ntt_config)?;
+    ntt_inplace(input, NTTDir::kForward, &ntt_config)?;
     Ok(())
 }
 
 // TODO CESAR: Compute batch of ntts
-// TODO CESAR: Do not hardcode for bn254
 pub fn ifft_inplace<F: Field + NTT<F, F>>(input: &mut DeviceSlice<F>) -> eyre::Result<()> {
+    // TODO CESAR: Handle better
+    ntt::initialize_domain(
+        ntt::get_root_of_unity::<ScalarField>(
+            input.len().try_into().unwrap(),
+        ).unwrap(),
+        &ntt::NTTInitDomainConfig::default(),
+    )
+    .unwrap();
+
     let ntt_config = NTTConfig::<F>::default();
-    ntt_inplace(input, ntt::NTTDir::kInverse, &ntt_config)?;
+    ntt_inplace(input, NTTDir::kInverse, &ntt_config)?;
     Ok(())
 }

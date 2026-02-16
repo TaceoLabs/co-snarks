@@ -60,7 +60,6 @@ criterion = { version = "0.5", features = ["async_tokio"] }
 eyre = "0.6"
 figment = { version = "0.10.19", features = ["toml", "env"] }
 hex-literal = "0.4.1"
-icicle-snark = { git = "https://github.com/ingonyama-zk/icicle-snark" }
 icicle-core = { git = "https://github.com/ingonyama-zk/icicle.git" }
 icicle-runtime = { git = "https://github.com/ingonyama-zk/icicle.git" }
 icicle-bn254 = { git = "https://github.com/ingonyama-zk/icicle.git" }

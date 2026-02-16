@@ -1,40 +1,19 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
-use ark_bn254::Bn254;
-use ark_ec::bn::Bn;
-use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, FftField, Field as ArkField, LegendreSymbol, PrimeField};
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::ConstraintMatrices;
-use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
+use co_circom_types::{SharedWitness};
 use eyre::Result;
-use icicle_core::msm::msm;
-use icicle_core::traits::MontgomeryConvertible;
-use icicle_runtime::Device;
+use icicle_runtime::{Device, runtime};
 use icicle_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice};
 use mpc_core::MpcState;
-use mpc_core::protocols::rep3::Rep3State;
-use mpc_core::protocols::rep3::conversion::A2BType;
-use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirState};
 use mpc_net::Network;
-use num_traits::ToPrimitive;
-use rayon::str;
 use std::marker::PhantomData;
 use std::mem::transmute;
 use std::ops::Index;
-use icicle_core::bignum::BigNum;
-use tracing::instrument;
-use icicle_core::affine::Affine;
 
-use icicle_bn254::curve::ScalarField;
-use icicle_core::{ecntt::Projective, ntt::NTT, msm::MSM, vec_ops::VecOps, field::Field, pairing::Pairing};
-use rayon::iter::{
-    IndexedParallelIterator
-};
+use icicle_core::{ecntt::Projective, msm::MSM};
 
-
-use crate::bridges::{ArkIcicleBridge, Bn254Bridge};
+use crate::bridges::{ArkIcicleBridge, Bn254Bridge, transmute_ark_to_icicle_scalars};
 use crate::gpu_utils::{DeviceMatrices, Proof, ProvingKey, VerifyingKey};
-use crate::groth16_gpu;
 use crate::mpc::CircomGroth16Prover;
 use crate::mpc::plain::PlainGroth16Driver;
 // use crate::mpc::rep3::Rep3Groth16Driver;
@@ -53,7 +32,7 @@ mod reduction;
 ///
 /// More interesting is the [`Groth16::verify`] method. You can verify any circom Groth16 proof, be it
 /// from snarkjs or one created by this project. Under the hood we use the arkwork Groth16 project for verifying.
-pub struct CoGroth16<P: ark_ec::pairing::Pairing> {
+pub struct Groth16<P: ark_ec::pairing::Pairing> {
     phantom_data: PhantomData<P>
 }
 
@@ -63,62 +42,6 @@ pub struct CoGroth16<P: ark_ec::pairing::Pairing> {
 /// A type alias for a [CoGroth16] protocol using shamir secret sharing, using the Circom R1CSToQAPReduction by default.
 // TODO CESAR
 // pub type ShamirCoGroth16<P> = CoGroth16<P, ShamirGroth16Driver>;
-
-/// Computes the roots of unity over the provided prime field. This method
-/// is equivalent with [circom's implementation](https://github.com/iden3/ffjavascript/blob/337b881579107ab74d5b2094dbe1910e33da4484/src/wasm_field1.js).
-///
-/// We calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p). We also calculate smallest t s.t. p-1=2^s*t, s is the two adicity.
-/// We use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
-/// Then if log2(\text{domain_size}) equals s we take q^2 as root of unity. Else we take the log2(\text{domain_size}) + 1-th element of the domain created above.
-fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
-    let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
-    let mut q = F::one();
-    while q.legendre() != LegendreSymbol::QuadraticNonResidue {
-        q += F::one();
-    }
-    let z = q.pow(F::TRACE);
-    roots[0] = z;
-    for i in 1..roots.len() {
-        roots[i] = roots[i - 1].square();
-    }
-    roots.reverse();
-    (q, roots)
-}
-
-/* old way of computing root of unity, does not work for bls12_381:
-let root_of_unity = {
-    let domain_size_double = 2 * domain_size;
-    let domain_double =
-        D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-    domain_double.element(1)
-};
-new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
-calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
-use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
-then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
-*/
-#[instrument(level = "debug", name = "root of unity", skip_all)]
-fn root_of_unity_for_groth16<F: PrimeField + FftField>(
-    pow: usize,
-    domain: &mut GeneralEvaluationDomain<F>,
-) -> F {
-    let (q, roots) = roots_of_unity::<F>();
-    match domain {
-        GeneralEvaluationDomain::Radix2(domain) => {
-            domain.group_gen = roots[pow];
-            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
-        }
-        GeneralEvaluationDomain::MixedRadix(domain) => {
-            domain.group_gen = roots[pow];
-            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
-        }
-    };
-    if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
-        q.square()
-    } else {
-        roots[domain.log_size_of_group().to_usize().unwrap() + 1]
-    }
-}
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CoGroth16Icicle<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> {
@@ -138,13 +61,20 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         private_witness: T::DeviceShares,
     ) -> eyre::Result<ark_groth16::Proof<B::ArkPairing>> {
 
+        // TODO CESAR: Handle properly
+        runtime::load_backend_from_env_or_default().unwrap();
+            
+        // Select CUDA device
+        icicle_runtime::set_device(&icicle_runtime::get_active_device().unwrap()).unwrap();
+
         let matrices = DeviceMatrices::from_constraint_matrices::<B>(matrices);
+
         let pk = ProvingKey::from_ark::<B>(pkey);
 
         // TODO CESAR: This looks sooo bad
-        let public_inputs = public_inputs.iter().map(B::ark_to_icicle_scalar).collect::<Vec<_>>();
         let public_inputs = DeviceVec::from_host_slice(&public_inputs);
-
+        let public_inputs = transmute_ark_to_icicle_scalars(public_inputs)?;
+        
         let icicle_proof = Self::prove_inner::<N, R>(net0, net1, state0, state1, &pk, &matrices, &public_inputs, private_witness)?;
 
         Ok(icicle_proof.to_ark::<B>())
@@ -152,7 +82,6 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
 
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
-    #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
     fn prove_inner<N: Network, R: R1CSToQAP>(
         net0: &N,
         net1: &N,
@@ -186,6 +115,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
             &public_inputs,
             &private_witness,
         )?;
+
         let (r, s) = (T::rand::<_, B>(net0, state0)?, T::rand::<_, B>(net0, state0)?);
 
         let private_witness_half_shares= T::to_half_share_vec(&private_witness);
@@ -218,7 +148,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         let pub_len = input_assignment.len();
 
         // TODO CESAR: parallelize with threads
-        let priv_acc = T::msm_public_points_hs::<C>(query.index(1 + pub_len..), aux_assignment);
+        let priv_acc = T::msm_public_points_hs::<C>(query.index((1 + pub_len)..), aux_assignment);
         let pub_acc = T::msm_public_points_hs::<C>(query.index(1..=pub_len), input_assignment);
 
         let mut res = initial;
@@ -230,7 +160,6 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         res
     }
 
-    #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
     #[expect(clippy::too_many_arguments)]
     fn create_proof_with_assignment<N: Network>(
         net0: &N,
@@ -260,7 +189,6 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         let VerifyingKey {
             alpha_g1,
             beta_g2,
-            gamma_g2,
             delta_g2,
             ..
         } = vk.clone();
@@ -275,6 +203,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
 
         // Compute A
         let r_hs = T::to_half_share(r);
+
         let r_g1 = delta_g1 * r_hs;
         let r_g1 = Self::calculate_coeff::<B::IcicleG1>(
             id,
@@ -401,7 +330,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
 //     }
 // }
 
-impl<P: ark_ec::pairing::Pairing> CoGroth16<P> {
+impl<P: ark_ec::pairing::Pairing> Groth16<P> {
     /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
     /// initialized with the [`PlainGroth16Driver`].
     ///
@@ -417,8 +346,8 @@ impl<P: ark_ec::pairing::Pairing> CoGroth16<P> {
             // SAFETY: transmutes are safe here because we know P == Bn254
             let public_inputs = unsafe {
                 transmute::<&Vec<P::ScalarField>, &Vec<ark_bn254::Fr>>(public_inputs)
-            };
-            
+            };            
+
             let private_witness = unsafe {
                 transmute::<&Vec<P::ScalarField>, &Vec<ark_bn254::Fr>>(private_witness)
             };
@@ -432,8 +361,8 @@ impl<P: ark_ec::pairing::Pairing> CoGroth16<P> {
             };
 
             // TODO CESAR: This looks sooo bad
-            let private_witness = private_witness.iter().map(Bn254Bridge::ark_to_icicle_scalar).collect::<Vec<_>>();
             let private_witness = DeviceVec::from_host_slice(&private_witness);
+            let private_witness = transmute_ark_to_icicle_scalars(private_witness)?;
 
             let proof = CoGroth16Icicle::<Bn254Bridge, PlainGroth16Driver>::setup_and_prove::<_, R>(&(), &(), &mut (), &mut (), key, matrices, public_inputs, private_witness);
             
