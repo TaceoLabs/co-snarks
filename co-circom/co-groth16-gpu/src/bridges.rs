@@ -145,15 +145,9 @@ pub trait ArkIcicleBridge {
         ark_to_icicle_affine(point)
     }
 
-    // TODO CESAR: Can't be implemented out of the box
-    fn icicle_to_ark_g1(point: Self::IcicleG1Affine) -> Self::ArkG1Affine {
-        todo!()
-    }
+    fn icicle_to_ark_g1(point: Self::IcicleG1Affine) -> Self::ArkG1Affine;
 
-    // TODO CESAR: Can't be implemented out of the box
-    fn icicle_to_ark_g2(point: Self::IcicleG2Affine) -> Self::ArkG2Affine {
-        todo!()
-    }
+    fn icicle_to_ark_g2(point: Self::IcicleG2Affine) -> Self::ArkG2Affine;
 }
 
 pub struct Bn254Bridge;

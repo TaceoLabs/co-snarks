@@ -4,7 +4,7 @@ use std::{
 
 
 pub(crate) mod plain;
-// pub(crate) mod rep3;
+pub(crate) mod rep3;
 // pub(crate) mod shamir;
 
 use icicle_core::{affine::Affine, ecntt::Projective, field::Field, msm::MSM, ntt::ntt_inplace, ntt::{NTTConfig, NTT,  ntt}, pairing::Pairing, vec_ops::VecOps};
@@ -14,19 +14,14 @@ use mpc_net::Network;
 pub use plain::PlainGroth16Driver;
 
 use crate::{ bridges::ArkIcicleBridge, gpu_utils::DeviceMatrix};
-// pub use rep3::Rep3Groth16Driver;
+pub use rep3::Rep3Groth16Driver;
 // pub use shamir::ShamirGroth16Driver;
 
 /// This trait represents the operations used during Groth16 proof generation
 pub trait CircomGroth16Prover<F: Field + VecOps<F> + NTT<F, F>>: Send + Sized {
 
     /// The arithmetic share type
-    type ArithmeticShare: Copy
-        + Clone
-        + Default
-        + Send
-        + Debug;
-
+    type ArithmeticShare;
     type DeviceShares;
     type DevicePointShares<C: Projective>;
 
@@ -86,15 +81,6 @@ pub trait CircomGroth16Prover<F: Field + VecOps<F> + NTT<F, F>>: Send + Sized {
         state: &mut Self::State,
     ) -> F;
 
-    // TODO CESAR: Remove
-    // Performs element-wise subtraction of two vectors of shared values.
-    /// Does not perform any networking.
-    fn sub_vec_hs(
-        a: &DeviceVec<F>,
-        b: &DeviceVec<F>,
-        state: &mut Self::State,
-    ) -> DeviceVec<F>;
-
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     fn distribute_powers_and_mul_by_const(
         coeffs: &mut Self::DeviceShares,
@@ -108,7 +94,7 @@ pub trait CircomGroth16Prover<F: Field + VecOps<F> + NTT<F, F>>: Send + Sized {
     );
 
     /// Converts a shared value to a half shared value. Local interaction only.
-    fn to_half_share(a: Self::ArithmeticShare) -> F;
+    fn to_half_share(a: &Self::ArithmeticShare) -> F;
 
     /// Converts shared values to half shared values. Local interaction only.
     fn to_half_share_vec(a: &Self::DeviceShares) -> DeviceVec<F>;

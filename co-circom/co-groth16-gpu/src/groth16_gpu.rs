@@ -1,4 +1,6 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
+use ark_ff::{FftField, LegendreSymbol, PrimeField};
+use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::ConstraintMatrices;
 use co_circom_types::{SharedWitness};
 use eyre::Result;
@@ -6,6 +8,7 @@ use icicle_runtime::{Device, runtime};
 use icicle_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice};
 use mpc_core::MpcState;
 use mpc_net::Network;
+use num_traits::ToPrimitive;
 use std::marker::PhantomData;
 use std::mem::transmute;
 use std::ops::Index;
@@ -42,6 +45,56 @@ pub struct Groth16<P: ark_ec::pairing::Pairing> {
 /// A type alias for a [CoGroth16] protocol using shamir secret sharing, using the Circom R1CSToQAPReduction by default.
 // TODO CESAR
 // pub type ShamirCoGroth16<P> = CoGroth16<P, ShamirGroth16Driver>;
+
+fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
+    let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
+    let mut q = F::one();
+    while q.legendre() != LegendreSymbol::QuadraticNonResidue {
+        q += F::one();
+    }
+    let z = q.pow(F::TRACE);
+    roots[0] = z;
+    for i in 1..roots.len() {
+        roots[i] = roots[i - 1].square();
+    }
+    roots.reverse();
+    (q, roots)
+}
+
+/* old way of computing root of unity, does not work for bls12_381:
+let root_of_unity = {
+    let domain_size_double = 2 * domain_size;
+    let domain_double =
+        D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
+    domain_double.element(1)
+};
+new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
+calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
+use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
+then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
+*/
+fn root_of_unity_for_groth16<F: PrimeField + FftField>(
+    pow: usize,
+    domain: &mut GeneralEvaluationDomain<F>,
+) -> F {
+    let (q, roots) = roots_of_unity::<F>();
+    match domain {
+        GeneralEvaluationDomain::Radix2(domain) => {
+            domain.group_gen = roots[pow];
+            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
+        }
+        GeneralEvaluationDomain::MixedRadix(domain) => {
+            domain.group_gen = roots[pow];
+            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
+        }
+    };
+    if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
+        q.square()
+    } else {
+        roots[domain.log_size_of_group().to_usize().unwrap() + 1]
+    }
+}
+
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CoGroth16Icicle<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> {
@@ -146,6 +199,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         C: Projective<ScalarField = B::IcicleScalarField> + MSM<C>,
     {
         let pub_len = input_assignment.len();
+        println!("Calculating coeff with pub_len: {}", pub_len);
 
         // TODO CESAR: parallelize with threads
         let priv_acc = T::msm_public_points_hs::<C>(query.index((1 + pub_len)..), aux_assignment);
@@ -193,7 +247,6 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
             ..
         } = vk.clone();
 
-
         let delta_g1 = B::from_affine_g1(*delta_g1);
         let delta_g2 = B::from_affine_g2(delta_g2);
 
@@ -202,7 +255,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         // TODO CESAR: Use threads
 
         // Compute A
-        let r_hs = T::to_half_share(r);
+        let r_hs = T::to_half_share(&r);
 
         let r_g1 = delta_g1 * r_hs;
         let r_g1 = Self::calculate_coeff::<B::IcicleG1>(
@@ -216,7 +269,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
 
         // Compute B in G1
         // In original implementation this is skipped if r==0, however r is shared in our case
-        let s_hs = T::to_half_share(s);
+        let s_hs = T::to_half_share(&s);
         let s_g1 = delta_g1 * s_hs;
         let s_g1 = Self::calculate_coeff::<B::IcicleG1>(
             id,

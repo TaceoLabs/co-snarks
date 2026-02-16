@@ -3,12 +3,12 @@ use std::{mem::transmute};
 
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use eyre::Result;
-use icicle_core::{ecntt::Projective, field::Field, ntt::{NTT, NTTDomain, get_root_of_unity}, traits::MontgomeryConvertible, vec_ops::VecOps};
-use icicle_runtime::{ memory::{DeviceSlice, DeviceVec}};
+use icicle_core::{ecntt::Projective, field::Field, ntt::{NTT, NTTDomain, get_root_of_unity}, traits::MontgomeryConvertible, vec_ops::{VecOps, VecOpsConfig, sub_scalars}};
+use icicle_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice};
 use mpc_core::MpcState;
 use tracing::instrument;
 
-use crate::{bridges::transmute_ark_to_icicle_scalar, gpu_utils::{DeviceMatrices}, mpc::CircomGroth16Prover};
+use crate::{bridges::transmute_ark_to_icicle_scalar, gpu_utils::DeviceMatrices, groth16_gpu::root_of_unity_for_groth16, mpc::CircomGroth16Prover};
 
 /// This trait is used to convert the secret-shared witness into a secret-shared QAP witness as part of a collaborative Groth16 proof.
 /// Refer to <https://docs.rs/ark-groth16/latest/ark_groth16/r1cs_to_qap/trait.R1CSToQAP.html> for more details on the plain version.
@@ -40,13 +40,13 @@ pub trait R1CSToQAP {
 //     result
 // }
 
-// /// Implements the witness map used by snarkjs. The arkworks witness map calculates the
-// /// coefficients of H through computing (AB-C)/Z in the evaluation domain and going back to the
-// /// coefficients domain. snarkjs instead precomputes the Lagrange form of the powers of tau bases
-// /// in a domain twice as large and the witness map is computed as the odd coefficients of (AB-C)
-// /// in that domain. This serves as HZ when computing the C proof element.
-// ///
-// /// Based on <https://github.com/arkworks-rs/circom-compat/>.
+/// Implements the witness map used by snarkjs. The arkworks witness map calculates the
+/// coefficients of H through computing (AB-C)/Z in the evaluation domain and going back to the
+/// coefficients domain. snarkjs instead precomputes the Lagrange form of the powers of tau bases
+/// in a domain twice as large and the witness map is computed as the odd coefficients of (AB-C)
+/// in that domain. This serves as HZ when computing the C proof element.
+///
+/// Based on <https://github.com/arkworks-rs/circom-compat/>.
 pub struct CircomReduction;
 
 impl R1CSToQAP for CircomReduction {
@@ -60,12 +60,11 @@ impl R1CSToQAP for CircomReduction {
         let DeviceMatrices { a, b, c, num_constraints, num_instance_variables, .. } = matrices;
         let (num_constraints, num_inputs) = (*num_constraints, *num_instance_variables);
 
-        // TODO CESAR: Does this always work
-        let domain_size = if (num_constraints + num_inputs).is_power_of_two() {
-            num_constraints + num_inputs
-        } else {
-            (num_constraints + num_inputs).next_power_of_two()
-        };
+        // TODO CESAR: Harcoded
+        let mut domain =
+            GeneralEvaluationDomain::<ark_bn254::Fr>::new(num_constraints + num_inputs)
+                .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+        let domain_size = domain.size();
         let power = domain_size.ilog2() as usize;
 
         let id = state.id();
@@ -75,7 +74,9 @@ impl R1CSToQAP for CircomReduction {
         // Computation of the roots of unity
         // TODO CESAR: Can we push this to the GPU
         // TODO CESAR: Hardcoded for bn254
-        let root_of_unity = get_root_of_unity::<F>(power as u64).unwrap();
+        // TODO CESAR: Might not work for bls
+        let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
+        let root_of_unity = transmute_ark_to_icicle_scalar(root_of_unity);
         let mut roots = Vec::with_capacity(domain_size);
         let mut c = F::one();
         for _ in 0..domain_size {
@@ -125,7 +126,9 @@ impl R1CSToQAP for CircomReduction {
         T::fft_in_place_hs(&mut c);
 
         let ab = T::local_mul_vec(&a, &b, state);
-        let result = T::sub_vec_hs(&ab, &c, state);
+
+        let mut result = DeviceVec::device_malloc(ab.len()).expect("Failed to allocate device vector");
+        sub_scalars(&ab, &c, result.as_mut_slice(), &VecOpsConfig::default()).unwrap();
 
         Ok(result)
     }
