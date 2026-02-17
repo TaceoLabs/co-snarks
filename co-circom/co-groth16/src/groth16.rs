@@ -21,7 +21,7 @@ use crate::mpc::plain::PlainGroth16Driver;
 use crate::mpc::rep3::Rep3Groth16Driver;
 use crate::mpc::shamir::ShamirGroth16Driver;
 
-pub use reduction::{CircomReduction, LibSnarkReduction, R1CSToQAP};
+pub use reduction::{CircomReduction, LibSnarkReduction, R1CSToQAP, evaluate_constraint};
 mod reduction;
 
 macro_rules! rayon_join5 {
@@ -57,7 +57,7 @@ pub type ShamirCoGroth16<P> = CoGroth16<P, ShamirGroth16Driver>;
 /// We calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p). We also calculate smallest t s.t. p-1=2^s*t, s is the two adicity.
 /// We use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
 /// Then if log2(\text{domain_size}) equals s we take q^2 as root of unity. Else we take the log2(\text{domain_size}) + 1-th element of the domain created above.
-fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
+pub fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
     let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
     let mut q = F::one();
     while q.legendre() != LegendreSymbol::QuadraticNonResidue {
@@ -85,7 +85,7 @@ use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compu
 then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
 */
 #[instrument(level = "debug", name = "root of unity", skip_all)]
-fn root_of_unity_for_groth16<F: PrimeField + FftField>(
+pub fn root_of_unity_for_groth16<F: PrimeField + FftField>(
     pow: usize,
     domain: &mut GeneralEvaluationDomain<F>,
 ) -> F {
@@ -142,12 +142,17 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
             )
         }
 
+        let timer_start = std::time::Instant::now();
         let h = R::witness_map_from_matrices::<P, T>(
             state0,
             matrices,
             &public_inputs,
             &private_witness.witness,
         )?;
+        println!(
+            "Witness map computation took {} ms",
+            timer_start.elapsed().as_millis()
+        );
         let (r, s) = (T::rand(net0, state0)?, T::rand(net0, state0)?);
 
         let private_witness_half_share: Vec<_> = private_witness
@@ -156,7 +161,8 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
             .map(T::to_half_share)
             .collect();
 
-        Self::create_proof_with_assignment(
+        let timer_start = std::time::Instant::now();
+        let out = Self::create_proof_with_assignment(
             net0,
             net1,
             state0,
@@ -167,7 +173,12 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
             h,
             &public_inputs,
             &private_witness_half_share,
-        )
+        );
+        println!(
+            "Proof with assignment took {} ms",
+            timer_start.elapsed().as_millis()
+        );
+        out
     }
 
     fn calculate_coeff<C>(

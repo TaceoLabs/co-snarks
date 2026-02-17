@@ -30,6 +30,7 @@ icicle-bn254 = { workspace = true }
 icicle-runtime = { workspace = true }
 mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 mpc-net = { version = "0.5.0", path = "../../mpc-net" }
+co-groth16 = { version = "0.10.0", path = "../co-groth16" }
 num-traits = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }

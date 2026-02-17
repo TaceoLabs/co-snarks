@@ -1,14 +1,22 @@
-
-use std::{mem::transmute};
+use core::str;
+use std::mem::transmute;
 
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use eyre::Result;
-use icicle_core::{ecntt::Projective, field::Field, ntt::{NTT, NTTDomain, get_root_of_unity}, traits::MontgomeryConvertible, vec_ops::{VecOps, VecOpsConfig, sub_scalars}};
-use icicle_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice};
+use icicle_core::{
+    ntt::{NTT, NTTDomain},
+    traits::{Arithmetic, FieldImpl, MontgomeryConvertible},
+    vec_ops::{VecOps, VecOpsConfig, sub_scalars},
+};
+use icicle_runtime::{
+    Device,
+    memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice},
+    stream::{self, IcicleStream},
+};
 use mpc_core::MpcState;
 use tracing::instrument;
 
-use crate::{bridges::transmute_ark_to_icicle_scalar, gpu_utils::DeviceMatrices, groth16_gpu::root_of_unity_for_groth16, mpc::CircomGroth16Prover};
+use crate::mpc::CircomGroth16Prover;
 
 /// This trait is used to convert the secret-shared witness into a secret-shared QAP witness as part of a collaborative Groth16 proof.
 /// Refer to <https://docs.rs/ark-groth16/latest/ark_groth16/r1cs_to_qap/trait.R1CSToQAP.html> for more details on the plain version.
@@ -16,11 +24,19 @@ use crate::{bridges::transmute_ark_to_icicle_scalar, gpu_utils::DeviceMatrices, 
 pub trait R1CSToQAP {
     /// Computes a QAP witness corresponding to the R1CS witness defined by `private_witness`, using the provided `ConstraintMatrices`.
     /// The provided `driver` is used to perform the necessary operations on the secret-shared witness.
-    fn witness_map_from_matrices<F: Field + VecOps<F> + NTT<F, F> + MontgomeryConvertible + NTTDomain<F>, G1: Projective<ScalarField = F>, G2: Projective<ScalarField =F>, T: CircomGroth16Prover<F>>(
+    fn witness_map_from_r1cs_eval<
+        F: FieldImpl<Config: VecOps<F> + NTT<F, F> + NTTDomain<F>>
+            + Arithmetic
+            + MontgomeryConvertible,
+        T: CircomGroth16Prover<F>,
+    >(
         state: &mut T::State,
-        matrices: &DeviceMatrices<F>,
+        eval_a: &mut T::DeviceShares,
+        eval_b: &mut T::DeviceShares,
         public_inputs: &DeviceSlice<F>,
-        private_witness: &T::DeviceShares,
+        roots_to_power_domain: &DeviceSlice<F>,
+        num_constraints: usize,
+        domain_size: usize,
     ) -> Result<DeviceVec<F>>;
 }
 
@@ -51,84 +67,62 @@ pub struct CircomReduction;
 
 impl R1CSToQAP for CircomReduction {
     #[instrument(level = "debug", name = "witness map from matrices", skip_all)]
-    fn witness_map_from_matrices<F: Field + VecOps<F> + NTT<F, F> + MontgomeryConvertible + NTTDomain<F>, G1: Projective<ScalarField = F>, G2: Projective<ScalarField =F>, T: CircomGroth16Prover<F>>(
+    fn witness_map_from_r1cs_eval<
+        F: FieldImpl<Config: VecOps<F> + NTT<F, F> + NTTDomain<F>>
+            + Arithmetic
+            + MontgomeryConvertible,
+        T: CircomGroth16Prover<F>,
+    >(
         state: &mut T::State,
-        matrices: &DeviceMatrices<F>,
+        eval_a: &mut T::DeviceShares,
+        eval_b: &mut T::DeviceShares,
         public_inputs: &DeviceSlice<F>,
-        private_witness: &T::DeviceShares,
+        roots_to_power_domain: &DeviceSlice<F>,
+        num_constraints: usize,
+        domain_size: usize,
     ) -> Result<DeviceVec<F>> {
-        let DeviceMatrices { a, b, c, num_constraints, num_instance_variables, .. } = matrices;
-        let (num_constraints, num_inputs) = (*num_constraints, *num_instance_variables);
-
-        // TODO CESAR: Harcoded
-        let mut domain =
-            GeneralEvaluationDomain::<ark_bn254::Fr>::new(num_constraints + num_inputs)
-                .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
-        let domain_size = domain.size();
-        let power = domain_size.ilog2() as usize;
-
         let id = state.id();
 
-        // TODO CESAR: Redo as threads or async somehow
-
-        // Computation of the roots of unity
-        // TODO CESAR: Can we push this to the GPU
-        // TODO CESAR: Hardcoded for bn254
-        // TODO CESAR: Might not work for bls
-        let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
-        let root_of_unity = transmute_ark_to_icicle_scalar(root_of_unity);
-        let mut roots = Vec::with_capacity(domain_size);
-        let mut c = F::one();
-        for _ in 0..domain_size {
-            roots.push(c);
-            c = c * root_of_unity;
-        }
-        let roots_to_power_domain = DeviceVec::from_host_slice(&roots);
-
         // Computation of a
-        let mut a = T::evaluate_constraints(
-            id,
-            domain_size,
-            a,
-            public_inputs,
-            private_witness,
-        );
-
         let promoted_public = T::promote_to_trivial_shares(id, public_inputs);
-        T::copy_to_device_shares(&promoted_public, &mut a, num_constraints, num_constraints + num_inputs);
+        T::copy_to_device_shares(&promoted_public, eval_a, num_constraints, domain_size);
 
-        // Computation of b
-        let mut b = T::evaluate_constraints(
-            id,
-            domain_size,
-            b,
-            public_inputs,
-            private_witness,
-        );
-
-        let mut c = T::local_mul_vec(&a, &b, state);
-
-        // TODO CESAR: Redo as threads or async somehow
+        let mut stream_c = IcicleStream::create().unwrap();
+        let mut c = T::local_mul_vec(eval_a, eval_b, state, &stream_c);
 
         // Computation of a
-        T::ifft_in_place(&mut a);
-        T::distribute_powers_and_mul_by_const(&mut a, &roots_to_power_domain);
-        T::fft_in_place(&mut a);
+        let mut stream_a = IcicleStream::create().unwrap();
+        T::ifft_in_place(eval_a, &stream_a);
+        T::distribute_powers_and_mul_by_const(eval_a, roots_to_power_domain, &stream_a);
+        T::fft_in_place(eval_a, &stream_a);
 
         // Computation of b
-        T::ifft_in_place(&mut b);
-        T::distribute_powers_and_mul_by_const(&mut b, &roots_to_power_domain);
-        T::fft_in_place(&mut b);
+        let mut stream_b = IcicleStream::create().unwrap();
+        T::ifft_in_place(eval_b, &stream_b);
+        T::distribute_powers_and_mul_by_const(eval_b, roots_to_power_domain, &stream_b);
+        T::fft_in_place(eval_b, &stream_b);
 
         // Computation of c
-        T::ifft_in_place_hs(&mut c);
-        T::distribute_powers_and_mul_by_const_hs(&mut c, &roots_to_power_domain);
-        T::fft_in_place_hs(&mut c);
+        T::ifft_in_place_hs(&mut c, &stream_c);
+        T::distribute_powers_and_mul_by_const_hs(&mut c, roots_to_power_domain, &stream_c);
+        T::fft_in_place_hs(&mut c, &stream_c);
 
-        let ab = T::local_mul_vec(&a, &b, state);
+        stream_a.synchronize().unwrap();
+        stream_b.synchronize().unwrap();
+        let ab = T::local_mul_vec(eval_a, eval_b, state, &stream_a);
 
-        let mut result = DeviceVec::device_malloc(ab.len()).expect("Failed to allocate device vector");
-        sub_scalars(&ab, &c, result.as_mut_slice(), &VecOpsConfig::default()).unwrap();
+        let mut result = DeviceVec::device_malloc_async(ab.len(), &stream_c)
+            .expect("Failed to allocate device vector");
+
+        let mut cfg = VecOpsConfig::default();
+        cfg.stream_handle = *stream_c;
+        cfg.is_async = true;
+        sub_scalars(&ab, &c, result.as_mut_slice(), &cfg).unwrap();
+        stream_c.synchronize().unwrap();
+
+        stream_a.destroy().unwrap();
+        stream_b.destroy().unwrap();
+        stream_c.destroy().unwrap();
 
         Ok(result)
     }

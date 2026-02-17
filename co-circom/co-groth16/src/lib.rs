@@ -8,7 +8,7 @@ mod verifier;
 
 pub use groth16::{
     CircomReduction, CoGroth16, Groth16, LibSnarkReduction, R1CSToQAP, Rep3CoGroth16,
-    ShamirCoGroth16,
+    ShamirCoGroth16, evaluate_constraint, root_of_unity_for_groth16, roots_of_unity,
 };
 
 pub use ark_groth16::{Proof, ProvingKey, VerifyingKey};

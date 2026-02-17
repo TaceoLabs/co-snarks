@@ -1,22 +1,31 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
-use ark_ff::{FftField, LegendreSymbol, PrimeField};
+use crate::gpu_utils::{
+    fft_inplace, from_host_slice, get_first_affine, get_first_projective, initialize_domain,
+    msm_async,
+};
+use ark_bn254::Bn254;
+use ark_ff::{FftField, LegendreSymbol, PrimeField, UniformRand};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::r1cs::ConstraintMatrices;
-use co_circom_types::{SharedWitness};
+use co_circom_types::SharedWitness;
 use eyre::Result;
-use icicle_runtime::{Device, runtime};
+use icicle_core::curve::{Affine, Curve};
 use icicle_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice};
+use icicle_runtime::stream::IcicleStream;
+use icicle_runtime::{Device, runtime};
 use mpc_core::MpcState;
 use mpc_net::Network;
-use num_traits::ToPrimitive;
+use std::array;
 use std::marker::PhantomData;
 use std::mem::transmute;
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
-use icicle_core::{ecntt::Projective, msm::MSM};
+use icicle_core::msm::MSM;
 
-use crate::bridges::{ArkIcicleBridge, Bn254Bridge, transmute_ark_to_icicle_scalars};
-use crate::gpu_utils::{DeviceMatrices, Proof, ProvingKey, VerifyingKey};
+use crate::bridges::{
+    ArkIcicleBridge, Bn254Bridge, transmute_ark_to_icicle_scalars,
+};
+use crate::gpu_utils::{Proof, ProvingKey, VerifyingKey};
 use crate::mpc::CircomGroth16Prover;
 use crate::mpc::plain::PlainGroth16Driver;
 // use crate::mpc::rep3::Rep3Groth16Driver;
@@ -36,7 +45,7 @@ mod reduction;
 /// More interesting is the [`Groth16::verify`] method. You can verify any circom Groth16 proof, be it
 /// from snarkjs or one created by this project. Under the hood we use the arkwork Groth16 project for verifying.
 pub struct Groth16<P: ark_ec::pairing::Pairing> {
-    phantom_data: PhantomData<P>
+    phantom_data: PhantomData<P>,
 }
 
 /// A type alias for a [CoGroth16] protocol using replicated secret sharing, using the Circom R1CSToQAPReduction by default.
@@ -46,89 +55,42 @@ pub struct Groth16<P: ark_ec::pairing::Pairing> {
 // TODO CESAR
 // pub type ShamirCoGroth16<P> = CoGroth16<P, ShamirGroth16Driver>;
 
-fn roots_of_unity<F: PrimeField + FftField>() -> (F, Vec<F>) {
-    let mut roots = vec![F::zero(); F::TWO_ADICITY.to_usize().unwrap() + 1];
-    let mut q = F::one();
-    while q.legendre() != LegendreSymbol::QuadraticNonResidue {
-        q += F::one();
-    }
-    let z = q.pow(F::TRACE);
-    roots[0] = z;
-    for i in 1..roots.len() {
-        roots[i] = roots[i - 1].square();
-    }
-    roots.reverse();
-    (q, roots)
-}
-
-/* old way of computing root of unity, does not work for bls12_381:
-let root_of_unity = {
-    let domain_size_double = 2 * domain_size;
-    let domain_double =
-        D::new(domain_size_double).ok_or(SynthesisError::PolynomialDegreeTooLarge)?;
-    domain_double.element(1)
-};
-new one is computed in the same way as in snarkjs (More precisely in ffjavascript/src/wasm_field1.js)
-calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) also calculate smallest t (F::TRACE) s.t. p-1=2^s*t, s is the two_adicity
-use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
-then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
-*/
-fn root_of_unity_for_groth16<F: PrimeField + FftField>(
-    pow: usize,
-    domain: &mut GeneralEvaluationDomain<F>,
-) -> F {
-    let (q, roots) = roots_of_unity::<F>();
-    match domain {
-        GeneralEvaluationDomain::Radix2(domain) => {
-            domain.group_gen = roots[pow];
-            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
-        }
-        GeneralEvaluationDomain::MixedRadix(domain) => {
-            domain.group_gen = roots[pow];
-            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
-        }
-    };
-    if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
-        q.square()
-    } else {
-        roots[domain.log_size_of_group().to_usize().unwrap() + 1]
-    }
-}
-
-
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 pub struct CoGroth16Icicle<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> {
     phantom_data: PhantomData<(B, T)>,
 }
 
 impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16Icicle<B, T> {
-
     fn setup_and_prove<N: Network, R: R1CSToQAP>(
         net0: &N,
         net1: &N,
         state0: &mut T::State,
         state1: &mut T::State,
-        pkey: &ark_groth16::ProvingKey<B::ArkPairing>,
-        matrices: &ConstraintMatrices<B::ArkScalarField>,
-        public_inputs: &Vec<B::ArkScalarField>,
+        eval_a: &mut T::DeviceShares,
+        eval_b: &mut T::DeviceShares,
+        pkey: &ProvingKey<B::IcicleScalarField, B::IcicleG1, B::IcicleG2>,
+        public_inputs: &DeviceVec<B::IcicleScalarField>,
         private_witness: T::DeviceShares,
     ) -> eyre::Result<ark_groth16::Proof<B::ArkPairing>> {
+        // TODO CESAR: Want this in the setup
+        initialize_domain::<B::IcicleScalarField>(pkey.domain_size);
 
-        // TODO CESAR: Handle properly
-        runtime::load_backend_from_env_or_default().unwrap();
-            
-        // Select CUDA device
-        icicle_runtime::set_device(&icicle_runtime::get_active_device().unwrap()).unwrap();
-
-        let matrices = DeviceMatrices::from_constraint_matrices::<B>(matrices);
-
-        let pk = ProvingKey::from_ark::<B>(pkey);
-
-        // TODO CESAR: This looks sooo bad
-        let public_inputs = DeviceVec::from_host_slice(&public_inputs);
-        let public_inputs = transmute_ark_to_icicle_scalars(public_inputs)?;
-        
-        let icicle_proof = Self::prove_inner::<N, R>(net0, net1, state0, state1, &pk, &matrices, &public_inputs, private_witness)?;
+        let timer_start = std::time::Instant::now();
+        let icicle_proof = Self::prove_inner::<N, R>(
+            net0,
+            net1,
+            state0,
+            state1,
+            eval_a,
+            eval_b,
+            pkey,
+            &public_inputs,
+            private_witness,
+        )?;
+        println!(
+            "Proof generation took {} ms",
+            timer_start.elapsed().as_millis()
+        );
 
         Ok(icicle_proof.to_ark::<B>())
     }
@@ -140,19 +102,21 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         net1: &N,
         state0: &mut T::State,
         state1: &mut T::State,
+        eval_a: &mut T::DeviceShares,
+        eval_b: &mut T::DeviceShares,
         pkey: &ProvingKey<B::IcicleScalarField, B::IcicleG1, B::IcicleG2>,
-        matrices: &DeviceMatrices<B::IcicleScalarField>,
         public_inputs: &DeviceVec<B::IcicleScalarField>,
         private_witness: T::DeviceShares,
     ) -> eyre::Result<Proof<B::IcicleScalarField, B::IcicleG1, B::IcicleG2>> {
-        if public_inputs.len() != matrices.num_instance_variables {
-            eyre::bail!(
-                "amount of public inputs does not match with provided constraint system! Expected {}, but got {}",
-                matrices.num_instance_variables,
-                public_inputs.len()
-            )
-        }
-        
+        // TODO CESAR
+        // if public_inputs.len() != matrices.num_instance_variables {
+        //     eyre::bail!(
+        //         "amount of public inputs does not match with provided constraint system! Expected {}, but got {}",
+        //         matrices.num_instance_variables,
+        //         public_inputs.len()
+        //     )
+        // }
+
         // TODO CESAR
         // if private_witness.len() != matrices.num_witness_variables {
         //     eyre::bail!(
@@ -162,18 +126,30 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         //     )
         // }
 
-        let h = R::witness_map_from_matrices::<B::IcicleScalarField, B::IcicleG1, B::IcicleG2, T>(
+        let timer_start = std::time::Instant::now();
+        let h = R::witness_map_from_r1cs_eval::<B::IcicleScalarField, T>(
             state0,
-            matrices,
-            &public_inputs,
-            &private_witness,
+            eval_a,
+            eval_b,
+            public_inputs,
+            &pkey.precomputed_roots,
+            pkey.num_constraints,
+            pkey.domain_size,
         )?;
+        println!(
+            "Witness map computation took {} ms",
+            timer_start.elapsed().as_millis()
+        );
 
-        let (r, s) = (T::rand::<_, B>(net0, state0)?, T::rand::<_, B>(net0, state0)?);
+        let (r, s) = (
+            T::rand::<_, B>(net0, state0)?,
+            T::rand::<_, B>(net0, state0)?,
+        );
 
-        let private_witness_half_shares= T::to_half_share_vec(&private_witness);
+        let private_witness_half_shares = T::to_half_share_vec(&private_witness);
 
-        Self::create_proof_with_assignment(
+        let timer_start = std::time::Instant::now();
+        let out = Self::create_proof_with_assignment(
             net0,
             net1,
             state0,
@@ -184,33 +160,28 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
             h,
             &public_inputs,
             &private_witness_half_shares,
-        )
+        );
+        println!(
+            "Proof with assignment took {} ms",
+            timer_start.elapsed().as_millis()
+        );
+        out
     }
 
     fn calculate_coeff<C>(
         id: <T::State as MpcState>::PartyID,
-        initial: C::Affine,
-        query: &DeviceVec<C::Affine>,
-        vk_param: C::Affine,
-        input_assignment: &DeviceSlice<B::IcicleScalarField>,
-        aux_assignment: &DeviceSlice<B::IcicleScalarField>,
-    ) -> C::Affine
+        initial: Affine<C>,
+        first_query: Affine<C>,
+        vk_param: Affine<C>,
+        priv_pub_acc: Affine<C>,
+    ) -> Affine<C>
     where
-        C: Projective<ScalarField = B::IcicleScalarField> + MSM<C>,
+        C: Curve<ScalarField = B::IcicleScalarField> + MSM<C>,
     {
-        let pub_len = input_assignment.len();
-        println!("Calculating coeff with pub_len: {}", pub_len);
-
-        // TODO CESAR: parallelize with threads
-        let priv_acc = T::msm_public_points_hs::<C>(query.index((1 + pub_len)..), aux_assignment);
-        let pub_acc = T::msm_public_points_hs::<C>(query.index(1..=pub_len), input_assignment);
-
         let mut res = initial;
-        // TODO CESAR: Is this bad?
-        T::add_assign_points_public_hs::<C>(id, &mut res, &query.index(0..1).to_host_vec().pop().unwrap());
+        T::add_assign_points_public_hs::<C>(id, &mut res, &first_query);
         T::add_assign_points_public_hs::<C>(id, &mut res, &vk_param);
-        T::add_assign_points_public_hs::<C>(id, &mut res, &pub_acc);
-        res = (C::from_affine(res) + C::from_affine(priv_acc)).to_affine();
+        T::add_assign_points_public_hs::<C>(id, &mut res, &priv_pub_acc);
         res
     }
 
@@ -227,7 +198,6 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         input_assignment: &DeviceVec<B::IcicleScalarField>,
         aux_assignment: &DeviceVec<B::IcicleScalarField>,
     ) -> eyre::Result<Proof<B::IcicleScalarField, B::IcicleG1, B::IcicleG2>> {
-
         let ProvingKey {
             vk,
             beta_g1,
@@ -237,6 +207,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
             b_g2_query,
             l_query,
             h_query,
+            ..
         } = pkey;
 
         // TODO CESAR: Maybe this is too much copying
@@ -252,50 +223,128 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
 
         let id = state0.id();
 
-        // TODO CESAR: Use threads
+        let mut streams: [IcicleStream; 5] = array::from_fn(|_| IcicleStream::create().unwrap());
+        let mut assignment = DeviceVec::device_malloc(input_assignment.len() + aux_assignment.len() -1 )
+            .expect("Failed to allocate device vector");
+        assignment.copy(input_assignment.index(1..)).unwrap();
+        assignment.index_mut((input_assignment.len() - 1)..)
+            .copy(aux_assignment).unwrap();
 
         // Compute A
-        let r_hs = T::to_half_share(&r);
-
-        let r_g1 = delta_g1 * r_hs;
-        let r_g1 = Self::calculate_coeff::<B::IcicleG1>(
-            id,
-            r_g1.to_affine(),
-            a_query,
-            alpha_g1,
-            &input_assignment[1..],
-            aux_assignment,
+        let timer_start = std::time::Instant::now();
+        let priv_pub_acc_r_g1 = msm_async::<B::IcicleScalarField, B::IcicleG1>(
+            &a_query[1..],
+            &assignment,
+            &streams[0],
+        );
+        println!(
+            "Queueing GPU ops for r_g1 took {} ms",
+            timer_start.elapsed().as_millis()
         );
 
         // Compute B in G1
-        // In original implementation this is skipped if r==0, however r is shared in our case
-        let s_hs = T::to_half_share(&s);
-        let s_g1 = delta_g1 * s_hs;
-        let s_g1 = Self::calculate_coeff::<B::IcicleG1>(
-            id,
-            s_g1.to_affine(),
-            b_g1_query,
-            *beta_g1,
-            &input_assignment[1..],
-            aux_assignment,
+        let timer_start = std::time::Instant::now();
+        let priv_pub_acc_s_g1 = msm_async::<B::IcicleScalarField, B::IcicleG1>(
+            &b_g1_query[1..],
+            &assignment,
+            &streams[1],
+        );
+        println!(
+            "Queueing GPU ops for B in G1 took {} ms",
+            timer_start.elapsed().as_millis()
         );
 
         // Compute B in G2
-        let s_g2 = delta_g2 * s_hs;
-        let s_g2 = Self::calculate_coeff::<B::IcicleG2>(
-            id,
-            s_g2.to_affine(),
-            b_g2_query,
-            beta_g2,
-            &input_assignment[1..],
-            aux_assignment,
+        let timer_start = std::time::Instant::now();
+        let priv_pub_acc_s_g2 = msm_async::<B::IcicleScalarField, B::IcicleG2>(
+            &b_g2_query[1..],
+            &assignment,
+            &streams[2],
+        );
+        println!(
+            "Queueing GPU ops for B in G2 took {} ms",
+            timer_start.elapsed().as_millis()
         );
 
         // Compute msm(l_query, aux_assignment)
-        let l_acc = T::msm_public_points_hs::<B::IcicleG1>(l_query, aux_assignment);
+        let timer_start = std::time::Instant::now();
+        let l_acc =
+            msm_async::<B::IcicleScalarField, B::IcicleG1>(l_query, aux_assignment, &streams[3]);
+        println!(
+            "Queueing GPU ops for L took {} ms",
+            timer_start.elapsed().as_millis()
+        );
 
         // Compute msm(h_query, h)
-        let h_acc = T::msm_public_points_hs::<B::IcicleG1>(h_query, &h);
+        let timer_start = std::time::Instant::now();
+        let h_acc = msm_async::<B::IcicleScalarField, B::IcicleG1>(h_query, &h, &streams[4]);
+        println!(
+            "Queueing GPU ops for H took {} ms",
+            timer_start.elapsed().as_millis()
+        );
+
+        let r_hs = T::to_half_share(&r);
+        let r_g1 = delta_g1 * r_hs;
+        let timer_start = std::time::Instant::now();
+        let r_g1 = Self::calculate_coeff::<B::IcicleG1>(
+            id,
+            r_g1.into(),
+            get_first_affine(a_query).unwrap(),
+            alpha_g1,
+            get_first_projective(&priv_pub_acc_r_g1).unwrap().into(),
+        );
+        println!(
+            "Coefficient calculation for A took {} ms",
+            timer_start.elapsed().as_millis()
+        );
+
+        // In original implementation this is skipped if r==0, however r is shared in our case
+        let s_hs = T::to_half_share(&s);
+        let s_g1 = delta_g1 * s_hs;
+        let timer_start = std::time::Instant::now();
+        let s_g1 = Self::calculate_coeff::<B::IcicleG1>(
+            id,
+            s_g1.into(),
+            get_first_affine(&b_g1_query).unwrap(),
+            *beta_g1,
+            get_first_projective(&priv_pub_acc_s_g1).unwrap().into(),
+        );
+        println!(
+            "Coefficient calculation for B in G1 took {} ms",
+            timer_start.elapsed().as_millis()
+        );
+
+        let timer_start = std::time::Instant::now();
+        let s_g2 = delta_g2 * s_hs;
+        let s_g2 = Self::calculate_coeff::<B::IcicleG2>(
+            id,
+            s_g2.into(),
+            get_first_affine(&b_g2_query).unwrap(),
+            beta_g2,
+            get_first_projective(&priv_pub_acc_s_g2).unwrap().into(),
+        );
+        println!(
+            "Coefficient calculation for B in G2 took {} ms",
+            timer_start.elapsed().as_millis()
+        );
+
+        let timer_start = std::time::Instant::now();
+        let l_acc = get_first_projective(&l_acc).unwrap();
+        println!(
+            "Coefficient calculation for L took {} ms",
+            timer_start.elapsed().as_millis()
+        );
+
+        let timer_start = std::time::Instant::now();
+        let h_acc = get_first_projective(&h_acc).unwrap();
+        println!(
+            "Coefficient calculation for H took {} ms",
+            timer_start.elapsed().as_millis()
+        );
+
+        streams.iter_mut().for_each(|s| s.destroy().unwrap());
+
+        let timer_start = std::time::Instant::now();
 
         // Compute r * s
         let rs = T::local_mul(&r, &s, state0);
@@ -308,18 +357,23 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         let g_a_opened = T::open_half_point::<_, B::IcicleG1, B>(g_a, net0, state0)?;
         let r_g1_b = T::scalar_mul::<_, B::IcicleG1>(&g1_b, r, net1, state1)?;
 
-        let s_g_a = B::IcicleG1::from_affine(g_a_opened) * s_hs;
+        let s_g_a = g_a_opened.to_projective() * s_hs;
 
         let mut g_c = s_g_a;
         g_c = g_c + B::from_affine_g1(r_g1_b);
         g_c = g_c - r_s_delta_g1;
-        g_c = g_c + B::from_affine_g1(l_acc);
-        g_c = g_c + B::from_affine_g1(h_acc);
+        g_c = g_c + l_acc;
+        g_c = g_c + h_acc;
 
         // TODO CESAR: Use threads
         let g2_b = s_g2;
-        let g_c_opened = T::open_half_point::<_, B::IcicleG1, B>(g_c.to_affine(), net0, state0)?;
+        let g_c_opened = T::open_half_point::<_, B::IcicleG1, B>(g_c.into(), net0, state0)?;
         let g2_b_opened = T::open_half_point::<_, B::IcicleG2, B>(g2_b, net1, state1)?;
+
+        println!(
+            "Final openings took {} ms",
+            timer_start.elapsed().as_millis()
+        );
 
         Ok(Proof {
             a: g_a_opened,
@@ -328,60 +382,6 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
         })
     }
 }
-
-// TODO CESAR
-// impl<P: Pairing> Rep3CoGroth16<P> {
-//     /// Create a [`Proof`].
-//     pub fn prove<N: Network, R: R1CSToQAP>(
-//         net0: &N,
-//         net1: &N,
-//         pkey: &ProvingKey<P>,
-//         matrices: &ConstraintMatrices<P::ScalarField>,
-//         witness: Rep3SharedWitness<P::ScalarField>,
-//     ) -> eyre::Result<Proof<P>> {
-//         let mut state0 = Rep3State::new(net0, A2BType::default())?;
-//         let mut state1 = state0.fork(0)?;
-//         // execute prover in MPC
-//         Self::prove_inner::<N, R>(
-//             net0,
-//             net1,
-//             &mut state0,
-//             &mut state1,
-//             pkey,
-//             matrices,
-//             witness,
-//         )
-//     }
-// }
-
-// impl<P: Pairing> ShamirCoGroth16<P> {
-//     /// Create a [`Proof`].
-//     pub fn prove<N: Network, R: R1CSToQAP>(
-//         net0: &N,
-//         net1: &N,
-//         num_parties: usize,
-//         threshold: usize,
-//         pkey: &ProvingKey<P>,
-//         matrices: &ConstraintMatrices<P::ScalarField>,
-//         witness: ShamirSharedWitness<P::ScalarField>,
-//     ) -> eyre::Result<Proof<P>> {
-//         // we need 3 number of corr rand pairs. 2 for two rand calls, 1 for scalar_mul
-//         let num_pairs = 3;
-//         let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net0)?;
-//         let mut state0 = ShamirState::from(preprocessing);
-//         let mut state1 = state0.fork(1)?;
-//         // execute prover in MPC
-//         Self::prove_inner::<N, R>(
-//             net0,
-//             net1,
-//             &mut state0,
-//             &mut state1,
-//             pkey,
-//             matrices,
-//             witness,
-//         )
-//     }
-// }
 
 impl<P: ark_ec::pairing::Pairing> Groth16<P> {
     /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
@@ -395,39 +395,92 @@ impl<P: ark_ec::pairing::Pairing> Groth16<P> {
     ) -> Result<ark_groth16::Proof<P>> {
         let public_inputs = &private_witness.public_inputs;
         let private_witness = &private_witness.witness;
-         if std::any::TypeId::of::<P>() == std::any::TypeId::of::<ark_bn254::Bn254>() {
+
+        // TODO CESAR: Handle properly
+        runtime::load_backend_from_env_or_default().unwrap();
+
+        // Select CUDA device
+        let device = icicle_runtime::Device::new("CUDA", 0);
+        icicle_runtime::set_device(&device).unwrap();
+
+        // TODO CESAR: Duplicate
+        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(
+            matrices.num_constraints + matrices.num_instance_variables,
+        )
+        .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+        let domain_size = domain.size();
+
+        let eval_a = co_groth16::evaluate_constraint::<P, co_groth16::mpc::PlainGroth16Driver>(
+            0,
+            domain_size,
+            &matrices.a,
+            public_inputs,
+            private_witness,
+        );
+        let eval_b = co_groth16::evaluate_constraint::<P, co_groth16::mpc::PlainGroth16Driver>(
+            0,
+            domain_size,
+            &matrices.b,
+            public_inputs,
+            private_witness,
+        );
+
+        if std::any::TypeId::of::<P>() == std::any::TypeId::of::<ark_bn254::Bn254>() {
             // SAFETY: transmutes are safe here because we know P == Bn254
-            let public_inputs = unsafe {
-                transmute::<&Vec<P::ScalarField>, &Vec<ark_bn254::Fr>>(public_inputs)
-            };            
+            let public_inputs =
+                unsafe { transmute::<&Vec<P::ScalarField>, &Vec<ark_bn254::Fr>>(public_inputs) };
 
-            let private_witness = unsafe {
-                transmute::<&Vec<P::ScalarField>, &Vec<ark_bn254::Fr>>(private_witness)
-            };
+            let public_inputs = from_host_slice(public_inputs);
+            let public_inputs = transmute_ark_to_icicle_scalars(public_inputs)?;
 
-            let matrices = unsafe {
-                transmute::<&ConstraintMatrices<P::ScalarField>, &ConstraintMatrices<ark_bn254::Fr>>(matrices)
-            };
-
-            let key = unsafe {
-                transmute::<&ark_groth16::ProvingKey<P>, &ark_groth16::ProvingKey<ark_bn254::Bn254>>(pkey)
-            };
+            let private_witness =
+                unsafe { transmute::<&Vec<P::ScalarField>, &Vec<ark_bn254::Fr>>(private_witness) };
 
             // TODO CESAR: This looks sooo bad
-            let private_witness = DeviceVec::from_host_slice(&private_witness);
+            let private_witness = from_host_slice(private_witness);
             let private_witness = transmute_ark_to_icicle_scalars(private_witness)?;
 
-            let proof = CoGroth16Icicle::<Bn254Bridge, PlainGroth16Driver>::setup_and_prove::<_, R>(&(), &(), &mut (), &mut (), key, matrices, public_inputs, private_witness);
-            
-            let proof = unsafe {
-                transmute::<&ark_groth16::Proof<ark_bn254::Bn254>, &ark_groth16::Proof<P>>(&proof?)
+            let key = unsafe {
+                transmute::<&ark_groth16::ProvingKey<P>, &ark_groth16::ProvingKey<ark_bn254::Bn254>>(
+                    pkey,
+                )
             };
-            
+
+            let key = ProvingKey::from_ark::<Bn254Bridge>(
+                key,
+                matrices.num_constraints,
+                matrices.num_instance_variables,
+            );
+
+            let eval_a = unsafe { transmute::<&Vec<P::ScalarField>, &Vec<ark_bn254::Fr>>(&eval_a) };
+
+            let eval_b = unsafe { transmute::<&Vec<P::ScalarField>, &Vec<ark_bn254::Fr>>(&eval_b) };
+
+            let eval_a = from_host_slice(eval_a);
+            let mut eval_a = transmute_ark_to_icicle_scalars(eval_a)?;
+
+            let eval_b = from_host_slice(eval_b);
+            let mut eval_b = transmute_ark_to_icicle_scalars(eval_b)?;
+
+            let proof = CoGroth16Icicle::<Bn254Bridge, PlainGroth16Driver>::setup_and_prove::<_, R>(
+                &(),
+                &(),
+                &mut (),
+                &mut (),
+                &mut eval_a,
+                &mut eval_b,
+                &key,
+                &public_inputs,
+                private_witness,
+            )?;
+
+            let proof = unsafe {
+                transmute::<&ark_groth16::Proof<ark_bn254::Bn254>, &ark_groth16::Proof<P>>(&proof)
+            };
+
             return Ok(proof.clone());
         } else {
             panic!("Unsupported pairing")
         };
-
-
     }
 }

@@ -175,7 +175,7 @@ impl R1CSToQAP for CircomReduction {
     }
 }
 
-fn evaluate_constraint<P: Pairing, T: CircomGroth16Prover<P>>(
+pub fn evaluate_constraint<P: Pairing, T: CircomGroth16Prover<P>>(
     id: <T::State as MpcState>::PartyID,
     domain_size: usize,
     matrix: &Matrix<P::ScalarField>,

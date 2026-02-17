@@ -1294,6 +1294,7 @@ dependencies = [
  "ark-relations",
  "ark-serialize 0.5.0",
  "co-circom-types",
+ "co-groth16",
  "eyre",
  "icicle-bn254",
  "icicle-core",
@@ -2507,22 +2508,20 @@ dependencies = [
 
 [[package]]
 name = "icicle-bn254"
-version = "4.0.0"
-source = "git+https://github.com/ingonyama-zk/icicle.git#625532a624e5aaa6e9d31a1c92587f1fcc30dc76"
+version = "3.8.0"
+source = "git+https://github.com/ingonyama-zk/icicle-snark#bf00385db19087a8a3f6d754b43b006254b1b465"
 dependencies = [
  "cmake",
  "icicle-core",
- "icicle-hash",
  "icicle-runtime",
  "serde",
 ]
 
 [[package]]
 name = "icicle-core"
-version = "4.0.0"
-source = "git+https://github.com/ingonyama-zk/icicle.git#625532a624e5aaa6e9d31a1c92587f1fcc30dc76"
+version = "3.8.0"
+source = "git+https://github.com/ingonyama-zk/icicle-snark#bf00385db19087a8a3f6d754b43b006254b1b465"
 dependencies = [
- "cmake",
  "hex",
  "icicle-runtime",
  "once_cell",
@@ -2532,20 +2531,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "icicle-hash"
-version = "4.0.0"
-source = "git+https://github.com/ingonyama-zk/icicle.git#625532a624e5aaa6e9d31a1c92587f1fcc30dc76"
-dependencies = [
- "cmake",
- "icicle-core",
- "icicle-runtime",
- "rand 0.8.5",
-]
-
-[[package]]
 name = "icicle-runtime"
-version = "4.0.0"
-source = "git+https://github.com/ingonyama-zk/icicle.git#625532a624e5aaa6e9d31a1c92587f1fcc30dc76"
+version = "3.8.0"
+source = "git+https://github.com/ingonyama-zk/icicle-snark#bf00385db19087a8a3f6d754b43b006254b1b465"
 dependencies = [
  "cmake",
  "once_cell",
