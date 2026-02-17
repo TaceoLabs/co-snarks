@@ -32,6 +32,7 @@ mod tests {
     use icicle_bn254::curve::ScalarField;
     use icicle_core::ntt::{self, NTTConfig, initialize_domain};
     use icicle_runtime::{Device, memory::HostSlice, runtime};
+    use icicle_snark::CacheManager;
     use std::fs::{self, File};
 
     use icicle_bn254::curve::G1Projective;
@@ -73,7 +74,7 @@ mod tests {
 
     #[test]
     fn create_proof_and_verify_poseidon_hash_bn254() {
-        for check in [CheckElement::Yes, CheckElement::No] {
+        for check in [CheckElement::Yes; 10000] {
             let zkey_file =
                 File::open("../../test_vectors/Groth16/bn254/poseidon/circuit.zkey").unwrap();
             let witness_file =
@@ -81,6 +82,19 @@ mod tests {
             let vk_file =
                 File::open("../../test_vectors/Groth16/bn254/poseidon/verification_key.json")
                     .unwrap();
+
+            let timer_start = std::time::Instant::now();
+            icicle_snark::groth16_prove(
+                "../../test_vectors/Groth16/bn254/poseidon/witness.wtns",
+                "../../test_vectors/Groth16/bn254/poseidon/circuit.zkey",
+                "proof.proof",
+                "../../test_vectors/Groth16/bn254/poseidon/public.json",
+                "CUDA",
+                &mut CacheManager::default(),
+            ).unwrap();
+            println!("GPU proof generation with icicle took: {:?}", timer_start.elapsed());
+
+
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
             let zkey = Zkey::<Bn254>::from_reader(zkey_file, check).unwrap();
             let (matrices, pkey) = zkey.into();
@@ -93,13 +107,11 @@ mod tests {
             };
             let proof = Groth16::<Bn254>::plain_prove::<CircomReduction>(&pkey, &matrices, witness)
                 .expect("proof generation works");
-            println!("Proof generated successfully");
             let proof = CircomGroth16Proof::from(proof);
             let ser_proof = serde_json::to_string(&proof).unwrap();
             let der_proof = serde_json::from_str::<CircomGroth16Proof<Bn254>>(&ser_proof).unwrap();
             let der_proof = der_proof.into();
-            println!("Verifying...");
-            Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");)
+            Groth16::verify(&vk, &der_proof, &public_input[1..]).expect("can verify");
         }
     }
 }

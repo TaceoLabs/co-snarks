@@ -25,6 +25,7 @@ ark-relations = { workspace = true }
 ark-serialize = { workspace = true }
 co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
 eyre = { workspace = true }
+icicle-snark = { workspace = true }
 icicle-core = { workspace = true }
 icicle-bn254 = { workspace = true }
 icicle-runtime = { workspace = true }
