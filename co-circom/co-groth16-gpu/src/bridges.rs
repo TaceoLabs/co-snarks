@@ -12,7 +12,7 @@ use icicle_core::{
     ntt::{NTT, NTTDomain},
     vec_ops::VecOps,
 };
-use icicle_runtime::memory::HostOrDeviceSlice;
+
 use icicle_runtime::stream::IcicleStream;
 
 use crate::gpu_utils::{from_host_slice, get_first_ark_scalar, get_first_icicle_scalar};
@@ -105,7 +105,7 @@ where
     get_first_ark_scalar(&icicle_to_ark_scalars(icicle_scalars).unwrap()).unwrap()
 }
 
-pub(crate) trait ArkIcicleBridge {
+pub trait ArkIcicleBridge {
     type ArkScalarField: PrimeField;
     type ArkG1Affine: AffineRepr<ScalarField = Self::ArkScalarField>;
     type ArkG2Affine: AffineRepr<ScalarField = Self::ArkScalarField>;

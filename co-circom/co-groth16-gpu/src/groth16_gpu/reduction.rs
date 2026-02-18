@@ -7,7 +7,7 @@ use icicle_runtime::{
 use mpc_core::MpcState;
 use tracing::instrument;
 
-use crate::{bridges::ArkIcicleBridge, mpc::CircomGroth16Prover};
+use crate::{bridges::ArkIcicleBridge, gpu_utils, mpc::CircomGroth16Prover};
 
 /// This trait is used to convert the secret-shared witness into a secret-shared QAP witness as part of a collaborative Groth16 proof.
 /// Refer to <https://docs.rs/ark-groth16/latest/ark_groth16/r1cs_to_qap/trait.R1CSToQAP.html> for more details on the plain version.
@@ -28,22 +28,6 @@ pub trait R1CSToQAP {
         domain_size: usize,
     ) -> Result<DeviceVec<B::IcicleScalarField>>;
 }
-
-// fn evaluate_constraint_half_share<F: Field + VecOps<F> + NTT<F, F>, T: CircomGroth16Prover<F>>(
-//     id: <T::State as MpcState>::PartyID,
-//     domain_size: usize,
-//     matrix: &DeviceMatrix<F>,
-//     public_inputs: &DeviceSlice<F>,
-//     private_witness: &T::DeviceShares,
-// ) -> T::DeviceHalfShares {
-//     let mut result = matrix
-//         .par_iter()
-//         .with_min_len(256)
-//         .map(|x| T::evaluate_constraint_half_share(id, x, public_inputs, private_witness))
-//         .collect::<Vec<_>>();
-//     result.resize(domain_size, T::ArithmeticHalfShare::default());
-//     result
-// }
 
 /// Implements the witness map used by snarkjs. The arkworks witness map calculates the
 /// coefficients of H through computing (AB-C)/Z in the evaluation domain and going back to the
@@ -90,17 +74,18 @@ impl R1CSToQAP for CircomReduction {
         T::fft_in_place(eval_b, &stream_b);
 
         // Computation of c
-        T::ifft_in_place_hs(&mut c, &stream_c);
+        gpu_utils::ifft_inplace(&mut c, &stream_c);
         T::distribute_powers_and_mul_by_const_hs(&mut c, roots_to_power_domain, &stream_c);
-        T::fft_in_place_hs(&mut c, &stream_c);
-        stream_a.synchronize().unwrap();
+        gpu_utils::fft_inplace(&mut c, &stream_c);
 
         stream_b.synchronize().unwrap();
 
+        let ab = T::local_mul_vec::<B>(eval_a, eval_b, state, &stream_a);
+
+        stream_a.synchronize().unwrap();
+
         stream_a.destroy().unwrap();
         stream_b.destroy().unwrap();
-
-        let ab = T::local_mul_vec::<B>(eval_a, eval_b, state, &stream_c);
 
         let mut result = DeviceVec::device_malloc_async(c.len(), &stream_c)
             .expect("Failed to allocate device vector");

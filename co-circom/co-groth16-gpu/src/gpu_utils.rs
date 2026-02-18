@@ -75,7 +75,7 @@ pub fn get_first_affine<C: Curve>(vec: &DeviceSlice<Affine<C>>) -> Option<Affine
     let mut host_vec = to_host_vec_affine(vec.index(..1));
     host_vec.pop()
 }
-pub struct Proof<
+pub(crate) struct Proof<
     F: FieldImpl<Config: VecOps<F> + NTT<F, F>>,
     C1: Curve<ScalarField = F>,
     C2: Curve<ScalarField = F>,
@@ -94,7 +94,9 @@ impl<
     C2: Curve<ScalarField = F>,
 > Proof<F, C1, C2>
 {
-    pub fn to_ark<B: ArkIcicleBridge<IcicleG1 = C1, IcicleG2 = C2, IcicleScalarField = F>>(
+    pub(crate) fn to_ark<
+        B: ArkIcicleBridge<IcicleG1 = C1, IcicleG2 = C2, IcicleScalarField = F>,
+    >(
         &self,
     ) -> ark_groth16::Proof<B::ArkPairing> {
         ark_groth16::Proof {
@@ -105,68 +107,48 @@ impl<
     }
 }
 
-pub struct VerifyingKey<
+pub(crate) struct VerifyingKey<
     F: FieldImpl<Config: VecOps<F> + NTT<F, F>>,
     C1: Curve<ScalarField = F>,
     C2: Curve<ScalarField = F>,
 > {
     /// The `alpha * G`, where `G` is the generator of `E::G1`.
-    pub alpha_g1: Affine<C1>,
+    pub(crate) alpha_g1: Affine<C1>,
     /// The `alpha * H`, where `H` is the generator of `E::G2`.
-    pub beta_g2: Affine<C2>,
+    pub(crate) beta_g2: Affine<C2>,
     /// The `gamma * H`, where `H` is the generator of `E::G2`.
-    pub gamma_g2: Affine<C2>,
+    pub(crate) gamma_g2: Affine<C2>,
     /// The `delta * H`, where `H` is the generator of `E::G2`.
-    pub delta_g2: Affine<C2>,
+    pub(crate) delta_g2: Affine<C2>,
     /// The `gamma^{-1} * (beta * a_i + alpha * b_i + c_i) * H`, where `H` is
     /// the generator of `E::G1`.
-    pub gamma_abc_g1: DeviceVec<Affine<C1>>,
+    pub(crate) gamma_abc_g1: DeviceVec<Affine<C1>>,
 }
 
-impl<
-    F: FieldImpl<Config: VecOps<F> + NTT<F, F>>,
-    C1: Curve<ScalarField = F>,
-    C2: Curve<ScalarField = F>,
-> Clone for VerifyingKey<F, C1, C2>
-{
-    fn clone(&self) -> Self {
-        let mut copy_gamma_abc_g1 = DeviceVec::device_malloc(self.gamma_abc_g1.len())
-            .expect("Failed to allocate device vector");
-        copy_gamma_abc_g1.copy(&self.gamma_abc_g1).unwrap();
-        Self {
-            alpha_g1: self.alpha_g1,
-            beta_g2: self.beta_g2,
-            gamma_g2: self.gamma_g2,
-            delta_g2: self.delta_g2,
-            gamma_abc_g1: copy_gamma_abc_g1,
-        }
-    }
-}
-
-pub struct ProvingKey<
+pub(crate) struct ProvingKey<
     F: FieldImpl<Config: VecOps<F> + NTT<F, F>>,
     C1: Curve<ScalarField = F>,
     C2: Curve<ScalarField = F>,
 > {
     /// The underlying verification key.
-    pub vk: VerifyingKey<F, C1, C2>,
+    pub(crate) vk: VerifyingKey<F, C1, C2>,
     /// The element `beta * G` in `E::G1`.
-    pub beta_g1: Affine<C1>,
+    pub(crate) beta_g1: Affine<C1>,
     /// The element `delta * G` in `E::G1`.
-    pub delta_g1: Affine<C1>,
+    pub(crate) delta_g1: Affine<C1>,
     /// The elements `a_i * G` in `E::G1`.
-    pub a_query: DeviceVec<Affine<C1>>,
+    pub(crate) a_query: DeviceVec<Affine<C1>>,
     /// The elements `b_i * G` in `E::G1`.
-    pub b_g1_query: DeviceVec<Affine<C1>>,
+    pub(crate) b_g1_query: DeviceVec<Affine<C1>>,
     /// The elements `b_i * H` in `E::G2`.
-    pub b_g2_query: DeviceVec<Affine<C2>>,
+    pub(crate) b_g2_query: DeviceVec<Affine<C2>>,
     /// The elements `h_i * G` in `E::G1`.
-    pub h_query: DeviceVec<Affine<C1>>,
+    pub(crate) h_query: DeviceVec<Affine<C1>>,
     /// The elements `l_i * G` in `E::G1`.
-    pub l_query: DeviceVec<Affine<C1>>,
-    pub domain_size: usize,
-    pub precomputed_roots: DeviceVec<F>,
-    pub num_constraints: usize,
+    pub(crate) l_query: DeviceVec<Affine<C1>>,
+    pub(crate) domain_size: usize,
+    pub(crate) precomputed_roots: DeviceVec<F>,
+    pub(crate) num_constraints: usize,
 }
 
 impl<
@@ -175,7 +157,7 @@ impl<
     C2: Curve<ScalarField = F>,
 > ProvingKey<F, C1, C2>
 {
-    pub fn from_ark<P: ark_ec::pairing::Pairing>(
+    pub(crate) fn from_ark<P: ark_ec::pairing::Pairing>(
         pk: &ark_groth16::ProvingKey<P>,
         num_constraints: usize,
         num_instance_variables: usize,
@@ -264,7 +246,7 @@ impl<
     }
 }
 
-pub fn initialize_domain<F: FieldImpl<Config: NTTDomain<F>>>(max_size: usize) {
+pub(crate) fn initialize_domain<F: FieldImpl<Config: NTTDomain<F>>>(max_size: usize) {
     // TODO CESAR: Handle better
     ntt::initialize_domain(
         ntt::get_root_of_unity::<F>(max_size.try_into().unwrap()),
@@ -273,7 +255,7 @@ pub fn initialize_domain<F: FieldImpl<Config: NTTDomain<F>>>(max_size: usize) {
     .unwrap();
 }
 
-pub fn fft_inplace<F: FieldImpl<Config: VecOps<F> + NTT<F, F>>>(
+pub(crate) fn fft_inplace<F: FieldImpl<Config: VecOps<F> + NTT<F, F>>>(
     input: &mut DeviceSlice<F>,
     stream: &IcicleStream,
 ) {
@@ -284,7 +266,7 @@ pub fn fft_inplace<F: FieldImpl<Config: VecOps<F> + NTT<F, F>>>(
     ntt_inplace(input, NTTDir::kForward, &ntt_config).expect("Failed to compute FFT in place");
 }
 
-pub fn ifft_inplace<F: FieldImpl<Config: VecOps<F> + NTT<F, F>>>(
+pub(crate) fn ifft_inplace<F: FieldImpl<Config: VecOps<F> + NTT<F, F>>>(
     input: &mut DeviceSlice<F>,
     stream: &IcicleStream,
 ) {
@@ -296,7 +278,7 @@ pub fn ifft_inplace<F: FieldImpl<Config: VecOps<F> + NTT<F, F>>>(
         .expect("Failed to compute inverse FFT in place");
 }
 
-pub fn msm_async<
+pub(crate) fn msm_async<
     F: FieldImpl<Config: VecOps<F> + NTT<F, F>>,
     C: Curve<ScalarField = F> + MSM<C>,
 >(

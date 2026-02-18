@@ -2,13 +2,13 @@
 #![warn(missing_docs)]
 mod groth16_gpu;
 
-pub mod bridges;
+mod bridges;
 mod gpu_utils;
 /// This module contains the Groth16 prover trait
 pub mod mpc;
 mod verifier;
 
-pub use groth16_gpu::{CircomReduction, Groth16, R1CSToQAP};
+pub use groth16_gpu::{CircomReduction, Groth16, R1CSToQAP, Rep3CoGroth16};
 
 pub use ark_groth16::{Proof, ProvingKey, VerifyingKey};
 pub use ark_relations::r1cs::ConstraintMatrices;

@@ -71,19 +71,19 @@ impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic + MontgomeryConver
         *coeffs = result;
     }
 
+    fn add_assign_points_public_hs<C: Curve<ScalarField = F>>(
+        _: <Self::State as MpcState>::PartyID,
+        a: &mut Affine<C>,
+        b: &Affine<C>,
+    ) {
+        *a = (a.to_projective() + b.to_projective()).into();
+    }
+
     fn fft_in_place(input: &mut Self::DeviceShares, stream: &IcicleStream) {
         fft_inplace(input, stream);
     }
 
     fn ifft_in_place(input: &mut Self::DeviceShares, stream: &IcicleStream) {
-        ifft_inplace(input, stream);
-    }
-
-    fn fft_in_place_hs(input: &mut DeviceVec<F>, stream: &IcicleStream) {
-        fft_inplace(input, stream);
-    }
-
-    fn ifft_in_place_hs(input: &mut DeviceVec<F>, stream: &IcicleStream) {
         ifft_inplace(input, stream);
     }
 

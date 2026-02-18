@@ -13,10 +13,11 @@ use icicle_runtime::{
 };
 use mpc_core::{
     MpcState,
-    protocols::rep3::{Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, pointshare},
+    protocols::rep3::{
+        Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, pointshare,
+    },
 };
 use mpc_net::Network;
-use rand::thread_rng;
 
 use crate::{
     bridges::{
@@ -101,6 +102,16 @@ impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic + MontgomeryConver
         };
     }
 
+    fn add_assign_points_public_hs<C: Curve<ScalarField = F>>(
+        id: <Self::State as MpcState>::PartyID,
+        a: &mut Affine<C>,
+        b: &Affine<C>,
+    ) {
+        if matches!(id, PartyID::ID0) {
+            *a = (a.to_projective() + b.to_projective()).into();
+        }
+    }
+
     fn fft_in_place(input: &mut Self::DeviceShares, stream: &IcicleStream) {
         fft_inplace(&mut input.a, stream);
         fft_inplace(&mut input.b, stream);
@@ -109,14 +120,6 @@ impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic + MontgomeryConver
     fn ifft_in_place(input: &mut Self::DeviceShares, stream: &IcicleStream) {
         ifft_inplace(&mut input.a, stream);
         ifft_inplace(&mut input.b, stream);
-    }
-
-    fn fft_in_place_hs(input: &mut DeviceVec<F>, stream: &IcicleStream) {
-        fft_inplace(input, stream);
-    }
-
-    fn ifft_in_place_hs(input: &mut DeviceVec<F>, stream: &IcicleStream) {
-        ifft_inplace(input, stream);
     }
 
     fn copy_to_device_shares(
@@ -212,7 +215,6 @@ impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic + MontgomeryConver
         _: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Self::ArithmeticShare> {
-        let mut rng = thread_rng();
         let res = arithmetic::rand::<B::ArkScalarField>(state);
         Ok(Self::ArithmeticShare {
             a: ark_to_icicle_scalar(res.a),

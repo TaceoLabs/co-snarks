@@ -202,13 +202,12 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
             ..
         } = pkey;
 
-        // TODO CESAR: Maybe this is too much copying
         let VerifyingKey {
             alpha_g1,
             beta_g2,
             delta_g2,
             ..
-        } = vk.clone();
+        } = vk;
 
         let delta_g1 = delta_g1.to_projective();
         let delta_g2 = delta_g2.to_projective();
@@ -219,6 +218,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
             IcicleStream::create().unwrap(),
             IcicleStream::create().unwrap(),
         );
+
         let mut assignment =
             DeviceVec::device_malloc(input_assignment.len() + aux_assignment.len() - 1)
                 .expect("Failed to allocate device vector");
@@ -281,7 +281,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
             id,
             r_g1.into(),
             get_first_affine(a_query).unwrap(),
-            alpha_g1,
+            *alpha_g1,
             get_first_projective(&priv_pub_acc_r_g1).unwrap().into(),
         );
         println!(
@@ -311,7 +311,7 @@ impl<B: ArkIcicleBridge, T: CircomGroth16Prover<B::IcicleScalarField>> CoGroth16
             id,
             s_g2.into(),
             get_first_affine(&b_g2_query).unwrap(),
-            beta_g2,
+            *beta_g2,
             get_first_projective(&priv_pub_acc_s_g2).unwrap().into(),
         );
         println!(

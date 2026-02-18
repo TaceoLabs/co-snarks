@@ -56,7 +56,6 @@ pub trait CircomGroth16Prover<
 
     /// Computes the \[coeffs_i\] *= c * g^i for the coefficients in 0 <= i < coeff.len()
     // TODO CESAR: Check if we can avoid alloc
-    // TODO CESAR: Remove
     fn distribute_powers_and_mul_by_const_hs(
         coeffs: &mut DeviceVec<F>,
         roots: &DeviceSlice<F>,
@@ -78,24 +77,21 @@ pub trait CircomGroth16Prover<
     /// Converts shared values to half shared values. Local interaction only.
     fn to_half_share_vec(a: &Self::DeviceShares) -> DeviceVec<F>;
 
-    // TODO CESAR: Remove
     /// Add a public point B in place to the shared point A
     fn add_assign_points_public_hs<C: Curve<ScalarField = F>>(
         _: <Self::State as MpcState>::PartyID,
         a: &mut Affine<C>,
         b: &Affine<C>,
-    ) {
-        *a = (a.to_projective() + b.to_projective()).into();
-    }
+    );
 
+    /// Performs the Fast Fourier Transform (FFT) in place.
     fn fft_in_place(input: &mut Self::DeviceShares, stream: &IcicleStream);
 
+    /// Performs the Inverse Fast Fourier Transform (IFFT) in place.
     fn ifft_in_place(input: &mut Self::DeviceShares, stream: &IcicleStream);
 
-    fn fft_in_place_hs(input: &mut DeviceVec<F>, stream: &IcicleStream);
-
-    fn ifft_in_place_hs(input: &mut DeviceVec<F>, stream: &IcicleStream);
-
+    /// Copies a slice of device shares to another device shares vector,
+    /// starting and ending at the specified indices.
     fn copy_to_device_shares(
         src: &Self::DeviceShares,
         dst: &mut Self::DeviceShares,
@@ -105,6 +101,7 @@ pub trait CircomGroth16Prover<
 
     // ICICLE <-> ARK functions
 
+    /// Converts a vector of arithmetic shares to device shares.
     fn shares_to_device<
         B: ArkIcicleBridge<IcicleScalarField = F>,
         T: co_groth16::CircomGroth16Prover<B::ArkPairing> + 'static,
@@ -112,6 +109,7 @@ pub trait CircomGroth16Prover<
         shares: &Vec<T::ArithmeticShare>,
     ) -> Self::DeviceShares;
 
+    /// Evaluates the constraints for a given party ID and transforms the results into device shares.
     fn evaluate_constraints<
         B: ArkIcicleBridge<IcicleScalarField = F>,
         T: co_groth16::CircomGroth16Prover<B::ArkPairing> + 'static,
@@ -160,6 +158,11 @@ pub trait CircomGroth16Prover<
         stream: &IcicleStream,
     ) -> DeviceVec<F>;
 
+    /// Performs multiplication of two shared values.
+    /// Does not perform any networking.
+    ///
+    /// # Security
+    /// You must *NOT* perform additional non-linear operations on the result of this function.
     fn local_mul<B: ArkIcicleBridge<IcicleScalarField = F>>(
         a: &Self::ArithmeticShare,
         b: &Self::ArithmeticShare,
