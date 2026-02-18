@@ -1,15 +1,13 @@
-use std::ops::{Index, IndexMut};
+use std::{mem::transmute, ops::IndexMut};
 
 use ark_ff::UniformRand;
 use icicle_core::{
     curve::{Affine, Curve},
-    msm::{MSM, MSMConfig, msm},
     ntt::NTT,
-    traits::{Arithmetic, FieldImpl},
-    vec_ops::{VecOps, VecOpsConfig, mul_scalars, sub_scalars, sum_scalars},
+    traits::{Arithmetic, FieldImpl, MontgomeryConvertible},
+    vec_ops::{VecOps, VecOpsConfig, mul_scalars},
 };
 use icicle_runtime::{
-    Device,
     memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice},
     stream::IcicleStream,
 };
@@ -18,8 +16,8 @@ use mpc_net::Network;
 use rand::thread_rng;
 
 use crate::{
-    bridges::ArkIcicleBridge,
-    gpu_utils::{fft_inplace, get_first_projective, ifft_inplace},
+    bridges::{ArkIcicleBridge, ark_to_icicle_scalar, ark_to_icicle_scalars},
+    gpu_utils::{fft_inplace, from_host_slice, ifft_inplace},
 };
 
 use super::CircomGroth16Prover;
@@ -27,8 +25,8 @@ use super::CircomGroth16Prover;
 /// A plain Groth16 driver
 pub struct PlainGroth16Driver;
 
-impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic> CircomGroth16Prover<F>
-    for PlainGroth16Driver
+impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic + MontgomeryConvertible>
+    CircomGroth16Prover<F> for PlainGroth16Driver
 {
     type ArithmeticShare = F;
 
@@ -48,20 +46,6 @@ impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic> CircomGroth16Prov
         result
     }
 
-    fn msm_public_points_hs<C: Curve<ScalarField = F> + MSM<C>>(
-        points: &DeviceSlice<Affine<C>>,
-        scalars: &DeviceSlice<F>,
-        stream: &IcicleStream,
-    ) -> Affine<C> {
-        let mut results =
-            DeviceVec::device_malloc_async(1, stream).expect("Failed to allocate device vector");
-        let mut cfg = MSMConfig::default();
-        cfg.stream_handle = **stream;
-        cfg.is_async = true;
-        msm::<C>(scalars, points, &cfg, results.index_mut(..)).unwrap();
-        get_first_projective(&results).unwrap().into()
-    }
-
     fn promote_to_trivial_shares(
         _: <Self::State as MpcState>::PartyID,
         public_values: &DeviceSlice<F>,
@@ -70,33 +54,6 @@ impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic> CircomGroth16Prov
             .expect("Failed to allocate device vector");
         result.copy(public_values).unwrap();
         result
-    }
-
-    fn local_mul_vec(
-        a: &Self::DeviceShares,
-        b: &Self::DeviceShares,
-        _: &mut Self::State,
-        stream: &IcicleStream,
-    ) -> DeviceVec<F> {
-        let mut result = DeviceVec::device_malloc_async(a.len(), stream)
-            .expect("Failed to allocate device vector");
-        let mut cfg = VecOpsConfig::default();
-        cfg.stream_handle = **stream;
-        cfg.is_async = true;
-        mul_scalars(a, b, result.as_mut_slice(), &cfg).unwrap();
-        result
-    }
-
-    fn local_mul(a: &Self::ArithmeticShare, b: &Self::ArithmeticShare, _: &mut Self::State) -> F {
-        *a * *b
-    }
-
-    fn add_assign_points_public_hs<C: Curve<ScalarField = F>>(
-        _: <Self::State as MpcState>::PartyID,
-        a: &mut Affine<C>,
-        b: &Affine<C>,
-    ) {
-        *a = (a.to_projective() + b.to_projective()).into();
     }
 
     // TODO CESAR: Check if we can avoid alloc
@@ -114,44 +71,20 @@ impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic> CircomGroth16Prov
         *coeffs = result;
     }
 
-    // TODO CESAR: Check if we can avoid alloc
-    fn distribute_powers_and_mul_by_const_hs(
-        coeffs: &mut DeviceVec<F>,
-        roots: &DeviceSlice<F>,
-        stream: &IcicleStream,
-    ) {
-        let mut result = DeviceVec::device_malloc_async(coeffs.len(), stream)
-            .expect("Failed to allocate device vector");
-        let mut cfg = VecOpsConfig::default();
-        cfg.stream_handle = **stream;
-        cfg.is_async = true;
-        mul_scalars(coeffs, roots, result.as_mut_slice(), &cfg).unwrap();
-        *coeffs = result;
-    }
-
-    fn scalar_mul<N: Network, C: Curve<ScalarField = F>>(
-        a: &Affine<C>,
-        b: Self::ArithmeticShare,
-        _: &N,
-        _: &mut Self::State,
-    ) -> eyre::Result<Affine<C>> {
-        Ok((a.to_projective() * b).into())
-    }
-
     fn fft_in_place(input: &mut Self::DeviceShares, stream: &IcicleStream) {
-        fft_inplace(input, stream).expect("FFT failed");
+        fft_inplace(input, stream);
     }
 
     fn ifft_in_place(input: &mut Self::DeviceShares, stream: &IcicleStream) {
-        ifft_inplace(input, stream).expect("IFFT failed");
+        ifft_inplace(input, stream);
     }
 
     fn fft_in_place_hs(input: &mut DeviceVec<F>, stream: &IcicleStream) {
-        fft_inplace(input, stream).expect("FFT failed");
+        fft_inplace(input, stream);
     }
 
     fn ifft_in_place_hs(input: &mut DeviceVec<F>, stream: &IcicleStream) {
-        ifft_inplace(input, stream).expect("IFFT failed");
+        ifft_inplace(input, stream);
     }
 
     fn copy_to_device_shares(
@@ -163,24 +96,81 @@ impl<F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic> CircomGroth16Prov
         dst.index_mut(start..end).copy(src).unwrap();
     }
 
+    fn shares_to_device<
+        B: ArkIcicleBridge<IcicleScalarField = F>,
+        T: co_groth16::CircomGroth16Prover<B::ArkPairing> + 'static,
+    >(
+        shares: &Vec<T::ArithmeticShare>,
+    ) -> Self::DeviceShares {
+        if std::any::TypeId::of::<T>()
+            != std::any::TypeId::of::<co_groth16::mpc::PlainGroth16Driver>()
+        {
+            panic!("Invalid driver: expected PlainGroth16Driver");
+        }
+
+        // SAFETY: At this point we know the shares are safe to transmute
+        let shares =
+            unsafe { transmute::<&Vec<T::ArithmeticShare>, &Vec<B::ArkScalarField>>(shares) };
+
+        let shares_icicle = from_host_slice(shares);
+        ark_to_icicle_scalars(shares_icicle).unwrap()
+    }
+
+    fn local_mul_vec<B: ArkIcicleBridge<IcicleScalarField = F>>(
+        a: &Self::DeviceShares,
+        b: &Self::DeviceShares,
+        _: &mut Self::State,
+        stream: &IcicleStream,
+    ) -> DeviceVec<F> {
+        let mut result = DeviceVec::device_malloc_async(a.len(), stream)
+            .expect("Failed to allocate device vector");
+        let mut cfg = VecOpsConfig::default();
+        cfg.stream_handle = **stream;
+        cfg.is_async = true;
+
+        mul_scalars(a, b, result.as_mut_slice(), &cfg).unwrap();
+        result
+    }
+
+    fn local_mul<B: ArkIcicleBridge<IcicleScalarField = F>>(
+        a: &Self::ArithmeticShare,
+        b: &Self::ArithmeticShare,
+        _: &mut Self::State,
+    ) -> F {
+        *a * *b
+    }
+
     fn rand<N: Network, B: ArkIcicleBridge<IcicleScalarField = F>>(
         _: &N,
         _: &mut Self::State,
     ) -> eyre::Result<Self::ArithmeticShare> {
         let mut rng = thread_rng();
         let res = B::ArkScalarField::rand(&mut rng);
-        Ok(B::ark_to_icicle_scalar(&res))
+        Ok(ark_to_icicle_scalar(res))
     }
 
-    fn open_half_point<
-        N: Network,
-        C: Curve<ScalarField = F>,
-        B: ArkIcicleBridge<IcicleScalarField = F>,
-    >(
-        a: Affine<C>,
+    fn open_half_point_g1<N: Network, B: ArkIcicleBridge<IcicleScalarField = F>>(
+        a: Affine<B::IcicleG1>,
         _: &N,
         _: &mut Self::State,
-    ) -> eyre::Result<Affine<C>> {
+    ) -> eyre::Result<Affine<B::IcicleG1>> {
         Ok(a)
+    }
+
+    fn open_half_point_g2<N: Network, B: ArkIcicleBridge<IcicleScalarField = F>>(
+        a: Affine<B::IcicleG2>,
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Affine<B::IcicleG2>> {
+        Ok(a)
+    }
+
+    fn scalar_mul_g1<N: Network, B: ArkIcicleBridge<IcicleScalarField = F>>(
+        a: &Affine<B::IcicleG1>,
+        b: Self::ArithmeticShare,
+        _: &N,
+        _: &mut Self::State,
+    ) -> eyre::Result<Affine<B::IcicleG1>> {
+        Ok((a.to_projective() * b).into())
     }
 }

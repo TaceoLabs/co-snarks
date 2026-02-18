@@ -1,29 +1,23 @@
-use std::{
-    mem::transmute,
-    ops::{Index, IndexMut},
-};
+use std::ops::{Index, IndexMut};
 
 use ark_ff::PrimeField;
 use ark_poly::EvaluationDomain;
 use ark_poly::GeneralEvaluationDomain;
-use ark_relations::r1cs::ConstraintMatrices;
 use co_groth16::root_of_unity_for_groth16;
-use icicle_bn254::curve::ScalarField;
 use icicle_core::curve::Affine;
 use icicle_core::vec_ops::VecOps;
 use icicle_core::{
     curve::{Curve, Projective},
-    field::Field,
     msm::{MSM, MSMConfig, msm},
     ntt::{self, NTT, NTTConfig, NTTDir, NTTDomain, ntt_inplace},
     traits::{Arithmetic, FieldImpl, MontgomeryConvertible},
 };
 use icicle_runtime::{
     memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice},
-    stream::{self, IcicleStream},
+    stream::IcicleStream,
 };
 
-use crate::bridges::ArkIcicleBridge;
+use crate::bridges::{ArkIcicleBridge, ark_to_icicle_affine, ark_to_icicle_scalar};
 
 pub fn from_host_slice<T>(slice: &[T]) -> DeviceVec<T> {
     let count = slice.len();
@@ -34,15 +28,27 @@ pub fn from_host_slice<T>(slice: &[T]) -> DeviceVec<T> {
     result
 }
 
-pub fn to_host_vec_scalar<F: FieldImpl>(slice: &DeviceSlice<F>) -> Vec<F> {
+pub fn to_host_vec_ark_scalar<F: PrimeField>(slice: &DeviceSlice<F>) -> Vec<F> {
     let mut host_vec = vec![F::zero(); slice.len()];
     let host_slice = HostSlice::from_mut_slice(&mut host_vec);
     slice.copy_to_host(host_slice).unwrap();
     host_vec
 }
 
-pub fn get_first_scalar<F: FieldImpl>(vec: &DeviceSlice<F>) -> Option<F> {
-    let mut host_vec = to_host_vec_scalar(vec.index(..1));
+pub fn get_first_ark_scalar<F: PrimeField>(vec: &DeviceSlice<F>) -> Option<F> {
+    let mut host_vec = to_host_vec_ark_scalar(vec.index(..1));
+    host_vec.pop()
+}
+
+pub fn to_host_vec_icicle_scalar<F: FieldImpl>(slice: &DeviceSlice<F>) -> Vec<F> {
+    let mut host_vec = vec![F::zero(); slice.len()];
+    let host_slice = HostSlice::from_mut_slice(&mut host_vec);
+    slice.copy_to_host(host_slice).unwrap();
+    host_vec
+}
+
+pub fn get_first_icicle_scalar<F: FieldImpl>(vec: &DeviceSlice<F>) -> Option<F> {
+    let mut host_vec = to_host_vec_icicle_scalar(vec.index(..1));
     host_vec.pop()
 }
 
@@ -69,7 +75,6 @@ pub fn get_first_affine<C: Curve>(vec: &DeviceSlice<Affine<C>>) -> Option<Affine
     let mut host_vec = to_host_vec_affine(vec.index(..1));
     host_vec.pop()
 }
-
 pub struct Proof<
     F: FieldImpl<Config: VecOps<F> + NTT<F, F>>,
     C1: Curve<ScalarField = F>,
@@ -118,7 +123,6 @@ pub struct VerifyingKey<
     pub gamma_abc_g1: DeviceVec<Affine<C1>>,
 }
 
-// TODO CESAR: So many copies, but is it bad?
 impl<
     F: FieldImpl<Config: VecOps<F> + NTT<F, F>>,
     C1: Curve<ScalarField = F>,
@@ -166,70 +170,70 @@ pub struct ProvingKey<
 }
 
 impl<
-    F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic,
+    F: FieldImpl<Config: VecOps<F> + NTT<F, F>> + Arithmetic + MontgomeryConvertible,
     C1: Curve<ScalarField = F>,
     C2: Curve<ScalarField = F>,
 > ProvingKey<F, C1, C2>
 {
-    pub fn from_ark<B: ArkIcicleBridge<IcicleG1 = C1, IcicleG2 = C2, IcicleScalarField = F>>(
-        pk: &ark_groth16::ProvingKey<B::ArkPairing>,
+    pub fn from_ark<P: ark_ec::pairing::Pairing>(
+        pk: &ark_groth16::ProvingKey<P>,
         num_constraints: usize,
         num_instance_variables: usize,
     ) -> Self {
-        let alpha_g1 = B::ark_to_icicle_g1(&pk.vk.alpha_g1);
-        let beta_g2 = B::ark_to_icicle_g2(&pk.vk.beta_g2);
-        let gamma_g2 = B::ark_to_icicle_g2(&pk.vk.gamma_g2);
-        let delta_g2 = B::ark_to_icicle_g2(&pk.vk.delta_g2);
+        let alpha_g1 = ark_to_icicle_affine(&pk.vk.alpha_g1);
+        let beta_g2 = ark_to_icicle_affine(&pk.vk.beta_g2);
+        let gamma_g2 = ark_to_icicle_affine(&pk.vk.gamma_g2);
+        let delta_g2 = ark_to_icicle_affine(&pk.vk.delta_g2);
         let gamma_abc_g1 = from_host_slice(
             &pk.vk
                 .gamma_abc_g1
                 .iter()
-                .map(B::ark_to_icicle_g1)
+                .map(ark_to_icicle_affine)
                 .collect::<Vec<_>>(),
         );
 
-        let beta_g1 = B::ark_to_icicle_g1(&pk.beta_g1);
-        let delta_g1 = B::ark_to_icicle_g1(&pk.delta_g1);
+        let beta_g1 = ark_to_icicle_affine(&pk.beta_g1);
+        let delta_g1 = ark_to_icicle_affine(&pk.delta_g1);
         let a_query = from_host_slice(
             &pk.a_query
                 .iter()
-                .map(B::ark_to_icicle_g1)
+                .map(ark_to_icicle_affine)
                 .collect::<Vec<_>>(),
         );
         let b_g1_query = from_host_slice(
             &pk.b_g1_query
                 .iter()
-                .map(B::ark_to_icicle_g1)
+                .map(ark_to_icicle_affine)
                 .collect::<Vec<_>>(),
         );
         let b_g2_query = from_host_slice(
             &pk.b_g2_query
                 .iter()
-                .map(B::ark_to_icicle_g2)
+                .map(ark_to_icicle_affine)
                 .collect::<Vec<_>>(),
         );
         let h_query = from_host_slice(
             &pk.h_query
                 .iter()
-                .map(B::ark_to_icicle_g1)
+                .map(ark_to_icicle_affine)
                 .collect::<Vec<_>>(),
         );
         let l_query = from_host_slice(
             &pk.l_query
                 .iter()
-                .map(B::ark_to_icicle_g1)
+                .map(ark_to_icicle_affine)
                 .collect::<Vec<_>>(),
         );
 
-        let mut domain = GeneralEvaluationDomain::<B::ArkScalarField>::new(
+        let mut domain = GeneralEvaluationDomain::<P::ScalarField>::new(
             num_constraints + num_instance_variables,
         )
         .unwrap();
         let domain_size = domain.size();
         let power = domain_size.ilog2() as usize;
 
-        let root_of_unity = root_of_unity_for_groth16::<B::ArkScalarField>(power, &mut domain);
-        let root_of_unity = B::ark_to_icicle_scalar(&root_of_unity);
+        let root_of_unity = root_of_unity_for_groth16::<P::ScalarField>(power, &mut domain);
+        let root_of_unity = ark_to_icicle_scalar(root_of_unity);
         let mut roots = Vec::with_capacity(domain_size);
         let mut c = F::one();
         for _ in 0..domain_size {
@@ -269,30 +273,27 @@ pub fn initialize_domain<F: FieldImpl<Config: NTTDomain<F>>>(max_size: usize) {
     .unwrap();
 }
 
-// TODO CESAR: Compute batch of ntts
 pub fn fft_inplace<F: FieldImpl<Config: VecOps<F> + NTT<F, F>>>(
     input: &mut DeviceSlice<F>,
     stream: &IcicleStream,
-) -> eyre::Result<()> {
+) {
     let mut ntt_config = NTTConfig::<F>::default();
     ntt_config.stream_handle = **stream;
     ntt_config.is_async = true;
 
-    ntt_inplace(input, NTTDir::kForward, &ntt_config).unwrap();
-    Ok(())
+    ntt_inplace(input, NTTDir::kForward, &ntt_config).expect("Failed to compute FFT in place");
 }
 
-// TODO CESAR: Compute batch of ntts
 pub fn ifft_inplace<F: FieldImpl<Config: VecOps<F> + NTT<F, F>>>(
     input: &mut DeviceSlice<F>,
     stream: &IcicleStream,
-) -> eyre::Result<()> {
+) {
     let mut ntt_config = NTTConfig::<F>::default();
     ntt_config.stream_handle = **stream;
     ntt_config.is_async = true;
 
-    ntt_inplace(input, NTTDir::kInverse, &ntt_config).unwrap();
-    Ok(())
+    ntt_inplace(input, NTTDir::kInverse, &ntt_config)
+        .expect("Failed to compute inverse FFT in place");
 }
 
 pub fn msm_async<
@@ -313,6 +314,7 @@ pub fn msm_async<
     let mut cfg = MSMConfig::default();
     cfg.stream_handle = **stream;
     cfg.is_async = true;
-    msm::<C>(scalars, points, &cfg, results.index_mut(..)).unwrap();
+
+    msm::<C>(scalars, points, &cfg, results.index_mut(..)).expect("Failed to compute MSM");
     results
 }

@@ -2,24 +2,22 @@ use std::mem::transmute;
 
 use ark_bn254::Bn254;
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, FftField, Field as ArkField, PrimeField};
-use icicle_core::curve::{Affine, Curve, Projective};
+use ark_ff::{BigInteger, PrimeField};
+use icicle_core::curve::{Affine, Curve};
 use icicle_core::traits::{Arithmetic, FieldImpl, MontgomeryConvertible};
-use icicle_runtime::memory::{DeviceSlice, DeviceVec, HostOrDeviceSlice, HostSlice};
+use icicle_runtime::memory::DeviceVec;
 
 use icicle_core::{
-    field::Field,
     msm::MSM,
     ntt::{NTT, NTTDomain},
-    pairing::Pairing,
     vec_ops::VecOps,
 };
+use icicle_runtime::memory::HostOrDeviceSlice;
 use icicle_runtime::stream::IcicleStream;
-use rayon::vec;
 
-use crate::gpu_utils::{from_host_slice, get_first_scalar};
+use crate::gpu_utils::{from_host_slice, get_first_ark_scalar, get_first_icicle_scalar};
 
-fn ark_to_icicle_base<T, I>(ark: &T) -> I
+pub(crate) fn ark_to_icicle_base<T, I>(ark: &T) -> I
 where
     T: ark_ff::Field,
     I: FieldImpl,
@@ -31,7 +29,7 @@ where
     I::from_bytes_le(&ark_bytes)
 }
 
-fn icicle_to_ark_base<T, I>(icicle: &I) -> T
+pub(crate) fn icicle_to_ark_base<T, I>(icicle: &I) -> T
 where
     T: ark_ff::Field,
     I: FieldImpl,
@@ -39,7 +37,7 @@ where
     T::from_random_bytes(&icicle.to_bytes_le()).unwrap()
 }
 
-fn ark_to_icicle_affine<T, C>(ark_affine: &T) -> Affine<C>
+pub(crate) fn ark_to_icicle_affine<T, C>(ark_affine: &T) -> Affine<C>
 where
     T: AffineRepr,
     C: Curve,
@@ -54,33 +52,7 @@ where
     }
 }
 
-fn ark_to_icicle_affine_points<T, C>(ark_affine: &[T]) -> Vec<Affine<C>>
-where
-    T: AffineRepr,
-    C: Curve,
-{
-    ark_affine
-        .iter()
-        .map(|ark| {
-            Affine::<C>::from_limbs(
-                ark_to_icicle_base::<_, C::BaseField>(&ark.x().unwrap()).into(),
-                ark_to_icicle_base::<_, C::BaseField>(&ark.y().unwrap()).into(),
-            )
-        })
-        .collect()
-}
-
-pub fn to_ark<T, I>(icicle: &I) -> T
-where
-    I: FieldImpl,
-    T: PrimeField,
-{
-    T::from_random_bytes(&icicle.to_bytes_le()).unwrap()
-}
-
-pub fn transmute_ark_to_icicle_scalars<T, I>(
-    ark_scalars: DeviceVec<T>,
-) -> eyre::Result<DeviceVec<I>>
+pub(crate) fn ark_to_icicle_scalars<T, I>(ark_scalars: DeviceVec<T>) -> eyre::Result<DeviceVec<I>>
 where
     T: PrimeField,
     I: FieldImpl + MontgomeryConvertible,
@@ -94,18 +66,46 @@ where
     Ok(icicle_scalars)
 }
 
+pub(crate) fn icicle_to_ark_scalars<T, I>(
+    icicle_scalars: DeviceVec<I>,
+) -> eyre::Result<DeviceVec<T>>
+where
+    T: PrimeField,
+    I: FieldImpl + MontgomeryConvertible,
+{
+    let mut icicle_scalars = icicle_scalars;
+
+    // Convert to Montgomery representation using the Icicle type's conversion method
+    I::to_mont(&mut icicle_scalars, &IcicleStream::default());
+
+    // SAFETY: Reinterpreting Icicle-specific scalars as Arkworks field elements
+    let ark_scalars = unsafe { transmute::<DeviceVec<I>, DeviceVec<T>>(icicle_scalars) };
+
+    Ok(ark_scalars)
+}
+
 // TODO CESAR: Batch
-pub fn transmute_ark_to_icicle_scalar<T, I>(ark_scalar: T) -> I
+pub(crate) fn ark_to_icicle_scalar<T, I>(ark_scalar: T) -> I
 where
     T: PrimeField,
     I: FieldImpl + MontgomeryConvertible,
 {
     let ark_scalars = vec![ark_scalar];
     let ark_scalars = from_host_slice(&ark_scalars);
-    get_first_scalar(&transmute_ark_to_icicle_scalars(ark_scalars).unwrap()).unwrap()
+    get_first_icicle_scalar(&ark_to_icicle_scalars(ark_scalars).unwrap()).unwrap()
 }
 
-pub trait ArkIcicleBridge {
+pub(crate) fn icicle_to_ark_scalar<T, I>(icicle_scalar: I) -> T
+where
+    T: PrimeField,
+    I: FieldImpl + MontgomeryConvertible,
+{
+    let icicle_scalars = vec![icicle_scalar];
+    let icicle_scalars = from_host_slice(&icicle_scalars);
+    get_first_ark_scalar(&icicle_to_ark_scalars(icicle_scalars).unwrap()).unwrap()
+}
+
+pub(crate) trait ArkIcicleBridge {
     type ArkScalarField: PrimeField;
     type ArkG1Affine: AffineRepr<ScalarField = Self::ArkScalarField>;
     type ArkG2Affine: AffineRepr<ScalarField = Self::ArkScalarField>;
@@ -128,56 +128,12 @@ pub trait ArkIcicleBridge {
     type IcicleG1: Curve<ScalarField = Self::IcicleScalarField> + MSM<Self::IcicleG1>;
     type IcicleG2: Curve<ScalarField = Self::IcicleScalarField> + MSM<Self::IcicleG2>;
 
-    fn ark_to_icicle_scalar(ark: &Self::ArkScalarField) -> Self::IcicleScalarField {
-        transmute_ark_to_icicle_scalar(*ark)
-    }
-
-    fn from_affine_g1(point: Affine<Self::IcicleG1>) -> Projective<Self::IcicleG1> {
-        point.to_projective()
-    }
-
-    fn from_affine_g2(point: Affine<Self::IcicleG2>) -> Projective<Self::IcicleG2> {
-        point.to_projective()
-    }
-
-    fn ark_to_icicle_base_g1(
-        ark: &<Self::ArkG1 as CurveGroup>::BaseField,
-    ) -> <Self::IcicleG1 as Curve>::BaseField {
-        ark_to_icicle_base(ark)
-    }
-
-    fn ark_to_icicle_base_g2(
-        ark: &<Self::ArkG2 as CurveGroup>::BaseField,
-    ) -> <Self::IcicleG2 as Curve>::BaseField {
-        ark_to_icicle_base(ark)
-    }
-
-    fn icicle_to_ark_base_g1(
-        icicle: &<Self::IcicleG1 as Curve>::BaseField,
-    ) -> <Self::ArkG1 as CurveGroup>::BaseField {
-        icicle_to_ark_base(icicle)
-    }
-
-    fn icicle_to_ark_base_g2(
-        icicle: &<Self::IcicleG2 as Curve>::BaseField,
-    ) -> <Self::ArkG2 as CurveGroup>::BaseField {
-        icicle_to_ark_base(icicle)
-    }
-
-    fn ark_to_icicle_g1(point: &Self::ArkG1Affine) -> Affine<Self::IcicleG1> {
-        ark_to_icicle_affine(point)
-    }
-
-    fn ark_to_icicle_g2(point: &Self::ArkG2Affine) -> Affine<Self::IcicleG2> {
-        ark_to_icicle_affine(point)
-    }
-
     fn icicle_to_ark_g1(point: Affine<Self::IcicleG1>) -> Self::ArkG1Affine;
 
     fn icicle_to_ark_g2(point: Affine<Self::IcicleG2>) -> Self::ArkG2Affine;
 }
 
-pub struct Bn254Bridge;
+pub(crate) struct Bn254Bridge;
 
 impl ArkIcicleBridge for Bn254Bridge {
     type ArkScalarField = ark_bn254::Fr;
@@ -197,10 +153,7 @@ impl ArkIcicleBridge for Bn254Bridge {
             return Self::ArkG1Affine::zero();
         }
 
-        Self::ArkG1Affine::new(
-            Self::icicle_to_ark_base_g1(&point.x),
-            Self::icicle_to_ark_base_g1(&point.y),
-        )
+        Self::ArkG1Affine::new(icicle_to_ark_base(&point.x), icicle_to_ark_base(&point.y))
     }
 
     fn icicle_to_ark_g2(point: icicle_bn254::curve::G2Affine) -> Self::ArkG2Affine {
@@ -208,17 +161,6 @@ impl ArkIcicleBridge for Bn254Bridge {
             return Self::ArkG2Affine::zero();
         }
 
-        Self::ArkG2Affine::new(
-            Self::icicle_to_ark_base_g2(&point.x),
-            Self::icicle_to_ark_base_g2(&point.y),
-        )
-    }
-}
-
-pub fn select_bridge<P: ark_ec::pairing::Pairing>() -> impl ArkIcicleBridge {
-    if std::any::TypeId::of::<P>() == std::any::TypeId::of::<ark_bn254::Bn254>() {
-        Bn254Bridge
-    } else {
-        panic!("Unsupported pairing")
+        Self::ArkG2Affine::new(icicle_to_ark_base(&point.x), icicle_to_ark_base(&point.y))
     }
 }

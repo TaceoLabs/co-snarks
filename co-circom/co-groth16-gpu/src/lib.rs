@@ -15,28 +15,17 @@ pub use ark_relations::r1cs::ConstraintMatrices;
 
 #[cfg(test)]
 mod tests {
-    use ark_bls12_377::{Bls12_377, G1Affine};
-    use ark_bls12_381::Bls12_381;
+
     use ark_bn254::Bn254;
-    use ark_groth16::{ProvingKey, VerifyingKey};
-    use ark_relations::r1cs::{ConstraintMatrices, Matrix};
-    use ark_serialize::CanonicalDeserialize;
+
     use circom_types::{
         CheckElement, Witness,
-        groth16::{
-            Proof as CircomGroth16Proof, PublicInput as JsonPublicInput,
-            VerificationKey as JsonVerificationKey, Zkey,
-        },
+        groth16::{Proof as CircomGroth16Proof, VerificationKey as JsonVerificationKey, Zkey},
     };
     use co_circom_types::SharedWitness;
-    use icicle_bn254::curve::ScalarField;
-    use icicle_core::ntt::{self, NTTConfig, initialize_domain};
-    use icicle_runtime::{Device, memory::HostSlice, runtime};
-    use icicle_snark::CacheManager;
-    use std::fs::{self, File};
 
-    use icicle_bn254::curve::G1Projective;
-    use icicle_core::{msm, msm::MSMConfig, traits::GenerateRandom};
+    use icicle_snark::CacheManager;
+    use std::fs::File;
 
     use crate::{CircomReduction, groth16_gpu::Groth16};
 
@@ -91,9 +80,12 @@ mod tests {
                 "../../test_vectors/Groth16/bn254/poseidon/public.json",
                 "CUDA",
                 &mut CacheManager::default(),
-            ).unwrap();
-            println!("GPU proof generation with icicle took: {:?}", timer_start.elapsed());
-
+            )
+            .unwrap();
+            println!(
+                "GPU proof generation with icicle took: {:?}",
+                timer_start.elapsed()
+            );
 
             let witness = Witness::<ark_bn254::Fr>::from_reader(witness_file).unwrap();
             let zkey = Zkey::<Bn254>::from_reader(zkey_file, check).unwrap();
