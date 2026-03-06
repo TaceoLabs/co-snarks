@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 mod ring_share {
     use ark_ff::PrimeField;
     use ark_std::UniformRand;
