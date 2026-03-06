@@ -26,42 +26,50 @@ fn read_field_element(s: &str) -> ark_bn254::Fr {
         ark_bn254::Fr::from_str(s).unwrap()
     }
 }
+
 macro_rules! witness_extension_test_plain {
-    ($name: ident) => {
-        #[test]
-        fn $name() {
-            let inp: TestInputs = from_test_name(stringify!($name));
-            for i in 0..inp.inputs.len() {
-                let mut compiler_config = CompilerConfig::default();
-                compiler_config.simplification =
-                    circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
-                compiler_config
-                    .link_library
-                    .push("../test_vectors/WitnessExtension/tests/libs/".into());
-                let parsed = CoCircomCompiler::<Bn254>::parse(
-                    format!(
-                        "../test_vectors/WitnessExtension/tests/{}.circom",
-                        stringify!($name)
-                    ),
-                    compiler_config,
-                )
-                .unwrap();
-                let is_witness = parsed
-                    .to_plain_vm(VMConfig::default())
-                    .run_with_flat(inp.inputs[i].to_owned(), 0)
-                    .unwrap()
-                    .into_shared_witness();
-                assert_eq!(convert_witness(is_witness), inp.witnesses[i].values);
+    ($name:ident) => {
+        mod $name {
+            use super::*;
+            fn inner(config: CompilerConfig) {
+                let inp: TestInputs = from_test_name(stringify!($name));
+                for i in 0..inp.inputs.len() {
+                    let mut compiler_config = config.clone();
+                    compiler_config.simplification =
+                        circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
+                    compiler_config
+                        .link_library
+                        .push("../test_vectors/WitnessExtension/tests/libs/".into());
+
+                    let parsed = CoCircomCompiler::<Bn254>::parse(
+                        format!(
+                            "../test_vectors/WitnessExtension/tests/{}.circom",
+                            stringify!($name)
+                        ),
+                        compiler_config,
+                    )
+                    .unwrap();
+
+                    let is_witness = parsed
+                        .to_plain_vm(VMConfig::default())
+                        .run_with_flat(inp.inputs[i].to_owned(), 0)
+                        .unwrap()
+                        .into_shared_witness();
+
+                    assert_eq!(convert_witness(is_witness), inp.witnesses[i].values);
+                }
+            }
+
+            #[test]
+            fn debug() {
+                inner(CompilerConfig::default());
+            }
+
+            #[test]
+            fn release() {
+                inner(CompilerConfig::release());
             }
         }
-    };
-
-    ($name: ident, $file: expr, $input: expr, $should:expr) => {
-        witness_extension_test_plain!($name, $file, $input, $should, "witness");
-    };
-
-    ($name: ident, $file: expr, $input: expr) => {
-        witness_extension_test_plain!($name, $file, $input, $file);
     };
 }
 
