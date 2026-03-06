@@ -85,7 +85,7 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
 }
 
 macro_rules! run_test {
-    ($file: expr, $input: expr) => {{
+    ($file: expr, $input: expr, $config: expr) => {{
         use tests::test_utils;
         //install_tracing();
         let mut rng = thread_rng();
@@ -94,9 +94,11 @@ macro_rules! run_test {
         let nets1 = LocalNetwork::new_3_parties();
         let mut threads = vec![];
 
-        for (net0, net1, input) in izip!(nets0, nets1, inputs) {
+        let configs = [$config.clone(), $config.clone(), $config];
+
+        for (net0, net1, input, config) in izip!(nets0, nets1, inputs, configs) {
             threads.push(std::thread::spawn(move || {
-                let mut compiler_config = CompilerConfig::default();
+                let mut compiler_config = config;
                 compiler_config.simplification =
                     circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
                 compiler_config
@@ -127,57 +129,68 @@ macro_rules! run_test {
 
 macro_rules! witness_extension_test_rep3 {
     ($name: ident) => {
-        #[test]
-        fn $name() {
-            let inp: TestInputs = from_test_name(stringify!($name));
-            // let path = inp.circuit_path.as_str().to_owned();
-            for i in 0..inp.inputs.len() {
-                let is_witness = run_test!(
-                    format!(
-                        "../test_vectors/WitnessExtension/tests/{}.circom",
-                        stringify!($name)
-                    ),
-                    &inp.inputs[i]
-                );
-                assert_eq!(is_witness, inp.witnesses[i].values);
+        mod $name {
+            use super::*;
+            fn inner(config: CompilerConfig) {
+                let inp: TestInputs = from_test_name(stringify!($name));
+                // let path = inp.circuit_path.as_str().to_owned();
+                for i in 0..inp.inputs.len() {
+                    let is_witness = run_test!(
+                        format!(
+                            "../test_vectors/WitnessExtension/tests/{}.circom",
+                            stringify!($name),
+                        ),
+                        &inp.inputs[i],
+                        config.clone()
+                    );
+                    assert_eq!(is_witness, inp.witnesses[i].values);
+                }
+            }
+
+            #[test]
+            fn debug() {
+                inner(CompilerConfig::default());
+            }
+
+            #[test]
+            fn release() {
+                inner(CompilerConfig::release());
             }
         }
-    };
-
-    ($name: ident, $file: expr, $input: expr, $should:expr) => {
-        witness_extension_test!($name, $file, $input, $should, "witness");
-    };
-
-    ($name: ident, $file: expr, $input: expr) => {
-        witness_extension_test!($name, $file, $input, $file);
     };
 }
 macro_rules! witness_extension_test_rep3_ignored {
     ($name: ident) => {
-        #[test]
-        #[ignore]
-        fn $name() {
-            let inp: TestInputs = from_test_name(stringify!($name));
-            // let path = inp.circuit_path.as_str().to_owned();
-            for i in 0..inp.inputs.len() {
-                let is_witness = run_test!(
-                    format!(
-                        "../test_vectors/WitnessExtension/tests/{}.circom",
-                        stringify!($name)
-                    ),
-                    &inp.inputs[i]
-                );
-                assert_eq!(is_witness, inp.witnesses[i].values);
+        mod $name {
+            use super::*;
+            fn inner(config: CompilerConfig) {
+                let inp: TestInputs = from_test_name(stringify!($name));
+                // let path = inp.circuit_path.as_str().to_owned();
+                for i in 0..inp.inputs.len() {
+                    let is_witness = run_test!(
+                        format!(
+                            "../test_vectors/WitnessExtension/tests/{}.circom",
+                            stringify!($name),
+                        ),
+                        &inp.inputs[i],
+                        config.clone()
+                    );
+                    assert_eq!(is_witness, inp.witnesses[i].values);
+                }
+            }
+
+            #[test]
+            #[ignore]
+            fn debug() {
+                inner(CompilerConfig::default());
+            }
+
+            #[test]
+            #[ignore]
+            fn release() {
+                inner(CompilerConfig::release());
             }
         }
-    };
-
-    ($name: ident, $file: expr, $input: expr, $should:expr) => {
-        witness_extension_test!($name, $file, $input, $should, "witness");
-    };
-
-    ($name: ident, $file: expr, $input: expr) => {
-        witness_extension_test!($name, $file, $input, $file);
     };
 }
 

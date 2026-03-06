@@ -80,6 +80,13 @@ pub struct CompilerConfig {
     /// Does an additional check over the constraints produced
     #[serde(default)]
     pub inspect: bool,
+    /// Adds additional opcodes for debugging.
+    #[serde(default = "default_true")]
+    pub debug: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_version() -> String {
@@ -95,15 +102,27 @@ impl Default for CompilerConfig {
             simplification: SimplificationLevel::default(),
             verbose: false,
             inspect: false,
+            debug: true,
         }
     }
 }
 
 impl CompilerConfig {
-    /// Creates a new instance of the compiler config with
-    /// values set to default
+    /// Creates a new instance of the compiler config with default values. Uses `debug` optimization level.
+    ///
+    /// Check [`Self::release`] for a release config.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Create a new instance of the compiler config optimized for release.
+    pub fn release() -> Self {
+        Self {
+            allow_leaky_loops: false,
+            simplification: SimplificationLevel::O2(usize::MAX),
+            debug: false,
+            ..Default::default()
+        }
     }
 }
 /// The compiler. Can only be initiated internally. Have a look at these two methods for usage:
@@ -447,9 +466,11 @@ where
     }
 
     fn handle_assert_bucket(&mut self, assert_bucket: &AssertBucket) {
-        //evaluate the assertion
-        self.handle_instruction(&assert_bucket.evaluate);
-        self.emit_opcode(MpcOpCode::Assert(assert_bucket.line));
+        if self.config.debug {
+            //evaluate the assertion
+            self.handle_instruction(&assert_bucket.evaluate);
+            self.emit_opcode(MpcOpCode::Assert(assert_bucket.line));
+        }
     }
 
     fn handle_return_bucket(&mut self, return_bucket: &ReturnBucket) {
@@ -573,18 +594,20 @@ where
     }
 
     fn handle_log_bucket(&mut self, log_bucket: &LogBucket) {
-        for to_log in log_bucket.argsprint.iter() {
-            match &to_log {
-                LogBucketArg::LogExp(log_expr) => {
-                    self.handle_instruction(log_expr);
-                    self.emit_opcode(MpcOpCode::Log);
-                }
-                LogBucketArg::LogStr(idx) => {
-                    self.emit_opcode(MpcOpCode::LogString(*idx));
+        if self.config.debug {
+            for to_log in log_bucket.argsprint.iter() {
+                match &to_log {
+                    LogBucketArg::LogExp(log_expr) => {
+                        self.handle_instruction(log_expr);
+                        self.emit_opcode(MpcOpCode::Log);
+                    }
+                    LogBucketArg::LogStr(idx) => {
+                        self.emit_opcode(MpcOpCode::LogString(*idx));
+                    }
                 }
             }
+            self.emit_opcode(MpcOpCode::LogFlush(log_bucket.line));
         }
-        self.emit_opcode(MpcOpCode::LogFlush(log_bucket.line));
     }
 
     fn handle_value_bucket(&mut self, value_bucket: &ValueBucket) {
@@ -771,7 +794,7 @@ fn get_size_from_size_option(size_option: &SizeOption) -> usize {
 #[cfg(test)]
 mod tests {
     use ark_bn254::Bn254;
-    use circom_mpc_vm::mpc_vm::VMConfig;
+    use circom_mpc_vm::{mpc_vm::VMConfig, op_codes::MpcOpCode};
 
     use crate::{CoCircomCompiler, CompilerConfig};
     use std::str::FromStr;
@@ -782,6 +805,65 @@ mod tests {
                 .collect::<Vec<_>>()
         };
     }
+
+    #[test]
+    fn test_release_build_creates_no_assert_and_logs() {
+        let mut debug = CompilerConfig::new();
+        debug.simplification = crate::SimplificationLevel::O2(usize::MAX);
+
+        let release = CompilerConfig::release();
+        let debug = CoCircomCompiler::<Bn254>::parse(
+            "../../test_vectors/WitnessExtension/tests/log_and_asserts.circom".to_owned(),
+            debug,
+        )
+        .expect("Can compile");
+
+        let release = CoCircomCompiler::<Bn254>::parse(
+            "../../test_vectors/WitnessExtension/tests/log_and_asserts.circom".to_owned(),
+            release,
+        )
+        .expect("Can compile");
+
+        // check that debug contains logs and asserts
+        assert!(debug.fun_decls().is_empty());
+        assert!(debug.templ_decls().len() == 1);
+        let debug_main = debug.templ_decls().get("Multiplier2_0").expect("Is there");
+        assert!(debug_main.code().contains(&MpcOpCode::Log));
+        assert!(
+            debug_main
+                .code()
+                .iter()
+                .any(|op| matches!(op, MpcOpCode::LogFlush(_)))
+        );
+        assert!(
+            debug_main
+                .code()
+                .iter()
+                .any(|op| matches!(op, MpcOpCode::Assert(_)))
+        );
+
+        // check that release DOESN'T have logs and asserts
+        assert!(release.fun_decls().is_empty());
+        assert!(release.templ_decls().len() == 1);
+        let release_main = release
+            .templ_decls()
+            .get("Multiplier2_0")
+            .expect("Is there");
+        assert!(!release_main.code().contains(&MpcOpCode::Log));
+        assert!(
+            release_main
+                .code()
+                .iter()
+                .all(|op| !matches!(op, MpcOpCode::LogFlush(_)))
+        );
+        assert!(
+            release_main
+                .code()
+                .iter()
+                .all(|op| !matches!(op, MpcOpCode::Assert(_)))
+        );
+    }
+
     #[test]
     fn test_get_output_from_finalized_witness() {
         let parsed = CoCircomCompiler::<Bn254>::parse(

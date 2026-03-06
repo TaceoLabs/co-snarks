@@ -54,6 +54,11 @@ impl TemplateDecl {
             body: Arc::new(body),
         }
     }
+
+    /// Returns a reference to the code block of the template.
+    pub fn code(&self) -> &CodeBlock {
+        &self.body
+    }
 }
 
 /// An unconstrained function declaration.
@@ -78,6 +83,11 @@ impl FunDecl {
             vars,
             body: Arc::new(body),
         }
+    }
+
+    /// Returns a reference to the code block of the function.
+    pub fn code(&self) -> &CodeBlock {
+        &self.body
     }
 }
 
@@ -197,5 +207,15 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
     /// Get public input names.
     pub fn public_inputs(&self) -> &[String] {
         &self.public_inputs
+    }
+
+    /// Get all function declarations.
+    pub fn fun_decls(&self) -> &HashMap<String, FunDecl> {
+        &self.fun_decls
+    }
+
+    /// Get all template declarations.
+    pub fn templ_decls(&self) -> &HashMap<String, TemplateDecl> {
+        &self.templ_decls
     }
 }
