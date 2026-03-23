@@ -284,6 +284,79 @@ pub fn joint_input_binary_xored<T: IntRing2k, N: Network>(
     Ok([x01, x2])
 }
 
+/// Transforms an binary shared input x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 xor x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
+pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
+    x: &[Rep3RingShare<T>],
+    delta: Option<WireMod2>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<[BinaryBundle<WireMod2>; 2]> {
+    let n_inputs = x.len();
+    let bitlen = T::K;
+    let bits = n_inputs * bitlen;
+
+    let (x01, x2) = match state.id {
+        PartyID::ID0 => {
+            // Receive x01
+            let x01 = GCUtils::receive_bundle_from(bits, net, PartyID::ID1)?;
+
+            // Receive x2
+            let x2 = GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?;
+            (x01, x2)
+        }
+        PartyID::ID1 => {
+            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+
+            let mut garbler_bundle = Vec::with_capacity(bits);
+            let mut evaluator_bundle = Vec::with_capacity(bits);
+
+            // Input x01
+            for x in x.iter() {
+                let xor = x.a ^ x.b;
+                let bits = GCUtils::ring_to_bits_as_u16(xor);
+                let (garbler, evaluator) =
+                    GCUtils::encode_bits_as_wires(bits, &mut state.rng, delta);
+                garbler_bundle.extend(garbler);
+                evaluator_bundle.extend(evaluator);
+            }
+            let x01 = GCUtils::wires_to_gcinput(garbler_bundle, evaluator_bundle, delta);
+
+            // Send x01 to the other parties
+            GCUtils::send_inputs(&x01, net, PartyID::ID2)?;
+            let x01 = x01.garbler_wires;
+
+            // Receive x2
+            let x2 = GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?;
+            (x01, x2)
+        }
+        PartyID::ID2 => {
+            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let mut garbler_bundle = Vec::with_capacity(bits);
+            let mut evaluator_bundle = Vec::with_capacity(bits);
+
+            // Input x2
+            for x in x.iter() {
+                let bits = GCUtils::ring_to_bits_as_u16(x.a);
+                let (garbler, evaluator) =
+                    GCUtils::encode_bits_as_wires(bits, &mut state.rng, delta);
+                garbler_bundle.extend(garbler);
+                evaluator_bundle.extend(evaluator);
+            }
+            let x2 = GCUtils::wires_to_gcinput(garbler_bundle, evaluator_bundle, delta);
+
+            // Send x2 to the other parties
+            GCUtils::send_inputs(&x2, net, PartyID::ID1)?;
+            let x2 = x2.garbler_wires;
+
+            // Receive x01
+            let x01 = GCUtils::receive_bundle_from(bits, net, PartyID::ID1)?;
+            (x01, x2)
+        }
+    };
+
+    Ok([x01, x2])
+}
+
 /// A cast of a vector of Rep3RingShare to a vector of Rep3PrimeFieldShare
 pub fn ring_to_field_many<T: IntRing2k, F: PrimeField, N: Network>(
     inputs: &[Rep3RingShare<T>],

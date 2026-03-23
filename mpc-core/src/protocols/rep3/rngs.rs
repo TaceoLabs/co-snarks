@@ -245,7 +245,7 @@ impl Rep3Rand {
     }
 
     /// Generate a random shared permutation
-    pub(crate) fn random_perm<T: Clone>(&mut self, input: Vec<T>) -> (Vec<T>, Vec<T>) {
+    pub fn random_perm<T: Clone>(&mut self, input: Vec<T>) -> (Vec<T>, Vec<T>) {
         let mut a = input.to_owned();
         let mut b = input;
         a.shuffle(&mut self.rng1);

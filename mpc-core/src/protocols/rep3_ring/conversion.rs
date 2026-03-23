@@ -870,6 +870,36 @@ pub fn b2y<T: IntRing2k, N: Network>(
     Ok(converted)
 }
 
+/// Transforms the replicated shared value x from a binary sharing to a yao sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x.
+pub fn b2y_many<T: IntRing2k, N: Network>(
+    x: &[Rep3RingShare<T>],
+    delta: Option<WireMod2>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<BinaryBundle<WireMod2>> {
+    let [x01, x2] = yao::joint_input_binary_xored_many(x, delta, net, state)?;
+
+    let converted = match state.id {
+        PartyID::ID0 => {
+            // There is no code difference between Rep3Evaluator and StreamingRep3Evaluator
+            let mut evaluator = Rep3Evaluator::new(net);
+            // evaluator.receive_circuit()?; // No network used here
+            let res = GarbledCircuits::xor_many(&mut evaluator, &x01, &x2);
+            GCUtils::garbled_circuits_error(res)?
+        }
+        PartyID::ID1 | PartyID::ID2 => {
+            // There is no code difference between Rep3Garbler and StreamingRep3Garbler
+            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
+            let res = GarbledCircuits::xor_many(&mut garbler, &x01, &x2);
+            GCUtils::garbled_circuits_error(res)?
+            // garbler.send_circuit()?; // No network used here
+        }
+    };
+
+    Ok(converted)
+}
+
 /// Transforms the shared value x from a yao sharing to a binary sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
 pub fn y2b<T: IntRing2k, N: Network>(
     x: BinaryBundle<WireMod2>,
@@ -898,6 +928,55 @@ where
             let px = collapsed;
             let r_xor_x_xor_px = net.recv_from(PartyID::ID0)?;
             Rep3RingShare::new_ring(r_xor_x_xor_px, px)
+        }
+    };
+
+    Ok(converted)
+}
+
+/// Transforms the shared value x from a yao sharing to a binary sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
+pub fn y2b_many<T: IntRing2k, N: Network>(
+    x: BinaryBundle<WireMod2>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3RingShare<T>>>
+where
+    Standard: Distribution<T>,
+{
+    let bits = T::K;
+    let vec = x.extract();
+    if !vec.size().is_multiple_of(bits) {
+        eyre::bail!("Invalid input length");
+    }
+    let num_elements = vec.size() / bits;
+    let mut collapsed = Vec::with_capacity(num_elements);
+    for chunk in vec.wires().chunks(bits) {
+        let bundle = BinaryBundle::new(chunk.to_vec());
+        collapsed.push(GCUtils::collapse_bundle_to_lsb_bits_as_ring(bundle)?);
+    }
+
+    let mut converted = Vec::with_capacity(num_elements);
+    match state.id {
+        PartyID::ID0 => {
+            for x_xor_px in collapsed.iter_mut() {
+                let r = state.rngs.rand.random_element_rng1::<RingElement<T>>();
+                let r_xor_x_xor_px = *x_xor_px ^ r;
+                converted.push(Rep3RingShare::new_ring(r, r_xor_x_xor_px));
+                *x_xor_px = r_xor_x_xor_px;
+            }
+            net.send_to(PartyID::ID2, collapsed)?;
+        }
+        PartyID::ID1 => {
+            for px in collapsed {
+                let r = state.rngs.rand.random_element_rng2::<RingElement<T>>();
+                converted.push(Rep3RingShare::new_ring(px, r));
+            }
+        }
+        PartyID::ID2 => {
+            let r_xor_x_xor_px: Vec<RingElement<T>> = net.recv_from(PartyID::ID0)?;
+            for (r_xor_x_xor_px, px) in r_xor_x_xor_px.into_iter().zip(collapsed) {
+                converted.push(Rep3RingShare::new_ring(r_xor_x_xor_px, px));
+            }
         }
     };
 
