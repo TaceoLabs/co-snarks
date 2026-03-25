@@ -171,7 +171,10 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                 .iter()
                 .chain(input.key.iter())
                 // TACEO TODO: Investigate whether we should open the variable at input.predicate.index
-                .chain(std::iter::once(&input.predicate.index))
+                .chain(
+                    std::iter::once(&input.predicate.index)
+                        .filter(|_| !input.predicate.is_constant),
+                )
             {
                 if T::is_shared(&self.get_variable(*idx as usize)) {
                     to_open.0.push(
