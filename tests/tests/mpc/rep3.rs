@@ -1,3 +1,4 @@
+#![allow(clippy::result_large_err)]
 mod field_share {
     use ark_ff::BigInteger;
     use ark_ff::Field;

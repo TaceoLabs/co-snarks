@@ -7,7 +7,7 @@ pub type CodeBlock = Vec<MpcOpCode>;
 ///
 /// Most of the opcodes interact with the stack, while some additionally need information stored in the variant.
 /// The MPC-VM iterates over [`CodeBlocks`](CodeBlock) and executes one opcode at a time.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum MpcOpCode {
     /// Pushes the constant from the constant table with the provided index onto the field stack.
     PushConstant(usize),
