@@ -178,7 +178,9 @@ impl TcpNetworkHandlerBuilder {
                     let after_cleanup = streams.len();
                     let removed = before_cleanup - after_cleanup;
                     if removed > 0 {
-                        tracing::debug!("cleaned up {removed} idle streams");
+                        tracing::warn!(
+                            "cleaned up {removed} idle streams - this means that some some MPC operations likely failed"
+                        );
                     }
                 }
             }
@@ -280,26 +282,28 @@ impl TcpNetwork {
                     }
                 }
             });
-            let cancellation_token_clone = cancellation_token.clone();
-            tokio::spawn(async move {
-                loop {
-                    tokio::select! {
-                        _ = cancellation_token_clone.cancelled() => {
-                            break;
-                        }
-                        msg = receiver.next() => {
-                            match msg {
-                                Some(Ok(data)) => {
-                                    if recv_tx.send(Ok(data.into())).await.is_err() {
-                                        tracing::warn!("recv receiver dropped");
+            tokio::spawn({
+                let cancellation_token = cancellation_token.clone();
+                async move {
+                    loop {
+                        tokio::select! {
+                            _ = cancellation_token.cancelled() => {
+                                break;
+                            }
+                            msg = receiver.next() => {
+                                match msg {
+                                    Some(Ok(data)) => {
+                                        if recv_tx.send(Ok(data.into())).await.is_err() {
+                                            tracing::warn!("recv receiver dropped");
+                                            break;
+                                        }
+                                    }
+                                    Some(Err(err)) => {
+                                        let _ = recv_tx.send(Err(eyre::eyre!("tcp error: {err}"))).await;
                                         break;
                                     }
+                                    None => break,
                                 }
-                                Some(Err(err)) => {
-                                    let _ = recv_tx.send(Err(eyre::eyre!("tcp error: {err}"))).await;
-                                    break;
-                                }
-                                None => break,
                             }
                         }
                     }
