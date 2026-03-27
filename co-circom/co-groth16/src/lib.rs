@@ -7,8 +7,9 @@ pub mod mpc;
 mod verifier;
 
 pub use groth16::{
-    CircomReduction, CoGroth16, Groth16, LibSnarkReduction, R1CSToQAP, Rep3CoGroth16,
-    ShamirCoGroth16,
+    CircomGroth16Prover, CircomReduction, CoGroth16, Groth16, LibSnarkReduction,
+    PlainGroth16Driver, R1CSToQAP, Rep3CoGroth16, Rep3Groth16Driver, ShamirCoGroth16,
+    ShamirGroth16Driver,
 };
 
 pub use ark_groth16::{Proof, ProvingKey, VerifyingKey};
