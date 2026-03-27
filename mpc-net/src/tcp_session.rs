@@ -252,6 +252,7 @@ pub struct TcpNetwork {
     id: usize,
     send: HashMap<usize, (mpsc::Sender<Vec<u8>>, AtomicUsize)>,
     recv: HashMap<usize, (Mutex<mpsc::Receiver<eyre::Result<Vec<u8>>>>, AtomicUsize)>,
+    max_frame_length: usize,
 }
 
 impl TcpNetwork {
@@ -313,7 +314,12 @@ impl TcpNetwork {
             recv.insert(other_id, (Mutex::new(recv_rx), AtomicUsize::default()));
         }
 
-        Ok(Self { id, send, recv })
+        Ok(Self {
+            id,
+            send,
+            recv,
+            max_frame_length,
+        })
     }
 }
 
