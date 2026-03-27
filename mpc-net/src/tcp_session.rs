@@ -323,6 +323,9 @@ impl Network for TcpNetwork {
     }
 
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
+        if data.len() > self.max_frame_length {
+            eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
+        }
         let (sender, sent_bytes) = self.send.get(&to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
         sender.blocking_send(data.to_vec())?;
