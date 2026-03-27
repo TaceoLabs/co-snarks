@@ -12,6 +12,8 @@ pub mod local;
 pub mod quic;
 #[cfg(feature = "tcp")]
 pub mod tcp;
+#[cfg(feature = "tcp-session")]
+pub mod tcp_session;
 #[cfg(feature = "tls")]
 pub mod tls;
 

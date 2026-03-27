@@ -16,6 +16,7 @@ rust-version.workspace = true
 default = ["tcp"]
 local = []
 tcp = ["dep:crossbeam-channel", "dep:socket2"]
+tcp-session = ["dep:tokio", "dep:tokio-util", "dep:futures"]
 tls = ["dep:rustls", "dep:crossbeam-channel", "dep:socket2"]
 quic = ["dep:rustls", "dep:futures", "dep:quinn", "dep:tokio", "dep:tokio-util"]
 
