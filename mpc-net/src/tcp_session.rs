@@ -12,7 +12,7 @@ use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::sync::mpsc;
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use tokio_util::sync::CancellationToken;
+use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENTH, Network};
 
@@ -209,12 +209,7 @@ impl TcpNetworkHandler {
     ///
     /// All parties must call this method with the same `session_id` to establish the connections for that session.
     /// The `session_id` should be unique for each session, but can be reused across different sessions as long as they are not active at the same time.
-    /// Use the `CancellationToken` to drop the network and close all connections when the session is over.
-    pub async fn init_session(
-        &self,
-        session_id: u128,
-        cancellation_token: CancellationToken,
-    ) -> eyre::Result<TcpNetwork> {
+    pub async fn init_session(&self, session_id: u128) -> eyre::Result<TcpNetwork> {
         let mut streams = HashMap::new();
         for (other_id, addr) in self.parties.iter().enumerate() {
             match other_id.cmp(&self.party_id) {
@@ -236,12 +231,7 @@ impl TcpNetworkHandler {
                 Ordering::Equal => continue,
             }
         }
-        TcpNetwork::new(
-            self.party_id,
-            streams,
-            self.max_frame_length,
-            cancellation_token,
-        )
+        TcpNetwork::new(self.party_id, streams, self.max_frame_length)
     }
 }
 
@@ -253,6 +243,8 @@ pub struct TcpNetwork {
     send: HashMap<usize, (mpsc::Sender<Vec<u8>>, AtomicUsize)>,
     recv: HashMap<usize, (Mutex<mpsc::Receiver<eyre::Result<Vec<u8>>>>, AtomicUsize)>,
     max_frame_length: usize,
+    /// A drop guard that cancels the cancellation token when dropped, used to stop tasks when the network is dropped.
+    _drop_guard: DropGuard,
 }
 
 impl TcpNetwork {
@@ -261,8 +253,8 @@ impl TcpNetwork {
         id: usize,
         streams: HashMap<usize, TcpStream>,
         max_frame_length: usize,
-        cancellation_token: CancellationToken,
     ) -> eyre::Result<Self> {
+        let cancellation_token = CancellationToken::new();
         let mut send = HashMap::new();
         let mut recv = HashMap::new();
         let codec = LengthDelimitedCodec::builder()
@@ -319,6 +311,7 @@ impl TcpNetwork {
             send,
             recv,
             max_frame_length,
+            _drop_guard: cancellation_token.drop_guard(),
         })
     }
 }
