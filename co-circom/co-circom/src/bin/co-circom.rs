@@ -14,7 +14,11 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_net::tcp::{NetworkConfig, TcpNetwork};
+#[cfg(feature = "libfabric-efa")]
+use mpc_net::libfabric_efa::FabricNetwork;
+use mpc_net::tcp::NetworkConfig;
+#[cfg(not(feature = "libfabric-efa"))]
+use mpc_net::tcp::TcpNetwork;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -807,8 +811,13 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     }
 
     // connect to network
+    #[cfg(not(feature = "libfabric-efa"))]
     let [net0, net1] =
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+    #[cfg(feature = "libfabric-efa")]
+    let net0 = FabricNetwork::new(config.network.clone())?;
+    #[cfg(feature = "libfabric-efa")]
+    let net1 = FabricNetwork::new(config.network.clone())?;
 
     // parse input shares
     let input_share_file =
@@ -858,7 +867,10 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
+    #[cfg(not(feature = "libfabric-efa"))]
     let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    #[cfg(feature = "libfabric-efa")]
+    let net = FabricNetwork::new(config.network)?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -902,8 +914,13 @@ fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
+            #[cfg(not(feature = "libfabric-efa"))]
             let [net0, net1] =
                 TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+            #[cfg(feature = "libfabric-efa")]
+            let net0 = FabricNetwork::new(config.network.clone())?;
+            #[cfg(feature = "libfabric-efa")]
+            let net1 = FabricNetwork::new(config.network.clone())?;
 
             let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
             let (matrices, pkey) = zkey.into();
@@ -970,54 +987,58 @@ fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
             public_input
         }
         ProofSystem::Plonk => {
-            let nets =
-                TcpNetwork::networks::<8>(config.network).context("while connecting to network")?;
-            let zkey = Arc::new(
-                PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
-            );
+            todo!();
+            // #[cfg(not(feature = "libfabric-efa"))]
+            // let nets =
+            //     TcpNetwork::networks::<8>(config.network).context("while connecting to network")?;
+            // #[cfg(feature = "libfabric-efa")]
+            // let nets = todo!();
+            // let zkey = Arc::new(
+            //     PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
+            // );
 
-            let (proof, public_input) = match protocol {
-                MPCProtocol::REP3 => {
-                    if t != 1 {
-                        eyre::bail!("REP3 only allows the threshold to be 1");
-                    }
+            // let (proof, public_input) = match protocol {
+            //     MPCProtocol::REP3 => {
+            //         if t != 1 {
+            //             eyre::bail!("REP3 only allows the threshold to be 1");
+            //         }
 
-                    let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
-                        bincode::deserialize_from(witness_file)?;
-                    let witness_share =
-                        co_circom::uncompress_shared_witness(witness_share, &nets[0])?;
-                    let public_input = witness_share.public_inputs.clone();
+            //         let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
+            //             bincode::deserialize_from(witness_file)?;
+            //         let witness_share =
+            //             co_circom::uncompress_shared_witness(witness_share, &nets[0])?;
+            //         let public_input = witness_share.public_inputs.clone();
 
-                    let start = Instant::now();
-                    let proof = Rep3CoPlonk::prove(&nets, zkey, witness_share)?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_input)
-                }
-                MPCProtocol::SHAMIR => {
-                    let witness_share: ShamirSharedWitness<P::ScalarField> =
-                        bincode::deserialize_from(witness_file)?;
-                    let public_input = witness_share.public_inputs.clone();
+            //         let start = Instant::now();
+            //         let proof = Rep3CoPlonk::prove(&nets, zkey, witness_share)?;
+            //         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            //         tracing::info!("Generate proof took {duration_ms} ms");
+            //         (proof, public_input)
+            //     }
+            //     MPCProtocol::SHAMIR => {
+            //         let witness_share: ShamirSharedWitness<P::ScalarField> =
+            //             bincode::deserialize_from(witness_file)?;
+            //         let public_input = witness_share.public_inputs.clone();
 
-                    let start = Instant::now();
-                    let proof = ShamirCoPlonk::prove(&nets, n, t, zkey, witness_share)?;
-                    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-                    tracing::info!("Generate proof took {duration_ms} ms");
-                    (proof, public_input)
-                }
-            };
+            //         let start = Instant::now();
+            //         let proof = ShamirCoPlonk::prove(&nets, n, t, zkey, witness_share)?;
+            //         let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            //         tracing::info!("Generate proof took {duration_ms} ms");
+            //         (proof, public_input)
+            //     }
+            // };
 
-            // write result to output file
-            if let Some(out) = out {
-                let out_file = BufWriter::new(
-                    std::fs::File::create(&out).context("while creating output file")?,
-                );
+            // // write result to output file
+            // if let Some(out) = out {
+            //     let out_file = BufWriter::new(
+            //         std::fs::File::create(&out).context("while creating output file")?,
+            //     );
 
-                serde_json::to_writer(out_file, &proof)
-                    .context("while serializing proof to JSON file")?;
-                tracing::info!("Wrote proof to file {}", out.display());
-            }
-            public_input
+            //     serde_json::to_writer(out_file, &proof)
+            //         .context("while serializing proof to JSON file")?;
+            //     tracing::info!("Wrote proof to file {}", out.display());
+            // }
+            // public_input
         }
     };
 

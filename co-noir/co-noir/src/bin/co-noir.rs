@@ -18,7 +18,11 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_net::tcp::{NetworkConfig, TcpNetwork};
+#[cfg(feature = "libfabric-efa")]
+use mpc_net::libfabric_efa::FabricNetwork;
+use mpc_net::tcp::NetworkConfig;
+#[cfg(not(feature = "libfabric-efa"))]
+use mpc_net::tcp::TcpNetwork;
 use noir_types::HonkProofType;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
@@ -1191,8 +1195,13 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
 
     // connect to network
+    #[cfg(not(feature = "libfabric-efa"))]
     let [net0, net1] =
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+    #[cfg(feature = "libfabric-efa")]
+    let net0 = FabricNetwork::new(config.network.clone())?;
+    #[cfg(feature = "libfabric-efa")]
+    let net1 = FabricNetwork::new(config.network.clone())?;
 
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
@@ -1227,7 +1236,10 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
         bincode::deserialize_from(witness_file).context("while deserializing witness share")?;
 
     // connect to network
+    #[cfg(not(feature = "libfabric-efa"))]
     let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    #[cfg(feature = "libfabric-efa")]
+    let net = FabricNetwork::new(config.network)?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -1261,7 +1273,10 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
         bincode::deserialize_from(proving_key_file).context("while deserializing witness share")?;
 
     // connect to network
+    #[cfg(not(feature = "libfabric-efa"))]
     let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    #[cfg(feature = "libfabric-efa")]
+    let net = FabricNetwork::new(config.network)?;
 
     // Translate proving key to shamir shares
     tracing::info!("Starting proving key translation...");
@@ -1304,8 +1319,13 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
         )?;
 
     // connect to network
+    #[cfg(not(feature = "libfabric-efa"))]
     let [net0, net1] =
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+    #[cfg(feature = "libfabric-efa")]
+    let net0 = FabricNetwork::new(config.network.clone())?;
+    #[cfg(feature = "libfabric-efa")]
+    let net1 = FabricNetwork::new(config.network.clone())?;
 
     tracing::info!("Starting proving key generation...");
     match protocol {
@@ -1374,7 +1394,10 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let has_zk = ZeroKnowledge::from(config.zk);
 
     // connect to network
+    #[cfg(not(feature = "libfabric-efa"))]
     let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    #[cfg(feature = "libfabric-efa")]
+    let net = FabricNetwork::new(config.network)?;
 
     // parse proving_key file
     let proving_key_file =
@@ -1575,8 +1598,13 @@ fn run_build_and_generate_proof(
         .context("while parsing constraint system")?;
 
     // connect to network
+    #[cfg(not(feature = "libfabric-efa"))]
     let [net0, net1] =
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+    #[cfg(feature = "libfabric-efa")]
+    let net0 = FabricNetwork::new(config.network.clone())?;
+    #[cfg(feature = "libfabric-efa")]
+    let net1 = FabricNetwork::new(config.network.clone())?;
 
     let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
     let prover_crs =

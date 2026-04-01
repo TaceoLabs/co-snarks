@@ -2,10 +2,7 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use color_eyre::{Result, eyre::Context};
-use mpc_net::{
-    Network as _,
-    tcp::{NetworkConfig, TcpNetwork},
-};
+use mpc_net::{Network as _, libfabric_efa::FabricNetwork, tcp::NetworkConfig};
 
 #[derive(Parser)]
 struct Args {
@@ -47,7 +44,7 @@ fn main() -> Result<()> {
             .context("parsing config file")?;
     let my_id = config.my_id;
 
-    let network = TcpNetwork::new(config)?;
+    let network = FabricNetwork::new(config)?;
 
     let buf = [0u8; 128];
     let start = std::time::Instant::now();

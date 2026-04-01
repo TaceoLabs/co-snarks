@@ -12,6 +12,7 @@ use std::{
 use crate::{
     ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENTH, Network, config::Address,
 };
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use crossbeam_channel::Receiver;
 use eyre::ContextCompat;
@@ -215,22 +216,27 @@ impl Network for TcpNetwork {
         self.id
     }
 
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
-        if data.len() > self.max_frame_length {
-            eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
+    fn send<T: CanonicalSerialize>(&self, to: usize, data: &T) -> eyre::Result<()> {
+        let size = data.serialized_size(ark_serialize::Compress::No);
+        if size > self.max_frame_length {
+            eyre::bail!("frame len {size} > max {}", self.max_frame_length);
         }
+        // TODO create reusable buffers to avoid allocating every time
+        let mut buf = Vec::with_capacity(size);
+        data.serialize_uncompressed(&mut buf)?;
         let (stream, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
-        sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
+        sent_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
         let mut stream = stream.lock();
-        stream.write_u64::<BigEndian>(data.len() as u64)?;
-        stream.write_all(data)?;
+        stream.write_u64::<BigEndian>(size as u64)?;
+        stream.write_all(&buf)?;
         Ok(())
     }
 
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
+    fn recv<T: CanonicalDeserialize>(&self, from: usize) -> eyre::Result<T> {
         let (queue, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
-        let data = queue.recv_timeout(self.timeout)??;
-        recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
+        let buf = queue.recv_timeout(self.timeout)??;
+        recv_bytes.fetch_add(buf.len(), std::sync::atomic::Ordering::Relaxed);
+        let data = T::deserialize_uncompressed_unchecked(buf.as_slice())?;
         Ok(data)
     }
 

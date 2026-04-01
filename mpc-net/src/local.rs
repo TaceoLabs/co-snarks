@@ -1,5 +1,6 @@
 //! Local MPC network
 
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
 use intmap::IntMap;
@@ -67,17 +68,21 @@ impl Network for LocalNetwork {
         self.id
     }
 
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
+    fn send<T: CanonicalSerialize>(&self, to: usize, data: &T) -> eyre::Result<()> {
         let (sender, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
-        sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        sender.send_timeout(data.to_owned(), self.timeout)?;
+        let size = data.serialized_size(ark_serialize::Compress::No);
+        let mut buf = Vec::with_capacity(size);
+        data.serialize_uncompressed(&mut buf)?;
+        sent_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
+        sender.send_timeout(buf, self.timeout)?;
         Ok(())
     }
 
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
+    fn recv<T: CanonicalDeserialize>(&self, from: usize) -> eyre::Result<T> {
         let (receiver, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
-        let data = receiver.recv_timeout(self.timeout)?;
-        recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
+        let buf = receiver.recv_timeout(self.timeout)?;
+        let data = T::deserialize_uncompressed(buf.as_slice())?;
+        recv_bytes.fetch_add(buf.len(), std::sync::atomic::Ordering::Relaxed);
         Ok(data)
     }
 

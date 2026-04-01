@@ -14,6 +14,7 @@ rust-version.workspace = true
 # 
 [features]
 default = ["tcp"]
+libfabric-efa = ["tcp", "dep:libfabric-efa-rs"]
 local = []
 tcp = ["dep:crossbeam-channel", "dep:socket2"]
 tcp-session = ["dep:tokio", "dep:tokio-util", "dep:futures"]
@@ -32,7 +33,12 @@ required-features = ["tls"]
 name = "three_party_quic"
 required-features = ["quic"]
 
+[[example]]
+name = "three_party_libfabric"
+required-features = ["libfabric-efa"]
+
 [dependencies]
+ark-serialize = { workspace = true }
 byteorder.workspace = true
 bytes = { workspace = true }
 eyre.workspace = true
@@ -40,6 +46,7 @@ futures = { version = "0.3.30", optional = true }
 intmap.workspace = true
 itertools.workspace = true
 parking_lot = "0.12.4"
+libfabric-efa-rs = { version = "0.1.0", git = "https://github.com/TaceoLabs/libfabric-efa-rs.git", rev = "0d288ef", optional = true }
 quinn = { version = "0.11", optional = true }
 rustls = { workspace = true, optional = true }
 serde = { workspace = true }

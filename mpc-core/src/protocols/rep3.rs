@@ -92,16 +92,23 @@ impl Rep3State {
                 Ok((bitcomp1, bitcomp2))
             }
             PartyID::ID1 => {
-                net.send_next((k1c, k2c))?;
-                let k1b: [u8; crate::SEED_SIZE] = net.recv_prev()?;
+                let (send_res, recv_res) =
+                    mpc_net::join(|| net.send_next((k1c, k2c)), || net.recv_prev());
+                send_res?;
+                let k1b: [u8; crate::SEED_SIZE] = recv_res?;
+                // net.send_next((k1c, k2c))?;
+                // let k1b: [u8; crate::SEED_SIZE] = net.recv_prev()?;
                 let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
                 let bitcomp2 = Rep3RandBitComp::new_2keys(k2a, k2c);
                 Ok((bitcomp1, bitcomp2))
             }
             PartyID::ID2 => {
-                net.send_next(k2c)?;
-                let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
-                    net.recv_prev()?;
+                let (send_res, recv_res) = mpc_net::join(|| net.send_next(k2c), || net.recv_prev());
+                send_res?;
+                let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) = recv_res?;
+                // net.send_next(k2c)?;
+                // let (k1b, k2b): ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) =
+                //     net.recv_prev()?;
                 let bitcomp1 = Rep3RandBitComp::new_3keys(k1a, k1b, k1c);
                 let bitcomp2 = Rep3RandBitComp::new_3keys(k2a, k2b, k2c);
                 Ok((bitcomp1, bitcomp2))

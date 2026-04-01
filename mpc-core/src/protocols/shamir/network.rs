@@ -26,11 +26,7 @@ pub trait ShamirNetworkExt: Network {
     /// Sends a vector of data to the target party.
     #[inline(always)]
     fn send_many<F: CanonicalSerialize>(&self, to: usize, data: &[F]) -> eyre::Result<()> {
-        let size = data.serialized_size(ark_serialize::Compress::No);
-        let mut ser_data = Vec::with_capacity(size);
-        data.serialize_uncompressed(&mut ser_data)?;
-        self.send(to, &ser_data)?;
-        Ok(())
+        self.send(to, &data)
     }
 
     /// Receives data from the party with the given id.
@@ -47,11 +43,7 @@ pub trait ShamirNetworkExt: Network {
     /// Receives a vector of data from the party with the given id.
     #[inline(always)]
     fn recv_many<F: CanonicalDeserialize>(&self, from: usize) -> eyre::Result<Vec<F>> {
-        let data = self.recv(from)?;
-
-        let res = Vec::<F>::deserialize_uncompressed_unchecked(&data[..])?;
-
-        Ok(res)
+        self.recv(from)
     }
 
     /// Send and reveive data to and from all parties.
@@ -62,15 +54,10 @@ pub trait ShamirNetworkExt: Network {
         num_parties: usize,
         data: F,
     ) -> eyre::Result<Vec<F>> {
-        // Serialize
-        let size = data.serialized_size(ark_serialize::Compress::No);
-        let mut ser_data = Vec::with_capacity(size);
-        data.to_owned().serialize_uncompressed(&mut ser_data)?;
-
         // Send
         for other_id in 0..num_parties {
             if other_id != self.id() {
-                self.send(other_id, &ser_data)?;
+                self.send(other_id, &data)?;
             }
         }
 
@@ -79,8 +66,7 @@ pub trait ShamirNetworkExt: Network {
         for other_id in 0..num_parties {
             if other_id != self.id() {
                 let data = self.recv(other_id)?;
-                let deser = F::deserialize_uncompressed_unchecked(&data[..])?;
-                res.push(deser);
+                res.push(data);
             } else {
                 res.push(data.to_owned());
             }
@@ -98,15 +84,10 @@ pub trait ShamirNetworkExt: Network {
         num: usize,
         data: F,
     ) -> eyre::Result<Vec<F>> {
-        // Serialize
-        let size = data.serialized_size(ark_serialize::Compress::No);
-        let mut ser_data = Vec::with_capacity(size);
-        data.to_owned().serialize_uncompressed(&mut ser_data)?;
-
         // Send
         for s in 1..num {
             let other_id = (self.id() + s) % num_parties;
-            self.send(other_id, &ser_data)?;
+            self.send(other_id, &data)?;
         }
 
         // Receive
@@ -115,8 +96,7 @@ pub trait ShamirNetworkExt: Network {
         for r in 1..num {
             let other_id = (self.id() + num_parties - r) % num_parties;
             let data = self.recv(other_id)?;
-            let deser = F::deserialize_uncompressed_unchecked(&data[..])?;
-            res.push(deser);
+            res.push(data);
         }
 
         Ok(res)

@@ -76,11 +76,7 @@ pub trait Rep3NetworkExt: Network {
     /// Sends a vector of data to the target party.
     #[inline(always)]
     fn send_many<F: CanonicalSerialize>(&self, to: PartyID, data: &[F]) -> eyre::Result<()> {
-        let size = data.serialized_size(ark_serialize::Compress::No);
-        let mut ser_data = Vec::with_capacity(size);
-        data.serialize_uncompressed(&mut ser_data)?;
-        self.send(to.into(), &ser_data)?;
-        Ok(())
+        self.send(to.into(), &data)
     }
 
     /// Sends data to the party with id = next_id (i.e., my_id + 1 mod 3).
@@ -125,9 +121,7 @@ pub trait Rep3NetworkExt: Network {
     /// Receives a vector of data from the party with the given id.
     #[inline(always)]
     fn recv_many<F: CanonicalDeserialize>(&self, from: PartyID) -> eyre::Result<Vec<F>> {
-        let data = self.recv(from.into())?;
-        let res = Vec::<F>::deserialize_uncompressed_unchecked(&data[..])?;
-        Ok(res)
+        self.recv(from.into())
     }
 
     /// Receives data from the party with the id = next_id (i.e., my_id + 1 mod 3)
@@ -183,8 +177,10 @@ pub trait Rep3NetworkExt: Network {
         data: &[F],
         from: PartyID,
     ) -> eyre::Result<Vec<F>> {
-        self.send_many(to, data)?;
-        self.recv_many(from)
+        let (send_res, recv_res) =
+            mpc_net::join(|| self.send_many(to, data), || self.recv_many(from));
+        send_res?;
+        recv_res
     }
 }
 

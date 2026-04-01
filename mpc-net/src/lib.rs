@@ -5,7 +5,11 @@ use std::{
     time::Duration,
 };
 
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+
 pub mod config;
+#[cfg(feature = "libfabric-efa")]
+pub mod libfabric_efa;
 #[cfg(feature = "local")]
 pub mod local;
 #[cfg(feature = "quic")]
@@ -29,10 +33,9 @@ pub trait Network: Send + Sync {
     /// The id of the party
     fn id(&self) -> usize;
     /// Send data to other party
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()>;
+    fn send<T: CanonicalSerialize>(&self, to: usize, data: &T) -> eyre::Result<()>;
     /// Receive data from other party
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>>;
-
+    fn recv<T: CanonicalDeserialize>(&self, from: usize) -> eyre::Result<T>;
     /// Get connection statistics for the Network.
     /// The returned HashMap maps party_id to a tuple of (sent_bytes, received_bytes).
     fn get_connection_stats(&self) -> ConnectionStats;
@@ -44,12 +47,12 @@ impl Network for () {
         0
     }
 
-    fn send(&self, _to: usize, _data: &[u8]) -> eyre::Result<()> {
-        Ok(())
+    fn send<T: CanonicalSerialize>(&self, _to: usize, _data: &T) -> eyre::Result<()> {
+        unimplemented!()
     }
 
-    fn recv(&self, _from: usize) -> eyre::Result<Vec<u8>> {
-        Ok(vec![])
+    fn recv<T: CanonicalDeserialize>(&self, _from: usize) -> eyre::Result<T> {
+        unimplemented!()
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {
