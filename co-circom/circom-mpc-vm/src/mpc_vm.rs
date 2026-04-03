@@ -926,6 +926,26 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
         })
     }
 
+    /// Registers a new accelerator for the MPC-VM replacing a function call with the provided one.
+    pub fn register_accelerator_function(
+        &mut self,
+        name: String,
+        fun: impl Fn(&mut C, &[C::VmType]) -> eyre::Result<Vec<C::VmType>> + Send + 'static,
+    ) {
+        self.ctx.mpc_accelerator.register_function(name, fun);
+    }
+
+    /// Registers a new accelerator for the MPC-VM replacing a compnent with the provided function call.
+    pub fn register_accelerator_component(
+        &mut self,
+        name: String,
+        fun: impl Fn(&mut C, &[C::VmType], usize) -> eyre::Result<ComponentAcceleratorOutput<C::VmType>>
+        + Send
+        + 'static,
+    ) {
+        self.ctx.mpc_accelerator.register_component(name, fun);
+    }
+
     fn set_input_signals(&mut self, mut input_signals: BTreeMap<String, C::VmType>) -> Result<()> {
         for (name, offset, size) in self.main_input_list.iter() {
             if *size == 1 {
