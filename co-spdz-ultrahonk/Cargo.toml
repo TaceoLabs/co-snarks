@@ -1,0 +1,21 @@
+[package]
+name = "co-spdz-ultrahonk"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+spdz-core = { path = "../spdz-core" }
+mpc-core = { version = "0.10.0", path = "../mpc-core" }
+mpc-net = { version = "0.5.0", path = "../mpc-net" }
+co-noir-common = { version = "0.2.0", path = "../co-noir/co-noir-common" }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-poly = { workspace = true }
+ark-serialize = { workspace = true }
+eyre = { workspace = true }
+itertools = { workspace = true }
+num-traits = { workspace = true }
+rayon = { workspace = true }
