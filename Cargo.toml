@@ -18,6 +18,9 @@ members = [
     "mpc-core",
     "mpc-net",
     "spdz-core",
+    "co-spdz-acvm",
+    "co-spdz-ultrahonk",
+    "co-spdz-noir",
     "tests",
 ]
 resolver = "2"
