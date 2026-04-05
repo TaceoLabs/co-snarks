@@ -14,9 +14,9 @@ use spdz_core::preprocessing::generate_dummy_preprocessing;
 use std::fs::File;
 use std::sync::Arc;
 
-const CRS_PATH_G1: &str = "../../co-snarks/co-noir/co-noir-common/src/crs/bn254_g1.dat";
-const CRS_PATH_G2: &str = "../../co-snarks/co-noir/co-noir-common/src/crs/bn254_g2.dat";
-const CIRCUIT_DIR: &str = "../../co-snarks/test_vectors/noir/addition_multiplication";
+const CRS_PATH_G1: &str = "../co-noir/co-noir-common/src/crs/bn254_g1.dat";
+const CRS_PATH_G2: &str = "../co-noir/co-noir-common/src/crs/bn254_g2.dat";
+const CIRCUIT_DIR: &str = "../test_vectors/noir/addition_multiplication";
 
 fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(has_zk: ZeroKnowledge) {
     let circuit_file = format!("{CIRCUIT_DIR}/kat/addition_multiplication.json");
