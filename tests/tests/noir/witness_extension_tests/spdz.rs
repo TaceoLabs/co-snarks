@@ -1,6 +1,8 @@
-use super::add_spdz_acvm_test;
+use super::{add_spdz_acvm_test, add_spdz_acvm_test_zk, add_spdz_acvm_test_poseidon2, spdz_prove_verify_test};
 
-// ---- Full prove+verify tests (passing) ----
+// ================================================================
+// Keccak256 transcript, no ZK (baseline — matches dark chess setup)
+// ================================================================
 add_spdz_acvm_test!("add3u64");
 add_spdz_acvm_test!("addition_multiplication");
 add_spdz_acvm_test!("approx_sigmoid");
@@ -22,22 +24,38 @@ add_spdz_acvm_test!("unconstrained_fn");
 add_spdz_acvm_test!("unconstrained_fn_field");
 add_spdz_acvm_test!("unconstrained_fn_not");
 
-// ---- Plookup circuits: proof verification fails ----
-// Witness extension completes (no panic), but UltraHonk proof doesn't verify.
-// Note: Rep3 also only has witness extension tests for these circuits —
-// NO proof tests exist for plookup-dependent circuits in co-snarks.
-// This is likely a general MPC+plookup integration issue, not SPDZ-specific.
-// TODO: investigate plookup sorted polynomial construction with shared values.
-//
+// ================================================================
+// ZeroKnowledge mode (Keccak256) — tests ZK masking with SPDZ shares
+// ================================================================
+add_spdz_acvm_test_zk!("addition_multiplication");
+add_spdz_acvm_test_zk!("poseidon2");
+// mul_shared ZK: fails due to preprocessing exhaustion in the prover phase.
+// The ZK mode requires additional random polynomials, consuming more triples.
+// TODO: increase preprocessing seed allocation for ZK mode.
+// add_spdz_acvm_test_zk!("mul_shared");
+
+// ================================================================
+// Poseidon2Sponge transcript — tests alternative Fiat-Shamir hasher
+// ================================================================
+add_spdz_acvm_test_poseidon2!("addition_multiplication");
+add_spdz_acvm_test_poseidon2!("poseidon2");
+add_spdz_acvm_test_poseidon2!("mul_shared");
+
+// ================================================================
+// Plookup circuits — proof verification fails (not SPDZ-specific,
+// Rep3 also has no proof tests for these). See commit f44eaa76.
+// ================================================================
 // add_spdz_acvm_test!("blackbox_and");
 // add_spdz_acvm_test!("blackbox_xor");
 // add_spdz_acvm_test!("bb_sha256_compression");
 // add_spdz_acvm_test!("blake2s");
 // add_spdz_acvm_test!("blake3");
 
-// ---- Not supported ----
-// add_spdz_acvm_test!("pedersen_hash");       // Grumpkin
-// add_spdz_acvm_test!("pedersen_commitment");  // Grumpkin
-// add_spdz_acvm_test!("embedded_curve_add");   // Grumpkin
-// add_spdz_acvm_test!("aes128");              // AES S-box
-// add_spdz_acvm_test!("write_access");         // Sparse table
+// ================================================================
+// Not supported (Grumpkin/AES/sparse tables)
+// ================================================================
+// add_spdz_acvm_test!("pedersen_hash");
+// add_spdz_acvm_test!("pedersen_commitment");
+// add_spdz_acvm_test!("embedded_curve_add");
+// add_spdz_acvm_test!("aes128");
+// add_spdz_acvm_test!("write_access");
