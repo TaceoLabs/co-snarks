@@ -17,6 +17,7 @@ members = [
     "co-noir/co-noir-common",
     "mpc-core",
     "mpc-net",
+    "spdz-core",
     "tests",
 ]
 resolver = "2"
