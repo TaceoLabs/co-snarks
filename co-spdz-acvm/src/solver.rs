@@ -640,35 +640,36 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
     // They perform specialized decompose-XOR-rotate-lookup operations.
     // We implement them using our bit decomposition primitives.
 
-    fn slice_and_get_and_rotate_values(&mut self, input1: Self::ArithmeticShare, input2: Self::ArithmeticShare, basis_bits: usize, total_bitsize: usize, rotation: usize) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
-        // Decompose, AND corresponding chunks, rotate
+    fn slice_and_get_and_rotate_values(&mut self, input1: Self::ArithmeticShare, input2: Self::ArithmeticShare, basis_bits: usize, total_bitsize: usize, _rotation: usize) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
+        // Decompose, AND corresponding bits, then group into chunks
         let bits1 = spdz_core::gadgets::bits::decompose(&input1, total_bitsize, self.net, &mut self.state)?;
         let bits2 = spdz_core::gadgets::bits::decompose(&input2, total_bitsize, self.net, &mut self.state)?;
         let and_bits = arithmetic::mul_many(&bits1, &bits2, self.net, &mut self.state)?;
-        // Group into chunks of basis_bits and recompose
-        let num_chunks = total_bitsize / basis_bits;
-        let mut slices1 = Vec::with_capacity(num_chunks);
-        let mut slices2 = Vec::with_capacity(num_chunks);
+
+        // Number of chunks: ceiling division to include remainder bits
+        let num_chunks = (total_bitsize + basis_bits - 1) / basis_bits;
+        let mut key_a_slices = Vec::with_capacity(num_chunks);
+        let mut key_b_slices = Vec::with_capacity(num_chunks);
         let mut and_slices = Vec::with_capacity(num_chunks);
         for c in 0..num_chunks {
             let start = c * basis_bits;
+            let chunk_size = basis_bits.min(total_bitsize - start);
             let mut v1 = SpdzPrimeFieldShare::zero_share();
             let mut v2 = SpdzPrimeFieldShare::zero_share();
             let mut va = SpdzPrimeFieldShare::zero_share();
             let mut pow = F::one();
-            for b in 0..basis_bits {
-                if start + b < total_bitsize {
-                    v1 += bits1[start + b] * pow;
-                    v2 += bits2[start + b] * pow;
-                    va += and_bits[start + b] * pow;
-                }
+            for b in 0..chunk_size {
+                v1 += bits1[start + b] * pow;
+                v2 += bits2[start + b] * pow;
+                va += and_bits[start + b] * pow;
                 pow.double_in_place();
             }
-            slices1.push(SpdzAcvmType::Shared(v1));
-            slices2.push(SpdzAcvmType::Shared(v2));
+            key_a_slices.push(SpdzAcvmType::Shared(v1));
+            key_b_slices.push(SpdzAcvmType::Shared(v2));
             and_slices.push(SpdzAcvmType::Shared(va));
         }
-        Ok((slices1, slices2, and_slices))
+        // Return order: (results, key_a, key_b) — matches what plookup.rs expects
+        Ok((and_slices, key_a_slices, key_b_slices))
     }
 
     fn slice_and_get_xor_rotate_values(&mut self, input1: Self::ArithmeticShare, input2: Self::ArithmeticShare, basis_bits: usize, total_bitsize: usize, _rotation: usize) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
@@ -678,29 +679,30 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
         let two = F::from(2u64);
         let xor_bits: Vec<_> = bits1.iter().zip(bits2.iter()).zip(prods.iter())
             .map(|((a, b), p)| *a + *b - *p * two).collect();
-        let num_chunks = total_bitsize / basis_bits;
-        let mut s1 = Vec::with_capacity(num_chunks);
-        let mut s2 = Vec::with_capacity(num_chunks);
-        let mut sx = Vec::with_capacity(num_chunks);
+        // Ceiling division for remainder chunk
+        let num_chunks = (total_bitsize + basis_bits - 1) / basis_bits;
+        let mut key_a = Vec::with_capacity(num_chunks);
+        let mut key_b = Vec::with_capacity(num_chunks);
+        let mut xor_slices = Vec::with_capacity(num_chunks);
         for c in 0..num_chunks {
             let start = c * basis_bits;
+            let chunk_size = basis_bits.min(total_bitsize - start);
             let mut v1 = SpdzPrimeFieldShare::zero_share();
             let mut v2 = SpdzPrimeFieldShare::zero_share();
             let mut vx = SpdzPrimeFieldShare::zero_share();
             let mut pow = F::one();
-            for b in 0..basis_bits {
-                if start + b < total_bitsize {
-                    v1 += bits1[start + b] * pow;
-                    v2 += bits2[start + b] * pow;
-                    vx += xor_bits[start + b] * pow;
-                }
+            for b in 0..chunk_size {
+                v1 += bits1[start + b] * pow;
+                v2 += bits2[start + b] * pow;
+                vx += xor_bits[start + b] * pow;
                 pow.double_in_place();
             }
-            s1.push(SpdzAcvmType::Shared(v1));
-            s2.push(SpdzAcvmType::Shared(v2));
-            sx.push(SpdzAcvmType::Shared(vx));
+            key_a.push(SpdzAcvmType::Shared(v1));
+            key_b.push(SpdzAcvmType::Shared(v2));
+            xor_slices.push(SpdzAcvmType::Shared(vx));
         }
-        Ok((s1, s2, sx))
+        // Return order: (results, key_a, key_b) — matches plookup.rs expectations
+        Ok((xor_slices, key_a, key_b))
     }
 
     fn slice_and_get_sparse_table_with_rotation_values(&mut self, _: Self::ArithmeticShare, _: Self::ArithmeticShare, _: &[u64], _: &[u32], _: usize, _: u64) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>, Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {
@@ -744,7 +746,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
             sx.push(SpdzAcvmType::Shared(vx));
             offset += blen;
         }
-        Ok((s1, s2, sx))
+        // Return order: (results, key_a, key_b)
+        Ok((sx, s1, s2))
     }
 
     fn slice_and_get_aes_sparse_normalization_values_from_key(&mut self, _: Self::ArithmeticShare, _: Self::ArithmeticShare, _: &[u64], _: u64) -> eyre::Result<(Vec<Self::AcvmType>, Vec<Self::AcvmType>, Vec<Self::AcvmType>)> {

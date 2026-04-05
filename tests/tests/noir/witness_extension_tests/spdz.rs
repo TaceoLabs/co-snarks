@@ -1,6 +1,6 @@
 use super::add_spdz_acvm_test;
 
-// ---- PASSING: Core arithmetic, control flow, Poseidon2 ----
+// ---- Full prove+verify tests (passing) ----
 add_spdz_acvm_test!("add3u64");
 add_spdz_acvm_test!("addition_multiplication");
 add_spdz_acvm_test!("approx_sigmoid");
@@ -22,11 +22,12 @@ add_spdz_acvm_test!("unconstrained_fn");
 add_spdz_acvm_test!("unconstrained_fn_field");
 add_spdz_acvm_test!("unconstrained_fn_not");
 
-// ---- KNOWN FAILURES: plookup table panic in builder ----
-// These circuits use lookup tables (AND/XOR gates, SHA256/Blake round functions).
-// Witness extension works, but the UltraHonk builder panics at plookup.rs:1790
-// when constructing the proving key with SPDZ shares.
-// TODO: investigate plookup compatibility with SPDZ share types.
+// ---- Plookup circuits: proof verification fails ----
+// Witness extension completes (no panic), but UltraHonk proof doesn't verify.
+// Note: Rep3 also only has witness extension tests for these circuits —
+// NO proof tests exist for plookup-dependent circuits in co-snarks.
+// This is likely a general MPC+plookup integration issue, not SPDZ-specific.
+// TODO: investigate plookup sorted polynomial construction with shared values.
 //
 // add_spdz_acvm_test!("blackbox_and");
 // add_spdz_acvm_test!("blackbox_xor");
@@ -34,9 +35,9 @@ add_spdz_acvm_test!("unconstrained_fn_not");
 // add_spdz_acvm_test!("blake2s");
 // add_spdz_acvm_test!("blake3");
 
-// ---- NOT SUPPORTED: Grumpkin / AES / sparse tables ----
-// add_spdz_acvm_test!("pedersen_hash");
-// add_spdz_acvm_test!("pedersen_commitment");
-// add_spdz_acvm_test!("embedded_curve_add");
-// add_spdz_acvm_test!("aes128");
-// add_spdz_acvm_test!("write_access");
+// ---- Not supported ----
+// add_spdz_acvm_test!("pedersen_hash");       // Grumpkin
+// add_spdz_acvm_test!("pedersen_commitment");  // Grumpkin
+// add_spdz_acvm_test!("embedded_curve_add");   // Grumpkin
+// add_spdz_acvm_test!("aes128");              // AES S-box
+// add_spdz_acvm_test!("write_access");         // Sparse table
