@@ -32,5 +32,6 @@ tracing = { workspace = true }
 ark-ec = { workspace = true }
 ark-std = { workspace = true }
 blake2 = { workspace = true }
+blake3 = { workspace = true }
 mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }
 rand_chacha = { workspace = true }

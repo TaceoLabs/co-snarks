@@ -1049,8 +1049,9 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
     }
     fn blake3_hash(&mut self, inputs: Vec<Self::AcvmType>, num_bits: usize) -> eyre::Result<Vec<Self::AcvmType>> {
         if inputs.iter().any(|v| Self::is_shared(v)) {
+            // Use garbled circuit for Blake3 on shared values (2-3 rounds)
             let shared: Vec<SpdzPrimeFieldShare<F>> = inputs.iter().map(|v| self.get_as_shared(v)).collect();
-            let result = spdz_core::gadgets::blake::blake3_hash(&shared, num_bits, self.net, &mut self.state)?;
+            let result = spdz_core::gadgets::yao2pc::gc_blake3::gc_blake3(&shared, num_bits, self.net, &self.state)?;
             Ok(result.into_iter().map(SpdzAcvmType::Shared).collect())
         } else {
             // All public — compute blake3 locally

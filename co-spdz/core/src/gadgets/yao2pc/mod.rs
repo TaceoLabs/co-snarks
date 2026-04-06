@@ -18,6 +18,7 @@ pub mod convert;
 pub mod engine;
 pub mod equality;
 pub mod gc_blake2s;
+pub mod gc_blake3;
 pub mod gc_eval;
 pub mod gc_hash;
 

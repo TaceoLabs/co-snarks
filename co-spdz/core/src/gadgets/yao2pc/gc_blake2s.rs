@@ -23,7 +23,7 @@ use crate::types::SpdzPrimeFieldShare;
 use crate::SpdzState;
 use super::gc_hash::{adder_mod_p, bits_to_spdz_shares};
 
-const IV: [u32; 8] = [
+pub(crate) const IV: [u32; 8] = [
     0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A,
     0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
 ];
@@ -183,7 +183,7 @@ fn precompute_blake2s_constants(num_input_bytes: usize, blocks: usize) -> Vec<bo
     bits
 }
 
-fn u32_to_bits(v: u32) -> Vec<bool> {
+pub(crate) fn u32_to_bits(v: u32) -> Vec<bool> {
     (0..32).map(|i| (v >> i) & 1 == 1).collect()
 }
 
@@ -320,7 +320,7 @@ where
 }
 
 /// 32-bit binary addition (no carry out — mod 2^32).
-fn add32<G: FancyBinary>(g: &mut G, a: &[G::Item], b: &[G::Item]) -> Result<Vec<G::Item>, eyre::Report>
+pub(crate) fn add32<G: FancyBinary>(g: &mut G, a: &[G::Item], b: &[G::Item]) -> Result<Vec<G::Item>, eyre::Report>
 where G::Error: std::fmt::Debug {
     assert_eq!(a.len(), 32);
     assert_eq!(b.len(), 32);
@@ -328,7 +328,7 @@ where G::Error: std::fmt::Debug {
     Ok(result)
 }
 
-fn xor_words<G: FancyBinary>(g: &mut G, a: &[G::Item], b: &[G::Item]) -> Result<Vec<G::Item>, eyre::Report>
+pub(crate) fn xor_words<G: FancyBinary>(g: &mut G, a: &[G::Item], b: &[G::Item]) -> Result<Vec<G::Item>, eyre::Report>
 where G::Error: std::fmt::Debug {
     a.iter().zip(b.iter())
         .map(|(x, y)| g.xor(x, y).map_err(|e| eyre::eyre!("{:?}", e)))
