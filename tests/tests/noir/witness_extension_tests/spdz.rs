@@ -42,6 +42,15 @@ add_spdz_acvm_test_poseidon2!("poseidon2");
 add_spdz_acvm_test_poseidon2!("mul_shared");
 
 // ================================================================
+// Recursion — verifies a proof inside the circuit
+// Requires non-native field arithmetic (limb ops) on shared values,
+// which is not implemented (same as Rep3). Rep3's proof test passes
+// because their Brillig VM handles the intermediate values differently.
+// TODO: implement shared limb arithmetic or handle recursion specially.
+// ================================================================
+// add_spdz_acvm_test!("recursion");
+
+// ================================================================
 // Plookup circuits — proof verification fails (not SPDZ-specific,
 // Rep3 also has no proof tests for these). See commit f44eaa76.
 // ================================================================

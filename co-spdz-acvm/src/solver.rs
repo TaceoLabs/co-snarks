@@ -1155,16 +1155,101 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
         }
     }
 
-    // Limb operations — these implement non-native field arithmetic by representing
-    // base field elements as 4 limbs of the scalar field. Complex to implement for shared values.
-    // Rep3 also panics on most of these.
-    fn acvm_type_limbs_to_other_acvm_type<const NUM_LIMBS: usize, const LIMB_BITS: usize, C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &[Self::AcvmType; NUM_LIMBS]) -> eyre::Result<Self::OtherAcvmType<C>> { not_supported!(limbs_to_other) }
-    fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &[Self::AcvmType; 4]) -> eyre::Result<[Self::AcvmType; 4]> { not_supported!(inverse_limbs) }
-    fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &[Self::AcvmType; 4], _: &[Self::AcvmType; 4]) -> eyre::Result<[Self::AcvmType; 4]> { not_supported!(add_limbs) }
-    fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &[Self::AcvmType; 4], _: &[Self::AcvmType; 4]) -> eyre::Result<[Self::AcvmType; 4]> { not_supported!(sub_limbs) }
-    fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &[Self::AcvmType; 4], _: &[Self::AcvmType; 4]) -> eyre::Result<[Self::AcvmType; 4]> { not_supported!(mul_mod_limbs) }
-    fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &[Self::AcvmType; 4], _: &[Self::AcvmType; 4], _: &[[Self::AcvmType; 4]]) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> { not_supported!(madd_div_mod) }
-    fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &[[Self::AcvmType; 4]], _: &[[Self::AcvmType; 4]], _: &[[Self::AcvmType; 4]]) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> { not_supported!(madd_div_mod_many) }
-    fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &[Self::AcvmType; 4]) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> { not_supported!(div_mod_limbs) }
-    fn other_acvm_type_to_acvm_type_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize, C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, _: &Self::OtherAcvmType<C>) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]> { not_supported!(other_to_limbs) }
+    // Limb operations — non-native field arithmetic (4-limb representation).
+    // Public case: delegate to PlainAcvmSolver. Shared case: not supported (same as Rep3).
+
+    fn acvm_type_limbs_to_other_acvm_type<const NUM_LIMBS: usize, const LIMB_BITS: usize, C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, limbs: &[Self::AcvmType; NUM_LIMBS]) -> eyre::Result<Self::OtherAcvmType<C>> {
+        if limbs.iter().all(|x| !Self::is_shared(x)) {
+            let result: C::BaseField = co_noir_common::utils::Utils::field_limbs_to_biguint::<F, NUM_LIMBS, LIMB_BITS>(
+                &limbs.clone().map(|x| Self::get_public(&x).unwrap()),
+            ).into();
+            return Ok(SpdzAcvmType::Public(result));
+        }
+        not_supported!(limbs_to_other_shared)
+    }
+
+    fn other_acvm_type_to_acvm_type_limbs<const NUM_LIMBS: usize, const LIMB_BITS: usize, C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, input: &Self::OtherAcvmType<C>) -> eyre::Result<[Self::AcvmType; NUM_LIMBS]> {
+        if let SpdzAcvmType::Public(public) = input {
+            let bigint: num_bigint::BigUint = (*public).into();
+            let result = co_noir_common::utils::Utils::biguint_to_field_limbs::<F, NUM_LIMBS, LIMB_BITS>(&bigint);
+            return Ok(result.map(SpdzAcvmType::Public));
+        }
+        not_supported!(other_to_limbs_shared)
+    }
+
+    fn inverse_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, limbs: &[Self::AcvmType; 4]) -> eyre::Result<[Self::AcvmType; 4]> {
+        if limbs.iter().all(|x| !Self::is_shared(x)) {
+            let plain = limbs.clone().map(|x| Self::get_public(&x).unwrap());
+            let result = co_acvm::PlainAcvmSolver::new().inverse_acvm_type_limbs::<C>(&plain)?;
+            return Ok(result.map(SpdzAcvmType::Public));
+        }
+        not_supported!(inverse_limbs_shared)
+    }
+
+    fn add_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, a: &[Self::AcvmType; 4], b: &[Self::AcvmType; 4]) -> eyre::Result<[Self::AcvmType; 4]> {
+        if a.iter().chain(b.iter()).all(|x| !Self::is_shared(x)) {
+            let pa = a.clone().map(|x| Self::get_public(&x).unwrap());
+            let pb = b.clone().map(|x| Self::get_public(&x).unwrap());
+            let result = co_acvm::PlainAcvmSolver::new().add_acvm_type_limbs::<C>(&pa, &pb)?;
+            return Ok(result.map(SpdzAcvmType::Public));
+        }
+        not_supported!(add_limbs_shared)
+    }
+
+    fn sub_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, a: &[Self::AcvmType; 4], b: &[Self::AcvmType; 4]) -> eyre::Result<[Self::AcvmType; 4]> {
+        if a.iter().chain(b.iter()).all(|x| !Self::is_shared(x)) {
+            let pa = a.clone().map(|x| Self::get_public(&x).unwrap());
+            let pb = b.clone().map(|x| Self::get_public(&x).unwrap());
+            let result = co_acvm::PlainAcvmSolver::new().sub_acvm_type_limbs::<C>(&pa, &pb)?;
+            return Ok(result.map(SpdzAcvmType::Public));
+        }
+        not_supported!(sub_limbs_shared)
+    }
+
+    fn mul_mod_acvm_type_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, a: &[Self::AcvmType; 4], b: &[Self::AcvmType; 4]) -> eyre::Result<[Self::AcvmType; 4]> {
+        if a.iter().chain(b.iter()).all(|x| !Self::is_shared(x)) {
+            let pa = a.clone().map(|x| Self::get_public(&x).unwrap());
+            let pb = b.clone().map(|x| Self::get_public(&x).unwrap());
+            let result = co_acvm::PlainAcvmSolver::new().mul_mod_acvm_type_limbs::<C>(&pa, &pb)?;
+            return Ok(result.map(SpdzAcvmType::Public));
+        }
+        not_supported!(mul_mod_limbs_shared)
+    }
+
+    fn madd_div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, a: &[Self::AcvmType; 4], b: &[Self::AcvmType; 4], to_add: &[[Self::AcvmType; 4]]) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        if a.iter().all(|x| !Self::is_shared(x))
+            && b.iter().all(|x| !Self::is_shared(x))
+            && to_add.iter().all(|arr| arr.iter().all(|x| !Self::is_shared(x)))
+        {
+            let pa = a.clone().map(|x| Self::get_public(&x).unwrap());
+            let pb = b.clone().map(|x| Self::get_public(&x).unwrap());
+            let pta: Vec<[F; 4]> = to_add.iter().map(|arr| arr.clone().map(|x| Self::get_public(&x).unwrap())).collect();
+            let (limbs_res, other_res) = co_acvm::PlainAcvmSolver::new().madd_div_mod_acvm_limbs::<C>(&pa, &pb, &pta)?;
+            return Ok((limbs_res.map(SpdzAcvmType::Public), SpdzAcvmType::Public(other_res)));
+        }
+        not_supported!(madd_div_mod_shared)
+    }
+
+    fn madd_div_mod_many_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, a: &[[Self::AcvmType; 4]], b: &[[Self::AcvmType; 4]], to_add: &[[Self::AcvmType; 4]]) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        if a.iter().flat_map(|arr| arr.iter()).all(|x| !Self::is_shared(x))
+            && b.iter().flat_map(|arr| arr.iter()).all(|x| !Self::is_shared(x))
+            && to_add.iter().all(|arr| arr.iter().all(|x| !Self::is_shared(x)))
+        {
+            let pa: Vec<[F; 4]> = a.iter().map(|arr| arr.clone().map(|x| Self::get_public(&x).unwrap())).collect();
+            let pb: Vec<[F; 4]> = b.iter().map(|arr| arr.clone().map(|x| Self::get_public(&x).unwrap())).collect();
+            let pta: Vec<[F; 4]> = to_add.iter().map(|arr| arr.clone().map(|x| Self::get_public(&x).unwrap())).collect();
+            let (limbs_res, other_res) = co_acvm::PlainAcvmSolver::new().madd_div_mod_many_acvm_limbs::<C>(&pa, &pb, &pta)?;
+            return Ok((limbs_res.map(SpdzAcvmType::Public), SpdzAcvmType::Public(other_res)));
+        }
+        not_supported!(madd_div_mod_many_shared)
+    }
+
+    fn div_mod_acvm_limbs<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(&mut self, a: &[Self::AcvmType; 4]) -> eyre::Result<([Self::AcvmType; 4], Self::OtherAcvmType<C>)> {
+        if a.iter().all(|x| !Self::is_shared(x)) {
+            let pa = a.clone().map(|x| Self::get_public(&x).unwrap());
+            let (limbs_res, other_res) = co_acvm::PlainAcvmSolver::new().div_mod_acvm_limbs::<C>(&pa)?;
+            return Ok((limbs_res.map(SpdzAcvmType::Public), SpdzAcvmType::Public(other_res)));
+        }
+        not_supported!(div_mod_limbs_shared)
+    }
 }
