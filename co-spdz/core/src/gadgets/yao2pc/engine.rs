@@ -9,15 +9,8 @@
 use ark_ff::PrimeField;
 use mpc_net::Network;
 use num_bigint::BigUint;
-use ocelot::ot::{
-    self, Receiver as OtReceiver, Sender as OtSender,
-};
-use rand::SeedableRng;
-use scuttlebutt::Block;
 
 use crate::arithmetic;
-use crate::network::SpdzNetworkExt;
-use crate::ot::channel::NetworkChannel;
 use crate::types::SpdzPrimeFieldShare;
 use crate::SpdzState;
 
@@ -200,6 +193,7 @@ mod tests {
     use ark_bn254::Fr;
     use ark_ff::{One, UniformRand, Zero};
     use mpc_net::local::LocalNetwork;
+    use rand::SeedableRng;
     use crate::preprocessing::{generate_dummy_preprocessing_with_rng, SpdzPreprocessing};
     use crate::types::{share_field_element, combine_field_element};
 
@@ -280,7 +274,7 @@ mod tests {
 
         for (i, &(_, _, expected)) in vals.iter().enumerate() {
             let result = combine_field_element(r0[i], r1[i]);
-            let exp = if expected { Fr::one() } else { Fr::zero() };
+            let _exp = if expected { Fr::one() } else { Fr::zero() };
             // greater_than returns a >= b, so for less_than we check b >= a
             // Actually our ot_less_than_batch returns the MSB of (a-b+2^k)
             // which is 1 if a >= b. We test with that.

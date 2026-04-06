@@ -16,13 +16,11 @@
 use ark_ff::{BigInteger, PrimeField};
 use mpc_net::Network;
 use ocelot::ot::{
-    ChouOrlandiReceiver, ChouOrlandiSender,
     Sender as OtSender, Receiver as OtReceiver,
 };
 use rand::SeedableRng;
 use scuttlebutt::{AesRng, Block};
 
-use crate::network::SpdzNetworkExt;
 use crate::types::SpdzPrimeFieldShare;
 use super::channel::NetworkChannel;
 

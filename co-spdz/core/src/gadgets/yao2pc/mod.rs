@@ -18,6 +18,7 @@ pub mod convert;
 pub mod engine;
 pub mod equality;
 pub mod gc_eval;
+pub mod gc_hash;
 
 use ark_ff::PrimeField;
 use mpc_net::Network;

@@ -21,7 +21,6 @@ use ark_ff::PrimeField;
 use mpc_net::Network;
 
 use crate::arithmetic;
-use crate::network::SpdzNetworkExt;
 use crate::types::SpdzPrimeFieldShare;
 use crate::SpdzState;
 

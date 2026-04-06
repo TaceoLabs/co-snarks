@@ -16,14 +16,8 @@
 
 use ark_ff::PrimeField;
 use mpc_net::Network;
-use num_bigint::BigUint;
-use ocelot::ot::{self, Sender as OtSender, Receiver as OtReceiver};
-use rand::SeedableRng;
-use scuttlebutt::Block;
 
 use crate::arithmetic;
-use crate::network::SpdzNetworkExt;
-use crate::ot::channel::NetworkChannel;
 use crate::types::SpdzPrimeFieldShare;
 use crate::SpdzState;
 

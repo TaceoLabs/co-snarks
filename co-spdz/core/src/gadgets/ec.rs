@@ -3,7 +3,6 @@
 //! Shared point representation: each coordinate (x, y) is SPDZ-shared.
 //! Operations use shared arithmetic to work on coordinates directly.
 
-use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use mpc_net::Network;
 

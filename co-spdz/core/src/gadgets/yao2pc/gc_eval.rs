@@ -18,8 +18,6 @@ use ocelot::ot::{ChouOrlandiSender, ChouOrlandiReceiver};
 use rand::SeedableRng;
 use scuttlebutt::AesRng;
 
-use crate::arithmetic;
-use crate::network::SpdzNetworkExt;
 use crate::ot::channel::NetworkChannel;
 use crate::types::SpdzPrimeFieldShare;
 use crate::SpdzState;

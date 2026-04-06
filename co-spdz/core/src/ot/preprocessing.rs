@@ -6,7 +6,7 @@
 use ark_ff::PrimeField;
 use ark_std::UniformRand;
 use mpc_net::Network;
-use rand::{CryptoRng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 
 use crate::network::SpdzNetworkExt;
 use crate::preprocessing::SpdzPreprocessing;

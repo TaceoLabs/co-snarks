@@ -12,9 +12,8 @@
 //! 6. Verify: peer's commitment opens correctly AND sigma_0 + sigma_1 == 0
 
 use ark_ff::PrimeField;
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::CanonicalSerialize;
 use mpc_net::Network;
-use rand::{CryptoRng, Rng};
 use sha3::{Digest, Sha3_256};
 
 use crate::network::SpdzNetworkExt;

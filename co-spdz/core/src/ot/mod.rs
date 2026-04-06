@@ -15,15 +15,9 @@ pub mod channel;
 pub mod preprocessing;
 pub mod triples;
 
-use ark_ff::PrimeField;
 use mpc_net::Network;
-use ocelot::ot::{self, CorrelatedReceiver, CorrelatedSender};
-use rand::{CryptoRng, Rng, SeedableRng};
-use scuttlebutt::Block;
 
-use crate::preprocessing::SpdzPreprocessing;
 use crate::types::SpdzPrimeFieldShare;
-use channel::NetworkChannel;
 
 /// OT-based preprocessing that generates Beaver triples on demand.
 ///
