@@ -30,10 +30,10 @@ noir-types = { version = "0.1.1", path = "../co-noir/noir-types" }
 co-plonk = { version = "0.7.0", path = "../co-circom/co-plonk" }
 co-ultrahonk = { version = "0.6.0", path = "../co-noir/co-ultrahonk" }
 co-noir-common = { version = "0.2.0", path = "../co-noir/co-noir-common" }
-spdz-core = { version = "0.1.0", path = "../co-spdz/core" }
-co-spdz-acvm = { version = "0.1.0", path = "../co-spdz/acvm" }
-co-spdz-noir = { version = "0.1.0", path = "../co-spdz/noir" }
-co-spdz-ultrahonk = { version = "0.1.0", path = "../co-spdz/ultrahonk" }
+spdz-core = { version = "0.1.0", path = "../spdz/core" }
+co-spdz-acvm = { version = "0.1.0", path = "../spdz/acvm" }
+co-spdz-noir = { version = "0.1.0", path = "../spdz/noir" }
+co-spdz-ultrahonk = { version = "0.1.0", path = "../spdz/ultrahonk" }
 eyre.workspace = true
 itertools = { workspace = true }
 mpc-core = { version = "0.10.0", path = "../mpc-core" }
