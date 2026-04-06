@@ -59,6 +59,10 @@ add_spdz_acvm_test_poseidon2!("mul_shared");
 // add_spdz_acvm_test!("blackbox_and");
 // add_spdz_acvm_test!("blackbox_xor");
 // add_spdz_acvm_test!("bb_sha256_compression");
+// blake2s: GC evaluation works (hash is correct), but proof verification
+// fails due to plookup sorted polynomial issue (same as blackbox_and/xor).
+// The GC computes correct values but the Noir circuit's ACIR uses plookup
+// gates internally for XOR operations.
 // add_spdz_acvm_test!("blake2s");
 // add_spdz_acvm_test!("blake3");
 
