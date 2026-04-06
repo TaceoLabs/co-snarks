@@ -136,8 +136,9 @@ pub(super) fn spdz_prove_verify_test<H: co_noir_common::transcript::TranscriptHa
         std::fs::File::open(&witness_file).unwrap()
     ).unwrap();
 
-    let seed_pk: u64 = 0xDEAD_BEEF_CAFE_1234;
-    let seed_pr: u64 = 0xFACE_B00C_DEAD_5678;
+    // Random seeds per test to avoid interference when tests run in parallel
+    let seed_pk: u64 = rand::random();
+    let seed_pr: u64 = rand::random();
     let mut pk0 = create_lazy_preprocessing::<Fr>(seed_pk, 0);
     let mut pk1 = create_lazy_preprocessing::<Fr>(seed_pk, 1);
     let pr0 = create_lazy_preprocessing::<Fr>(seed_pr, 0);

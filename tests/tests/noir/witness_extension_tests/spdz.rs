@@ -26,13 +26,13 @@ add_spdz_acvm_test!("unconstrained_fn_not");
 
 // ================================================================
 // ZeroKnowledge mode (Keccak256) — tests ZK masking with SPDZ shares
+// Note: these tests may fail when run in parallel with other SPDZ tests
+// due to LocalNetwork timeout under CPU contention. Run with:
+//   cargo test -p tests --release test_spdz_zk -- --test-threads=1
 // ================================================================
 add_spdz_acvm_test_zk!("addition_multiplication");
 add_spdz_acvm_test_zk!("poseidon2");
-// mul_shared ZK: fails due to preprocessing exhaustion in the prover phase.
-// The ZK mode requires additional random polynomials, consuming more triples.
-// TODO: increase preprocessing seed allocation for ZK mode.
-// add_spdz_acvm_test_zk!("mul_shared");
+add_spdz_acvm_test_zk!("mul_shared");
 
 // ================================================================
 // Poseidon2Sponge transcript — tests alternative Fiat-Shamir hasher
