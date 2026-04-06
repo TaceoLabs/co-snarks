@@ -19,5 +19,7 @@ ark-serialize = { workspace = true }
 brillig = { workspace = true }
 eyre = { workspace = true }
 sha2 = { version = "0.10", features = ["compress"] }
+blake2 = { workspace = true }
+blake3 = { workspace = true }
 num-bigint = { workspace = true }
 serde = { workspace = true }

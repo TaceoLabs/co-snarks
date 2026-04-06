@@ -1030,7 +1030,20 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
             let result = spdz_core::gadgets::blake::blake2s_hash(&shared, num_bits, self.net, &mut self.state)?;
             Ok(result.into_iter().map(SpdzAcvmType::Shared).collect())
         } else {
-            not_supported!(blake2s_public_fallback)
+            // All public — compute blake2s locally
+            use sha2::Digest;
+            let num_elements = num_bits.div_ceil(8);
+            let mut real_input = Vec::new();
+            for inp in &inputs {
+                let val = Self::get_public(inp).unwrap();
+                let bytes = {
+                    use ark_ff::BigInteger;
+                    val.into_bigint().to_bytes_le()
+                };
+                real_input.extend_from_slice(&bytes[..num_elements]);
+            }
+            let output: [u8; 32] = blake2::Blake2s256::digest(&real_input).into();
+            Ok(output.into_iter().map(|x| SpdzAcvmType::Public(F::from(x as u64))).collect())
         }
     }
     fn blake3_hash(&mut self, inputs: Vec<Self::AcvmType>, num_bits: usize) -> eyre::Result<Vec<Self::AcvmType>> {
@@ -1039,7 +1052,19 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
             let result = spdz_core::gadgets::blake::blake3_hash(&shared, num_bits, self.net, &mut self.state)?;
             Ok(result.into_iter().map(SpdzAcvmType::Shared).collect())
         } else {
-            not_supported!(blake3_public_fallback)
+            // All public — compute blake3 locally
+            let num_elements = num_bits.div_ceil(8);
+            let mut real_input = Vec::new();
+            for inp in &inputs {
+                let val = Self::get_public(inp).unwrap();
+                let bytes = {
+                    use ark_ff::BigInteger;
+                    val.into_bigint().to_bytes_le()
+                };
+                real_input.extend_from_slice(&bytes[..num_elements]);
+            }
+            let output: [u8; 32] = blake3::hash(&real_input).into();
+            Ok(output.into_iter().map(|x| SpdzAcvmType::Public(F::from(x as u64))).collect())
         }
     }
     fn aes128_encrypt(&mut self, scalars: &[Self::AcvmType], iv: Vec<Self::AcvmType>, key: Vec<Self::AcvmType>) -> eyre::Result<Vec<Self::AcvmType>> {

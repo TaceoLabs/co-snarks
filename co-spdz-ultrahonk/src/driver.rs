@@ -333,11 +333,14 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for SpdzUltraH
     }
 
     fn is_zero_many<N: Network>(
-        _a: &[Self::ArithmeticShare],
-        _net: &N,
-        _state: &mut Self::State,
+        a: &[Self::ArithmeticShare],
+        net: &N,
+        state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        panic!("SpdzUltraHonkDriver does not support is_zero_many");
+        let num_bits = P::ScalarField::MODULUS_BIT_SIZE as usize;
+        a.iter()
+            .map(|x| spdz_core::gadgets::bits::is_zero(x, num_bits, net, state))
+            .collect()
     }
 
     fn scalar_mul_public_point(a: &P, b: Self::ArithmeticShare) -> Self::PointShare {
