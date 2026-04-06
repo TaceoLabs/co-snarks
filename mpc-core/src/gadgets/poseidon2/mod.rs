@@ -30,15 +30,6 @@ pub struct Poseidon2Precomputations<F> {
 }
 
 impl<F> Poseidon2Precomputations<F> {
-    /// Construct new precomputations from the r, r^2, r^3, r^4, r^5 vectors.
-    pub fn new(r: Vec<F>, r2: Vec<F>, r3: Vec<F>, r4: Vec<F>, r5: Vec<F>) -> Self {
-        debug_assert_eq!(r.len(), r2.len());
-        debug_assert_eq!(r.len(), r3.len());
-        debug_assert_eq!(r.len(), r4.len());
-        debug_assert_eq!(r.len(), r5.len());
-        Self { r, r2, r3, r4, r5, offset: 0 }
-    }
-
     /// Returns the precomputations at a given offset.
     pub fn get(&self, offset: usize) -> (&F, &F, &F, &F, &F) {
         debug_assert!(offset < self.r.len());

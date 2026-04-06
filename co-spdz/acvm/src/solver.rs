@@ -23,11 +23,16 @@ pub struct SpdzAcvmSolver<'a, F: PrimeField, N: Network> {
     net: &'a N,
     state: SpdzState<F>,
     phantom_data: PhantomData<F>,
+    /// Stores Poseidon2 precomputation between preprocess and round calls.
+    /// The trait passes `Poseidon2Precomputations` as a dummy token;
+    /// we use our own precomp internally to avoid needing the `new()`
+    /// constructor on the mpc-core type.
+    poseidon2_precomp: Option<spdz_core::gadgets::poseidon2::SpdzPoseidon2Precomp<F>>,
 }
 
 impl<'a, F: PrimeField, N: Network> SpdzAcvmSolver<'a, F, N> {
     pub fn new(net: &'a N, state: SpdzState<F>) -> Self {
-        Self {
+        Self { poseidon2_precomp: None,
             net,
             state,
             phantom_data: PhantomData,
@@ -832,20 +837,26 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
         num_poseidon: usize,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> eyre::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
+        // Store our precomp internally; return a dummy Default token.
+        // The round functions will use self.poseidon2_precomp instead of the
+        // passed-in Poseidon2Precomputations, avoiding the need for its `new()`.
         let spdz_precomp = spdz_core::gadgets::poseidon2::precompute(
             poseidon2, num_poseidon, self.net, &mut self.state,
         )?;
-        Ok(spdz_precomp.into_mpc_core_precomp())
+        self.poseidon2_precomp = Some(spdz_precomp);
+        Ok(Poseidon2Precomputations::default())
     }
 
     fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
         &mut self,
         input: &mut [Self::ArithmeticShare; T],
         r: usize,
-        precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        _precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> eyre::Result<()> {
-        spdz_core::gadgets::poseidon2::external_round_with_mpc_precomp(
+        let precomp = self.poseidon2_precomp.as_mut()
+            .ok_or_else(|| eyre::eyre!("Poseidon2 precomp not initialized — call preprocess first"))?;
+        spdz_core::gadgets::poseidon2::external_round(
             poseidon2, input, r, precomp, self.net, &self.state,
         )
     }
@@ -854,10 +865,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
         &mut self,
         input: &mut [Self::ArithmeticShare; T],
         r: usize,
-        precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
+        _precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> eyre::Result<()> {
-        spdz_core::gadgets::poseidon2::internal_round_with_mpc_precomp(
+        let precomp = self.poseidon2_precomp.as_mut()
+            .ok_or_else(|| eyre::eyre!("Poseidon2 precomp not initialized — call preprocess first"))?;
+        spdz_core::gadgets::poseidon2::internal_round(
             poseidon2, input, r, precomp, self.net, &self.state,
         )
     }

@@ -6,7 +6,7 @@
 //! powers [r], [r^2], [r^3], [r^4], [r^5].
 
 use ark_ff::PrimeField;
-use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
+use mpc_core::gadgets::poseidon2::Poseidon2;
 use mpc_net::Network;
 
 use crate::arithmetic;
@@ -32,11 +32,6 @@ impl<F: PrimeField> SpdzPoseidon2Precomp<F> {
     pub fn get_r(&self, idx: usize) -> &SpdzPrimeFieldShare<F> { &self.r[idx] }
     pub fn get_offset(&self) -> usize { self.offset }
     pub fn increment_offset(&mut self, n: usize) { self.offset += n; }
-
-    /// Convert to mpc-core's Poseidon2Precomputations (same data, different struct).
-    pub fn into_mpc_core_precomp(self) -> Poseidon2Precomputations<SpdzPrimeFieldShare<F>> {
-        Poseidon2Precomputations::new(self.r, self.r2, self.r3, self.r4, self.r5)
-    }
 }
 
 // ─────────────────────── Precomputation ───────────────────────
@@ -268,123 +263,6 @@ pub fn permutation_in_place<F: PrimeField, const T: usize, const D: u64, N: Netw
         external_round(poseidon, state_arr, r, precomp, net, state)?;
     }
 
-    Ok(())
-}
-
-// ─────────────── Bridge functions for mpc-core Poseidon2Precomputations ───────────────
-
-/// External round using mpc-core's Poseidon2Precomputations (called by ACVM solver).
-pub fn external_round_with_mpc_precomp<F: PrimeField, const T: usize, const D: u64, N: Network>(
-    poseidon: &Poseidon2<F, T, D>,
-    state_arr: &mut [SpdzPrimeFieldShare<F>; T],
-    r: usize,
-    precomp: &mut Poseidon2Precomputations<SpdzPrimeFieldShare<F>>,
-    net: &N,
-    state: &SpdzState<F>,
-) -> eyre::Result<()> {
-    // Add round constants
-    for (i, x) in state_arr.iter_mut().enumerate() {
-        let rc = poseidon.params.round_constants_external[r][i];
-        *x = arithmetic::add_public(*x, rc, state.mac_key_share, state.id);
-    }
-
-    // S-box on all T elements using mpc-core precomp
-    sbox_batch_mpc_precomp(state_arr.as_mut_slice(), precomp, net, state)?;
-
-    // MDS matrix
-    matmul_external(state_arr);
-    Ok(())
-}
-
-/// Internal round using mpc-core's Poseidon2Precomputations (called by ACVM solver).
-pub fn internal_round_with_mpc_precomp<F: PrimeField, const T: usize, const D: u64, N: Network>(
-    poseidon: &Poseidon2<F, T, D>,
-    state_arr: &mut [SpdzPrimeFieldShare<F>; T],
-    r: usize,
-    precomp: &mut Poseidon2Precomputations<SpdzPrimeFieldShare<F>>,
-    net: &N,
-    state: &SpdzState<F>,
-) -> eyre::Result<()> {
-    // Add round constant to first element
-    let rc = poseidon.params.round_constants_internal[r];
-    state_arr[0] = arithmetic::add_public(state_arr[0], rc, state.mac_key_share, state.id);
-
-    // S-box on first element only
-    sbox_single_mpc_precomp(&mut state_arr[0], precomp, net, state)?;
-
-    // Internal MDS matrix
-    matmul_internal(poseidon, state_arr);
-    Ok(())
-}
-
-/// S-box evaluation using mpc-core's Poseidon2Precomputations.
-fn sbox_batch_mpc_precomp<F: PrimeField, N: Network>(
-    input: &mut [SpdzPrimeFieldShare<F>],
-    precomp: &mut Poseidon2Precomputations<SpdzPrimeFieldShare<F>>,
-    net: &N,
-    state: &SpdzState<F>,
-) -> eyre::Result<()> {
-    let base = precomp.get_offset();
-    let n = input.len();
-
-    let masked: Vec<SpdzPrimeFieldShare<F>> = input
-        .iter()
-        .enumerate()
-        .map(|(i, x)| *x - *precomp.get_r(base + i))
-        .collect();
-
-    let ys = arithmetic::open_many_unchecked(&masked, net)?;
-
-    for (i, (inp, y)) in input.iter_mut().zip(ys.iter()).enumerate() {
-        let y2 = y.square();
-        let y3 = y2 * *y;
-        let y4 = y2.square();
-        let y5 = y4 * *y;
-        let five = F::from(5u64);
-        let ten = F::from(10u64);
-
-        let (r, r2, r3, r4, r5) = precomp.get(base + i);
-        let mut res = *r5;
-        res += *r4 * (five * *y);
-        res += *r3 * (ten * y2);
-        res += *r2 * (ten * y3);
-        res += *r * (five * y4);
-        res = arithmetic::add_public(res, y5, state.mac_key_share, state.id);
-        *inp = res;
-    }
-
-    precomp.increment_offset(n);
-    Ok(())
-}
-
-fn sbox_single_mpc_precomp<F: PrimeField, N: Network>(
-    input: &mut SpdzPrimeFieldShare<F>,
-    precomp: &mut Poseidon2Precomputations<SpdzPrimeFieldShare<F>>,
-    net: &N,
-    state: &SpdzState<F>,
-) -> eyre::Result<()> {
-    let idx = precomp.get_offset();
-
-    let masked = *input - *precomp.get_r(idx);
-    let y = arithmetic::open_unchecked(&masked, net)?;
-
-    let y2 = y.square();
-    let y3 = y2 * y;
-    let y4 = y2.square();
-    let y5 = y4 * y;
-    let five = F::from(5u64);
-    let ten = F::from(10u64);
-
-    let (r, r2, r3, r4, r5) = precomp.get(idx);
-    let mut res = *r5;
-    res += *r4 * (five * y);
-    res += *r3 * (ten * y2);
-    res += *r2 * (ten * y3);
-    res += *r * (five * y4);
-    res = arithmetic::add_public(res, y5, state.mac_key_share, state.id);
-
-    *input = res;
-    precomp.increment_offset(1);
     Ok(())
 }
 
