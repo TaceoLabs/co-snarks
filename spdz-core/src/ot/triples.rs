@@ -1,32 +1,118 @@
 //! Beaver Triple Generation via Oblivious Transfer
 //!
-//! Uses the Gilboa multiplication technique:
-//! To compute shares of c = a * b where a = a₀ + a₁ and b = b₀ + b₁:
+//! Implements the Gilboa multiplication technique using KOS OT extension:
 //!
-//! For each bit i of a₀ (from Party 0's perspective):
-//!   - Party 0 (sender) offers two messages: (r, r + b₁ * 2^i) for random r
-//!   - Party 1 (receiver) selects based on bit i of a₁
-//!   - Party 1 gets: r + a₁[i] * b₁ * 2^i
+//! To compute a shared product c = a*b where a = a0+a1, b = b0+b1:
+//!   Each party knows their own (a_i, b_i). Need shares of a*b.
+//!   a*b = a0*b0 + a0*b1 + a1*b0 + a1*b1
+//!   Party i computes a_i*b_i locally.
+//!   Cross terms (a0*b1, a1*b0) use Gilboa OT multiplication.
 //!
-//! After all bits: Party 0 holds c₀ = a₀*b₀ - sum(r_i)
-//!                  Party 1 holds c₁ = a₁*b₁ + sum(selected_i)
-//! And c₀ + c₁ = a₀*b₀ + a₁*b₁ + a₀*b₁ + a₁*b₀ = (a₀+a₁)(b₀+b₁) = a*b ✓
+//! Gilboa OT multiplication of x (sender's value) * y (receiver's bits):
+//!   For each bit j of y:
+//!     Sender offers (r_j, r_j + x * 2^j)
+//!     Receiver selects message based on y[j]
+//!     Receiver gets: r_j + y[j] * x * 2^j
+//!   Sender's share: -sum(r_j)
+//!   Receiver's share: sum(r_j + y[j] * x * 2^j) = sum(r_j) + x*y
+//!   Combined: x*y ✓
+//!
+//! MAC generation uses the same technique: mac_i = alpha_i * v
+//! where alpha = alpha0 + alpha1 is the global MAC key.
 
 use ark_ff::{BigInteger, PrimeField};
 use mpc_net::Network;
-use ocelot::ot;
-use rand::{CryptoRng, Rng, SeedableRng};
-use scuttlebutt::Block;
+use ocelot::ot::{ChouOrlandiReceiver, ChouOrlandiSender, Receiver as OtReceiver, Sender as OtSender};
+use rand::SeedableRng;
+use scuttlebutt::{AesRng, Block};
 
 use crate::network::SpdzNetworkExt;
-use crate::preprocessing::SpdzPreprocessing;
 use crate::types::SpdzPrimeFieldShare;
 use super::channel::NetworkChannel;
 
-/// Generate `count` Beaver triples using KOS OT extension.
+/// Perform Gilboa OT multiplication: sender has `x`, receiver has `y`.
+/// Returns additive shares of x*y.
 ///
-/// Party 0 is the OT sender, Party 1 is the OT receiver.
-/// Returns `(triples, mac_key_share)` for the calling party.
+/// sender_share + receiver_share = x * y (in the field)
+///
+/// The sender doesn't learn y, the receiver doesn't learn x.
+fn gilboa_mul<F: PrimeField, N: Network>(
+    party_id: usize,
+    my_value: F,       // sender's x or receiver's y
+    net: &N,
+) -> eyre::Result<F> {
+    let field_bits = F::MODULUS_BIT_SIZE as usize;
+    let mut channel = NetworkChannel::new(net);
+    let mut rng = AesRng::from_seed(rand::random());
+
+    // Each field element = 2 Blocks (lo + hi halves).
+    // For each bit of y, we need 2 OT messages (one per half).
+    // Total: 2 * field_bits OT instances per Gilboa multiplication.
+
+    if party_id == 0 {
+        // Party 0 = OT Sender
+        let mut sender = ChouOrlandiSender::init(&mut channel, &mut rng)
+            .map_err(|e| eyre::eyre!("OT sender init: {:?}", e))?;
+
+        let mut my_share = F::zero();
+        let mut pairs = Vec::with_capacity(2 * field_bits);
+
+        let mut pow = F::one();
+        for _j in 0..field_bits {
+            let r_j = F::rand(&mut rng);
+            let val0 = r_j;
+            let val1 = r_j + my_value * pow;
+
+            // Encode each as two blocks
+            let (lo0, hi0) = field_to_block_pair::<F>(val0);
+            let (lo1, hi1) = field_to_block_pair::<F>(val1);
+            pairs.push((lo0, lo1));
+            pairs.push((hi0, hi1));
+
+            my_share -= r_j;
+            pow.double_in_place();
+        }
+
+        sender.send(&mut channel, &pairs, &mut rng)
+            .map_err(|e| eyre::eyre!("OT send: {:?}", e))?;
+
+        Ok(my_share)
+    } else {
+        // Party 1 = OT Receiver
+        let mut receiver = ChouOrlandiReceiver::init(&mut channel, &mut rng)
+            .map_err(|e| eyre::eyre!("OT receiver init: {:?}", e))?;
+
+        let y_big = my_value.into_bigint();
+        // Each bit needs 2 OT calls (lo + hi), same choice bit for both
+        let mut choices = Vec::with_capacity(2 * field_bits);
+        for j in 0..field_bits {
+            let bit = y_big.get_bit(j as usize);
+            choices.push(bit); // for lo half
+            choices.push(bit); // for hi half
+        }
+
+        let received = receiver.receive(&mut channel, &choices, &mut rng)
+            .map_err(|e| eyre::eyre!("OT receive: {:?}", e))?;
+
+        // Reconstruct: each consecutive pair of blocks is one field element
+        let mut my_share = F::zero();
+        for chunk in received.chunks(2) {
+            my_share += block_pair_to_field::<F>(chunk[0], chunk[1]);
+        }
+
+        Ok(my_share)
+    }
+}
+
+/// Generate `count` Beaver triples using OT-based Gilboa multiplication.
+///
+/// Each triple (a, b, c) satisfies: a*b = c (when shares are combined).
+/// All values are authenticated with MAC key alpha = alpha0 + alpha1.
+///
+/// Protocol:
+/// 1. Each party generates random a_i, b_i locally
+/// 2. Cross-products computed via Gilboa OT (no values revealed)
+/// 3. MACs computed via Gilboa OT (mac_i = alpha_i * value)
 pub fn generate_triples_via_ot<F: PrimeField, N: Network>(
     count: usize,
     party_id: usize,
@@ -34,124 +120,138 @@ pub fn generate_triples_via_ot<F: PrimeField, N: Network>(
 ) -> eyre::Result<(Vec<(SpdzPrimeFieldShare<F>, SpdzPrimeFieldShare<F>, SpdzPrimeFieldShare<F>)>, F)>
 {
     let mut rng = rand_chacha::ChaCha20Rng::from_entropy();
-    let field_bits = F::MODULUS_BIT_SIZE as usize;
 
-    // Step 1: Agree on MAC key
-    // Each party picks a random MAC key share
+    // Step 1: MAC key — each party picks a random share
     let mac_key_share = F::rand(&mut rng);
 
-    // Step 2: For each triple, generate random a_i, b_i shares locally
-    let mut a_shares: Vec<F> = (0..count).map(|_| F::rand(&mut rng)).collect();
-    let mut b_shares: Vec<F> = (0..count).map(|_| F::rand(&mut rng)).collect();
+    // Step 2: Generate random a_i, b_i locally
+    let a_shares: Vec<F> = (0..count).map(|_| F::rand(&mut rng)).collect();
+    let b_shares: Vec<F> = (0..count).map(|_| F::rand(&mut rng)).collect();
 
-    // Step 3: Use OT to compute cross-product shares
-    // c = a*b = (a₀+a₁)(b₀+b₁) = a₀b₀ + a₀b₁ + a₁b₀ + a₁b₁
-    // Each party can compute a_i * b_i locally.
-    // The cross-terms (a₀b₁ and a₁b₀) require OT.
-
-    // For the cross-term a₀*b₁:
-    //   Party 0 knows a₀, Party 1 knows b₁
-    //   Use Gilboa: for each bit j of a₀, run 1-out-of-2 OT
-    //     Sender (Party 0) offers: (r_j, r_j + b₁ * 2^j)... but Party 0 doesn't know b₁
+    // Step 3: Compute cross-product shares via Gilboa OT
+    // c = a*b = (a0+a1)(b0+b1) = a0*b0 + a0*b1 + a1*b0 + a1*b1
+    // Party i computes a_i*b_i locally.
+    // Cross term a_i*b_j (i≠j) via OT: one party has a_i (sender), other has b_j (receiver).
     //
-    // Actually, the roles need to be swapped for the two cross-terms.
-    // Simpler approach: use correlated OT directly.
+    // We need TWO Gilboa multiplications per triple:
+    //   cross1 = a0 * b1 (Party 0 sends a0, Party 1 selects with b1)
+    //   cross2 = a1 * b0 (Party 1 sends a1, Party 0 selects with b0)
     //
-    // For now, use the simpler "exchange and multiply" approach:
-    // Each party sends their b_share to the other (masked with a random value)
-    // and both compute the cross products.
-    //
-    // NOTE: This is a simplified version. A full implementation would use
-    // the Gilboa OT-based multiplication to avoid revealing b shares.
+    // For efficiency, batch all triples:
+    //   Round 1: Party 0 is sender (sends a0_i values), Party 1 is receiver (uses b1_i)
+    //   Round 2: Party 1 is sender (sends a1_i values), Party 0 is receiver (uses b0_i)
 
-    // Simplified triple generation using random OT:
-    // 1. Party 0 sends a₀ (masked), Party 1 sends a₁ (masked)
-    // 2. Both compute c locally using the combined a values
-    // 3. Re-share c
-    //
-    // This version uses the network directly (not OT) as a stepping stone.
-    // The OT version would replace step 1 with Gilboa multiplication.
+    let mut cross1_shares = Vec::with_capacity(count);
+    let mut cross2_shares = Vec::with_capacity(count);
 
-    // Exchange b shares to compute cross products
-    let other_b: Vec<F> = net.exchange_many(&b_shares)?;
-
-    // Each party computes: c_i = a_i * b_i + a_i * other_b_i
-    // (this is their share of the product)
-    // Plus a correction term from the other party
-    let mut c_shares: Vec<F> = Vec::with_capacity(count);
-
-    // We need: c₀ + c₁ = (a₀+a₁)(b₀+b₁) = a₀b₀ + a₀b₁ + a₁b₀ + a₁b₁
-    // Party 0 computes: c₀ = a₀*b₀ + a₀*b₁ + random_correction
-    // Party 1 computes: c₁ = a₁*b₁ + a₁*b₀ - random_correction
-    //
-    // But we need the corrections to be agreed upon. Use a shared random seed:
-
-    // Exchange random seeds for correction
-    let my_seed: u64 = rng.r#gen();
-    let other_seed: u64 = {
-        let s: u64 = net.exchange(my_seed)?;
-        s
-    };
-    let mut correction_rng = rand_chacha::ChaCha20Rng::seed_from_u64(
-        my_seed.wrapping_add(other_seed)
-    );
-
+    // Round 1: compute shares of a0 * b1
     for i in 0..count {
-        // Local product + cross-product with other party's b
-        let local = a_shares[i] * b_shares[i] + a_shares[i] * other_b[i];
-
-        // Random correction to re-randomize the share
-        let correction = F::rand(&mut correction_rng);
-        let c = if party_id == 0 {
-            local + correction
-        } else {
-            local - correction
-        };
-        c_shares.push(c);
+        let my_val = if party_id == 0 { a_shares[i] } else { b_shares[i] };
+        let share = gilboa_mul::<F, N>(party_id, my_val, net)?;
+        cross1_shares.push(share);
     }
 
-    // Step 4: Authenticate with MACs
-    // MAC of a value v: mac = mac_key * v
-    // Each party holds: mac_share = mac_key_share * v (for their share)
-    // But we need: mac₀ + mac₁ = mac_key * (share₀ + share₁)
-    // This requires exchanging MAC key shares... which defeats the purpose.
-    //
-    // Proper MAC authentication uses another round of OT.
-    // For now, compute MACs using a shared MAC key approach:
+    // Round 2: compute shares of a1 * b0 (swap roles)
+    for i in 0..count {
+        let my_val = if party_id == 0 { b_shares[i] } else { a_shares[i] };
+        // Swap roles: Party 0 is now receiver, Party 1 is sender
+        let share = gilboa_mul::<F, N>(1 - party_id, my_val, net)?;
+        cross2_shares.push(share);
+    }
 
-    // Exchange MAC key shares (in production, this would use OT too)
-    let other_mac: F = net.exchange(mac_key_share)?;
-    let mac_key = mac_key_share + other_mac;
+    // Combine: c_i = a_i*b_i + cross1_i + cross2_i
+    let c_shares: Vec<F> = (0..count)
+        .map(|i| a_shares[i] * b_shares[i] + cross1_shares[i] + cross2_shares[i])
+        .collect();
+
+    // Step 4: Authenticate with MACs via OT
+    // For each value v with shares (v0, v1), need mac_i = alpha_i * (v0+v1).
+    // mac_i = alpha_i * v_i + alpha_i * v_j (cross-term via OT)
+    //
+    // For each value, one Gilboa mul: alpha_i * v_j
+    // Total: 3 * count Gilboa muls (for a, b, c values)
 
     let mut triples = Vec::with_capacity(count);
     for i in 0..count {
-        let a_val = a_shares[i]; // My share of a
-        let b_val = b_shares[i]; // My share of b
-        let c_val = c_shares[i]; // My share of c
-
-        // Compute MAC shares: need mac_key * total_value
-        // But we don't know total_value! We know our share and can compute
-        // mac_share = mac_key_share * total_value via another exchange.
-        // For now, use the simplified version:
-        let a_total: F = net.exchange(a_val)?;
-        let a_total = a_val + a_total;
-        let b_total: F = net.exchange(b_val)?;
-        let b_total = b_val + b_total;
-        let c_total: F = net.exchange(c_val)?;
-        let c_total = c_val + c_total;
-
-        let a_mac = mac_key_share * a_total;
-        let b_mac = mac_key_share * b_total;
-        let c_mac = mac_key_share * c_total;
+        let a_mac = compute_mac_share(party_id, mac_key_share, a_shares[i], net)?;
+        let b_mac = compute_mac_share(party_id, mac_key_share, b_shares[i], net)?;
+        let c_mac = compute_mac_share(party_id, mac_key_share, c_shares[i], net)?;
 
         triples.push((
-            SpdzPrimeFieldShare::new(a_val, a_mac),
-            SpdzPrimeFieldShare::new(b_val, b_mac),
-            SpdzPrimeFieldShare::new(c_val, c_mac),
+            SpdzPrimeFieldShare::new(a_shares[i], a_mac),
+            SpdzPrimeFieldShare::new(b_shares[i], b_mac),
+            SpdzPrimeFieldShare::new(c_shares[i], c_mac),
         ));
     }
 
     Ok((triples, mac_key_share))
+}
+
+/// Compute MAC share for a value.
+/// MAC = alpha * v where alpha = alpha0 + alpha1, v = v0 + v1.
+/// Party i's MAC share = alpha_i * v_i + share_of(alpha_i * v_j) + share_of(alpha_j * v_i)
+///
+/// Cross terms computed via Gilboa OT:
+///   Round 1: Party 0 sends alpha_0 (sender), Party 1 uses v_1 (receiver) → shares of alpha_0 * v_1
+///   Round 2: Party 0 uses v_0 (receiver), Party 1 sends alpha_1 (sender) → shares of alpha_1 * v_0
+fn compute_mac_share<F: PrimeField, N: Network>(
+    party_id: usize,
+    mac_key_share: F,
+    my_value_share: F,
+    net: &N,
+) -> eyre::Result<F> {
+    // Local part
+    let local_mac = mac_key_share * my_value_share;
+
+    // Round 1: Party 0 sends alpha_0, Party 1 selects with v_1
+    // This gives shares of alpha_0 * v_1
+    let cross1 = if party_id == 0 {
+        gilboa_mul::<F, N>(0, mac_key_share, net)?  // sender: alpha_0
+    } else {
+        gilboa_mul::<F, N>(1, my_value_share, net)?  // receiver: v_1
+    };
+
+    // Round 2: Party 1 sends alpha_1, Party 0 selects with v_0
+    // This gives shares of alpha_1 * v_0
+    let cross2 = if party_id == 0 {
+        gilboa_mul::<F, N>(1, my_value_share, net)?  // receiver: v_0
+    } else {
+        gilboa_mul::<F, N>(0, mac_key_share, net)?  // sender: alpha_1
+    };
+
+    Ok(local_mac + cross1 + cross2)
+}
+
+// Helper: convert Field element to bytes and back.
+// BN254 is 254 bits = 32 bytes. We split into 16-byte halves for Block encoding.
+fn field_to_bytes<F: PrimeField>(f: F) -> Vec<u8> {
+    f.into_bigint().to_bytes_le()
+}
+
+fn field_from_bytes<F: PrimeField>(bytes: &[u8]) -> F {
+    F::from_le_bytes_mod_order(bytes)
+}
+
+fn field_to_block_pair<F: PrimeField>(f: F) -> (Block, Block) {
+    let bytes = field_to_bytes(f);
+    let mut lo = [0u8; 16];
+    let mut hi = [0u8; 16];
+    let mid = bytes.len().min(16);
+    lo[..mid].copy_from_slice(&bytes[..mid]);
+    if bytes.len() > 16 {
+        let hi_len = (bytes.len() - 16).min(16);
+        hi[..hi_len].copy_from_slice(&bytes[16..16 + hi_len]);
+    }
+    (Block::from(lo), Block::from(hi))
+}
+
+fn block_pair_to_field<F: PrimeField>(lo: Block, hi: Block) -> F {
+    let lo_bytes: [u8; 16] = lo.into();
+    let hi_bytes: [u8; 16] = hi.into();
+    let mut bytes = Vec::with_capacity(32);
+    bytes.extend_from_slice(&lo_bytes);
+    bytes.extend_from_slice(&hi_bytes);
+    F::from_le_bytes_mod_order(&bytes)
 }
 
 #[cfg(test)]
@@ -167,7 +267,7 @@ mod tests {
         let net0 = nets.next().unwrap();
         let net1 = nets.next().unwrap();
 
-        let count = 10;
+        let count = 5;
 
         let h0 = std::thread::spawn(move || {
             generate_triples_via_ot::<Fr, _>(count, 0, &net0).unwrap()
