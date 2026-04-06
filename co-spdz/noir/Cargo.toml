@@ -1,0 +1,38 @@
+[package]
+name = "co-spdz-noir"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+spdz-core = { path = "../core" }
+co-spdz-acvm = { path = "../acvm" }
+co-spdz-ultrahonk = { path = "../ultrahonk" }
+co-noir = { version = "0.7.0", path = "../../co-noir/co-noir" }
+co-builder = { version = "0.5.0", path = "../../co-noir/co-builder" }
+co-noir-common = { version = "0.2.0", path = "../../co-noir/co-noir-common" }
+co-noir-types = { path = "../../co-noir/co-noir-types" }
+co-ultrahonk = { version = "0.6.0", path = "../../co-noir/co-ultrahonk" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-net = { version = "0.5.0", path = "../../mpc-net" }
+noir-types = { path = "../../co-noir/noir-types" }
+ark-bn254 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+eyre = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+ark-bn254 = { workspace = true }
+ark-ff = { workspace = true }
+co-builder = { version = "0.5.0", path = "../../co-noir/co-builder" }
+co-spdz-acvm = { path = "../acvm" }
+co-ultrahonk = { version = "0.6.0", path = "../../co-noir/co-ultrahonk" }
+mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local", "tcp"] }
+noirc-artifacts = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+spdz-core = { path = "../core" }
+sha3 = { workspace = true }

@@ -1338,6 +1338,8 @@ dependencies = [
  "ark-ec",
  "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
+ "blake2",
+ "blake3",
  "brillig",
  "co-acvm",
  "co-brillig",

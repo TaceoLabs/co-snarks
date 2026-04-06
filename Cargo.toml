@@ -17,10 +17,10 @@ members = [
     "co-noir/co-noir-common",
     "mpc-core",
     "mpc-net",
-    "spdz-core",
-    "co-spdz-acvm",
-    "co-spdz-ultrahonk",
-    "co-spdz-noir",
+    "co-spdz/core",
+    "co-spdz/acvm",
+    "co-spdz/ultrahonk",
+    "co-spdz/noir",
     "tests",
 ]
 resolver = "2"

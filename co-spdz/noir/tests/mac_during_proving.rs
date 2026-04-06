@@ -23,15 +23,15 @@ use spdz_core::types::share_field_element;
 use std::fs::File;
 use std::sync::Arc;
 
-const CRS_PATH_G1: &str = "../co-noir/co-noir-common/src/crs/bn254_g1.dat";
-const CRS_PATH_G2: &str = "../co-noir/co-noir-common/src/crs/bn254_g2.dat";
+const CRS_PATH_G1: &str = "../../co-noir/co-noir-common/src/crs/bn254_g1.dat";
+const CRS_PATH_G2: &str = "../../co-noir/co-noir-common/src/crs/bn254_g2.dat";
 
 /// Prove with MAC verification enabled (default behavior).
 /// This exercises the ACVM solver's open_many with MAC checking.
 #[test]
 fn test_proving_with_mac_verification_enabled() {
-    let circuit_file = "../test_vectors/noir/mul_shared/kat/mul_shared.json";
-    let witness_file = "../test_vectors/noir/mul_shared/kat/mul_shared.gz";
+    let circuit_file = "../../test_vectors/noir/mul_shared/kat/mul_shared.json";
+    let witness_file = "../../test_vectors/noir/mul_shared/kat/mul_shared.gz";
 
     let program_artifact =
         co_noir::program_artifact_from_reader(File::open(circuit_file).unwrap()).unwrap();
@@ -129,9 +129,9 @@ fn test_proving_with_mac_verification_enabled() {
 #[test]
 fn test_proving_with_mac_verification_disabled() {
     let circuit_file =
-        "../test_vectors/noir/addition_multiplication/kat/addition_multiplication.json";
+        "../../test_vectors/noir/addition_multiplication/kat/addition_multiplication.json";
     let witness_file =
-        "../test_vectors/noir/addition_multiplication/kat/addition_multiplication.gz";
+        "../../test_vectors/noir/addition_multiplication/kat/addition_multiplication.gz";
 
     let program_artifact =
         co_noir::program_artifact_from_reader(File::open(circuit_file).unwrap()).unwrap();

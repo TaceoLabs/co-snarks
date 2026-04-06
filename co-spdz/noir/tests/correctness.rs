@@ -27,8 +27,8 @@ use spdz_core::types::{share_field_element, SpdzPrimeFieldShare};
 use std::fs::File;
 use std::sync::Arc;
 
-const CRS_PATH_G1: &str = "../co-noir/co-noir-common/src/crs/bn254_g1.dat";
-const CRS_PATH_G2: &str = "../co-noir/co-noir-common/src/crs/bn254_g2.dat";
+const CRS_PATH_G1: &str = "../../co-noir/co-noir-common/src/crs/bn254_g1.dat";
+const CRS_PATH_G2: &str = "../../co-noir/co-noir-common/src/crs/bn254_g2.dat";
 
 fn load_circuit(
     circuit_file: &str,
@@ -114,8 +114,8 @@ fn run_spdz_prove_with_prep<H: TranscriptHasher<TranscriptFieldType>>(
 
 #[test]
 fn test_shared_x_shared_multiplication() {
-    let circuit_file = "../test_vectors/noir/mul_shared/kat/mul_shared.json";
-    let witness_file = "../test_vectors/noir/mul_shared/kat/mul_shared.gz";
+    let circuit_file = "../../test_vectors/noir/mul_shared/kat/mul_shared.json";
+    let witness_file = "../../test_vectors/noir/mul_shared/kat/mul_shared.gz";
     let (program_artifact, prover_crs, vk) = load_circuit(circuit_file, ZeroKnowledge::No);
 
     let witness = co_noir::witness_from_reader(File::open(witness_file).unwrap()).unwrap();
@@ -155,8 +155,8 @@ fn test_shared_x_shared_multiplication() {
 
 #[test]
 fn test_secret_shared_inputs() {
-    let circuit_file = "../test_vectors/noir/mul_shared/kat/mul_shared.json";
-    let witness_file = "../test_vectors/noir/mul_shared/kat/mul_shared.gz";
+    let circuit_file = "../../test_vectors/noir/mul_shared/kat/mul_shared.json";
+    let witness_file = "../../test_vectors/noir/mul_shared/kat/mul_shared.gz";
     let (program_artifact, prover_crs, vk) = load_circuit(circuit_file, ZeroKnowledge::No);
 
     let witness_plain = co_noir::witness_from_reader(File::open(witness_file).unwrap()).unwrap();
@@ -225,9 +225,9 @@ fn test_secret_shared_inputs() {
 #[test]
 fn test_poseidon2_shared() {
     let circuit_file =
-        "../test_vectors/noir/blackbox_poseidon2/kat/blackbox_poseidon2.json";
+        "../../test_vectors/noir/blackbox_poseidon2/kat/blackbox_poseidon2.json";
     let witness_file =
-        "../test_vectors/noir/blackbox_poseidon2/kat/blackbox_poseidon2.gz";
+        "../../test_vectors/noir/blackbox_poseidon2/kat/blackbox_poseidon2.gz";
     let (program_artifact, prover_crs, vk) = load_circuit(circuit_file, ZeroKnowledge::No);
 
     let witness = co_noir::witness_from_reader(File::open(witness_file).unwrap()).unwrap();
