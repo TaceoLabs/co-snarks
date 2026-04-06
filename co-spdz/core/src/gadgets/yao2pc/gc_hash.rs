@@ -146,7 +146,7 @@ where
 /// Returns `outlen` bits of the result.
 ///
 /// Ported from Rep3's `adder_mod_p_with_output_size`.
-fn adder_mod_p<G: FancyBinary, F: PrimeField>(
+pub(crate) fn adder_mod_p<G: FancyBinary, F: PrimeField>(
     g: &mut G,
     a: &[G::Item],
     b: &[G::Item],
@@ -167,7 +167,7 @@ where
 }
 
 /// Binary addition returning (sum_bits, carry_out).
-fn bin_addition<G: FancyBinary>(
+pub(crate) fn bin_addition<G: FancyBinary>(
     g: &mut G,
     a: &[G::Item],
     b: &[G::Item],
@@ -280,7 +280,7 @@ where
 }
 
 /// Convert output bits to SPDZ trivial shares.
-fn bits_to_spdz_shares<F: PrimeField>(
+pub(crate) fn bits_to_spdz_shares<F: PrimeField>(
     output_bits: &[bool],
     output_bytes: usize,
     state: &SpdzState<F>,
