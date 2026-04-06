@@ -1332,6 +1332,70 @@ dependencies = [
 ]
 
 [[package]]
+name = "co-spdz-acvm"
+version = "0.1.0"
+dependencies = [
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "brillig",
+ "co-acvm",
+ "co-brillig",
+ "co-noir-common",
+ "eyre",
+ "mpc-core",
+ "mpc-net",
+ "num-bigint 0.4.6",
+ "serde",
+ "sha2",
+ "spdz-core",
+]
+
+[[package]]
+name = "co-spdz-noir"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "co-builder",
+ "co-noir",
+ "co-noir-common",
+ "co-noir-types",
+ "co-spdz-acvm",
+ "co-spdz-ultrahonk",
+ "co-ultrahonk",
+ "eyre",
+ "mpc-core",
+ "mpc-net",
+ "noir-types",
+ "noirc_artifacts",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "sha3",
+ "spdz-core",
+ "tracing",
+]
+
+[[package]]
+name = "co-spdz-ultrahonk"
+version = "0.1.0"
+dependencies = [
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-poly",
+ "ark-serialize 0.5.0",
+ "co-noir-common",
+ "eyre",
+ "itertools 0.14.0",
+ "mpc-core",
+ "mpc-net",
+ "num-traits",
+ "rayon",
+ "spdz-core",
+]
+
+[[package]]
 name = "co-ultrahonk"
 version = "0.6.0"
 dependencies = [
@@ -4581,6 +4645,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bceb57dc07c92cdae60f5b27b3fa92ecaaa42fe36c55e22dbfb0b44893e0b1f7"
 
 [[package]]
+name = "spdz-core"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "ark-poly",
+ "ark-serialize 0.5.0",
+ "ark-std 0.5.0",
+ "crossbeam-channel",
+ "eyre",
+ "fancy-garbling",
+ "mpc-core",
+ "mpc-net",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "ocelot",
+ "rand 0.8.5",
+ "rand_chacha 0.3.1",
+ "scuttlebutt",
+ "serde",
+ "sha3",
+ "tracing",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4876,6 +4966,9 @@ dependencies = [
  "co-noir-common",
  "co-noir-types",
  "co-plonk",
+ "co-spdz-acvm",
+ "co-spdz-noir",
+ "co-spdz-ultrahonk",
  "co-ultrahonk",
  "eyre",
  "itertools 0.14.0",
@@ -4891,6 +4984,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "sha3",
+ "spdz-core",
  "taceo-circom-types",
  "tracing",
  "tracing-subscriber 0.3.20",
