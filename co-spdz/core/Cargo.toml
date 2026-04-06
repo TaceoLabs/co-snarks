@@ -33,5 +33,6 @@ ark-ec = { workspace = true }
 ark-std = { workspace = true }
 blake2 = { workspace = true }
 blake3 = { workspace = true }
+sha2 = { workspace = true }
 mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }
 rand_chacha = { workspace = true }

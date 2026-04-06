@@ -4670,6 +4670,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "scuttlebutt",
  "serde",
+ "sha2",
  "sha3",
  "tracing",
 ]

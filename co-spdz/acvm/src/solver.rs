@@ -998,9 +998,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F>
         message: &[Self::AcvmType; 16],
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         if state.iter().chain(message.iter()).any(|v| Self::is_shared(v)) {
-            let s: [SpdzPrimeFieldShare<F>; 8] = std::array::from_fn(|i| self.get_as_shared(&state[i]));
-            let m: [SpdzPrimeFieldShare<F>; 16] = std::array::from_fn(|i| self.get_as_shared(&message[i]));
-            let result = spdz_core::gadgets::yao::sha256_compression(&s, &m, self.net, &mut self.state)?;
+            // Use garbled circuit for SHA256 on shared values (2-3 rounds)
+            let s: Vec<SpdzPrimeFieldShare<F>> = state.iter().map(|v| self.get_as_shared(v)).collect();
+            let m: Vec<SpdzPrimeFieldShare<F>> = message.iter().map(|v| self.get_as_shared(v)).collect();
+            let result = spdz_core::gadgets::yao2pc::gc_sha256::gc_sha256_compression(&s, &m, self.net, &self.state)?;
             Ok(result.into_iter().map(SpdzAcvmType::Shared).collect())
         } else {
             // All public — use standard SHA256

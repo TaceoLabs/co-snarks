@@ -21,6 +21,7 @@ pub mod gc_blake2s;
 pub mod gc_blake3;
 pub mod gc_eval;
 pub mod gc_hash;
+pub mod gc_sha256;
 
 use ark_ff::PrimeField;
 use mpc_net::Network;
