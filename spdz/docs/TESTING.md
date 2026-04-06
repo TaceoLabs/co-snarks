@@ -39,7 +39,7 @@ Two-party tests using `LocalNetwork::new(2)`:
 - **Inversion**: `a * inv(a) = 1`
 - **Input sharing**: Sender's value correctly shared with receiver
 
-### 5. End-to-End Proving (co-spdz-noir integration tests)
+### 5. End-to-End Proving (co-spdz-noir (crate name) integration tests)
 
 Full pipeline from Noir circuit to verified proof:
 
@@ -88,14 +88,14 @@ cargo test
 cargo test -p spdz-core
 
 # Integration tests (requires CRS files from co-snarks)
-cargo test -p co-spdz-noir
+cargo test -p co-spdz-noir (crate name)
 
 # Specific test with output
-cargo test --test correctness -p co-spdz-noir test_secret_shared -- --nocapture
+cargo test --test correctness -p co-spdz-noir (crate name) test_secret_shared -- --nocapture
 ```
 
 ## Test Dependencies
 
-- CRS files: `../co-snarks/co-noir/co-noir-common/src/crs/bn254_g1.dat` (65MB) and `bn254_g2.dat`
-- Test vectors: `../co-snarks/test_vectors/noir/addition_multiplication/kat/`
-- Custom circuits: `test_circuits/mul_shared/kat/` (compiled with nargo v1.0.0-beta.17)
+- CRS files: `co-noir/co-noir-common/src/crs/bn254_g1.dat` (65MB) and `bn254_g2.dat`
+- Test vectors: `test_vectors/noir/addition_multiplication/kat/`
+- Custom circuits: `test_vectors/noir/mul_shared/kat/` (compiled with nargo v1.0.0-beta.17)

@@ -1,23 +1,39 @@
-# co-spdz — 2-Party SPDZ Protocol for co-snarks
+# SPDZ — 2-Party MPC Protocol for co-snarks
 
 Dishonest-majority 2-party computation using the SPDZ protocol, integrated with TACEO's co-snarks framework for collaborative Noir proving.
 
 ## What is this?
 
-co-spdz adds a 2-party MPC backend to co-snarks, alongside the existing Rep3 (3-party) and Shamir (n-party) protocols. It enables two parties to collaboratively generate UltraHonk ZK proofs over shared private inputs — neither party learns the other's data.
+This adds a 2-party MPC backend to co-snarks, alongside the existing Rep3 (3-party) and Shamir (n-party) protocols. Two parties can collaboratively generate UltraHonk ZK proofs over shared private inputs — neither party learns the other's data.
 
 ## Structure
 
 ```
-co-spdz/
-├── core/          # SPDZ protocol primitives (shares, Beaver multiplication, preprocessing, gadgets)
-├── acvm/          # ACVM witness extension solver (NoirWitnessExtensionProtocol)
-├── ultrahonk/     # UltraHonk prover driver (NoirUltraHonkProver)
-├── noir/          # Top-level API: generate_proving_key_spdz(), prove_spdz()
-└── docs/          # Architecture, capabilities, testing, comparison with Rep3
+spdz/
+├── core/          # SPDZ protocol: shares, Beaver multiplication, preprocessing, OT, gadgets
+│   └── gadgets/
+│       ├── bits.rs        # Algebraic is_zero, bit decomposition
+│       ├── poseidon2.rs   # Mask-and-evaluate S-box
+│       ├── yao2pc/        # Garbled circuit engine
+│       │   ├── gc_blake2s.rs  # Blake2s via GC (0.05s)
+│       │   ├── gc_blake3.rs   # Blake3 via GC (0.05s)
+│       │   ├── gc_sha256.rs   # SHA256 via GC (0.39s)
+│       │   └── gc_hash.rs     # 254-bit modular adder for share recovery
+│       └── ...
+├── acvm/          # ACVM witness extension solver
+├── ultrahonk/     # UltraHonk prover driver
+├── noir/          # Top-level API + integration tests
+└── docs/          # Architecture, capabilities, testing, gap analysis
 ```
 
-Mirrors the `co-noir/` directory structure: separate crates for each layer, all under one folder.
+## Key Features
+
+- **Full prove+verify pipeline**: Secret-share inputs -> ACVM solve -> UltraHonk prove -> verify
+- **25 prove+verify tests** across Keccak256, Poseidon2Sponge, and ZK mode
+- **Garbled circuit hashing**: Blake2s, Blake3, SHA256 evaluated via GC in 2-3 network rounds
+- **KOS OT extension**: Amortized base OT for efficient Beaver triple generation
+- **Poseidon2 on shared values**: Mask-and-evaluate S-box technique
+- **Zero modifications to TACEO's code**: Everything in `spdz/`, clean upstream merges
 
 ## Usage
 
@@ -30,7 +46,7 @@ let preprocessing = create_lazy_preprocessing::<Fr>(seed, party_id);
 let pk = generate_proving_key_spdz(preprocessing, &constraint_system, witness, &net, &crs)?;
 let (proof, public_inputs) = prove_spdz::<_, Keccak256, _>(&net, proving_prep, pk, &crs, zk, &vk)?;
 
-// Standard UltraHonk proof — verifiable by anyone
+// Standard UltraHonk proof -- verifiable by anyone
 let valid = UltraHonk::<_, Keccak256>::verify(proof, &public_inputs, &vk, zk)?;
 ```
 
@@ -40,18 +56,16 @@ let valid = UltraHonk::<_, Keccak256>::verify(proof, &public_inputs, &vk, zk)?;
 |---|---|---|
 | Parties | 3 | 2 |
 | Security | Honest majority | Dishonest majority |
-| Preprocessing | Online (correlated RNG) | Beaver triples (OT-based) |
-| Garbled circuits | Full (Yao GC via Bristol) | Standalone engine (not wired into ACVM) |
-| Supported Noir ops | 29 circuits tested | 25 circuits tested (19 prove+verify) |
+| Preprocessing | Online (correlated RNG) | Beaver triples (KOS OT) |
+| Hash GC (Blake2s, Blake3, SHA256) | Via Yao GC | Via Yao GC (wired into ACVM) |
+| Prove+verify tests | 4 circuits | 25 circuits |
 
 See `docs/SPDZ_VS_REP3.md` for the full gap analysis.
 
 ## Upstreaming
 
-This code is structured to be upstreamable to TACEO's co-snarks. If integrated:
-- `core/` → `mpc-core/src/protocols/spdz/`
-- `acvm/src/solver.rs` → `co-noir/co-acvm/src/mpc/spdz.rs`
-- `ultrahonk/src/driver.rs` → `co-noir/co-noir-common/src/mpc/spdz.rs`
-- `noir/src/lib.rs` → `co-noir/co-noir/src/lib.rs` (add spdz functions)
-
-The only modification to existing co-snarks code: `Poseidon2Precomputations::new()` constructor in `mpc-core`.
+This code lives entirely in `spdz/` with zero changes to TACEO's crates. If integrated upstream:
+- `core/` -> `mpc-core/src/protocols/spdz/`
+- `acvm/src/solver.rs` -> `co-noir/co-acvm/src/mpc/spdz.rs`
+- `ultrahonk/src/driver.rs` -> `co-noir/co-noir-common/src/mpc/spdz.rs`
+- `noir/src/lib.rs` -> `co-noir/co-noir/src/lib.rs` (add spdz functions)

@@ -1,4 +1,4 @@
-# SPDZ vs Rep3 — Gap Analysis
+# SPDZ vs Rep3 -- Gap Analysis
 
 ## Protocol Comparison
 
@@ -6,20 +6,21 @@
 |---|---|---|
 | **Parties** | 3 | 2 |
 | **Security** | Honest majority (1 of 3 corrupt) | Dishonest majority (either party can cheat) |
-| **Preprocessing** | Online (correlated RNG, no trusted dealer) | Beaver triples (currently trusted dealer, OT-based available) |
+| **Preprocessing** | Online (correlated RNG, no trusted dealer) | Beaver triples (KOS OT extension) |
 | **Multiplication** | 1 reshare (local mask + send) | 1 Beaver triple + 1 open (2 messages) |
-| **Garbled Circuits** | Full Yao GC integration | Not integrated into ACVM (standalone GC available) |
+| **Garbled Circuits** | Full Yao GC (Bristol fashion + gate-level) | Yao GC (gate-level, wired into ACVM) |
 
 ## ACVM Solver (Witness Extension)
 
 | Operation Category | Rep3 (109 methods) | SPDZ (93 methods) | Gap |
 |---|---|---|---|
 | **Field arithmetic** | Full | Full | None |
-| **Comparisons (==, <, >)** | Via Yao GC | Via algebraic is_zero + bit decomp | Different approach, both work |
-| **Bitwise (AND, XOR)** | Via Yao GC | Via bit decomp + mul | Both produce correct witnesses |
+| **Comparisons (==, <, >)** | Via Yao GC | Via algebraic is_zero + bit decomp | None (different approach) |
+| **Bitwise (AND, XOR)** | Via Yao GC | Via bit decomp + mul | None (witness correct) |
 | **Poseidon2** | Full (precomp S-box) | Full (mask-and-evaluate S-box) | None |
-| **SHA256** | Via Yao GC (Bristol circuit) | Panics on shared | **Gap** |
-| **Blake2s/Blake3** | Via Yao GC (Bristol circuit) | Panics on shared | **Gap** |
+| **SHA256** | Via Yao GC (Bristol circuit) | Via Yao GC (gate-level) | None |
+| **Blake2s** | Via Yao GC (gate-level) | Via Yao GC (gate-level) | None |
+| **Blake3** | Via Yao GC (gate-level) | Via Yao GC (gate-level) | None |
 | **AES128** | Via Yao GC (Bristol circuit) | Panics on shared | **Gap** |
 | **EC point ops** | Full (Grumpkin) | Public-only (shared panics) | **Gap** |
 | **Pedersen hash/commit** | Full (uses EC) | Panics (needs Grumpkin) | **Gap** |
@@ -31,13 +32,12 @@
 | **equal_many** | Via GC batch | Via algebraic batch | None |
 | **Plookup slicing (AND/XOR)** | Via Yao GC | Via bit decomp | Witness correct, proof fails |
 
-### Summary: 16 methods Rep3 has that SPDZ doesn't
+### Remaining gaps: 6 methods
 
-The gap comes from two root causes:
-
-1. **No Yao GC in the ACVM** (12 methods): Rep3 uses garbled circuits for SHA256, Blake, AES, sparse tables, and bit-level operations. Our spdz-core has a standalone GC engine (`gadgets/yao2pc/`) but it's not wired into the ACVM solver's blackbox handlers.
-
-2. **No Grumpkin curve support** (4 methods): EC point construction, Pedersen hash/commitment require Grumpkin field operations with shared coordinates. Rep3 handles these natively.
+1. **AES128** (1 method): Needs Bristol fashion circuit loader or gate-level AES implementation
+2. **Grumpkin curve ops** (3 methods): EC point construction, Pedersen hash/commitment
+3. **Sparse tables** (1 method): Complex lookup used by AES/SHA internally
+4. **LUT write** (1 method): Lookup table write for shared index
 
 ## UltraHonk Driver (Proving)
 
@@ -48,15 +48,14 @@ The gap comes from two root causes:
 | MSM | Full | Full | None |
 | Open (field + point) | Full | Full (unchecked) | None |
 | Reshare | Full | Full | None |
-| local_mul_vec | Local mask | Beaver via stored net ptr | None (different approach) |
-| `is_zero_many` | Full | **Panics** | **Gap** |
+| local_mul_vec | Local mask | Beaver via stored net ptr | None |
+| `is_zero_many` | Full | Full | None |
 | `pointshare_to_field_shares_many` | Full | **Panics** | **Gap** |
 | Poseidon2 permutation | Full | Full | None |
 
-### 2 methods SPDZ is missing in UltraHonk:
+### 1 method SPDZ is missing in UltraHonk:
 
-- `is_zero_many`: Used during proof construction. Could be implemented using our algebraic is_zero gadget. Not triggered by current test circuits.
-- `pointshare_to_field_shares_many`: Point decomposition. Requires Grumpkin support. Not triggered by current test circuits.
+- `pointshare_to_field_shares_many`: Point decomposition. Requires Grumpkin support. Not triggered by current circuits.
 
 ## Brillig Driver (Unconstrained Execution)
 
@@ -68,83 +67,62 @@ The gap comes from two root causes:
 | Shared division | Panics | Panics | Same |
 | random() | Supported | Panics | **Gap** |
 
-SPDZ's Brillig driver is actually **better** than Rep3's for basic shared arithmetic — Rep3 panics on shared add/sub/mul in Brillig, SPDZ handles them.
+SPDZ's Brillig driver handles basic shared arithmetic (add/sub/mul) where Rep3 panics.
 
 ## Preprocessing
 
 | | Rep3 | SPDZ |
 |---|---|---|
 | **Type** | Online (correlated RNG) | Offline (Beaver triples) |
-| **Trusted dealer needed** | No | Yes (currently) |
-| **OT-based alternative** | N/A | Available but not default |
+| **Trusted dealer needed** | No | No (KOS OT extension) |
+| **OT implementation** | N/A | KOS with Chou-Orlandi base OT, Gilboa multiplication |
 | **Material** | Masking elements on-the-fly | Triples, random shares, random bits |
 | **Memory** | Minimal (RNG state) | Lazy generation (12MB for 4K batch) |
 | **Fork support** | Yes (split RNG state) | Yes (partition preprocessing) |
-
-**Key difference**: Rep3 needs no preprocessing phase — randomness is generated online from correlated RNGs seeded during initialization. SPDZ requires Beaver triples generated before computation. Our `LazyDummyPreprocessing` generates them on-demand from a shared seed (equivalent to a trusted dealer). For production, OT-based triple generation is available.
 
 ## Test Coverage
 
 | Test Category | Rep3 | SPDZ |
 |---|---|---|
-| MPC core unit tests | 87 | 46 |
+| MPC core unit tests | 87 | 50 |
 | Witness extension (circuit tests) | 31 | 19 |
 | Proof tests (Keccak256, no ZK) | 3 | 19 |
 | Proof tests (Keccak256, ZK) | 3 | 3 |
 | Proof tests (Poseidon2Sponge) | 3 | 3 |
-| Integration tests | — | 6 |
-| **Total** | **~130** | **~96** |
+| Integration tests | -- | 6 |
+| **Total** | **~130** | **~100** |
 
-Rep3 has more MPC unit tests (87 vs 46) and more witness extension tests (31 vs 19). But SPDZ has **6x more proof tests** (25 vs 4 that actually prove+verify). Rep3's proof tests only cover poseidon, add3u64, and recursion.
+SPDZ has **6x more proof tests** (25 vs 4 that actually prove+verify).
 
 ## Plookup Proof Verification
 
-Neither Rep3 nor SPDZ has passing proof tests for plookup-dependent circuits. Rep3 only tests witness extension for these (no prove+verify). We tested prove+verify and found they fail at verification — a general co-snarks MPC+plookup issue.
+Neither Rep3 nor SPDZ has passing proof tests for plookup-dependent circuits. This is a general co-snarks MPC+plookup issue, not protocol-specific.
 
 | Plookup Circuit | Rep3 Witness | Rep3 Proof | SPDZ Witness | SPDZ Proof |
 |---|---|---|---|---|
 | blackbox_and | Pass | **Not tested** | Pass | Fail |
 | blackbox_xor | Pass | **Not tested** | Pass | Fail |
-| sha256 | Pass | **Not tested** | N/A (panic) | N/A |
-| blake2s | Pass | **Not tested** | N/A (panic) | N/A |
-| blake3 | Pass | **Not tested** | N/A (panic) | N/A |
+| sha256 | Pass | **Not tested** | GC works | Fail (plookup) |
+| blake2s | Pass | **Not tested** | GC works | Fail (plookup) |
+| blake3 | Pass | **Not tested** | GC works | Fail (plookup) |
 | random_access | Pass | **Not tested** | Pass | Fail |
 
-## What Would Close the Gaps
+## Remaining Gaps
 
-### Priority 1: Wire GC into ACVM (closes 12 method gaps)
+### Priority 1: Grumpkin curve support (closes 4 gaps)
 
-Our `spdz-core/gadgets/yao2pc/` has a working Yao GC engine with OT. Wiring it into the ACVM solver's blackbox handlers would enable:
-- SHA256, Blake2s, Blake3 on shared values
-- Sparse table operations
-- AES S-box
-- Bit-level slicing via GC (like Rep3 does)
+Need dual-field preprocessing for Grumpkin operations.
 
-**Effort**: Medium. The GC engine works (tested). Need to map ACVM blackbox calls to GC circuits.
+**Effort**: Large.
 
-### Priority 2: Grumpkin curve support (closes 4 method gaps)
+### Priority 2: AES128 via GC (closes 1 gap)
 
-Need dual-field preprocessing: Grumpkin scalars are BN254 base field elements. Requires:
-- `SpdzPointShare` with Grumpkin coordinates
-- EC addition/scalar-mul on shared Grumpkin points
-- Pedersen hash using shared EC ops
+Implement AES round function as FancyBinary gates, or add Bristol circuit loader.
 
-**Effort**: Large. Requires new share types and preprocessing for a second field.
+**Effort**: Medium.
 
-### Priority 3: UltraHonk `is_zero_many` (closes 1 gap)
+### Priority 3: Plookup proof compatibility (closes proof verification)
 
-Batch version of is_zero for the prover. Could delegate to our `gadgets::bits::is_zero` in a loop, or implement a batched algebraic version.
-
-**Effort**: Small. Not triggered by current circuits but good for completeness.
-
-### Priority 4: Plookup proof compatibility (closes proof verification failures)
-
-The sorted polynomial construction in UltraHonk's plookup doesn't work correctly with MPC shares. This affects both Rep3 and SPDZ. Needs investigation at the co-builder level.
+Sorted polynomial construction in UltraHonk plookup doesn't work with MPC shares. Affects both Rep3 and SPDZ.
 
 **Effort**: Large. Architectural issue in co-snarks.
-
-### Priority 5: Production preprocessing (closes trusted dealer gap)
-
-Replace `LazyDummyPreprocessing` with OT-based triple generation as the default. The OT infrastructure exists (`spdz-core/ot/`) but needs hardening.
-
-**Effort**: Medium. Infrastructure exists, needs testing and integration.
