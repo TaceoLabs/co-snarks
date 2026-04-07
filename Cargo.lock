@@ -47,7 +47,7 @@ dependencies = [
  "acvm_blackbox_solver",
  "brillig_vm",
  "indexmap 2.10.0",
- "rustc-hash",
+ "rustc-hash 2.1.1",
  "serde",
  "thiserror 1.0.69",
  "tracing",
@@ -725,6 +725,26 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
+version = "0.69.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "271383c67ccabffb7381723dea0672a673f292304fcb45c01cc648c7a8d58088"
+dependencies = [
+ "bitflags",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.10.5",
+ "lazy_static",
+ "lazycell",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 1.1.0",
+ "shlex",
+ "syn 2.0.104",
+]
+
+[[package]]
+name = "bindgen"
 version = "0.72.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "993776b509cfb49c750f11b8f07a46fa23e0a1386ffc01fb1e7d343efc387895"
@@ -732,13 +752,13 @@ dependencies = [
  "bitflags",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
- "rustc-hash",
+ "rustc-hash 2.1.1",
  "shlex",
  "syn 2.0.104",
 ]
@@ -873,6 +893,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "build-probe-mpi"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d78ace2bb02fc18ad937f1599a853fcf3da2327bc1eb3c8e62b1f2fe4573bfd6"
+dependencies = [
+ "pkg-config",
+ "shell-words",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -924,10 +954,11 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.2.32"
+version = "1.2.59"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2352e5597e9c544d5e6d9c95190d5d27738ade584fa8db0a16e130e5c2b5296e"
+checksum = "b7a4d3ec6524d28a329fc53654bbadc9bdd7b0431f5d65f1a56ffb28a1ee5283"
 dependencies = [
+ "find-msvc-tools",
  "jobserver",
  "libc",
  "shlex",
@@ -1153,7 +1184,7 @@ dependencies = [
  "rayon",
  "serde",
  "sha2",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -1303,7 +1334,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber 0.3.20",
@@ -1331,7 +1362,7 @@ dependencies = [
  "ruint",
  "serde",
  "sha3",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -1367,7 +1398,7 @@ dependencies = [
  "serde_json",
  "sha3",
  "taceo-circom-types",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -1577,6 +1608,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "conv"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78ff10625fd0ac447827aa30ea8b861fead473bb60aeb73af6c1c58caf0d1299"
+dependencies = [
+ "custom_derive",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1745,6 +1785,12 @@ dependencies = [
  "quote",
  "syn 2.0.104",
 ]
+
+[[package]]
+name = "custom_derive"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef8ae57c4978a2acd8b869ce6b9ca1dfe817bff704c220209fdef2c0b75a01b9"
 
 [[package]]
 name = "dag"
@@ -2123,6 +2169,12 @@ dependencies = [
  "uncased",
  "version_check",
 ]
+
+[[package]]
+name = "find-msvc-tools"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
 
 [[package]]
 name = "fixed-hash"
@@ -2739,6 +2791,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lazycell"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
+
+[[package]]
 name = "libaes"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2755,13 +2813,32 @@ name = "libfabric-efa-rs"
 version = "0.1.0"
 source = "git+https://github.com/TaceoLabs/libfabric-efa-rs.git?rev=0d288ef#0d288ef0b55bec32222b93bcbbaa29be0f580724"
 dependencies = [
- "bindgen",
+ "bindgen 0.72.1",
  "cc",
  "eyre",
  "libc",
  "pkg-config",
  "serde",
  "tokio",
+]
+
+[[package]]
+name = "libffi"
+version = "5.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0498fe5655f857803e156523e644dcdcdc3b3c7edda42ea2afdae2e09b2db87b"
+dependencies = [
+ "libc",
+ "libffi-sys",
+]
+
+[[package]]
+name = "libffi-sys"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71d4f1d4ce15091955144350b75db16a96d4a63728500122706fb4d29a26afbb"
+dependencies = [
+ "cc",
 ]
 
 [[package]]
@@ -2916,7 +2993,7 @@ dependencies = [
  "serde",
  "sha3",
  "subtle",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -2936,6 +3013,7 @@ dependencies = [
  "intmap",
  "itertools 0.14.0",
  "libfabric-efa-rs",
+ "mpi",
  "parking_lot",
  "quinn",
  "rcgen",
@@ -2947,6 +3025,32 @@ dependencies = [
  "toml 0.8.23",
  "tracing",
  "tracing-subscriber 0.3.20",
+]
+
+[[package]]
+name = "mpi"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41457b69d35846af2fec1877a4f3b866a72b6ab2c9500218f115e65e10993b21"
+dependencies = [
+ "build-probe-mpi",
+ "conv",
+ "libffi",
+ "mpi-sys",
+ "once_cell",
+ "smallvec",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "mpi-sys"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f655543f54b263cbc3d2456bf714bd807d66a33eff8f70136687f0776d34f76"
+dependencies = [
+ "bindgen 0.69.5",
+ "build-probe-mpi",
+ "cc",
 ]
 
 [[package]]
@@ -3036,7 +3140,7 @@ dependencies = [
  "noirc_evaluator",
  "noirc_frontend",
  "rust-embed",
- "rustc-hash",
+ "rustc-hash 2.1.1",
  "serde",
  "tracing",
 ]
@@ -3053,7 +3157,7 @@ dependencies = [
  "fm",
  "noirc_printable_type",
  "noirc_span",
- "rustc-hash",
+ "rustc-hash 2.1.1",
  "serde",
  "serde_json",
  "tracing",
@@ -3080,7 +3184,7 @@ dependencies = [
  "num-traits",
  "petgraph 0.8.3",
  "rayon",
- "rustc-hash",
+ "rustc-hash 2.1.1",
  "rustc-stable-hash",
  "serde",
  "serde_json",
@@ -3109,7 +3213,7 @@ dependencies = [
  "num-traits",
  "petgraph 0.8.3",
  "rangemap",
- "rustc-hash",
+ "rustc-hash 2.1.1",
  "serde",
  "serde_json",
  "small-ord-set",
@@ -3465,7 +3569,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1db05f56d34358a8b1066f67cbb203ee3e7ed2ba674a6263a1d5ec6db2204323"
 dependencies = [
  "memchr",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "ucd-trie",
 ]
 
@@ -3723,10 +3827,10 @@ dependencies = [
  "pin-project-lite",
  "quinn-proto",
  "quinn-udp",
- "rustc-hash",
+ "rustc-hash 2.1.1",
  "rustls",
  "socket2 0.5.10",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "tokio",
  "tracing",
  "web-time",
@@ -3744,12 +3848,12 @@ dependencies = [
  "lru-slab",
  "rand 0.9.2",
  "ring",
- "rustc-hash",
+ "rustc-hash 2.1.1",
  "rustls",
  "rustls-pki-types",
  "rustls-platform-verifier",
  "slab",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "tinyvec",
  "tracing",
  "web-time",
@@ -4116,6 +4220,12 @@ name = "rustc-demangle"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "56f7d92ca342cea22a06f2121d944b4fd82af56988c270852495420f961d4ace"
+
+[[package]]
+name = "rustc-hash"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustc-hash"
@@ -4561,6 +4671,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "shell-words"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc6fe69c597f9c37bfeeeeeb33da3530379845f10be461a66d16d03eca2ded77"
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4882,7 +4998,7 @@ dependencies = [
  "serde",
  "serde_json",
  "taceo-ark-serde-compat",
- "thiserror 2.0.14",
+ "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -4979,11 +5095,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.14"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b0949c3a6c842cbde3f1686d6eea5a010516deb7085f79db747562d4102f41e"
+checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.14",
+ "thiserror-impl 2.0.18",
 ]
 
 [[package]]
@@ -4999,9 +5115,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.14"
+version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc5b44b4ab9c2fdd0e0512e6bece8388e214c0749f5862b114cc5b7a25daf227"
+checksum = "ebc4ee7f67670e9b64d05fa4253e753e016c6c95ff35b89b7941d6b856dec1d5"
 dependencies = [
  "proc-macro2",
  "quote",

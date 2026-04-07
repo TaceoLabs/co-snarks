@@ -12,6 +12,8 @@ pub mod config;
 pub mod libfabric_efa;
 #[cfg(feature = "local")]
 pub mod local;
+#[cfg(feature = "mpi")]
+pub mod mpi;
 #[cfg(feature = "quic")]
 pub mod quic;
 #[cfg(feature = "tcp")]
