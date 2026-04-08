@@ -83,7 +83,7 @@ impl NetworkConfig {
 #[expect(clippy::complexity)]
 pub struct TcpNetwork {
     id: usize,
-    send: IntMap<usize, (Mutex<TcpStream>, Mutex<Vec<u8>>, AtomicUsize)>,
+    send: IntMap<usize, (Mutex<TcpStream>, AtomicUsize)>,
     recv: IntMap<usize, (Receiver<eyre::Result<Vec<u8>>>, AtomicUsize)>,
     timeout: Duration,
     max_frame_length: usize,
@@ -160,7 +160,6 @@ impl TcpNetwork {
                             other_id,
                             (
                                 Mutex::new(stream.try_clone().expect("can clone stream")),
-                                Mutex::new(Vec::with_capacity(1024)),
                                 AtomicUsize::default(),
                             ),
                         );
@@ -189,7 +188,6 @@ impl TcpNetwork {
                             other_id,
                             (
                                 Mutex::new(stream.try_clone().expect("can clone stream")),
-                                Mutex::new(Vec::with_capacity(1024)),
                                 AtomicUsize::default(),
                             ),
                         );
@@ -223,14 +221,14 @@ impl Network for TcpNetwork {
         if size > self.max_frame_length {
             eyre::bail!("frame len {size} > max {}", self.max_frame_length);
         }
-        let (stream, buf, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
-        let mut buf = buf.lock();
+        // TODO create reusable buffers to avoid allocating every time
+        let mut buf = Vec::with_capacity(size);
+        data.serialize_uncompressed(&mut buf)?;
+        let (stream, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
+        sent_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
         let mut stream = stream.lock();
-        buf.resize(size, 0);
-        data.serialize_uncompressed(buf.as_mut_slice())?;
         stream.write_u64::<BigEndian>(size as u64)?;
         stream.write_all(&buf)?;
-        sent_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 
@@ -244,7 +242,7 @@ impl Network for TcpNetwork {
 
     fn get_connection_stats(&self) -> ConnectionStats {
         let mut stats = std::collections::BTreeMap::new();
-        for (id, (_, _, sent_bytes)) in self.send.iter() {
+        for (id, (_, sent_bytes)) in self.send.iter() {
             let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
             stats.insert(
                 id,
