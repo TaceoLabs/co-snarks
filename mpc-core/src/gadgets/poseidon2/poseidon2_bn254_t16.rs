@@ -898,4 +898,4 @@ pub(crate) const WITNESS_INDICES_T16: &[u16] = &[
     3521, 3522, 3523, 3524, 3530, 3531, 3532, 3533, 3539, 3540, 3541, 3542, 3548, 3549, 3550, 3551,
 ];
 
-pub(crate) const WITNESS_INDICES_SIZE_T16: usize = 9708;
+pub(crate) const WITNESS_INDICES_SIZE_T16: usize = 9676;
