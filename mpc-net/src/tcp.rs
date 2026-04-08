@@ -3,6 +3,7 @@
 use std::{
     array,
     cmp::Ordering,
+    collections::HashMap,
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
     sync::atomic::AtomicUsize,
@@ -14,11 +15,10 @@ use crate::{
 };
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
 use intmap::IntMap;
 use itertools::Itertools;
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 
@@ -83,7 +83,7 @@ impl NetworkConfig {
 #[expect(clippy::complexity)]
 pub struct TcpNetwork {
     id: usize,
-    send: IntMap<usize, (Mutex<TcpStream>, AtomicUsize)>,
+    send: IntMap<usize, (Sender<Vec<u8>>, AtomicUsize)>,
     recv: IntMap<usize, (Receiver<eyre::Result<Vec<u8>>>, AtomicUsize)>,
     timeout: Duration,
     max_frame_length: usize,
@@ -135,6 +135,7 @@ impl TcpNetwork {
         });
 
         for i in 0..N {
+            let mut streams = HashMap::new();
             for (other_id, addr) in addrs.iter().enumerate() {
                 let addr = addr
                     .to_socket_addrs()?
@@ -156,23 +157,7 @@ impl TcpNetwork {
                         stream.set_nodelay(true)?;
                         stream.write_u64::<BigEndian>(i as u64)?;
                         stream.write_u64::<BigEndian>(id as u64)?;
-                        nets[i].send.insert(
-                            other_id,
-                            (
-                                Mutex::new(stream.try_clone().expect("can clone stream")),
-                                AtomicUsize::default(),
-                            ),
-                        );
-                        let (tx, rx) = crossbeam_channel::bounded(32);
-                        std::thread::spawn(move || {
-                            loop {
-                                let data = read_next_frame(&mut stream, max_frame_length);
-                                if tx.send(data).is_err() {
-                                    break;
-                                }
-                            }
-                        });
-                        nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
+                        streams.insert((other_id, i), stream);
                     }
                     Ordering::Greater => {
                         let (stream, _) = listener.accept()?;
@@ -184,26 +169,42 @@ impl TcpNetwork {
                         stream.set_nodelay(true)?;
                         let i = stream.read_u64::<BigEndian>()? as usize;
                         let other_id = stream.read_u64::<BigEndian>()? as usize;
-                        nets[i].send.insert(
-                            other_id,
-                            (
-                                Mutex::new(stream.try_clone().expect("can clone stream")),
-                                AtomicUsize::default(),
-                            ),
-                        );
-                        let (tx, rx) = crossbeam_channel::bounded(32);
-                        std::thread::spawn(move || {
-                            loop {
-                                let data = read_next_frame(&mut stream, max_frame_length);
-                                if tx.send(data).is_err() {
-                                    break;
-                                }
-                            }
-                        });
-                        nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
+                        streams.insert((other_id, i), stream);
                     }
                     Ordering::Equal => continue,
                 }
+            }
+
+            for ((other_id, i), stream) in streams.into_iter() {
+                let (tx, rx) = crossbeam_channel::bounded::<Vec<u8>>(32);
+                std::thread::spawn({
+                    let mut stream = stream.try_clone()?;
+                    move || {
+                        while let Ok(data) = rx.recv() {
+                            if let Err(err) = stream
+                                .write_u64::<BigEndian>(data.len() as u64)
+                                .and_then(|_| stream.write_all(&data))
+                            {
+                                tracing::warn!("failed to send data: {err:?}");
+                                break;
+                            }
+                        }
+                    }
+                });
+                nets[i].send.insert(other_id, (tx, AtomicUsize::default()));
+                let (tx, rx) = crossbeam_channel::bounded(32);
+                std::thread::spawn({
+                    let mut stream = stream.try_clone()?;
+                    move || {
+                        loop {
+                            let data = read_next_frame(&mut stream, max_frame_length);
+                            if tx.send(data).is_err() {
+                                break;
+                            }
+                        }
+                    }
+                });
+                nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
             }
         }
 
@@ -225,10 +226,8 @@ impl Network for TcpNetwork {
         let mut buf = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut buf)?;
         let (stream, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
+        stream.send(buf)?;
         sent_bytes.fetch_add(size, std::sync::atomic::Ordering::Relaxed);
-        let mut stream = stream.lock();
-        stream.write_u64::<BigEndian>(size as u64)?;
-        stream.write_all(&buf)?;
         Ok(())
     }
 
