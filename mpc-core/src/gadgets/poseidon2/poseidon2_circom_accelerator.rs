@@ -1422,6 +1422,7 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                     traces[i][wtns_indices[counter + 1] as usize] = second_val;
                 }
             }
+            counter += 2;
         }
 
         if T == 4 {
@@ -1698,6 +1699,7 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                     traces[i][wtns_indices[counter + 1] as usize] = second_val;
                 }
             }
+            counter += 2;
         }
 
         if T == 4 {
