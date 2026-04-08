@@ -16,8 +16,10 @@ use figment::{
 };
 #[cfg(feature = "libfabric-efa")]
 use mpc_net::libfabric_efa::FabricNetwork;
+#[cfg(feature = "mpi")]
+use mpc_net::mpi::MpiNetwork;
 use mpc_net::tcp::NetworkConfig;
-#[cfg(not(feature = "libfabric-efa"))]
+#[cfg(not(any(feature = "libfabric-efa", feature = "mpi")))]
 use mpc_net::tcp::TcpNetwork;
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
@@ -811,13 +813,15 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     }
 
     // connect to network
-    #[cfg(not(feature = "libfabric-efa"))]
+    #[cfg(feature = "mpi")]
+    let [net0, net1] = MpiNetwork::networks::<2>().context("while connecting to network")?;
+    #[cfg(all(not(feature = "mpi"), feature = "libfabric-efa"))]
+    let net0 = FabricNetwork::new(config.network.clone())?;
+    #[cfg(all(not(feature = "mpi"), feature = "libfabric-efa"))]
+    let net1 = FabricNetwork::new(config.network.clone())?;
+    #[cfg(not(any(feature = "mpi", feature = "libfabric-efa")))]
     let [net0, net1] =
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
-    #[cfg(feature = "libfabric-efa")]
-    let net0 = FabricNetwork::new(config.network.clone())?;
-    #[cfg(feature = "libfabric-efa")]
-    let net1 = FabricNetwork::new(config.network.clone())?;
 
     // parse input shares
     let input_share_file =
@@ -867,10 +871,12 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
-    #[cfg(not(feature = "libfabric-efa"))]
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
-    #[cfg(feature = "libfabric-efa")]
+    #[cfg(feature = "mpi")]
+    let net = MpiNetwork::new().context("while connecting to network")?;
+    #[cfg(all(not(feature = "mpi"), feature = "libfabric-efa"))]
     let net = FabricNetwork::new(config.network)?;
+    #[cfg(not(any(feature = "mpi", feature = "libfabric-efa")))]
+    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -914,13 +920,16 @@ fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
-            #[cfg(not(feature = "libfabric-efa"))]
+            #[cfg(feature = "mpi")]
+            let [net0, net1] =
+                MpiNetwork::networks::<2>().context("while connecting to network")?;
+            #[cfg(all(not(feature = "mpi"), feature = "libfabric-efa"))]
+            let net0 = FabricNetwork::new(config.network.clone())?;
+            #[cfg(all(not(feature = "mpi"), feature = "libfabric-efa"))]
+            let net1 = FabricNetwork::new(config.network.clone())?;
+            #[cfg(not(any(feature = "mpi", feature = "libfabric-efa")))]
             let [net0, net1] =
                 TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
-            #[cfg(feature = "libfabric-efa")]
-            let net0 = FabricNetwork::new(config.network.clone())?;
-            #[cfg(feature = "libfabric-efa")]
-            let net1 = FabricNetwork::new(config.network.clone())?;
 
             let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
             let (matrices, pkey) = zkey.into();
