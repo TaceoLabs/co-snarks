@@ -2,14 +2,13 @@ use circom_types::CheckElement;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
     Bls12_381, Bn254, CircomArkworksPairingBridge, CircomGroth16Proof, CoCircomCompiler,
-    CompilerConfig, Compression, Groth16, Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk,
-    PlonkJsonVerificationKey, PlonkProof, PlonkZKey, R1CS, Rep3CoGroth16, Rep3CoPlonk,
-    Rep3SharedInput, ShamirCoGroth16, ShamirCoPlonk, ShamirSharedWitness, SimplificationLevel,
-    VMConfig, Witness,
+    CompilerConfig, Groth16, Groth16JsonVerificationKey, Groth16ZKey, Pairing, Plonk,
+    PlonkJsonVerificationKey, PlonkProof, PlonkZKey, Rep3CoGroth16, Rep3CoPlonk, Rep3SharedInput,
+    ShamirCoGroth16, ShamirCoPlonk, ShamirSharedWitness, SimplificationLevel, VMConfig,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
 use co_groth16::CircomReduction;
-use color_eyre::eyre::{self, Context, ContextCompat, eyre};
+use color_eyre::eyre::{self, Context, eyre};
 use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
@@ -736,178 +735,6 @@ fn main() -> color_eyre::Result<ExitCode> {
 }
 
 #[instrument(level = "debug", skip(config))]
-fn run_split_witness<P: Pairing + CircomArkworksPairingBridge>(
-    config: SplitWitnessConfig,
-) -> color_eyre::Result<ExitCode> {
-    let witness_path = config.witness;
-    let r1cs = config.r1cs;
-    let protocol = config.protocol;
-    let out_dir = config.out_dir;
-    let t = config.threshold;
-    let n = config.num_parties;
-
-    // read the circom witness file
-    let witness_file =
-        BufReader::new(File::open(&witness_path).context("while opening witness file")?);
-    let witness = Witness::<P::ScalarField>::from_reader(witness_file)
-        .context("while parsing witness file")?;
-
-    // read the circom r1cs file
-    let r1cs_file = BufReader::new(File::open(&r1cs).context("while opening r1cs file")?);
-    let r1cs = R1CS::<P>::from_reader(r1cs_file).context("while parsing r1cs file")?;
-
-    tracing::info!("Starting split witness...");
-    match protocol {
-        MPCProtocol::REP3 => {
-            if t != 1 {
-                eyre::bail!("REP3 only allows the threshold to be 1");
-            }
-            if n != 3 {
-                eyre::bail!("REP3 only allows the number of parties to be 3");
-            }
-            // create witness shares
-            let start = Instant::now();
-            let shares = co_circom::split_witness_rep3(
-                r1cs.num_inputs,
-                witness,
-                Compression::SeededHalfShares,
-            );
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Split witness took {duration_ms} ms");
-
-            // write out the shares to the output directory
-            let base_name = witness_path
-                .file_name()
-                .context("we have a file name")?
-                .to_str()
-                .context("witness file name is not valid UTF-8")?;
-            for (i, share) in shares.iter().enumerate() {
-                let path = out_dir.join(format!("{base_name}.{i}.shared"));
-                let out_file =
-                    BufWriter::new(File::create(&path).context("while creating output file")?);
-                bincode::serialize_into(out_file, share)
-                    .context("while serializing witness share")?;
-                tracing::info!("Wrote witness share {} to file {}", i, path.display());
-            }
-        }
-        MPCProtocol::SHAMIR => {
-            // create witness shares
-            let start = Instant::now();
-            let shares = co_circom::split_witness_shamir(r1cs.num_inputs, witness, t, n);
-            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-            tracing::info!("Split witness took {duration_ms} ms");
-
-            // write out the shares to the output directory
-            let base_name = witness_path
-                .file_name()
-                .context("we have a file name")?
-                .to_str()
-                .context("witness file name is not valid UTF-8")?;
-            for (i, share) in shares.iter().enumerate() {
-                let path = out_dir.join(format!("{base_name}.{i}.shared"));
-                let out_file =
-                    BufWriter::new(File::create(&path).context("while creating output file")?);
-                bincode::serialize_into(out_file, share)
-                    .context("while serializing witness share")?;
-                tracing::info!("Wrote witness share {} to file {}", i, path.display());
-            }
-        }
-    }
-    tracing::info!("Split witness into shares successfully");
-    Ok(ExitCode::SUCCESS)
-}
-
-#[instrument(level = "debug", skip(config))]
-fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
-    config: SplitInputConfig,
-) -> color_eyre::Result<ExitCode> {
-    let input_path = config.input;
-    let circuit = config.circuit;
-    let protocol = config.protocol;
-    let out_dir = config.out_dir;
-
-    if protocol != MPCProtocol::REP3 {
-        eyre::bail!("Only REP3 protocol is supported for splitting inputs");
-    }
-    let circuit_path = PathBuf::from(&circuit);
-
-    //get the public inputs if any from parser
-    let public_inputs = CoCircomCompiler::<P>::get_public_inputs(circuit_path, config.compiler)
-        .context("while reading public inputs from circuit")?;
-
-    // read the input file
-    let input = BufReader::new(File::open(&input_path).context("while opening input file")?);
-    let input = serde_json::from_reader(input)?;
-
-    tracing::info!("Starting split input...");
-    let start = Instant::now();
-    let shares = co_circom::split_input::<P::ScalarField>(input, &public_inputs)?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Split input took {duration_ms} ms");
-
-    // write out the shares to the output directory
-    let base_name = input_path
-        .file_name()
-        .context("we have a file name")?
-        .to_str()
-        .context("input file name is not valid UTF-8")?;
-    for (i, share) in shares.iter().enumerate() {
-        let path = out_dir.join(format!("{base_name}.{i}.shared"));
-        let out_file = BufWriter::new(File::create(&path).context("while creating output file")?);
-        serde_json::to_writer(out_file, share).context("while serializing witness share")?;
-        tracing::info!("Wrote input share {} to file {}", i, path.display());
-    }
-    tracing::info!("Split input into shares successfully");
-    Ok(ExitCode::SUCCESS)
-}
-
-#[instrument(level = "debug", skip(config))]
-fn run_merge_input_shares<P: Pairing + CircomArkworksPairingBridge>(
-    config: MergeInputSharesConfig,
-) -> color_eyre::Result<ExitCode> {
-    let circuit = config.circuit;
-    let inputs = config.inputs;
-    let protocol = config.protocol;
-    let out = config.out;
-
-    if protocol != MPCProtocol::REP3 {
-        eyre::bail!("Only REP3 protocol is supported for merging input shares");
-    }
-
-    if inputs.len() < 2 {
-        eyre::bail!("Need at least two input shares to merge");
-    }
-
-    // parse circuit file & put through our compiler
-    let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
-        .context("while parsing circuit file")?;
-
-    let input_shares = inputs
-        .iter()
-        .map(|input| {
-            let input_share_file =
-                BufReader::new(File::open(input).context("while opening input share file")?);
-            let input_share: Rep3SharedInput<P::ScalarField> =
-                serde_json::from_reader(input_share_file)
-                    .context("trying to parse input share file")?;
-            color_eyre::Result::<_>::Ok(input_share)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    tracing::info!("Starting input shares merging...");
-    let start = Instant::now();
-    let merged = co_circom::merge_input_shares(input_shares, circuit.public_inputs())?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Merge input shares took {duration_ms} ms");
-
-    let out_file = BufWriter::new(File::create(&out).context("while creating output file")?);
-    serde_json::to_writer(out_file, &merged).context("while serializing witness share")?;
-    tracing::info!("Wrote merged input share to file {}", out.display());
-
-    Ok(ExitCode::SUCCESS)
-}
-
-#[instrument(level = "debug", skip(config))]
 fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateWitnessConfig,
 ) -> color_eyre::Result<ExitCode> {
@@ -948,42 +775,6 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
         out_file,
         &CompressedRep3SharedWitness::from(result_witness_share),
     )?;
-    tracing::info!("Witness successfully written to {}", out.display());
-    Ok(ExitCode::SUCCESS)
-}
-
-#[instrument(level = "debug", skip(config))]
-fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
-    config: TranslateWitnessConfig,
-) -> color_eyre::Result<ExitCode> {
-    let witness = config.witness;
-    let src_protocol = config.src_protocol;
-    let target_protocol = config.target_protocol;
-    let out = config.out;
-
-    if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
-        eyre::bail!("Only REP3 to SHAMIR translation is supported");
-    }
-
-    // parse witness shares
-    let witness_file =
-        BufReader::new(File::open(witness).context("trying to open witness share file")?);
-    let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
-        bincode::deserialize_from(witness_file)?;
-
-    // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
-
-    // Translate witness to shamir shares
-    tracing::info!("Starting witness translation...");
-    let start = Instant::now();
-    let shamir_witness_share = co_circom::translate_witness(witness_share, &net)?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Translate witness took {duration_ms} ms");
-
-    // write result to output file
-    let out_file = BufWriter::new(std::fs::File::create(&out)?);
-    bincode::serialize_into(out_file, &shamir_witness_share)?;
     tracing::info!("Witness successfully written to {}", out.display());
     Ok(ExitCode::SUCCESS)
 }
