@@ -625,6 +625,27 @@ fn main() -> color_eyre::Result<ExitCode> {
                 ..CompilerConfig::default()
             };
 
+            let input_candidates = [
+                case_dir.join(format!("input.{curve_tag}.json.{my_id}.shared")),
+                case_dir.join(format!("input.{curve_tag}.{my_id}.shared")),
+                case_dir.join(format!("input.json.{curve_tag}.{my_id}.shared")),
+                case_dir.join(format!("input.json.{my_id}.shared")),
+            ];
+            let input_share = input_candidates
+                .iter()
+                .find(|p| p.exists())
+                .cloned()
+                .ok_or_else(|| {
+                    eyre!(
+                        "Missing input share for size {size}, curve {curve}, party {my_id}. Looked for: {}",
+                        input_candidates
+                            .iter()
+                            .map(|p| p.display().to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })?;
+
             let zkey_subdirs: &[&str] = match curve {
                 Curve::BN254 => &["bn254"],
                 Curve::BLS12_381 => &["bls", "bls12", "bls12_381"],
@@ -661,7 +682,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 
             let witness_out = case_dir.join(format!("witness.{curve_tag}.{my_id}.wtns.shared"));
             let generate_witness_cfg = GenerateWitnessConfig {
-                input: case_dir.join(format!("input.json.{my_id}.shared")),
+                input: input_share,
                 circuit: circuit.clone(),
                 protocol: MPCProtocol::REP3,
                 curve,
