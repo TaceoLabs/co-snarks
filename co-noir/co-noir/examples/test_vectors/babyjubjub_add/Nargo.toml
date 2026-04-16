@@ -1,0 +1,8 @@
+[package]
+name = "babyjubjub_add"
+type = "bin"
+compiler_version = ">=1.0.0"
+authors = [""]
+
+[dependencies]
+babyjubjub = { tag = "compat/noir-1.0.0-beta.19", git = "https://github.com/TaceoLabs/oprf-nr", directory = "babyjubjub" }
