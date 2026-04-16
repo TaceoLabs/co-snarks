@@ -850,8 +850,8 @@ fn main() -> color_eyre::Result<ExitCode> {
         })?;
     let my_id = bench_cfg.network.my_id;
 
-    let vector_dir = examples_root.join("test_vectors/babyjubjub_add");
-    let circuit = vector_dir.join("babyjubjub_add.json");
+    let vector_dir = examples_root.join("test_vectors/babyjubjub_scalar_mul");
+    let circuit = vector_dir.join("babyjubjub_scalar_mul.json");
     let vk = vector_dir.join("verification_key");
     let crs_g1 = PathBuf::from("co-noir/co-noir-common/src/crs/bn254_g1.dat");
     let crs_g2 = PathBuf::from("co-noir/co-noir-common/src/crs/bn254_g2.dat");
@@ -869,7 +869,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         input: vector_dir.join(format!("Prover.toml.{my_id}.shared")),
         circuit: circuit.clone(),
         protocol: MPCProtocol::REP3,
-        out: vector_dir.join(format!("babyjubjub_add.gz.{my_id}.shared")),
+        out: vector_dir.join(format!("babyjubjub_scalar_mul.gz.{my_id}.shared")),
         network: bench_cfg.network,
     })?;
     if code != ExitCode::SUCCESS {
@@ -886,7 +886,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             )
         })?;
     let code = run_build_and_generate_proof(BuildAndGenerateProofConfig {
-        witness: vector_dir.join(format!("babyjubjub_add.gz.{my_id}.shared")),
+        witness: vector_dir.join(format!("babyjubjub_scalar_mul.gz.{my_id}.shared")),
         circuit: circuit.clone(),
         crs: crs_g1,
         protocol: MPCProtocol::REP3,
