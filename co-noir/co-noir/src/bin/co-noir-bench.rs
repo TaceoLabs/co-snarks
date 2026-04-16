@@ -850,8 +850,8 @@ fn main() -> color_eyre::Result<ExitCode> {
         })?;
     let my_id = bench_cfg.network.my_id;
 
-    let vector_dir = examples_root.join("test_vectors/bb_sha256_compression");
-    let circuit = vector_dir.join("bb_sha256_compression.json");
+    let vector_dir = examples_root.join("test_vectors/babyjubjub_add");
+    let circuit = vector_dir.join("babyjubjub_add.json");
     let vk = vector_dir.join("verification_key");
     let crs_g1 = PathBuf::from("co-noir/co-noir-common/src/crs/bn254_g1.dat");
     let crs_g2 = PathBuf::from("co-noir/co-noir-common/src/crs/bn254_g2.dat");
@@ -869,7 +869,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         input: vector_dir.join(format!("Prover.toml.{my_id}.shared")),
         circuit: circuit.clone(),
         protocol: MPCProtocol::REP3,
-        out: vector_dir.join(format!("bb_sha256_compression.gz.{my_id}.shared")),
+        out: vector_dir.join(format!("babyjubjub_add.gz.{my_id}.shared")),
         network: bench_cfg.network,
     })?;
     if code != ExitCode::SUCCESS {
@@ -886,7 +886,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             )
         })?;
     let code = run_build_and_generate_proof(BuildAndGenerateProofConfig {
-        witness: vector_dir.join(format!("bb_sha256_compression.gz.{my_id}.shared")),
+        witness: vector_dir.join(format!("babyjubjub_add.gz.{my_id}.shared")),
         circuit: circuit.clone(),
         crs: crs_g1,
         protocol: MPCProtocol::REP3,
@@ -895,7 +895,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         public_input: Some(PathBuf::from(format!("public_input.{my_id}"))),
         threshold: 1,
         network: bench_cfg.network,
-        zk: false,
+        zk: true,
         fields_as_json: false,
         vk: vk.clone(),
     })?;
@@ -909,7 +909,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         public_input: PathBuf::from(format!("public_input.{my_id}")),
         vk,
         crs: crs_g2,
-        has_zk: false,
+        has_zk: true,
     })?;
     if code != ExitCode::SUCCESS {
         eyre::bail!("verify failed")
