@@ -510,8 +510,196 @@ pub(crate) fn point_from_xy<C: CurveGroup>(
         let y = *crate::downcast(&y).expect("We checked types");
         let result: ark_grumpkin::Projective = ark_grumpkin::Affine::new(x, y).into();
         *crate::downcast(&result).expect("We checked types")
+    } else if TypeId::of::<C>() == TypeId::of::<ark_babyjubjub::EdwardsProjective>() {
+        let x = *crate::downcast(&x).expect("We checked types");
+        let y = *crate::downcast(&y).expect("We checked types");
+        let result: ark_babyjubjub::EdwardsProjective =
+            ark_babyjubjub::EdwardsAffine::new(x, y).into();
+        *crate::downcast(&result).expect("We checked types")
     } else {
         panic!("Unsupported curve {}", std::any::type_name::<C>());
     };
     Ok(point)
+}
+
+/// BabyJubJub-specific point addition using twisted Edwards curve formula.
+/// For twisted Edwards curves of the form x^2 + y^2 = 1 + (121665/121666)*x^2*y^2
+///
+/// The output will be (x, y, is_infinity). Note that for Edwards curves,
+/// the point at infinity is (0, 1), not handled specially in the addition formula.
+/// The is_infinity flag is set to zero as Edwards addition is complete.
+pub(crate) fn point_addition_babyjubjub<F: PrimeField, N: Network>(
+    a_x: Rep3PrimeFieldShare<F>,
+    a_y: Rep3PrimeFieldShare<F>,
+    b_x: Rep3PrimeFieldShare<F>,
+    b_y: Rep3PrimeFieldShare<F>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(
+    Rep3PrimeFieldShare<F>,
+    Rep3PrimeFieldShare<F>,
+    Rep3PrimeFieldShare<F>,
+)> {
+    // BabyJubJub parameters
+    let a = F::from(168700u64);
+    let d = F::from(168696u64);
+
+    // Batch multiply: beta = a_x * b_y, gamma = a_y * b_x
+    let mul_inputs_l = [a_x, a_y];
+    let mul_inputs_r = [b_y, b_x];
+    let mul_results = arithmetic::mul_vec(&mul_inputs_l, &mul_inputs_r, net, state)?;
+    let beta = mul_results[0];
+    let gamma = mul_results[1];
+
+    // delta = ((-a * a_x) + a_y) * (b_x + b_y)
+    let neg_a_times_a_x = arithmetic::mul_public(a_x, -a);
+    let neg_a_times_a_x_plus_a_y = neg_a_times_a_x + a_y;
+    let b_x_plus_b_y = b_x + b_y;
+    let delta_tau_l = [neg_a_times_a_x_plus_a_y, beta];
+    let delta_tau_r = [b_x_plus_b_y, gamma];
+    let delta_tau = arithmetic::mul_vec(&delta_tau_l, &delta_tau_r, net, state)?;
+    let delta = delta_tau[0];
+
+    // tau = beta * gamma
+    let tau = delta_tau[1];
+
+    // Batch compute denominators with d*tau inlined
+    let one = arithmetic::promote_to_trivial_share(state.id, F::one());
+    let d_times_tau = arithmetic::mul_public(tau, d);
+    let denom_x = one + d_times_tau;
+    let denom_y = one - d_times_tau;
+
+    // Batch invert both denominators
+    let denoms = [denom_x, denom_y];
+    let inverted = arithmetic::inv_vec(&denoms, net, state)?;
+    let inv_denom_x = inverted[0];
+    let inv_denom_y = inverted[1];
+
+    // Consolidate final x and y numerator computation
+    let a_times_beta = arithmetic::mul_public(beta, a);
+    let muls = [beta + gamma, (delta + a_times_beta) - gamma];
+    let invs = [inv_denom_x, inv_denom_y];
+    let results = arithmetic::mul_vec(&muls, &invs, net, state)?;
+    let x = results[0];
+    let y = results[1];
+
+    // Compute is_infinity: check if result is the identity point (0, 1)
+    let zero = Rep3PrimeFieldShare::default();
+    let eq_lhs = [zero, one];
+    let eq_rhs = [x, y];
+    let eq_results = arithmetic::eq_many(&eq_lhs, &eq_rhs, net, state)?;
+    let is_infinity = arithmetic::mul(eq_results[0], eq_results[1], net, state)?;
+
+    Ok((x, y, is_infinity))
+}
+
+/// Batched version of BabyJubJub point addition using twisted Edwards curve formula.
+/// For twisted Edwards curves of the form x^2 + y^2 = 1 + (121665/121666)*x^2*y^2
+///
+/// The output will be (x, y, is_infinity). Note that for Edwards curves,
+/// the point at infinity is (0, 1), not handled specially in the addition formula.
+/// The is_infinity flags are set to zero as Edwards addition is complete.
+#[expect(clippy::type_complexity)]
+pub(crate) fn point_addition_many_babyjubjub<F: PrimeField, N: Network>(
+    a_x: &[Rep3PrimeFieldShare<F>],
+    a_y: &[Rep3PrimeFieldShare<F>],
+    b_x: &[Rep3PrimeFieldShare<F>],
+    b_y: &[Rep3PrimeFieldShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<(
+    Vec<Rep3PrimeFieldShare<F>>,
+    Vec<Rep3PrimeFieldShare<F>>,
+    Vec<Rep3PrimeFieldShare<F>>,
+)> {
+    // BabyJubJub parameters
+    let a = F::from(168700u64);
+    let d = F::from(168696u64);
+
+    // Batch beta and gamma: beta = a_x * b_y, gamma = a_y * b_x
+    let n = a_x.len();
+    let mut xy_muls = Vec::with_capacity(2 * n);
+    xy_muls.extend_from_slice(a_x);
+    xy_muls.extend_from_slice(a_y);
+    let mut by_bx = Vec::with_capacity(2 * n);
+    by_bx.extend_from_slice(b_y);
+    by_bx.extend_from_slice(b_x);
+    let xy_results = arithmetic::mul_vec(&xy_muls, &by_bx, net, state)?;
+    let beta = xy_results[0..n].to_vec();
+    let gamma = xy_results[n..].to_vec();
+
+    // Compute delta and tau inputs directly in batched arrays
+    let mut dt_muls = Vec::with_capacity(2 * n);
+    let mut dt_vals = Vec::with_capacity(2 * n);
+    for i in 0..n {
+        let neg_a_times_a_x = arithmetic::mul_public(a_x[i], -a);
+        dt_muls.push(neg_a_times_a_x + a_y[i]);
+        dt_vals.push(b_x[i] + b_y[i]);
+    }
+    // Add beta and gamma for tau computation
+    dt_muls.extend_from_slice(&beta);
+    dt_vals.extend_from_slice(&gamma);
+    let dt_results = arithmetic::mul_vec(&dt_muls, &dt_vals, net, state)?;
+    let delta = dt_results[0..n].to_vec();
+    let tau = dt_results[n..].to_vec();
+
+    // Compute denominators in batched array while maintaining original order
+    let one_share = arithmetic::promote_to_trivial_share(state.id, F::one());
+    let mut all_denoms = Vec::with_capacity(2 * n);
+    let mut d_times_taus = Vec::with_capacity(n);
+    
+    // First pass: compute all (one + d*tau) denominators
+    for tau_i in &tau {
+        let d_times_tau = arithmetic::mul_public(*tau_i, d);
+        d_times_taus.push(d_times_tau);
+        all_denoms.push(one_share + d_times_tau);
+    }
+    
+    // Second pass: compute all (one - d*tau) denominators
+    for d_times_tau in &d_times_taus {
+        all_denoms.push(one_share - *d_times_tau);
+    }
+    
+    // Batch invert both denominators in one network call
+    let all_invs = arithmetic::inv_vec(&all_denoms, net, state)?;
+
+    // Consolidate final x and y numerator computation in original order
+    let mut xy_numer = Vec::with_capacity(2 * n);
+    
+    // First: all x numerators
+    for i in 0..n {
+        xy_numer.push(beta[i] + gamma[i]);
+    }
+    
+    // Second: all y numerators
+    for i in 0..n {
+        let a_times_beta = arithmetic::mul_public(beta[i], a);
+        xy_numer.push((delta[i] + a_times_beta) - gamma[i]);
+    }
+    
+    // Batch multiply numerators by their corresponding inverses
+    let mul_results = arithmetic::mul_vec(&xy_numer, &all_invs, net, state)?;
+    let x = mul_results[0..n].to_vec();
+    let y = mul_results[n..].to_vec();
+
+    // Compute is_infinity: check if result is the identity point (0, 1)
+    let zero = Rep3PrimeFieldShare::default();
+    let one = arithmetic::promote_to_trivial_share(state.id, F::one());
+
+    let mut eq_lhs = Vec::with_capacity(2 * n);
+    let mut eq_rhs = Vec::with_capacity(2 * n);
+    for xi in &x {
+        eq_lhs.push(zero);
+        eq_rhs.push(*xi);
+    }
+    for yi in &y {
+        eq_lhs.push(one);
+        eq_rhs.push(*yi);
+    }
+    let eq_results = arithmetic::eq_many(&eq_lhs, &eq_rhs, net, state)?;
+    let is_result_x_zero = eq_results[0..n].to_vec();
+    let is_result_y_one = eq_results[n..].to_vec();
+    let is_infinity = arithmetic::mul_vec(&is_result_x_zero, &is_result_y_one, net, state)?;
+
+    Ok((x, y, is_infinity))
 }

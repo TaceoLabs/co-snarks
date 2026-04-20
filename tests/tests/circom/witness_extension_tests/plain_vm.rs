@@ -178,3 +178,4 @@ witness_extension_test_plain!(bitonic_sort);
 witness_extension_test_plain!(num2bits_accelerator);
 witness_extension_test_plain!(reclaim_addbits_accelerator);
 witness_extension_test_plain!(reclaim_addbits_accelerator_small);
+witness_extension_test_plain!(pedersen_commit_bits);

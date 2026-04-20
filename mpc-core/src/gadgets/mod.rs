@@ -3,6 +3,7 @@
 //! This module contains some commonly used gadgets.
 
 pub mod merkle_tree;
+pub mod pedersen;
 pub mod poseidon2;
 
 use ark_ff::PrimeField;

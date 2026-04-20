@@ -7,6 +7,7 @@ license = "GPL-3.0" # due to circom-mpc-compiler dep
 
 [dependencies]
 acir = { workspace = true }
+ark-babyjubjub = { workspace = true }
 ark-bls12-381 = { workspace = true }
 ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
@@ -33,7 +34,9 @@ co-noir-common = { version = "0.2.0", path = "../co-noir/co-noir-common" }
 eyre.workspace = true
 itertools = { workspace = true }
 mpc-core = { version = "0.10.0", path = "../mpc-core" }
-mpc-net = { version = "0.5.0", path = "../mpc-net", default-features = false, features = ["local"] }
+mpc-net = { version = "0.5.0", path = "../mpc-net", default-features = false, features = [
+    "local",
+] }
 num-bigint.workspace = true
 num-traits = { workspace = true }
 noirc-artifacts = { workspace = true }

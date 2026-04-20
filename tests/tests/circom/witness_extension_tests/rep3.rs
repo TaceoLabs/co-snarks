@@ -234,6 +234,7 @@ witness_extension_test_rep3!(mux2_1);
 witness_extension_test_rep3!(mux3_1);
 witness_extension_test_rep3!(mux4_1);
 witness_extension_test_rep3_ignored!(pedersen2_test);
+witness_extension_test_rep3!(pedersen_commit_bits);
 witness_extension_test_rep3!(pedersen_hasher);
 witness_extension_test_rep3_ignored!(pedersen_test);
 witness_extension_test_rep3!(pointbits_loopback);

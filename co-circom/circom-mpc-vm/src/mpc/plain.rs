@@ -3,6 +3,7 @@ use crate::mpc_vm::VMConfig;
 use ark_ff::{One, PrimeField};
 use eyre::Result;
 use eyre::eyre;
+use mpc_core::gadgets::pedersen::pedersen_accelerator_plain::pedersen_commit_bits_trace_fr;
 use mpc_core::gadgets::poseidon2::CircomTracePlainHasher;
 use mpc_core::gadgets::poseidon2::Poseidon2;
 use num_bigint::BigUint;
@@ -308,5 +309,43 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         let state: [F; T] = inputs.try_into().expect("we checked state size");
         let (state, trace) = poseidon.plain_permutation_intermediate(state)?;
         Ok((state.to_vec(), trace.to_vec()))
+    }
+
+    fn pedersen_commit_bits_accelerator(
+        &mut self,
+        value_bits: Vec<Self::VmType>,
+        r_bits: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        if F::MODULUS.to_string() != ark_bn254::Fr::MODULUS.to_string() {
+            return Err(eyre!(
+                "pedersen_commit_bits accelerator requires a BN254 scalar field backend"
+            ));
+        }
+
+        let value_bits: [ark_bn254::Fr; 251] = value_bits
+            .into_iter()
+            .map(|value| ark_bn254::Fr::from(to_bigint!(value)))
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| eyre!("pedersen_commit_bits expects 251 value bits"))?;
+        let r_bits: [ark_bn254::Fr; 251] = r_bits
+            .into_iter()
+            .map(|value| ark_bn254::Fr::from(to_bigint!(value)))
+            .collect::<Vec<_>>()
+            .try_into()
+            .map_err(|_| eyre!("pedersen_commit_bits expects 251 blinding bits"))?;
+
+        let trace = pedersen_commit_bits_trace_fr(&value_bits, &r_bits)?;
+        let output = vec![
+            F::from(to_bigint!(trace.out_x)),
+            F::from(to_bigint!(trace.out_y)),
+        ];
+        let intermediate = trace
+            .trace
+            .into_iter()
+            .map(|value| F::from(to_bigint!(value)))
+            .collect();
+
+        Ok((output, intermediate))
     }
 }

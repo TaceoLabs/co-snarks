@@ -9,7 +9,13 @@ use eyre::bail;
 use itertools::Itertools;
 use mpc_core::{
     MpcState,
-    gadgets::poseidon2::Poseidon2,
+    gadgets::{
+        pedersen::{
+            PEDERSEN_COMMIT_BITS_INPUT_LEN,
+            pedersen_accelerator_rep3::pedersen_commit_bits_trace_rep3,
+        },
+        poseidon2::Poseidon2,
+    },
     protocols::rep3::{
         Rep3PrimeFieldShare, Rep3State,
         arithmetic::{self, promote_to_trivial_share},
@@ -22,6 +28,7 @@ use mpc_core::{
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
+use std::any::Any;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
@@ -101,7 +108,7 @@ impl<'a, F: PrimeField, N: Network> CircomRep3VmWitnessExtension<'a, F, N> {
     }
 }
 
-impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
+impl<F: PrimeField + 'static, N: Network> VmCircomWitnessExtension<F>
     for CircomRep3VmWitnessExtension<'_, F, N>
 {
     type Public = F;
@@ -701,6 +708,110 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             self.plain
                 .poseidon2_accelerator::<T>(
                     inputs
+                        .into_iter()
+                        .map(|x| match x {
+                            Rep3VmType::Public(x) => x,
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                )
+                .map(|(outs, trace)| {
+                    (
+                        outs.into_iter().map(Rep3VmType::Public).collect(),
+                        trace.into_iter().map(Rep3VmType::Public).collect(),
+                    )
+                })
+        }
+    }
+
+    fn pedersen_commit_bits_accelerator(
+        &mut self,
+        value_bits: Vec<Self::VmType>,
+        r_bits: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        if F::MODULUS.to_string() != ark_bn254::Fr::MODULUS.to_string() {
+            bail!("pedersen_commit_bits accelerator requires a BN254 scalar field backend");
+        }
+
+        if value_bits
+            .iter()
+            .chain(r_bits.iter())
+            .any(|x| matches!(x, Rep3VmType::Arithmetic(_)))
+        {
+            let value_bits: [Rep3PrimeFieldShare<F>; PEDERSEN_COMMIT_BITS_INPUT_LEN] = value_bits
+                .into_iter()
+                .map(|value| match value {
+                    Rep3VmType::Public(x) => promote_to_trivial_share(self.id, x),
+                    Rep3VmType::Arithmetic(x) => x,
+                })
+                .collect::<Vec<_>>()
+                .try_into()
+                .map_err(|_| {
+                    eyre::eyre!(
+                        "pedersen_commit_bits expects {} value bits",
+                        PEDERSEN_COMMIT_BITS_INPUT_LEN
+                    )
+                })?;
+            let r_bits: [Rep3PrimeFieldShare<F>; PEDERSEN_COMMIT_BITS_INPUT_LEN] = r_bits
+                .into_iter()
+                .map(|value| match value {
+                    Rep3VmType::Public(x) => promote_to_trivial_share(self.id, x),
+                    Rep3VmType::Arithmetic(x) => x,
+                })
+                .collect::<Vec<_>>()
+                .try_into()
+                .map_err(|_| {
+                    eyre::eyre!(
+                        "pedersen_commit_bits expects {} blinding bits",
+                        PEDERSEN_COMMIT_BITS_INPUT_LEN
+                    )
+                })?;
+
+            let value_bits_bn254 = (&value_bits as &dyn Any)
+                .downcast_ref::<[Rep3PrimeFieldShare<ark_bn254::Fr>; PEDERSEN_COMMIT_BITS_INPUT_LEN]>()
+                .ok_or_else(|| eyre::eyre!("failed to downcast value bits to BN254 shares"))?;
+            let r_bits_bn254 = (&r_bits as &dyn Any)
+                .downcast_ref::<[Rep3PrimeFieldShare<ark_bn254::Fr>; PEDERSEN_COMMIT_BITS_INPUT_LEN]>()
+                .ok_or_else(|| eyre::eyre!("failed to downcast blinding bits to BN254 shares"))?;
+
+            let trace = pedersen_commit_bits_trace_rep3(
+                value_bits_bn254,
+                r_bits_bn254,
+                self.net0,
+                &mut self.state0,
+            )?;
+
+            let output_bn254 = vec![
+                Rep3VmType::Arithmetic(trace.out_x),
+                Rep3VmType::Arithmetic(trace.out_y),
+            ];
+            let intermediate_bn254 = trace
+                .trace
+                .into_iter()
+                .map(Rep3VmType::Arithmetic)
+                .collect::<Vec<Rep3VmType<ark_bn254::Fr>>>();
+
+            let output = (Box::new(output_bn254) as Box<dyn Any>)
+                .downcast::<Vec<Rep3VmType<F>>>()
+                .map(|boxed| *boxed)
+                .map_err(|_| eyre::eyre!("failed to downcast Pedersen output to VM field type"))?;
+            let intermediate = (Box::new(intermediate_bn254) as Box<dyn Any>)
+                .downcast::<Vec<Rep3VmType<F>>>()
+                .map(|boxed| *boxed)
+                .map_err(|_| eyre::eyre!("failed to downcast Pedersen trace to VM field type"))?;
+
+            Ok((output, intermediate))
+        } else {
+            self.plain
+                .pedersen_commit_bits_accelerator(
+                    value_bits
+                        .into_iter()
+                        .map(|x| match x {
+                            Rep3VmType::Public(x) => x,
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                    r_bits
                         .into_iter()
                         .map(|x| match x {
                             Rep3VmType::Public(x) => x,

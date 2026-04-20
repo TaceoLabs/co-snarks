@@ -3946,6 +3946,14 @@ mod curve_share {
     }
 
     #[test]
+    fn babyjubjub_to_fieldshares() {
+        for _ in 0..10 {
+            to_fieldshares(ark_babyjubjub::EdwardsProjective::zero());
+            to_fieldshares(ark_babyjubjub::EdwardsProjective::rand(&mut thread_rng()));
+        }
+    }
+
+    #[test]
     fn bn254_to_fieldshares_many() {
         const VEC_SIZE: usize = 10;
         const RUNS: usize = 10;
@@ -3978,6 +3986,25 @@ mod curve_share {
         for _ in 0..RUNS {
             let points = (0..VEC_SIZE)
                 .map(|_| ark_grumpkin::Projective::zero())
+                .collect_vec();
+            to_fieldshares_many(&points);
+        }
+    }
+
+    #[test]
+    fn babyjubjub_to_fieldshares_many() {
+        const VEC_SIZE: usize = 10;
+        const RUNS: usize = 10;
+        for _ in 0..RUNS {
+            let mut rng = thread_rng();
+            let points = (0..VEC_SIZE)
+                .map(|_| ark_babyjubjub::EdwardsProjective::rand(&mut rng))
+                .collect_vec();
+            to_fieldshares_many(&points);
+        }
+        for _ in 0..RUNS {
+            let points = (0..VEC_SIZE)
+                .map(|_| ark_babyjubjub::EdwardsProjective::zero())
                 .collect_vec();
             to_fieldshares_many(&points);
         }

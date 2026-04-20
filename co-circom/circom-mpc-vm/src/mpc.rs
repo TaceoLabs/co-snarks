@@ -12,7 +12,7 @@ pub(crate) mod rep3;
 /// This trait represents the operations used during witness extension by the co-circom MPC-VM
 pub trait VmCircomWitnessExtension<F: PrimeField> {
     /// The public value type
-    type Public: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
+    type Public: CanonicalSerialize + CanonicalDeserialize + Clone + Default + std::fmt::Debug;
     /// The arithmetic share type
     type ArithmeticShare: CanonicalSerialize + CanonicalDeserialize + Clone + Default;
     /// The VM type
@@ -143,4 +143,19 @@ pub trait VmCircomWitnessExtension<F: PrimeField> {
         &mut self,
         inputs: Vec<Self::VmType>,
     ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)>;
+
+    /// Computes `pedersen_commit_bits` on the provided bit-vectors while also
+    /// returning intermediate values needed for Circom witness extension.
+    #[expect(clippy::type_complexity)]
+    fn pedersen_commit_bits_accelerator(
+        &mut self,
+        value_bits: Vec<Self::VmType>,
+        r_bits: Vec<Self::VmType>,
+    ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        let _ = value_bits;
+        let _ = r_bits;
+        Err(eyre::eyre!(
+            "pedersen_commit_bits accelerator is not implemented for this backend"
+        ))
+    }
 }

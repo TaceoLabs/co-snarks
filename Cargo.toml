@@ -38,6 +38,7 @@ brillig = { version = "1.0.0-beta.17", git = "https://github.com/noir-lang/noir/
 noirc-abi = { version = "1.0.0-beta.17", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.17", package = "noirc_abi" }
 noirc-artifacts = { version = "1.0.0-beta.17", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.17", package = "noirc_artifacts" }
 
+ark-babyjubjub = { package = "taceo-ark-babyjubjub", version = "^0.5.3" }
 ark-bls12-377 = "0.5"
 ark-bls12-381 = "0.5"
 ark-bn254 = "0.5"

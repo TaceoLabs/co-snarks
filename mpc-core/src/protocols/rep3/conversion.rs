@@ -987,7 +987,15 @@ where
     C::BaseField: PrimeField,
 {
     let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre(x, net, state)?;
-    detail::point_addition(x01_x, x01_y, x2_x, x2_y, net, state)
+
+    // Use curve-specific point addition formula
+    use std::any::TypeId;
+    if TypeId::of::<C>() == TypeId::of::<ark_babyjubjub::EdwardsProjective>() {
+        detail::point_addition_babyjubjub(x01_x, x01_y, x2_x, x2_y, net, state)
+    } else {
+        // Default to Weierstrass formula for other curves (BN254, Grumpkin, etc.)
+        detail::point_addition(x01_x, x01_y, x2_x, x2_y, net, state)
+    }
 }
 
 /// Transforms a vec of replicated point shares to shares of their coordinates.
@@ -1006,7 +1014,15 @@ where
     C::BaseField: PrimeField,
 {
     let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre_many(x, net, state)?;
-    detail::point_addition_many(&x01_x, &x01_y, &x2_x, &x2_y, net, state)
+
+    // Use curve-specific point addition formula
+    use std::any::TypeId;
+    if TypeId::of::<C>() == TypeId::of::<ark_babyjubjub::EdwardsProjective>() {
+        detail::point_addition_many_babyjubjub(&x01_x, &x01_y, &x2_x, &x2_y, net, state)
+    } else {
+        // Default to Weierstrass formula for other curves (BN254, Grumpkin, etc.)
+        detail::point_addition_many(&x01_x, &x01_y, &x2_x, &x2_y, net, state)
+    }
 }
 
 /// Transforms shares of coordinates to a replicated point share.
@@ -1071,7 +1087,14 @@ where
     y_x.b = local_b[0];
     y_y.b = local_b[1];
 
-    let z = detail::point_addition(x, y, y_x, y_y, net, state)?;
+    // Use curve-specific point addition formula
+    use std::any::TypeId;
+    let z = if TypeId::of::<C>() == TypeId::of::<ark_babyjubjub::EdwardsProjective>() {
+        detail::point_addition_babyjubjub(x, y, y_x, y_y, net, state)?
+    } else {
+        // Default to Weierstrass formula for other curves (BN254, Grumpkin, etc.)
+        detail::point_addition(x, y, y_x, y_y, net, state)?
+    };
     // If infinity then z should be y
     let cmux = arithmetic::cmux_vec(is_infinity, &[y_x, y_y], &[z.0, z.1], net, state)?;
     // Since y is randomly chosen, it is very unlikely that the x-coordinate matches the x-coordinate of x. Thus z.2 is already 0
@@ -1195,7 +1218,14 @@ where
         y_y[i].b = local_b_y[i];
     }
 
-    let z = detail::point_addition_many(x, y, &y_x, &y_y, net, state)?;
+    // Use curve-specific point addition formula
+    use std::any::TypeId;
+    let z = if TypeId::of::<C>() == TypeId::of::<ark_babyjubjub::EdwardsProjective>() {
+        detail::point_addition_many_babyjubjub(x, y, &y_x, &y_y, net, state)?
+    } else {
+        // Default to Weierstrass formula for other curves (BN254, Grumpkin, etc.)
+        detail::point_addition_many(x, y, &y_x, &y_y, net, state)?
+    };
     // If infinity then z should be y
 
     // TACEO TODO: Maybe remove this manual impl of the cmux

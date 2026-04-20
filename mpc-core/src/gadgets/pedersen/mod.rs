@@ -1,0 +1,181 @@
+//! Pedersen gadgets used by Circom witness-extension accelerators.
+//!
+//! This module currently contains shared types and constants for the
+//! `pedersen_commit_bits` accelerator integration.
+
+use ark_ff::PrimeField;
+
+/// Plain Pedersen arithmetic and Circom-compatible trace generation helpers.
+pub mod pedersen_accelerator_plain;
+/// Rep3-based Pedersen arithmetic and Circom-compatible trace generation helpers.
+pub mod pedersen_accelerator_rep3;
+pub(crate) mod pedersen_commit_bits_indices;
+pub(crate) use pedersen_commit_bits_indices::{
+    WITNESS_INDICES_COUNT_PEDERSEN_COMMIT_BITS, WITNESS_INDICES_PEDERSEN_COMMIT_BITS_END,
+    WITNESS_INDICES_PEDERSEN_COMMIT_BITS_START, WITNESS_INDICES_SIZE_PEDERSEN_COMMIT_BITS,
+};
+
+/// Name of the Circom component targeted by the accelerator.
+pub const PEDERSEN_COMMIT_BITS_COMPONENT_NAME: &str = "PedersenCommitBits";
+
+/// Bit-length of both message and blinding inputs in `pedersen_commit_bits`.
+pub const PEDERSEN_COMMIT_BITS_INPUT_LEN: usize = 251;
+
+/// Number of intermediate witness values expected from the Pedersen accelerator trace.
+///
+/// The order follows the accelerator-written `.sym` region in
+/// `co-circom/co-circom/examples/groth16/test_vectors/pedersen_commit_bits/circuit.sym`.
+pub const PEDERSEN_COMMIT_BITS_TRACE_VALUE_COUNT: usize =
+    WITNESS_INDICES_COUNT_PEDERSEN_COMMIT_BITS;
+
+/// Number of accelerator-written intermediate slots after the output and input signal regions.
+pub const PEDERSEN_COMMIT_BITS_TRACE_INTERMEDIATE_COUNT: usize =
+    PEDERSEN_COMMIT_BITS_TRACE_VALUE_COUNT;
+
+/// Index of the first Pedersen witness slot touched by trace writes.
+pub const PEDERSEN_COMMIT_BITS_TRACE_MIN_WITNESS_INDEX: u16 =
+    WITNESS_INDICES_PEDERSEN_COMMIT_BITS_START;
+
+/// Index of the last Pedersen witness slot touched by trace writes.
+pub const PEDERSEN_COMMIT_BITS_TRACE_MAX_WITNESS_INDEX: u16 =
+    WITNESS_INDICES_PEDERSEN_COMMIT_BITS_END;
+
+/// Full witness vector size required by the Pedersen trace index mapping.
+///
+/// This equals `max_witness_index + 1` and is used for sparse trace materialization.
+pub const PEDERSEN_COMMIT_BITS_TRACE_VECTOR_SIZE: usize = WITNESS_INDICES_SIZE_PEDERSEN_COMMIT_BITS;
+
+pub(crate) const PEDERSEN_FULL_TRACE_LENGTH: usize = 19903;
+
+pub(crate) const PEDERSEN_TRACE_INDICES: [u16; 1040] = [
+    2, 3, 4, 5, 14, 15, 16, 17, 528, 529, 530, 531, 532, 533, 534, 535, 792, 793, 796, 797, 798,
+    799, 800, 803, 804, 805, 806, 807, 810, 811, 812, 813, 814, 817, 818, 819, 820, 821, 824, 825,
+    826, 827, 828, 831, 832, 833, 834, 835, 838, 839, 840, 841, 842, 845, 846, 847, 848, 849, 852,
+    853, 854, 855, 856, 859, 860, 861, 862, 863, 866, 867, 868, 869, 870, 873, 874, 875, 876, 877,
+    880, 881, 882, 883, 884, 887, 888, 889, 890, 891, 894, 895, 896, 897, 898, 901, 902, 903, 904,
+    905, 908, 909, 910, 911, 912, 915, 916, 917, 918, 919, 922, 923, 924, 925, 926, 929, 930, 931,
+    932, 933, 936, 937, 938, 939, 940, 943, 944, 945, 946, 947, 950, 951, 952, 953, 954, 957, 958,
+    959, 960, 961, 964, 965, 966, 967, 968, 971, 972, 973, 974, 975, 978, 979, 980, 981, 982, 985,
+    986, 987, 988, 989, 992, 993, 994, 995, 996, 999, 1000, 1001, 1002, 1003, 1006, 1007, 1008,
+    1009, 1010, 1013, 1014, 1015, 1016, 1017, 1020, 1021, 1022, 1023, 1024, 1027, 1028, 1029, 1030,
+    1031, 1034, 1035, 1036, 1037, 1038, 1041, 1042, 1043, 1044, 1045, 1048, 1049, 1050, 1051, 1052,
+    1055, 1056, 1057, 1058, 1059, 1062, 1063, 1064, 1065, 1066, 1069, 1070, 1071, 1072, 1073, 1076,
+    1077, 1078, 1079, 1080, 1083, 1084, 1085, 1086, 1087, 1090, 1091, 1092, 1093, 1094, 1097, 1098,
+    1099, 1100, 1101, 1104, 1105, 1106, 1107, 1108, 1111, 1112, 1113, 1114, 1115, 1118, 1119, 1120,
+    1121, 1122, 1125, 1126, 1127, 1128, 1129, 1132, 1133, 1134, 1135, 1136, 1139, 1140, 1141, 1142,
+    1143, 1146, 1147, 1148, 1149, 1150, 1153, 1154, 1155, 1156, 1157, 1160, 1161, 1162, 1163, 1164,
+    1167, 1168, 1169, 1170, 1171, 1174, 1175, 1176, 1177, 1178, 1181, 1182, 1183, 1184, 1185, 1188,
+    1189, 1190, 1191, 1192, 1195, 1196, 1197, 1198, 1199, 1202, 1203, 1204, 1205, 1206, 1209, 1210,
+    1211, 1212, 1213, 1216, 1217, 1218, 1219, 1220, 1223, 1224, 1225, 1226, 1227, 1230, 1231, 1232,
+    1233, 1234, 1237, 1238, 1239, 1240, 1241, 1244, 1245, 1246, 1247, 1248, 1251, 1252, 1253, 1254,
+    1255, 1258, 1259, 1260, 1261, 1262, 1265, 1266, 1267, 1268, 1269, 1272, 1273, 1274, 1275, 1276,
+    1279, 1280, 1281, 1282, 1283, 1286, 1287, 1288, 1289, 1290, 1293, 1294, 1295, 1296, 1297, 1300,
+    1301, 1302, 1303, 1304, 1307, 1308, 1309, 1310, 1311, 1314, 1315, 1316, 1317, 1318, 1321, 1322,
+    1323, 1324, 1325, 1328, 1329, 1330, 1331, 1332, 1335, 1336, 1337, 1338, 1339, 1342, 1343, 1344,
+    1345, 1346, 1349, 1350, 1351, 1352, 1353, 1356, 1357, 1358, 1359, 1360, 1363, 1364, 1365, 1368,
+    1369, 1375, 2046, 2141, 2236, 2331, 2426, 2521, 2616, 2711, 2806, 2901, 2996, 3091, 3186, 3281,
+    3376, 3471, 3566, 3661, 3756, 3851, 3946, 4041, 4136, 4231, 4326, 4421, 4516, 4611, 4706, 4801,
+    4896, 4991, 5086, 5181, 5276, 5371, 5466, 5561, 5656, 5751, 5846, 5941, 6036, 6131, 6226, 6321,
+    6416, 6511, 6606, 6701, 6796, 6891, 6986, 7081, 7176, 7271, 7366, 7461, 7556, 7651, 7746, 7841,
+    7936, 8031, 8126, 8221, 8316, 8411, 8506, 8601, 8696, 8791, 8886, 8981, 9076, 9171, 9266, 9361,
+    9456, 9551, 9646, 9741, 9770, 9771, 9774, 9775, 9776, 9777, 9778, 9781, 9783, 9786, 9787, 9793,
+    9904, 10526, 10527, 10528, 10529, 10530, 10531, 10532, 10533, 10790, 10791, 10794, 10795,
+    10796, 10797, 10798, 10801, 10802, 10803, 10804, 10805, 10808, 10809, 10810, 10811, 10812,
+    10815, 10816, 10817, 10818, 10819, 10822, 10823, 10824, 10825, 10826, 10829, 10830, 10831,
+    10832, 10833, 10836, 10837, 10838, 10839, 10840, 10843, 10844, 10845, 10846, 10847, 10850,
+    10851, 10852, 10853, 10854, 10857, 10858, 10859, 10860, 10861, 10864, 10865, 10866, 10867,
+    10868, 10871, 10872, 10873, 10874, 10875, 10878, 10879, 10880, 10881, 10882, 10885, 10886,
+    10887, 10888, 10889, 10892, 10893, 10894, 10895, 10896, 10899, 10900, 10901, 10902, 10903,
+    10906, 10907, 10908, 10909, 10910, 10913, 10914, 10915, 10916, 10917, 10920, 10921, 10922,
+    10923, 10924, 10927, 10928, 10929, 10930, 10931, 10934, 10935, 10936, 10937, 10938, 10941,
+    10942, 10943, 10944, 10945, 10948, 10949, 10950, 10951, 10952, 10955, 10956, 10957, 10958,
+    10959, 10962, 10963, 10964, 10965, 10966, 10969, 10970, 10971, 10972, 10973, 10976, 10977,
+    10978, 10979, 10980, 10983, 10984, 10985, 10986, 10987, 10990, 10991, 10992, 10993, 10994,
+    10997, 10998, 10999, 11000, 11001, 11004, 11005, 11006, 11007, 11008, 11011, 11012, 11013,
+    11014, 11015, 11018, 11019, 11020, 11021, 11022, 11025, 11026, 11027, 11028, 11029, 11032,
+    11033, 11034, 11035, 11036, 11039, 11040, 11041, 11042, 11043, 11046, 11047, 11048, 11049,
+    11050, 11053, 11054, 11055, 11056, 11057, 11060, 11061, 11062, 11063, 11064, 11067, 11068,
+    11069, 11070, 11071, 11074, 11075, 11076, 11077, 11078, 11081, 11082, 11083, 11084, 11085,
+    11088, 11089, 11090, 11091, 11092, 11095, 11096, 11097, 11098, 11099, 11102, 11103, 11104,
+    11105, 11106, 11109, 11110, 11111, 11112, 11113, 11116, 11117, 11118, 11119, 11120, 11123,
+    11124, 11125, 11126, 11127, 11130, 11131, 11132, 11133, 11134, 11137, 11138, 11139, 11140,
+    11141, 11144, 11145, 11146, 11147, 11148, 11151, 11152, 11153, 11154, 11155, 11158, 11159,
+    11160, 11161, 11162, 11165, 11166, 11167, 11168, 11169, 11172, 11173, 11174, 11175, 11176,
+    11179, 11180, 11181, 11182, 11183, 11186, 11187, 11188, 11189, 11190, 11193, 11194, 11195,
+    11196, 11197, 11200, 11201, 11202, 11203, 11204, 11207, 11208, 11209, 11210, 11211, 11214,
+    11215, 11216, 11217, 11218, 11221, 11222, 11223, 11224, 11225, 11228, 11229, 11230, 11231,
+    11232, 11235, 11236, 11237, 11238, 11239, 11242, 11243, 11244, 11245, 11246, 11249, 11250,
+    11251, 11252, 11253, 11256, 11257, 11258, 11259, 11260, 11263, 11264, 11265, 11266, 11267,
+    11270, 11271, 11272, 11273, 11274, 11277, 11278, 11279, 11280, 11281, 11284, 11285, 11286,
+    11287, 11288, 11291, 11292, 11293, 11294, 11295, 11298, 11299, 11300, 11301, 11302, 11305,
+    11306, 11307, 11308, 11309, 11312, 11313, 11314, 11315, 11316, 11319, 11320, 11321, 11322,
+    11323, 11326, 11327, 11328, 11329, 11330, 11333, 11334, 11335, 11336, 11337, 11340, 11341,
+    11342, 11343, 11344, 11347, 11348, 11349, 11350, 11351, 11354, 11355, 11356, 11357, 11358,
+    11361, 11362, 11363, 11366, 11367, 11373, 12044, 12139, 12234, 12329, 12424, 12519, 12614,
+    12709, 12804, 12899, 12994, 13089, 13184, 13279, 13374, 13469, 13564, 13659, 13754, 13849,
+    13944, 14039, 14134, 14229, 14324, 14419, 14514, 14609, 14704, 14799, 14894, 14989, 15084,
+    15179, 15274, 15369, 15464, 15559, 15654, 15749, 15844, 15939, 16034, 16129, 16224, 16319,
+    16414, 16509, 16604, 16699, 16794, 16889, 16984, 17079, 17174, 17269, 17364, 17459, 17554,
+    17649, 17744, 17839, 17934, 18029, 18124, 18219, 18314, 18409, 18504, 18599, 18694, 18789,
+    18884, 18979, 19074, 19169, 19264, 19359, 19454, 19549, 19644, 19739, 19768, 19769, 19772,
+    19773, 19774, 19775, 19776, 19779, 19781, 19784, 19785, 19791, 19902,
+];
+
+/// Output and intermediate trace values produced by the Pedersen accelerator.
+#[derive(Clone, Debug)]
+pub struct PedersenCommitBitsTrace<T> {
+    /// x-coordinate of the resulting Pedersen commitment point.
+    pub out_x: T,
+    /// y-coordinate of the resulting Pedersen commitment point.
+    pub out_y: T,
+    /// Intermediate witness values written by index into the component trace.
+    pub trace: Vec<T>,
+}
+
+impl<T> PedersenCommitBitsTrace<T> {
+    /// Creates a new PedersenCommitBitsTrace object.
+    pub fn new(out_x: T, out_y: T, trace: Vec<T>) -> Self {
+        Self {
+            out_x,
+            out_y,
+            trace,
+        }
+    }
+}
+
+/// Trait for plain (non-MPC) Pedersen commit-bits Circom trace generation.
+pub trait CircomPedersenCommitBitsPlainTrace<F: PrimeField> {
+    /// Computes the Pedersen commitment output and witness-extension intermediate trace.
+    fn pedersen_commit_bits_plain_trace(
+        value_bits: &[F],
+        r_bits: &[F],
+    ) -> eyre::Result<PedersenCommitBitsTrace<F>>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        PEDERSEN_COMMIT_BITS_TRACE_MAX_WITNESS_INDEX, PEDERSEN_COMMIT_BITS_TRACE_MIN_WITNESS_INDEX,
+        PEDERSEN_COMMIT_BITS_TRACE_VALUE_COUNT, PEDERSEN_COMMIT_BITS_TRACE_VECTOR_SIZE,
+    };
+
+    #[test]
+    fn pedersen_trace_indices_are_contiguous() {
+        assert_eq!(PEDERSEN_COMMIT_BITS_TRACE_MIN_WITNESS_INDEX, 505);
+        assert_eq!(PEDERSEN_COMMIT_BITS_TRACE_MAX_WITNESS_INDEX, 1544);
+        assert_eq!(
+            PEDERSEN_COMMIT_BITS_TRACE_VALUE_COUNT,
+            (PEDERSEN_COMMIT_BITS_TRACE_MAX_WITNESS_INDEX
+                - PEDERSEN_COMMIT_BITS_TRACE_MIN_WITNESS_INDEX
+                + 1) as usize
+        );
+    }
+
+    #[test]
+    fn pedersen_trace_indices_fit_trace_vector() {
+        assert!(
+            (PEDERSEN_COMMIT_BITS_TRACE_MAX_WITNESS_INDEX as usize)
+                < PEDERSEN_COMMIT_BITS_TRACE_VECTOR_SIZE
+        );
+    }
+}

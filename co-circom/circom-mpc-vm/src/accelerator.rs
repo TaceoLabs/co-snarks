@@ -2,6 +2,9 @@ use std::collections::HashMap;
 
 use ark_ff::PrimeField;
 use eyre::bail;
+use mpc_core::gadgets::pedersen::{
+    PEDERSEN_COMMIT_BITS_COMPONENT_NAME, PEDERSEN_COMMIT_BITS_INPUT_LEN,
+};
 
 use crate::mpc::VmCircomWitnessExtension;
 
@@ -57,6 +60,9 @@ pub struct MpcAcceleratorConfig {
     /// Whether to use the pre-defined POSEIDON2 accelerator
     /// Default: true
     pub(crate) poseidon2: bool,
+    /// Whether to use the pre-defined PEDERSEN_COMMIT_BITS accelerator
+    /// Default: false (implementation in progress)
+    pub(crate) pedersen_commit_bits: bool,
 }
 
 impl Default for MpcAcceleratorConfig {
@@ -67,6 +73,7 @@ impl Default for MpcAcceleratorConfig {
             addbits: true,
             iszero: true,
             poseidon2: true,
+            pedersen_commit_bits: true,
         }
     }
 }
@@ -98,6 +105,7 @@ impl MpcAcceleratorConfig {
     /// - ADDBITS
     /// - ISZERO
     /// - POSEIDON2
+    /// - PEDERSEN_COMMIT_BITS
     ///
     /// Possible values for the boolean variables are: "1", "true", "on", "0", "false", "off"
     pub fn from_env() -> Self {
@@ -115,6 +123,9 @@ impl MpcAcceleratorConfig {
                 .map(|x| map_env_string_to_bool(&x))
                 .unwrap_or(true),
             poseidon2: std::env::var("CIRCOM_MPC_ACCELERATOR_POSEIDON2")
+                .map(|x| map_env_string_to_bool(&x))
+                .unwrap_or(true),
+            pedersen_commit_bits: std::env::var("CIRCOM_MPC_ACCELERATOR_PEDERSEN_COMMIT_BITS")
                 .map(|x| map_env_string_to_bool(&x))
                 .unwrap_or(true),
         }
@@ -156,6 +167,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         }
         if config.poseidon2 {
             accelerator.register_poseidon2();
+        }
+        if config.pedersen_commit_bits {
+            accelerator.register_pedersen_commit_bits();
         }
         accelerator
     }
@@ -267,6 +281,34 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
                 Ok(ComponentAcceleratorOutput {
                     output: state,
                     intermediate: traces,
+                })
+            },
+        );
+    }
+
+    fn register_pedersen_commit_bits(&mut self) {
+        self.register_component(
+            PEDERSEN_COMMIT_BITS_COMPONENT_NAME.to_string(),
+            |protocol, args, _amount_outputs| {
+                tracing::debug!("calling pre-defined PedersenCommitBits accelerator");
+                let args_len = args.len();
+                let expected = PEDERSEN_COMMIT_BITS_INPUT_LEN * 2;
+                if args_len != expected {
+                    bail!(
+                        "PedersenCommitBits accelerator expects {} inputs, got {}",
+                        expected,
+                        args_len
+                    );
+                }
+
+                let (out, trace) = protocol.pedersen_commit_bits_accelerator(
+                    args[..PEDERSEN_COMMIT_BITS_INPUT_LEN].to_vec(),
+                    args[PEDERSEN_COMMIT_BITS_INPUT_LEN..].to_vec(),
+                )?;
+
+                Ok(ComponentAcceleratorOutput {
+                    output: out,
+                    intermediate: trace,
                 })
             },
         );

@@ -11,6 +11,7 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
+ark-bn254.workspace = true
 ark-ff.workspace = true
 ark-serialize.workspace = true
 bincode.workspace = true
@@ -23,5 +24,3 @@ mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 serde.workspace = true
 tracing.workspace = true
-
-
