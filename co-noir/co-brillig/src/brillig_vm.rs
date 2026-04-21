@@ -426,7 +426,7 @@ where
         };
         let persitent_shared_state = std::mem::take(&mut self.persistent_shared_state);
         Ok(CoBrilligResult::Success(BrilligSuccess {
-            unconstrained_witnesses: self.take_result(offset, size),
+            unconstrained_witnesses: self.take_result(offset as usize, size),
             generated_pss: persitent_shared_state,
         }))
     }

@@ -63,10 +63,10 @@ where
         id: &BrilligFunctionId,
         inputs: &[BrilligInputs<GenericFieldElement<F>>],
         outputs: &[BrilligOutputs],
-        predicate: &Option<Expression<GenericFieldElement<F>>>,
+        predicate: &Expression<GenericFieldElement<F>>,
     ) -> CoAcvmResult<()> {
-        let brillig_mask = if let Some(expr) = predicate {
-            let predicate = self.evaluate_expression(expr)?;
+        let brillig_mask = {
+            let predicate = self.evaluate_expression(predicate)?;
             // we skip if predicate is zero
             if T::is_public_zero(&predicate) {
                 tracing::debug!("skipping brillig call as predicate is zero");
@@ -78,8 +78,6 @@ where
                 // we need to cmux the result with random zeros
                 BrilligMask::Mask(predicate)
             }
-        } else {
-            BrilligMask::NoMask
         };
         tracing::debug!("solving brillig call: {}", id);
         let mut calldata = vec![];
