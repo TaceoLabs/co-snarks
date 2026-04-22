@@ -121,7 +121,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
         let mut result = Vec::with_capacity(luts.len());
 
         // TODO parallelize this at some point
-        for (bin_a, bin_b) in bins_a.into_iter().zip(bins_b.into_iter()) {
+        for (bin_a, bin_b) in bins_a.into_iter().zip(bins_b) {
             let bin = Rep3BigUintShare::new(bin_a, bin_b);
             let res = rep3::conversion::b2a_selector(&bin, net0, state0)?;
             result.push(res);

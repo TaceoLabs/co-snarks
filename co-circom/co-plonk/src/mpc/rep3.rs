@@ -207,7 +207,7 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
             open[i] = open[i] * open[i - 1];
         }
 
-        for (unblind, open) in unblind.iter_mut().zip(open.into_iter()) {
+        for (unblind, open) in unblind.iter_mut().zip(open) {
             *unblind = arithmetic::mul_public(*unblind, open);
         }
         if inv {

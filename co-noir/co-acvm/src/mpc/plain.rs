@@ -501,7 +501,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             })
             .collect();
 
-        indexed_values.sort_by(|a, b| a.0.cmp(&b.0));
+        indexed_values.sort_by_key(|a| a.0);
 
         let mut results = Vec::with_capacity(inputs.len());
 

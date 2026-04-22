@@ -438,11 +438,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(arithmetic::inv(x, &net, &mut state).unwrap())
@@ -493,11 +489,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::bit_inject(&x, &net, &mut state).unwrap())
@@ -540,7 +532,7 @@ mod field_share {
         for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
-            .zip([x0_shares, x1_shares, x2_shares].into_iter())
+            .zip([x0_shares, x1_shares, x2_shares])
         {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
@@ -651,11 +643,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2b(x, &net, &mut state).unwrap())
@@ -681,11 +669,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
@@ -711,11 +695,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
@@ -756,7 +736,7 @@ mod field_share {
         for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
-            .zip([x0_shares, x1_shares, x2_shares].into_iter())
+            .zip([x0_shares, x1_shares, x2_shares])
         {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
@@ -781,11 +761,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2b(x, &net, &mut state).unwrap())
@@ -812,11 +788,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
@@ -843,11 +815,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
@@ -889,7 +857,7 @@ mod field_share {
         for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
-            .zip([x0_shares, x1_shares, x2_shares].into_iter())
+            .zip([x0_shares, x1_shares, x2_shares])
         {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
@@ -914,11 +882,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2a(&x, &net, &mut state).unwrap())
@@ -941,11 +905,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2y2a(&x, &net, &mut state).unwrap())
@@ -968,11 +928,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2y2a_streaming(&x, &net, &mut state).unwrap())
@@ -1349,11 +1305,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let id = state.id;
@@ -1396,11 +1348,7 @@ mod field_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let id = state.id;
@@ -1702,7 +1650,7 @@ mod field_share {
         let y_shares = rep3::share_field_elements(&y, &mut rng);
 
         let mut should_result = Vec::new();
-        for (x, y) in x.into_iter().zip(y.into_iter()) {
+        for (x, y) in x.into_iter().zip(y) {
             let mut x: BigUint = x.into();
             let mut y: BigUint = y.into();
             let mut xs = Vec::with_capacity(NUM_DECOMPS);
@@ -1984,7 +1932,7 @@ mod field_share {
         let y_shares = rep3::share_field_elements(&y, &mut rng);
 
         let mut should_result = Vec::new();
-        for (x, y) in x.into_iter().zip(y.into_iter()) {
+        for (x, y) in x.into_iter().zip(y) {
             let mut x: BigUint = x.into();
             let mut y: BigUint = y.into();
             let mut xs = Vec::with_capacity(NUM_DECOMPS);
@@ -2105,7 +2053,7 @@ mod field_share {
             x &= &mask;
             shortened.push((i, ark_bn254::Fr::from(x)));
         }
-        shortened.sort_by(|a, b| a.1.cmp(&b.1));
+        shortened.sort_by_key(|a| a.1);
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         for (i, _) in shortened.into_iter() {
             should_result.push(x[i]);
@@ -2372,7 +2320,7 @@ mod field_share {
         let y_shares = rep3::share_field_elements(&keys_b, &mut rng);
 
         let mut should_result = Vec::new();
-        for (x, y) in keys_a.into_iter().zip(keys_b.into_iter()) {
+        for (x, y) in keys_a.into_iter().zip(keys_b) {
             let mut x: BigUint = x.into();
             let mut y: BigUint = y.into();
             let mut xs = Vec::with_capacity(slice_sizes.len());
@@ -2505,7 +2453,7 @@ mod field_share {
         let y_shares = rep3::share_field_elements(&keys_b, &mut rng);
 
         let mut should_result = Vec::new();
-        for (x, y) in keys_a.into_iter().zip(keys_b.into_iter()) {
+        for (x, y) in keys_a.into_iter().zip(keys_b) {
             let mut x: BigUint = x.into();
             let mut y: BigUint = y.into();
             let mut xs = Vec::with_capacity(slice_sizes.len());
@@ -2619,7 +2567,7 @@ mod field_share {
         let y_shares = rep3::share_field_elements(&keys_b, &mut rng);
 
         let mut should_result = Vec::new();
-        for (x, y) in keys_a.into_iter().zip(keys_b.into_iter()) {
+        for (x, y) in keys_a.into_iter().zip(keys_b) {
             let mut x: BigUint = x.into();
             let mut y: BigUint = y.into();
             let mut xs = Vec::with_capacity(slice_sizes.len());
@@ -3152,7 +3100,7 @@ mod field_share {
         let y_shares = rep3::share_field_elements(&y, &mut rng);
 
         let mut should_result = Vec::with_capacity(VEC_SIZE);
-        for (x, y) in x.into_iter().zip(y.into_iter()) {
+        for (x, y) in x.into_iter().zip(y) {
             let x: BigUint = x.into();
             let y: BigUint = y.into();
 
@@ -3241,7 +3189,7 @@ mod field_share {
         let y_shares = rep3::share_field_elements(&y, &mut rng);
 
         let mut should_result = Vec::with_capacity(VEC_SIZE);
-        for (x, y) in x.iter().cloned().zip(y.into_iter()) {
+        for (x, y) in x.iter().cloned().zip(y) {
             let x: BigUint = x.into();
             let y: BigUint = y.into();
 

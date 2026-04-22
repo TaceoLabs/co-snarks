@@ -410,11 +410,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::bit_inject(&x, &net, &mut state).unwrap())
@@ -464,7 +460,7 @@ mod ring_share {
         for ((net, tx), x) in nets
             .into_iter()
             .zip([tx1, tx2, tx3])
-            .zip([x0_shares, x1_shares, x2_shares].into_iter())
+            .zip([x0_shares, x1_shares, x2_shares])
         {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
@@ -553,11 +549,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2b(x, &net, &mut state).unwrap())
@@ -587,11 +579,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
@@ -621,11 +609,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
@@ -658,11 +642,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2b(x, &net, &mut state).unwrap())
@@ -692,11 +672,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b(x, &net, &mut state).unwrap())
@@ -726,11 +702,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::a2y2b_streaming(x, &net, &mut state).unwrap())
@@ -760,11 +732,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2a(&x, &net, &mut state).unwrap())
@@ -794,11 +762,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2y2a(&x, &net, &mut state).unwrap())
@@ -828,11 +792,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 tx.send(conversion::b2y2a_streaming(&x, &net, &mut state).unwrap())
@@ -1191,11 +1151,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let id = state.id;
@@ -1245,11 +1201,7 @@ mod ring_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let id = state.id;
@@ -1749,7 +1701,7 @@ mod ring_share {
         let x_shares = rep3_ring::share_ring_elements(&x, &mut rng);
         let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
         let mut should_result: Vec<RingElement<T>> = Vec::with_capacity(VEC_SIZE);
-        for (x, y) in x.into_iter().zip(y.into_iter()) {
+        for (x, y) in x.into_iter().zip(y) {
             should_result.push(RingElement(T::cast_from_biguint(
                 &(x.0.cast_to_biguint() / y.0.cast_to_biguint()),
             )));
@@ -2042,7 +1994,7 @@ mod ring_share {
             .collect_vec();
         let y_shares = rep3_ring::share_ring_elements(&y, &mut rng);
         let mut should_result: Vec<RingElement<T>> = Vec::with_capacity(VEC_SIZE);
-        for (x, y) in x.iter().zip(y.into_iter()) {
+        for (x, y) in x.iter().zip(y) {
             should_result.push(RingElement(T::cast_from_biguint(
                 &(x.0.cast_to_biguint() / y.0.cast_to_biguint()),
             )));

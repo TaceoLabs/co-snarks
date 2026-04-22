@@ -236,7 +236,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
             open[i] = open[i] * open[i - 1];
         }
 
-        for (unblind, open) in unblind.iter_mut().zip(open.into_iter()) {
+        for (unblind, open) in unblind.iter_mut().zip(open) {
             *unblind *= open;
         }
         if inv { inv_vec(&unblind) } else { Ok(unblind) }

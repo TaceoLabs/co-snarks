@@ -20,11 +20,7 @@ mod translate_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             thread::spawn(move || {
                 let preprocessing = ShamirPreprocessing::new(3, 1, 1, &net).unwrap();
                 let mut shamir = ShamirState::from(preprocessing);
@@ -54,11 +50,7 @@ mod translate_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             thread::spawn(move || {
                 let preprecessing = ShamirPreprocessing::new(3, 1, x.len(), &net).unwrap();
                 let mut shamir = ShamirState::from(preprecessing);
@@ -86,11 +78,7 @@ mod translate_share {
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
-        for ((net, tx), x) in nets
-            .into_iter()
-            .zip([tx1, tx2, tx3])
-            .zip(x_shares.into_iter())
-        {
+        for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
             thread::spawn(move || {
                 let preprecessing = ShamirPreprocessing::new(3, 1, 1, &net).unwrap();
                 let mut shamir = ShamirState::from(preprecessing);

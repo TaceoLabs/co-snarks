@@ -231,7 +231,7 @@ where
 
     // Start the result with a random mask (for potential resharing later)
     let mut t = state.rngs.rand.masking_field_element::<F>();
-    for (l, e) in lut.iter().zip(injected.into_iter()) {
+    for (l, e) in lut.iter().zip(injected) {
         let mul = &e * l;
         t += mul;
     }

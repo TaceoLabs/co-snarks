@@ -170,10 +170,7 @@ where
 
         let mut poly_r_shared = vec![T::ArithmeticShare::default(); len];
 
-        for (inout, add) in poly_r_shared
-            .iter_mut()
-            .zip(polys.z.poly.clone().into_iter())
-        {
+        for (inout, add) in poly_r_shared.iter_mut().zip(polys.z.poly.clone()) {
             *inout = T::mul_with_public(add, e24);
         }
 
@@ -183,14 +180,14 @@ where
 
         let mut tmp_poly = vec![T::ArithmeticShare::default(); len];
         let xin2 = xin.square();
-        for (inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone().into_iter()) {
+        for (inout, add) in tmp_poly.iter_mut().zip(polys.t3.clone()) {
             *inout = T::mul_with_public(add, xin2);
         }
-        for (inout, add) in tmp_poly.iter_mut().zip(polys.t2.clone().into_iter()) {
+        for (inout, add) in tmp_poly.iter_mut().zip(polys.t2.clone()) {
             let tmp = T::mul_with_public(add, xin);
             *inout = T::add(*inout, tmp);
         }
-        for (inout, add) in tmp_poly.iter_mut().zip(polys.t1.clone().into_iter()) {
+        for (inout, add) in tmp_poly.iter_mut().zip(polys.t1.clone()) {
             *inout = T::add(*inout, add);
         }
         for inout in tmp_poly.iter_mut() {
@@ -226,17 +223,17 @@ where
             *inout = *add;
         }
         // A
-        for (inout, add) in res.iter_mut().zip(polys.a.poly.clone().into_iter()) {
+        for (inout, add) in res.iter_mut().zip(polys.a.poly.clone()) {
             let tmp = T::mul_with_public(add, challenges.v[0]);
             *inout = T::add(tmp, *inout);
         }
         // B
-        for (inout, add) in res.iter_mut().zip(polys.b.poly.clone().into_iter()) {
+        for (inout, add) in res.iter_mut().zip(polys.b.poly.clone()) {
             let tmp = T::mul_with_public(add, challenges.v[1]);
             *inout = T::add(tmp, *inout);
         }
         // C
-        for (inout, add) in res.iter_mut().zip(polys.c.poly.clone().into_iter()) {
+        for (inout, add) in res.iter_mut().zip(polys.c.poly.clone()) {
             let tmp = T::mul_with_public(add, challenges.v[2]);
             *inout = T::add(tmp, *inout);
         }
