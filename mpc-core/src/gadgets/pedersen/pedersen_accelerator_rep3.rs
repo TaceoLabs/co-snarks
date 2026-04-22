@@ -7,7 +7,7 @@ use eyre::WrapErr;
 use mpc_net::Network;
 use num_bigint::BigUint;
 
-use super::{PEDERSEN_COMMIT_BITS_TRACE_VALUE_COUNT, PedersenCommitBitsTrace};
+use super::PedersenCommitBitsTrace;
 use crate::{
     gadgets::pedersen::{PEDERSEN_FULL_TRACE_LENGTH, PEDERSEN_TRACE_INDICES},
     protocols::rep3::{
@@ -95,11 +95,8 @@ fn edwards_to_montgomery_many<F: PrimeField, N: Network>(
     let x_num: Vec<_> = ys.iter().map(|y| arithmetic::add(one, *y)).collect();
     let one_minus_y: Vec<_> = ys.iter().map(|y| arithmetic::sub(one, *y)).collect();
 
-    let zero_vec = vec![zero; xs.len()];
-    let mut eq_lhs = Vec::with_capacity(2 * xs.len());
+    let eq_lhs = vec![zero; 2 * xs.len()];
     let mut eq_rhs = Vec::with_capacity(2 * xs.len());
-    eq_lhs.extend_from_slice(&zero_vec);
-    eq_lhs.extend_from_slice(&zero_vec);
     eq_rhs.extend_from_slice(&one_minus_y);
     eq_rhs.extend_from_slice(xs);
     let is_zero = arithmetic::eq_many(&eq_lhs, &eq_rhs, net, state)?;
@@ -782,7 +779,7 @@ where
             table_xs0[off + 6],
             table_ys0[off + 6],
         ]);
-        stage1_conds.extend((0..8).map(|_| bit0[0]));
+        stage1_conds.extend_from_slice(&[bit0[0]; 8]);
 
         stage1_truthy.extend_from_slice(&[
             table_xs0[off + 9],
@@ -804,7 +801,7 @@ where
             table_xs0[off + 14],
             table_ys0[off + 14],
         ]);
-        stage1_conds.extend((0..8).map(|_| bit0[1]));
+        stage1_conds.extend_from_slice(&[bit0[1]; 8]);
     }
 
     for window_index in 0..n1 {
@@ -834,7 +831,7 @@ where
             table_xs1[off + 6],
             table_ys1[off + 6],
         ]);
-        stage1_conds.extend((0..8).map(|_| bit0[0]));
+        stage1_conds.extend_from_slice(&[bit0[0]; 8]);
 
         stage1_truthy.extend_from_slice(&[
             table_xs1[off + 9],
@@ -856,7 +853,7 @@ where
             table_xs1[off + 14],
             table_ys1[off + 14],
         ]);
-        stage1_conds.extend((0..8).map(|_| bit0[1]));
+        stage1_conds.extend_from_slice(&[bit0[1]; 8]);
     }
 
     let stage1_sel = cmux_vec_many(&stage1_conds, &stage1_truthy, &stage1_falsy, net, state)?;
@@ -884,7 +881,7 @@ where
             stage1_sel0[off + 4],
             stage1_sel0[off + 5],
         ]);
-        stage2_conds.extend((0..4).map(|_| bit1[0]));
+        stage2_conds.extend_from_slice(&[bit1[0]; 4]);
 
         stage2_truthy.extend_from_slice(&[
             stage1_sel0[off + 10],
@@ -898,7 +895,7 @@ where
             stage1_sel0[off + 12],
             stage1_sel0[off + 13],
         ]);
-        stage2_conds.extend((0..4).map(|_| bit1[1]));
+        stage2_conds.extend_from_slice(&[bit1[1]; 4]);
     }
 
     for window_index in 0..n1 {
@@ -919,7 +916,7 @@ where
             stage1_sel1[off + 4],
             stage1_sel1[off + 5],
         ]);
-        stage2_conds.extend((0..4).map(|_| bit1[0]));
+        stage2_conds.extend_from_slice(&[bit1[0]; 4]);
 
         stage2_truthy.extend_from_slice(&[
             stage1_sel1[off + 10],
@@ -933,7 +930,7 @@ where
             stage1_sel1[off + 12],
             stage1_sel1[off + 13],
         ]);
-        stage2_conds.extend((0..4).map(|_| bit1[1]));
+        stage2_conds.extend_from_slice(&[bit1[1]; 4]);
     }
 
     let stage2_sel = cmux_vec_many(&stage2_conds, &stage2_truthy, &stage2_falsy, net, state)?;
@@ -951,11 +948,11 @@ where
         let off = 8 * window_index;
         stage3_truthy.extend_from_slice(&[stage2_sel0[off + 2], stage2_sel0[off + 3]]);
         stage3_falsy.extend_from_slice(&[stage2_sel0[off], stage2_sel0[off + 1]]);
-        stage3_conds.extend((0..2).map(|_| bit2[0]));
+        stage3_conds.extend_from_slice(&[bit2[0]; 2]);
 
         stage3_truthy.extend_from_slice(&[stage2_sel0[off + 6], stage2_sel0[off + 7]]);
         stage3_falsy.extend_from_slice(&[stage2_sel0[off + 4], stage2_sel0[off + 5]]);
-        stage3_conds.extend((0..2).map(|_| bit2[1]));
+        stage3_conds.extend_from_slice(&[bit2[1]; 2]);
     }
 
     for window_index in 0..n1 {
@@ -966,11 +963,11 @@ where
         let off = 8 * window_index;
         stage3_truthy.extend_from_slice(&[stage2_sel1[off + 2], stage2_sel1[off + 3]]);
         stage3_falsy.extend_from_slice(&[stage2_sel1[off], stage2_sel1[off + 1]]);
-        stage3_conds.extend((0..2).map(|_| bit2[0]));
+        stage3_conds.extend_from_slice(&[bit2[0]; 2]);
 
         stage3_truthy.extend_from_slice(&[stage2_sel1[off + 6], stage2_sel1[off + 7]]);
         stage3_falsy.extend_from_slice(&[stage2_sel1[off + 4], stage2_sel1[off + 5]]);
-        stage3_conds.extend((0..2).map(|_| bit2[1]));
+        stage3_conds.extend_from_slice(&[bit2[1]; 2]);
     }
 
     let stage3_sel = cmux_vec_many(&stage3_conds, &stage3_truthy, &stage3_falsy, net, state)?;
@@ -1451,11 +1448,10 @@ where
 
     let (montgomery_a, montgomery_b) = montgomery_constants::<F>();
     let lambda_sq = arithmetic::mul_vec(&lambdas, &lambdas, net, state)?;
+    let montgomery_b_share = promote_to_trivial_share(state.id, montgomery_b);
     let b_lambda_sq = arithmetic::mul_vec(
         &lambda_sq,
-        &(0..(2 * (n0 + n1)))
-            .map(|_| promote_to_trivial_share(state.id, montgomery_b))
-            .collect::<Vec<_>>(),
+        &vec![montgomery_b_share; 2 * (n0 + n1)],
         net,
         state,
     )?;
@@ -1747,8 +1743,7 @@ pub fn pedersen_commit_bits_trace_rep3<F: PrimeField, N: Network>(
 where
     BabyJubJubEdwardsProjective: CurveGroup<BaseField = F>,
 {
-
-    let ([g_r, g_value], [mut g_r_trace, mut g_value_trace]) = escalar_mul_fix_trace_pair(
+    let ([g_r, g_value], [g_r_trace, g_value_trace]) = escalar_mul_fix_trace_pair(
         [babyjub_h_generator(), babyjub_generator()],
         [r_bits_le_251, value_bits_le_251],
         net,
@@ -1756,21 +1751,23 @@ where
     )?;
     let final_add = babyjub_add_trace(g_value, g_r, net, state)?;
 
-    let mut trace = Vec::with_capacity(PEDERSEN_COMMIT_BITS_TRACE_VALUE_COUNT);
-    trace.push(final_add.lhs.x);
-    trace.push(final_add.lhs.y);
-    trace.push(final_add.rhs.x);
-    trace.push(final_add.rhs.y);
-    trace.push(final_add.beta);
-    trace.push(final_add.gamma);
-    trace.push(final_add.delta);
-    trace.push(final_add.tau);
-    trace.append(&mut g_r_trace);
-    trace.append(&mut g_value_trace);
+    let ordered_trace_values = [
+        final_add.lhs.x,
+        final_add.lhs.y,
+        final_add.rhs.x,
+        final_add.rhs.y,
+        final_add.beta,
+        final_add.gamma,
+        final_add.delta,
+        final_add.tau,
+    ]
+    .into_iter()
+    .chain(g_r_trace)
+    .chain(g_value_trace);
 
     let mut real_trace = vec![Rep3PrimeFieldShare::default(); PEDERSEN_FULL_TRACE_LENGTH];
 
-    for (val, idx) in trace.into_iter().zip(PEDERSEN_TRACE_INDICES) {
+    for (idx, val) in PEDERSEN_TRACE_INDICES.into_iter().zip(ordered_trace_values) {
         real_trace[idx as usize] = val;
     }
     Ok(PedersenCommitBitsTrace::new(
