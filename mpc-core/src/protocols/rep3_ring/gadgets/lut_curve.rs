@@ -32,7 +32,7 @@ where
         conversion::bit_inject_from_bits_to_field_many::<C::ScalarField, _>(&e, net, state)?;
 
     let mut t = Rep3PointShare::default();
-    for (l, e) in lut.iter().zip(injected.into_iter()) {
+    for (l, e) in lut.iter().zip(injected) {
         let mul = pointshare::scalar_mul_public_point(l, e);
         t += &mul;
     }
@@ -96,7 +96,7 @@ where
 
     // Start the result with a random mask (for potential resharing later)
     let mut t = state.rngs.rand.masking_ec_element::<C>();
-    for (l, e) in lut.iter().zip(injected.into_iter()) {
+    for (l, e) in lut.iter().zip(injected) {
         let mul = e * l;
         t += &mul;
     }

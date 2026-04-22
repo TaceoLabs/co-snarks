@@ -89,10 +89,8 @@ where
         };
 
         match (T::get_public(&old_value), T::get_public(&value_to_insert)) {
-            (Some(old_value), Some(value_to_insert)) => {
-                if old_value != value_to_insert {
-                    Err(eyre::eyre!("UnsatisfiedConstraint"))?;
-                }
+            (Some(old_value), Some(value_to_insert)) if old_value != value_to_insert => {
+                Err(eyre::eyre!("UnsatisfiedConstraint"))?;
             }
             _ => { // We cannot have this sanitiy check
             }
@@ -230,7 +228,7 @@ where
         let state = driver.poseidon2_permutation(state, &poseidon2)?;
 
         // Write witness assignments
-        for (output_witness, value) in outputs.iter().zip(state.into_iter()) {
+        for (output_witness, value) in outputs.iter().zip(state) {
             Self::insert_value(output_witness, value, initial_witness)?;
         }
         Ok(())
@@ -244,7 +242,7 @@ where
         let message_input = Self::get_hash_input(initial_witness, inputs)?;
         let digest = T::blake3_hash(driver, message_input, 8)?; // This is now hardcoded to 8 in Noir
 
-        for (output_witness, value) in outputs.iter().zip(digest.into_iter()) {
+        for (output_witness, value) in outputs.iter().zip(digest) {
             Self::insert_value(output_witness, value, initial_witness)?;
         }
 
@@ -338,7 +336,7 @@ where
 
         let state = T::sha256_compression(driver, &state, &message)?;
 
-        for (output_witness, value) in outputs.iter().zip(state.into_iter()) {
+        for (output_witness, value) in outputs.iter().zip(state) {
             Self::insert_value(output_witness, value, initial_witness)?;
         }
 
@@ -354,7 +352,7 @@ where
         let message_input = Self::get_hash_input(initial_witness, inputs)?;
         let digest = T::blake2s_hash(driver, message_input, 8)?; // This is now hardcoded to 8 in Noir
 
-        for (output_witness, value) in outputs.iter().zip(digest.into_iter()) {
+        for (output_witness, value) in outputs.iter().zip(digest) {
             Self::insert_value(output_witness, value, initial_witness)?;
         }
 
@@ -403,7 +401,7 @@ where
         let ciphertext = T::aes128_encrypt(driver, &scalars, ivs, keys)?;
 
         // Write witness assignments
-        for (output_witness, value) in outputs.iter().zip(ciphertext.into_iter()) {
+        for (output_witness, value) in outputs.iter().zip(ciphertext) {
             Self::insert_value(output_witness, value, initial_witness)?;
         }
         Ok(())

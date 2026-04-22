@@ -1063,9 +1063,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             *rangecount += 1; // we need to add 1 extra addition gates for every distinct range list
         }
         // update rangecount to include the ram range checks the composer will eventually be creating
-        for (ram_range_sizes, ram_range_exist) in ram_range_sizes
-            .into_iter()
-            .zip(ram_range_exists.into_iter())
+        for (ram_range_sizes, ram_range_exist) in ram_range_sizes.into_iter().zip(ram_range_exists)
         {
             if !ram_range_exist {
                 *rangecount += ram_range_sizes;
@@ -2347,7 +2345,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             .collect();
 
         // here we sort two times, since the ordering should be according to this: self.index < other.index || (self.index == other.index && self.timestamp < other.timestamp), hence we first sort along timestamp (which is public), then along index
-        indexed_to_sort3.sort_by(|a, b| a.1.cmp(&b.1));
+        indexed_to_sort3.sort_by_key(|a| a.1);
 
         let mut key = Vec::with_capacity(indexed_to_sort3.len());
         let mut to_sort1 = Vec::with_capacity(indexed_to_sort3.len());

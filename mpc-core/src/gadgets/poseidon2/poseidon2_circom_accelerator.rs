@@ -242,9 +242,9 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         for (sq, qu) in squares_1
             .into_iter()
-            .zip(quads_1.into_iter())
-            .chain(squares_3.into_iter().zip(quads_3.into_iter()))
-            .chain(squares_2.into_iter().zip(quads_2.into_iter()))
+            .zip(quads_1)
+            .chain(squares_3.into_iter().zip(quads_3))
+            .chain(squares_2.into_iter().zip(quads_2))
         {
             if let Some(idx) = wtns_indices_iter.next() {
                 trace[idx as usize] = sq;
@@ -1072,9 +1072,9 @@ impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F
 
         for (sq, qu) in squares_1
             .into_iter()
-            .zip(quads_1.into_iter())
-            .chain(squares_3.into_iter().zip(quads_3.into_iter()))
-            .chain(squares_2.into_iter().zip(quads_2.into_iter()))
+            .zip(quads_1)
+            .chain(squares_3.into_iter().zip(quads_3))
+            .chain(squares_2.into_iter().zip(quads_2))
         {
             if let Some(idx) = wtns_indices_iter.next() {
                 trace[idx as usize] = sq;
