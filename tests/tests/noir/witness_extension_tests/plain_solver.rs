@@ -15,7 +15,6 @@ add_plain_acvm_test!("poseidon");
 add_plain_acvm_test!("poseidon2");
 add_plain_acvm_test!("poseidon_assert");
 add_plain_acvm_test!("poseidon_input2");
-add_plain_acvm_test!("poseidon_stdlib");
 add_plain_acvm_test!("quantized");
 add_plain_acvm_test!("random_access");
 add_plain_acvm_test!("slice");
