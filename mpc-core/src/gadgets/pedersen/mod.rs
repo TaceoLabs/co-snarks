@@ -9,6 +9,8 @@ use ark_ff::PrimeField;
 pub mod pedersen_accelerator_plain;
 /// Rep3-based Pedersen arithmetic and Circom-compatible trace generation helpers.
 pub mod pedersen_accelerator_rep3;
+/// Packed rep3-based Pedersen arithmetic and Circom-compatible trace generation helpers.
+pub mod pedersen_accelerator_rep3_packed;
 pub(crate) mod pedersen_commit_bits_indices;
 pub(crate) use pedersen_commit_bits_indices::{
     WITNESS_INDICES_COUNT_PEDERSEN_COMMIT_BITS, WITNESS_INDICES_PEDERSEN_COMMIT_BITS_END,
