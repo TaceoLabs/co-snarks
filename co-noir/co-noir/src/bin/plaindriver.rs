@@ -27,11 +27,6 @@ use std::{
     process::ExitCode,
 };
 
-/// Error type for config parsing and merging
-#[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-pub struct ConfigError(#[from] figment::error::Error);
-
 /// An enum representing the transcript hasher to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
 #[clap(rename_all = "lower")]
