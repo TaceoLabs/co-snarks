@@ -19,8 +19,10 @@ type AcceleratorFunction<F, C> = Box<
 /// Output of a component accelerator for Co-Circom witness extension
 #[derive(Clone)]
 pub struct ComponentAcceleratorOutput<T> {
-    pub(crate) output: Vec<T>,
-    pub(crate) intermediate: Vec<T>,
+    /// TODO
+    pub output: Vec<T>,
+    /// TODO
+    pub intermediate: Vec<T>,
 }
 
 impl<T> ComponentAcceleratorOutput<T> {
