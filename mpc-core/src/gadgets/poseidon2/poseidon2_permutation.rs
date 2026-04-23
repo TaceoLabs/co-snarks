@@ -3,7 +3,7 @@ use std::any::TypeId;
 use super::poseidon2_params::Poseidon2Params;
 use ark_ff::PrimeField;
 
-/// A struct represnting the Poseidon2 permutation.
+/// A struct representing the Poseidon2 permutation.
 #[derive(Clone, Debug)]
 pub struct Poseidon2<F: PrimeField, const T: usize, const D: u64> {
     /// The parameter set containing the parameters for the Poseidon2 permutation.
@@ -11,7 +11,7 @@ pub struct Poseidon2<F: PrimeField, const T: usize, const D: u64> {
 }
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
-    /// Creates a new instance of the Poseidon2 permuation with given parameters
+    /// Creates a new instance of the Poseidon2 permutation with given parameters
     pub fn new(params: &'static Poseidon2Params<F, T, D>) -> Self {
         Self { params }
     }
@@ -161,7 +161,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
     }
 
-    /// The round constant additon in the external rounds of the Poseidon2 permutation.
+    /// The round constant addition in the external rounds of the Poseidon2 permutation.
     pub fn add_rc_external(&self, input: &mut [F; T], rc_offset: usize) {
         for (s, rc) in input
             .iter_mut()
@@ -171,19 +171,19 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
     }
 
-    /// The round constant additon in the internal rounds of the Poseidon2 permutation.
+    /// The round constant addition in the internal rounds of the Poseidon2 permutation.
     pub fn add_rc_internal(&self, input: &mut [F; T], rc_offset: usize) {
         input[0] += &self.params.round_constants_internal[rc_offset];
     }
 
-    /// One external round of the Poseidon2 permuation.
+    /// One external round of the Poseidon2 permutation.
     pub fn external_round(&self, state: &mut [F; T], r: usize) {
         self.add_rc_external(state, r);
         Self::sbox(state);
         Self::matmul_external(state);
     }
 
-    /// One internal round of the Poseidon2 permuation.
+    /// One internal round of the Poseidon2 permutation.
     pub fn internal_round(&self, state: &mut [F; T], r: usize) {
         self.add_rc_internal(state, r);
         Self::single_sbox(&mut state[0]);

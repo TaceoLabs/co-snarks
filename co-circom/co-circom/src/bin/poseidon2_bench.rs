@@ -72,7 +72,7 @@ pub struct Cli {
     #[arg(short, long, default_value_t = 10)]
     pub batch_size: usize,
 
-    /// The number of leafs in the Merkle tree tree benchmarks
+    /// The number of leaves in the Merkle tree tree benchmarks
     #[arg(short, long, default_value_t = 1024)]
     pub merkle_size: usize,
 
@@ -90,7 +90,7 @@ pub struct Config {
     pub threshold: usize,
     /// The batch size for the number of poseidon elements in parallel in packed implementation
     pub batch_size: usize,
-    /// The number of leafs in the Merkle tree benchmarks
+    /// The number of leaves in the Merkle tree benchmarks
     pub merkle_size: usize,
     /// Statesize for the hash function
     pub statesize: usize,

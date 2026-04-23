@@ -46,7 +46,7 @@ impl Bit {
         unsafe { &*(vec as *const [bool] as *const [Self]) }
     }
 
-    /// Transfroms a vector of bool into a vector of Bits
+    /// Transforms a vector of bool into a vector of Bits
     // Safe because Bit has repr(transparent)
     pub fn convert_vec_rev(vec: Vec<bool>) -> Vec<Self> {
         let me = ManuallyDrop::new(vec);

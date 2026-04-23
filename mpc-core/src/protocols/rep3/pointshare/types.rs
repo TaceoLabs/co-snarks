@@ -11,7 +11,7 @@ pub struct Rep3PointShare<C: CurveGroup> {
 }
 
 impl<C: CurveGroup> Rep3PointShare<C> {
-    /// Contruct a new [`Rep3PointShare`]
+    /// Construct a new [`Rep3PointShare`]
     pub fn new(a: C, b: C) -> Self {
         Self { a, b }
     }

@@ -15,7 +15,7 @@ use crate::protocols::{
 };
 
 /// Generates a random one-hot-encoded vector of size k bits.
-/// The output is (r, e), where r is a binary sharing of the index of the set bit, wheras e is a vector of size 2^k with all bits zero except at index r.
+/// The output is (r, e), where r is a binary sharing of the index of the set bit, whereas e is a vector of size 2^k with all bits zero except at index r.
 /// The algorithm is a rewrite of Protocol 5 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
 pub fn rand_ohv<T: IntRing2k, N: Network>(
     k: usize,
@@ -41,7 +41,7 @@ where
 }
 
 /// Generates a one-hot-encoded vector of size k bits from a given secret shared index which is already decomposed into shared bits.
-/// The output is (r, e), where r is a binary sharing of the index of the set bit, wheras e is a vector of size 2^k with all bits zero except at index r.
+/// The output is (r, e), where r is a binary sharing of the index of the set bit, whereas e is a vector of size 2^k with all bits zero except at index r.
 /// The algorithm is a rewrite of Protocol 5 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
 pub fn ohv<T: IntRing2k, N: Network>(
     k: usize,

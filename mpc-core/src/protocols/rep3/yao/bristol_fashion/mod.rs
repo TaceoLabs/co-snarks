@@ -7,10 +7,10 @@ pub use bristol::{BristolFashionCircuit, BristolFashionEvaluator, LeveledBristol
 /// Errors that happen during parsing of circuits
 #[derive(Error, Debug)]
 pub enum CircuitBuilderError {
-    /// An IO-Error has occured
+    /// An IO-Error has occurred
     #[error("{0}")]
     IoError(#[from] std::io::Error),
-    /// An Error has occured during parsing
+    /// An Error has occurred during parsing
     #[error("Error during Parsing: {0}")]
     ParseError(String),
     /// The built/parsed circuit is invalid
@@ -21,10 +21,10 @@ pub enum CircuitBuilderError {
 /// Errors that happen during execution of circuits
 #[derive(Error, Debug)]
 pub enum CircuitExecutionError {
-    /// An unspecified Error has occured
+    /// An unspecified Error has occurred
     #[error("{0}")]
     GenericError(Box<dyn std::error::Error>),
-    /// An IO-Error has occured
+    /// An IO-Error has occurred
     #[error("{0}")]
     IoError(#[from] std::io::Error),
     /// The provided input was not the correct format for the circuit

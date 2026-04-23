@@ -54,7 +54,7 @@ pub trait ShamirNetworkExt: Network {
         Ok(res)
     }
 
-    /// Send and reveive data to and from all parties.
+    /// Send and receive data to and from all parties.
     #[inline(always)]
     fn broadcast<F: CanonicalSerialize + CanonicalDeserialize + Clone + Send>(
         &self,
@@ -89,7 +89,7 @@ pub trait ShamirNetworkExt: Network {
         Ok(res)
     }
 
-    /// Send and reveive a vector of data to and from all parties.
+    /// Send and receive a vector of data to and from all parties.
     #[inline(always)]
     fn broadcast_next<F: CanonicalSerialize + CanonicalDeserialize + Clone + Send>(
         &self,

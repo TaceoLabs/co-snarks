@@ -27,7 +27,7 @@ where
                 "Invalid signature for TACEO store. We expect two inputs, a name and the data"
             );
         }
-        let identifer = if let ValueOrArray::HeapArray(heap_array) = inputs[0].to_owned() {
+        let identifier = if let ValueOrArray::HeapArray(heap_array) = inputs[0].to_owned() {
             let mem = self.memory.read_heap_array(heap_array)?;
             mem.into_iter()
                 .map(|c| T::try_into_char(c))
@@ -42,15 +42,15 @@ where
             self.memory.read_heap_array(heap_array)?
         } else {
             eyre::bail!(
-                "Invalid signature for TACEO store. Second paramter must be array of field elements."
+                "Invalid signature for TACEO store. Second parameter must be array of field elements."
             );
         };
         if self
             .persistent_shared_state
-            .insert(identifer.clone(), serialized)
+            .insert(identifier.clone(), serialized)
             .is_some()
         {
-            eyre::bail!("duplicate entry for shared state id: {identifer}");
+            eyre::bail!("duplicate entry for shared state id: {identifier}");
         }
 
         Ok(())

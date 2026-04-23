@@ -179,7 +179,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 acir::circuit::Opcode::MemoryOp { block_id, op } => {
                     let block = block_id_to_block_constraint.get_mut(&block_id.0);
                     if block.is_none() {
-                        panic!("unitialized MemoryOp");
+                        panic!("uninitialized MemoryOp");
                     }
                     let block = block.unwrap();
                     Self::handle_memory_op(op, &mut af, &mut block.0);
@@ -264,7 +264,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 return;
             }
             // Even if the number of linear terms is less than 3, we might not be able to fit it into a width-3 arithmetic
-            // gate. This is the case if the linear terms are all disctinct witness from the multiplication term. In that
+            // gate. This is the case if the linear terms are all distinct witness from the multiplication term. In that
             // case, the serialize_arithmetic_gate() function will return a poly_triple with all 0's, and we use a width-4
             // gate instead. We could probably always use a width-4 gate in fact.
             if pt == PolyTriple::default() {
@@ -657,7 +657,7 @@ impl<F: PrimeField> AcirFormat<F> {
             // Updates both af.minimal_range and af.index_range with u_bit_range when it is lower.
             // By doing so, we keep these invariants:
             // - minimal_range contains the smallest possible range for a witness
-            // - index_range constains the smallest range for a witness implied by any array operation
+            // - index_range contains the smallest range for a witness implied by any array operation
             if af.minimal_range.contains_key(&index_witness) {
                 if af.minimal_range[&index_witness] > bit_range {
                     af.minimal_range.insert(index_witness, bit_range);

@@ -159,8 +159,8 @@ impl<F: PrimeField> RamTable<F> {
         assert!(self.check_indices_initialized());
 
         let index_wire = if index.is_constant() {
-            let nativ_index = T::get_public(&index_value).expect("Constant should be public");
-            FieldCT::from_witness_index(builder.put_constant_variable(nativ_index))
+            let native_index = T::get_public(&index_value).expect("Constant should be public");
+            FieldCT::from_witness_index(builder.put_constant_variable(native_index))
         } else {
             index.to_owned()
         };
@@ -189,8 +189,8 @@ impl<F: PrimeField> RamTable<F> {
         self.initialize_table(builder, driver)?;
 
         let index_wire = if index.is_constant() {
-            let nativ_index = T::get_public(&index_value).expect("Constant should be public");
-            FieldCT::from_witness_index(builder.put_constant_variable(nativ_index))
+            let native_index = T::get_public(&index_value).expect("Constant should be public");
+            FieldCT::from_witness_index(builder.put_constant_variable(native_index))
         } else {
             self.initialize_table(builder, driver)?;
             index.to_owned()

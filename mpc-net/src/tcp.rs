@@ -10,7 +10,7 @@ use std::{
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENTH, Network, config::Address,
+    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network, config::Address,
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use crossbeam_channel::Receiver;
@@ -106,7 +106,7 @@ impl TcpNetwork {
             .map(|party| party.dns_name)
             .collect::<Vec<_>>();
         let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);
-        let max_frame_length = config.max_frame_length.unwrap_or(DEFAULT_MAX_FRAME_LENTH);
+        let max_frame_length = config.max_frame_length.unwrap_or(DEFAULT_MAX_FRAME_LENGTH);
 
         let domain = match bind_addr {
             SocketAddr::V4(_) => Domain::IPV4,

@@ -265,7 +265,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>>
                 T::add(self.grand_sum_identity_polynomial.coefficients[idx], sub);
         }
 
-        // Mutiply - F(X) * G(X) + A(gX) - A(X) by X-g:
+        // Multiply - F(X) * G(X) + A(gX) - A(X) by X-g:
         // 1. Multiply by X
         for idx in (1..self.grand_sum_identity_polynomial.coefficients.len()).rev() {
             self.grand_sum_identity_polynomial.coefficients[idx] =

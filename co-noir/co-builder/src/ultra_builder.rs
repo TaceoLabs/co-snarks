@@ -1000,7 +1000,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 }
             }
             *romcount += rom_array.records.len();
-            *romcount += 1; // we add an addition gate after procesing a rom array
+            *romcount += 1; // we add an addition gate after processing a rom array
         }
 
         // each RAM gate adds +2 extra gates due to the ram reads being copied to a sorted list set,
@@ -1009,7 +1009,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let mut ram_range_sizes = Vec::with_capacity(self.ram_arrays.len());
         let mut ram_range_exists = Vec::with_capacity(self.ram_arrays.len());
         for ram_array in self.ram_arrays.iter() {
-            // If the LUT is not public, then it is definetly not uninitialized, since it gets initialized with every read/write
+            // If the LUT is not public, then it is definitely not uninitialized, since it gets initialized with every read/write
             if T::is_public_lut(&ram_array.state) {
                 let lut_pub =
                     T::get_public_lut(&ram_array.state).expect("Already checked it is public");
@@ -1020,7 +1020,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 }
             }
             *ramcount += ram_array.records.len() * Self::NUMBER_OF_GATES_PER_RAM_ACCESS;
-            *ramcount += Self::NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY; // we add an addition gate after procesing a ram array
+            *ramcount += Self::NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY; // we add an addition gate after processing a ram array
 
             // there will be 'max_timestamp' number of range checks, need to calculate.
             let max_timestamp = ram_array.access_count - 1;
@@ -1621,7 +1621,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         let lut = &self.ram_arrays[ram_id].state;
 
-        // We get the minimum and maximum of the write recors to reduce the size of LUTs required to read the variable
+        // We get the minimum and maximum of the write records to reduce the size of LUTs required to read the variable
         let min_witness = self.ram_arrays[ram_id]
             .records
             .iter()
@@ -1966,7 +1966,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         block.q_poseidon2_internal().push(P::ScalarField::zero());
 
         // TACEO TODO these are uncommented due to mutability issues
-        // Taken care of by the caller uisng the create_unconstrained_gate! macro
+        // Taken care of by the caller using the create_unconstrained_gate! macro
         // self.check_selector_length_consistency();
         // self.num_gates += 1;
     }
@@ -2480,7 +2480,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // Make sure that every cell has been initialized
         // AZTEC TODO: throw some kind of error here? Circuit should initialize all RAM elements to prevent errors.
         // e.g. if a RAM record is uninitialized but the index of that record is a function of public/private inputs,
-        // different public iputs will produce different circuit constraints.
+        // different public inputs will produce different circuit constraints.
 
         // We need to initialize the RAM if it is uninitialized. Since RAM gets initialized on every read/write, it can only be uninitialized if it is public
         if T::is_public_lut(&self.ram_arrays[ram_id].state) {
@@ -2627,7 +2627,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             Utils::get_msb64((list.target_range + 1).next_power_of_two()) as usize,
         )?;
 
-        // list must be padded to a multipe of 4 and larger than 4 (gate_width)
+        // list must be padded to a multiple of 4 and larger than 4 (gate_width)
         const GATE_WIDTH: usize = NUM_WIRES;
         let mut padding = (GATE_WIDTH - (list.variable_indices.len() % GATE_WIDTH)) % GATE_WIDTH;
         let mut indices = Vec::with_capacity(padding + sorted_list.len());
@@ -2875,7 +2875,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         //  * This is not strictly required iff num_bits <= target_range_bitnum.
         //  * However, this produces an edge-case where a variable is range-constrained but NOT present in an arithmetic gate.
         //  * This in turn produces an unsatisfiable circuit (see `create_new_range_constraint`). We would need to check for
-        //  * and accommodate/reject this edge case to support not adding addition gates here if not reqiured
+        //  * and accommodate/reject this edge case to support not adding addition gates here if not required
         //  * if (num_bits <= target_range_bitnum) {
         //  *     const uint64_t expected_range = (1ULL << num_bits) - 1ULL;
         //  *     create_new_range_constraint(variable_index, expected_range);
@@ -3668,7 +3668,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // | x.p | x.1 | y.1 | z.0 | (a.1  + b.1 - c.1 = 0)
         // | x.2 | y.2 | z.2 | z.1 | (a.2  + b.2 - c.2 = 0)
         // | x.3 | y.3 | z.3 | --- | (a.3  + b.3 - c.3 = 0)
-        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/896): descrepency between above comment and the actual
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/896): discrepancy between above comment and the actual
         // implementation below.
         let block = &mut self.blocks.arithmetic;
         block.populate_wires(y_p, x_0, y_0, x_p);
@@ -4087,7 +4087,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
      * @param varnum number of known witness
      *
      * @note The size of witness_values may be less than varnum. The former is the set of actual witness values known at
-     * the time of acir generation. The latter may be larger and essentially acounts for placeholders for witnesses that
+     * the time of acir generation. The latter may be larger and essentially accounts for placeholders for witnesses that
      * we know will exist but whose values are not known during acir generation. Both are in general less than the total
      * number of variables/witnesses that might be present for a circuit generated from acir, since many gates will
      * depend on the details of the bberg implementation (or more generally on the backend used to process acir).
