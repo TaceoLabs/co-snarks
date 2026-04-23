@@ -1,0 +1,21 @@
+[files]
+extend-exclude = [
+    "test_vectors/",
+    "**/CHANGELOG.md",
+    "co-circom/co-circom/examples/**/test_vectors/",
+    "co-circom/co-circom/examples/lib/",
+]
+
+[default.extend-words]
+# Jens Groth / Groth16 — named after the cryptographer, not a typo for "growth"
+Groth = "Groth"
+groth = "groth"
+
+# MiMC hash function — not the word "mimic"
+MiMC = "MiMC"
+Mimc = "Mimc"
+mimc = "mimc"
+
+# "OT" = Oblivious Transfer (MPC primitive)
+OT = "OT"
+Ot = "Ot"

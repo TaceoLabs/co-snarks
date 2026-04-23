@@ -9,7 +9,7 @@ use mpc_core::{
 use mpc_net::Network;
 use rayon::prelude::*;
 
-/// A Groth16 dirver unsing shamir secret sharing
+/// A Groth16 driver using shamir secret sharing
 pub struct ShamirGroth16Driver;
 
 impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {

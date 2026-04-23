@@ -177,7 +177,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         false
     }
 
-    fn add_entites(
+    fn add_entities(
         entity: &super::ProverUnivariates<T, P>,
         batch: &mut ProverUnivariatesBatch<T, P>,
     ) {
@@ -245,7 +245,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * an inversion when are not supposed to skip over it.
      * we argue that this does not give the prover any advantage, as it would only mean an element from the lookup table
      * is removed. this means that if a proof verifies, we still have that the provers set is a subset of the lookup
-     * table, as the only freedome the prover has is to make the lookup table smaller.
+     * table, as the only freedom the prover has is to make the lookup table smaller.
      * the boolean check is still necessary, as otherwise has_inverse, is a leanier function of read_tags, and the
      * the prover can set it to zero (by picking a non-binary value for read_tags) even when we have a read gate in the
      * row.

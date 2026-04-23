@@ -111,7 +111,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     //  * f₀, …, fₖ₋₁ = multilinear polynomials,
     //  * g₀, …, gₕ₋₁ = shifted multilinear polynomial,
     //  *  Each gⱼ is the left-shift of some f↺ᵢ, and gⱼ points to the same memory location as fᵢ.
-    //  * v₀, …, vₖ₋₁, v↺₀, …, v↺ₕ₋₁ = multilinear evalutions  s.t. fⱼ(u) = vⱼ, and gⱼ(u) = f↺ⱼ(u) = v↺ⱼ
+    //  * v₀, …, vₖ₋₁, v↺₀, …, v↺ₕ₋₁ = multilinear evaluations  s.t. fⱼ(u) = vⱼ, and gⱼ(u) = f↺ⱼ(u) = v↺ⱼ
     //  *
     //  * We use a challenge ρ to create a random linear combination of all fⱼ,
     //  * and actually define A₀ = F + G↺, where

@@ -192,7 +192,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
     }
 
     fn shared_zeros(&mut self, len: usize) -> eyre::Result<Vec<Self::AcvmType>> {
-        // TODO: This is not the best implementaiton for shared zeros
+        // TODO: This is not the best implementation for shared zeros
         let trivial_zeros = vec![F::zero(); len];
         let res = self
             .net

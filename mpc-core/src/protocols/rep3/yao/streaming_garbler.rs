@@ -134,7 +134,7 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
         }
     }
 
-    /// As ID2, send a hash of the sended data to the evaluator.
+    /// As ID2, send a hash of the sent data to the evaluator.
     pub fn send_hash(&self) -> eyre::Result<()> {
         if self.id == PartyID::ID2 {
             let digest = self.hash.clone().finalize();
@@ -192,7 +192,7 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
 
     /// Garbles an 'and' gate given two input wires and the delta.
     ///
-    /// Outputs a tuple consisting of the two gates (that should be transfered to the evaluator)
+    /// Outputs a tuple consisting of the two gates (that should be transferred to the evaluator)
     /// and the next wire label for the garbler.
     ///
     /// Used internally as a subroutine to implement 'and' gates for `FancyBinary`.

@@ -1,6 +1,6 @@
 //! # Shamir
 //!
-//! This module implements the shamir share and combine opertions and shamir preprocessing
+//! This module implements the shamir share and combine operations and shamir preprocessing
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
@@ -405,7 +405,7 @@ pub fn poly_with_zeros_from_precomputed<F: PrimeField>(secret: &F, precomp: Vec<
     poly
 }
 
-/// Create the poly from secret pont and precomputed values
+/// Create the poly from secret point and precomputed values
 // sets the shares of parties in points to 0
 pub fn poly_with_zeros_from_precomputed_point<F: PrimeField, C>(secret: &C, precomp: &[F]) -> Vec<C>
 where

@@ -368,7 +368,7 @@ where
 {
     // Special case for Bit
     if TypeId::of::<T>() == TypeId::of::<Bit>() {
-        // SAFTEY: We already checked that the type matches
+        // SAFETY: We already checked that the type matches
         let shares =
             unsafe { &*(inputs as *const [Rep3RingShare<T>] as *const [Rep3RingShare<Bit>]) };
         let biguint_shares = shares
@@ -888,7 +888,7 @@ where
 
     // Special case for Bit
     if TypeId::of::<T>() == TypeId::of::<Bit>() {
-        // SAFTEY: We already checked that the type matches
+        // SAFETY: We already checked that the type matches
         let shares =
             unsafe { &*(inputs as *const [Rep3RingShare<T>] as *const [Rep3RingShare<Bit>]) };
         return conversion::bit_inject_from_bits_many(shares, net, state);
@@ -1324,7 +1324,7 @@ where
     Ok(res)
 }
 
-/// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, ther will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
+/// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, there will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
 pub fn decompose_field_to_rings<F: PrimeField, T: IntRing2k, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,

@@ -784,7 +784,7 @@ pub fn arithmetic_xor_many<F: PrimeField, N: Network>(
     Ok(res)
 }
 
-/// Reshares the shared valuse from two parties to one other
+/// Reshares the shared values from two parties to one other
 /// Assumes seeds are set up correctly already
 pub fn reshare_from_2_to_3_parties<F: PrimeField, N: Network>(
     input: Option<Vec<Rep3PrimeFieldShare<F>>>,

@@ -935,7 +935,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
         self.ctx.mpc_accelerator.register_function(name, fun);
     }
 
-    /// Registers a new accelerator for the MPC-VM replacing a compnent with the provided function call.
+    /// Registers a new accelerator for the MPC-VM replacing a component with the provided function call.
     pub fn register_accelerator_component(
         &mut self,
         name: String,

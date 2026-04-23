@@ -282,7 +282,7 @@ impl<F: PrimeField> FieldCT<F> {
             result.multiplicative_constant = other.multiplicative_constant * self.additive_constant;
             result.witness_index = other.witness_index;
         } else {
-            // Both inputs map to circuit varaibles: create a `*` constraint.
+            // Both inputs map to circuit variables: create a `*` constraint.
 
             // /**
             //  * Value of this   = a.v * a.mul + a.add;
@@ -352,7 +352,7 @@ impl<F: PrimeField> FieldCT<F> {
             .map(|(i, (l, r))| l.multiply(r, builder, driver).map(|res| (i, res)))
             .collect::<eyre::Result<Vec<_>>>()?;
 
-        // Both inputs map to circuit varaibles: create a `*` constraint.
+        // Both inputs map to circuit variables: create a `*` constraint.
 
         // /**
         //  * Value of this   = a.v * a.mul + a.add;
@@ -452,7 +452,7 @@ impl<F: PrimeField> FieldCT<F> {
             .map(|(i, (l, r))| l.multiply(r, builder, driver).map(|res| (i, res)))
             .collect::<eyre::Result<Vec<_>>>()?;
 
-        // Both inputs map to circuit varaibles: create a `*` constraint.
+        // Both inputs map to circuit variables: create a `*` constraint.
 
         // /**
         //  * Value of this   = a.v * a.mul + a.add;
@@ -764,7 +764,7 @@ impl<F: PrimeField> FieldCT<F> {
             let result_value = base_value.pow([exponent_value.to_u64().expect("we checked bits")]);
             return Ok(FieldCT::from(result_value));
         }
-        // Use the constant version that perfoms only the necessary multiplications if the exponent is constant
+        // Use the constant version that performs only the necessary multiplications if the exponent is constant
         if exponent_constant {
             let exponent_value: BigUint = T::get_public(&exponent_value)
                 .expect("Constant should be public")
@@ -1710,7 +1710,7 @@ impl<F: PrimeField> FieldCT<F> {
         }
         let num_elements = accumulator.len();
         let num_gates = num_elements / 3;
-        // Last gate is handled separetely
+        // Last gate is handled separately
         let last_gate_idx = num_gates - 1;
 
         let total = FieldCT::from_witness(output, builder);
@@ -3300,7 +3300,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             CycleGroupCT::from_group_element(offset_generators[0].to_owned().into());
 
         // populate the set of points we are going to add into our accumulator, *before* we do any ECC operations
-        // this way we are able to fuse mutliple ecc add / ecc double operations and reduce total gate count.
+        // this way we are able to fuse multiple ecc add / ecc double operations and reduce total gate count.
         // (ecc add/ecc double gates normally cost 2 UltraPlonk gates. However if we chain add->add, add->double,
         // double->add, double->double, they only cost one)
         let mut points_to_add = Vec::with_capacity(num_rounds * num_points);

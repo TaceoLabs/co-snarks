@@ -69,7 +69,7 @@ impl GCUtils {
 
     /// Garbles an 'and' gate given two input wires and the delta.
     ///
-    /// Outputs a tuple consisting of the two gates (that should be transfered to the evaluator)
+    /// Outputs a tuple consisting of the two gates (that should be transferred to the evaluator)
     /// and the next wire label for the garbler.
     ///
     /// Used internally as a subroutine to implement 'and' gates for `FancyBinary`.

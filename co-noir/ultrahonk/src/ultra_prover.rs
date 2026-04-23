@@ -42,7 +42,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let oink_result = oink.prove(&mut proving_key, &mut transcript, verifying_key)?;
 
         let crs = proving_key.crs;
-        let cicruit_size = proving_key.circuit_size;
+        let circuit_size = proving_key.circuit_size;
 
         let mut memory =
             ProverMemory::from_memory_and_polynomials(oink_result, proving_key.polynomials);
@@ -58,7 +58,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let num_public_inputs = proving_key.num_public_inputs - PAIRING_POINT_ACCUMULATOR_SIZE;
         let decider = Decider::new(memory, has_zk);
-        let proof = decider.prove(cicruit_size, &crs, transcript, virtual_log_n)?;
+        let proof = decider.prove(circuit_size, &crs, transcript, virtual_log_n)?;
         Ok(proof.separate_proof_and_public_inputs(num_public_inputs as usize))
     }
 }

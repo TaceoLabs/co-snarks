@@ -2435,7 +2435,7 @@ mod ring_share {
     }
 
     #[test]
-    fn rep3_write_cuvre_lut_test() {
+    fn rep3_write_curve_lut_test() {
         apply_to_all!(rep3_write_curve_lut_test_t, [u8, u16]);
     }
 }

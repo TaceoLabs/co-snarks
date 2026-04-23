@@ -415,12 +415,12 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             Self::precomputed_offset_generators::<P>(num_rounds)?;
 
         // Initialize accumulator with initial offset generator + first NAF column
-        let mut inital_entry: ChainAddAccumulator<F> =
+        let mut initial_entry: ChainAddAccumulator<F> =
             point_table.get_chain_initial_entry(builder, driver)?;
 
         let tmp = Self::chain_add(
             &mut offset_generator_start,
-            &mut inital_entry,
+            &mut initial_entry,
             builder,
             driver,
         )?;

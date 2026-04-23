@@ -61,7 +61,7 @@ impl EllipticRelation {
     pub(crate) const SKIPPABLE: bool = true;
 
     pub(crate) fn skip<F: PrimeField>(input: &ProverUnivariates<F>) -> bool {
-        // This is the relation implemented manally
+        // This is the relation implemented manually
         if !Self::SKIPPABLE {
             panic!("Cannot skip this relation");
         }

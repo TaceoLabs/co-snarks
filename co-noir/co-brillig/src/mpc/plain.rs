@@ -140,7 +140,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
                     Ok(char::from(u8::try_from(int).expect("u8 fits into char")))
                 } else {
                     Err(eyre::eyre!(
-                        "Must be {} bits for charcters, but is {}",
+                        "Must be {} bits for characters, but is {}",
                         CHAR_BIT_SIZE,
                         bit_size
                     ))

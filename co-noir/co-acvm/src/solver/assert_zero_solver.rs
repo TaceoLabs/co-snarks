@@ -31,7 +31,7 @@ where
                         self.witness().get(lhs).cloned(),
                         self.witness().get(rhs).cloned(),
                     ) {
-                        // we could batch this multiplication but our currently planed network design
+                        // we could batch this multiplication but our currently planned network design
                         // should solve this without batching
                         (Some(lhs), Some(rhs)) => {
                             tracing::trace!("solving mul term...");

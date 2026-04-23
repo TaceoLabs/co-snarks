@@ -34,7 +34,7 @@ where
 /// The result of a single run of the coBrillig-VM.
 ///
 /// **Note:** If the coBrillig-VM encountered a branch on shared
-/// values, it will return sucess if one of the paths did not encounter
+/// values, it will return success if one of the paths did not encounter
 /// a trap. In such a case, as we do not know what the correct execution
 /// path would have been, we return a success result with random noise.
 /// The constructed proof will then not verify.
@@ -43,7 +43,7 @@ where
     T: BrilligDriver<F>,
     F: PrimeField + Clone,
 {
-    /// Indicates that the run of the Brillig-VM was a sucess. Holds
+    /// Indicates that the run of the Brillig-VM was a success. Holds
     /// the computed values
     Success(BrilligSuccess<T::BrilligType>),
     /// Indicates that the run failed. At the moment, this only happens
@@ -51,7 +51,7 @@ where
     Failed,
 }
 
-/// The values produces by the coBrillig-VM on a successfull run.
+/// The values produces by the coBrillig-VM on a successful run.
 pub struct BrilligSuccess<T> {
     /// The return value of the function executed by the coBrillig-VM. Those values
     /// are the same (secret-shared) values produced by the ordinary Brillig-VM.
@@ -424,10 +424,10 @@ where
         } else {
             0
         };
-        let persitent_shared_state = std::mem::take(&mut self.persistent_shared_state);
+        let persistent_shared_state = std::mem::take(&mut self.persistent_shared_state);
         Ok(CoBrilligResult::Success(BrilligSuccess {
             unconstrained_witnesses: self.take_result(offset, size),
-            generated_pss: persitent_shared_state,
+            generated_pss: persistent_shared_state,
         }))
     }
 

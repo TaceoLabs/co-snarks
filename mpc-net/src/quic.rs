@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENTH, Network, config::Address,
+    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network, config::Address,
 };
 use bytes::Bytes;
 use eyre::{Context as _, ContextCompat};
@@ -183,7 +183,7 @@ struct QuicConnectionHandler {
 impl QuicConnectionHandler {
     pub fn new(config: NetworkConfig, rt: Runtime) -> eyre::Result<Self> {
         let id = config.my_id;
-        let max_frame_length = config.max_frame_length.unwrap_or(DEFAULT_MAX_FRAME_LENTH);
+        let max_frame_length = config.max_frame_length.unwrap_or(DEFAULT_MAX_FRAME_LENGTH);
         let (connections, endpoints) = rt.block_on(Self::init(config))?;
         Ok(Self {
             id,

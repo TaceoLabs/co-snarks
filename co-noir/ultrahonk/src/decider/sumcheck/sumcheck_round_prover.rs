@@ -235,7 +235,7 @@ impl SumcheckProverRound {
 
         let mut univariate_accumulators = AllRelationAcc::<P::ScalarField>::default();
 
-        // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
+        // Accumulate the contribution from each sub-relation across each edge of the hyper-cube
         for edge_idx in (0..self.round_size).step_by(2) {
             Self::extend_edges(&mut extended_edge, polynomials, edge_idx);
             // Compute the \f$ \ell \f$-th edge's univariate contribution,

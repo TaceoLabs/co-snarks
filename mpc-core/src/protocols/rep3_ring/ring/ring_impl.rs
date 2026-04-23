@@ -1,6 +1,6 @@
 //! RingImpl
 //!
-//! This type is a wrapper for all datatypes implementing the [`IntRing2k`] trait. The purpose is explicitly allowing wrapping arithmetic opearations.
+//! This type is a wrapper for all datatypes implementing the [`IntRing2k`] trait. The purpose is explicitly allowing wrapping arithmetic operations.
 
 use super::int_ring::IntRing2k;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Valid};
@@ -18,7 +18,7 @@ use std::{
     },
 };
 
-/// The RingElement type is a wrapper for all datatypes implementing the [`IntRing2k`] trait to explicitly allow wrapping arithmetic opearations.
+/// The RingElement type is a wrapper for all datatypes implementing the [`IntRing2k`] trait to explicitly allow wrapping arithmetic operations.
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize, PartialOrd, Eq, Ord, Hash,
 )]
@@ -34,7 +34,7 @@ impl<T: IntRing2k> RingElement<T> {
         unsafe { &*(vec as *const [T] as *const [Self]) }
     }
 
-    /// Transfroms a vector of T into a vector of RingElements
+    /// Transforms a vector of T into a vector of RingElements
     // Safe because RingElement has repr(transparent)
     pub fn convert_vec_rev(vec: Vec<T>) -> Vec<Self> {
         let me = ManuallyDrop::new(vec);
