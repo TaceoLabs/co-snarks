@@ -1,7 +1,7 @@
 name: Release
 
 permissions:
-  contents: write
+  contents: read
 
 on:
   release:
@@ -11,6 +11,8 @@ on:
 jobs:
   upload-assets-co-circom:
     if: startsWith(github.event.release.tag_name, 'co-circom-v')
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -57,6 +59,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
   upload-assets-co-noir:
     if: startsWith(github.event.release.tag_name, 'co-noir-v')
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
