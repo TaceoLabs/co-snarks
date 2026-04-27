@@ -7,6 +7,23 @@
     * co-groth16 bumped from 0.5.0 to 0.5.1
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.11.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-compiler-v0.10.0...circom-mpc-compiler-v0.11.0) (2026-04-27)
+
+
+### Features
+
+* add debug flag for circom compiler ([2a6fe21](https://github.com/TaceoLabs/co-snarks/commit/2a6fe217d3771e26012198dc90c5e74fa79d7f5b))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * circom-mpc-vm bumped from 0.9.0 to 0.10.0
+  * dev-dependencies
+    * co-groth16 bumped from 0.10.0 to 0.11.0
+    * mpc-core bumped from 0.10.0 to 0.11.0
+
 ## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/circom-mpc-compiler-v0.9.1...circom-mpc-compiler-v0.10.0) (2025-11-06)
 
 

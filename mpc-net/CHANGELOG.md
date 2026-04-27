@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.5.0...mpc-net-v0.6.0) (2026-04-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* cancel background tasks of TCP session mpc-net on drop ([#529](https://github.com/TaceoLabs/co-snarks/issues/529))
+
+### Features
+
+* add TCP session mpc net implementation ([#524](https://github.com/TaceoLabs/co-snarks/issues/524)) ([48b82ac](https://github.com/TaceoLabs/co-snarks/commit/48b82ace1e4b3995d0f7031f539085c179d027d3))
+* cancel background tasks of TCP session mpc-net on drop ([#529](https://github.com/TaceoLabs/co-snarks/issues/529)) ([5d91afa](https://github.com/TaceoLabs/co-snarks/commit/5d91afa7aaf0d7e958c91fde437fc288e6334795))
+
 ## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/mpc-net-v0.4.0...mpc-net-v0.5.0) (2025-11-06)
 
 
