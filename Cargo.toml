@@ -45,7 +45,7 @@ ark-ec = { version = "0.5", default-features = false }
 ark-groth16 = { version = "0.5" }
 ark-ff = "0.5"
 ark-grumpkin = "0.5"
-ark-poly = "0.5"
+ark-poly = "0.6"
 ark-relations = "0.5"
 ark-serialize = { version = "0.5", features = ["derive", "std"] }
 ark-std = { version = "0.5", features = ["std"] }
