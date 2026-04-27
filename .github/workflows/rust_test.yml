@@ -15,6 +15,9 @@ env:
   RUST_BACKTRACE: FULL
   RUSTFLAGS: "-C link-arg=-fuse-ld=lld"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Test
