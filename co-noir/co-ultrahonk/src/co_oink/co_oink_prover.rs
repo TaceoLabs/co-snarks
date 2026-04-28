@@ -665,7 +665,8 @@ impl<
         Self::print_point_hex("LOOKUP_READ_TAGS", &lookup_read_tags);
         Self::print_point_hex("W_4", &w_4);
 
-        transcript.send_point_to_verifier::<C>("LOOKUP_READ_COUNTS".to_string(), lookup_read_counts);
+        transcript
+            .send_point_to_verifier::<C>("LOOKUP_READ_COUNTS".to_string(), lookup_read_counts);
         transcript.send_point_to_verifier::<C>("LOOKUP_READ_TAGS".to_string(), lookup_read_tags);
         transcript.send_point_to_verifier::<C>("W_4".to_string(), w_4);
 
@@ -680,7 +681,10 @@ impl<
     ) -> HonkProofResult<()> {
         tracing::trace!("commit_to_logderiv_inverses");
 
-        let [beta, gamma] = transcript.get_challenges::<C>(&["beta".to_string(), "gamma".to_string()]).try_into().unwrap();
+        let [beta, gamma] = transcript
+            .get_challenges::<C>(&["beta".to_string(), "gamma".to_string()])
+            .try_into()
+            .unwrap();
         self.memory.challenges.beta = beta;
         self.memory.challenges.beta_sqr = beta * beta;
         self.memory.challenges.beta_cube = beta * beta * beta;
