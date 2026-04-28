@@ -14,7 +14,7 @@ use co_noir_common::{crs::ProverCrs, honk_proof::HonkProofResult};
 pub const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
 /// AZTEC TODO(<https://github.com/AztecProtocol/barretenberg/issues/1046>): Remove the need for const sized proofs
-pub const CONST_PROOF_SIZE_LOG_N: usize = 28;
+pub const CONST_PROOF_SIZE_LOG_N: usize = 25;
 // For ZK Flavors: the number of the commitments required by Libra and SmallSubgroupIPA.
 pub const NUM_LIBRA_COMMITMENTS: usize = 3;
 pub const NUM_SMALL_IPA_EVALUATIONS: usize = 4;
