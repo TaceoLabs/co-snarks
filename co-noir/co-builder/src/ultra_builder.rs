@@ -4902,7 +4902,28 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         assert!(num_bits < 254);
         assert!(num_bits > 0);
 
-        assert!(!a.is_constant() || !b.is_constant());
+        if a.is_constant() && b.is_constant() {
+            let a_native: BigUint = T::get_public(&a.get_value(self, driver))
+                .expect("Constant should be public")
+                .into();
+            let b_native: BigUint = T::get_public(&b.get_value(self, driver))
+                .expect("Constant should be public")
+                .into();
+            assert!(
+                a_native.bits() <= num_bits as u64,
+                "field_t: Left operand in logic gate exceeds specified bit length"
+            );
+            assert!(
+                b_native.bits() <= num_bits as u64,
+                "field_t: Right operand in logic gate exceeds specified bit length"
+            );
+            let result_native: BigUint = if is_xor_gate {
+                a_native ^ b_native
+            } else {
+                a_native & b_native
+            };
+            return Ok(FieldCT::from(P::ScalarField::from(result_native)));
+        }
 
         if a.is_constant() && !b.is_constant() {
             let a_native =
@@ -5053,10 +5074,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
-        let a_slice = &a.split_at(num_bits as u8, None, self, driver)?[0];
-        let b_slice = &b.split_at(num_bits as u8, None, self, driver)?[0];
-        a_slice.assert_equal(&a_accumulator, self, driver);
-        b_slice.assert_equal(&b_accumulator, self, driver);
+        a.assert_equal(&a_accumulator, self, driver);
+        b.assert_equal(&b_accumulator, self, driver);
 
         Ok(res)
     }
