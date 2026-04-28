@@ -978,7 +978,7 @@ impl<F: PrimeField> BigField<F> {
         let quotient_limb_wi = quotient_limb.get_witness_index(builder, driver);
 
         // Range-constrain the quotient limb
-        builder.decompose_into_default_range(
+        builder.create_limbed_range_constraint(
             driver,
             quotient_limb_wi,
             maximum_quotient_bits,

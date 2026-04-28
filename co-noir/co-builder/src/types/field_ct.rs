@@ -1123,7 +1123,7 @@ impl<F: PrimeField> FieldCT<F> {
         } else {
             let index = self.get_witness_index(builder, driver);
             // We have plookup
-            builder.decompose_into_default_range(
+            builder.create_limbed_range_constraint(
                 driver,
                 index,
                 num_bits as u64,
@@ -4093,7 +4093,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScala
         }
 
         let index = scalar.get_witness_index(builder, driver);
-        let slice_indices = builder.decompose_into_default_range(
+        let slice_indices = builder.create_limbed_range_constraint(
             driver,
             index,
             num_bits as u64,

@@ -2773,8 +2773,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         }
     }
 
-    // TODO CESAR: Refactor this to match barretenbergs create_dyadic_range_constraint
-    pub(crate) fn create_range_constraint(
+    pub(crate) fn create_dyadic_range_constraint(
         &mut self,
         driver: &mut T,
         variable_index: u32,
@@ -2783,35 +2782,19 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         if num_bits == 1 {
             self.create_bool_gate(variable_index);
         } else if num_bits <= Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 {
-            // /**
-            //  * N.B. if `variable_index` is not used in any arithmetic constraints, this will create an unsatisfiable
-            //  *      circuit!
-            //  *      this range constraint will increase the size of the 'sorted set' of range-constrained integers by 1.
-            //  *      The 'non-sorted set' of range-constrained integers is a subset of the wire indices of all arithmetic
-            //  *      gates. No arithmetic gate => size imbalance between sorted and non-sorted sets. Checking for this
-            //  *      and throwing an error would require a refactor of the Composer to catelog all 'orphan' variables not
-            //  *      assigned to gates.
-            //  *
-            //  * AZTEC TODO(Suyash):
-            //  *    The following is a temporary fix to make sure the range constraints on numbers with
-            //  *    num_bits <= DEFAULT_PLOOKUP_RANGE_BITNUM is correctly enforced in the circuit.
-            //  *    Longer term, as Zac says, we would need to refactor the composer to fix this.
-            //  **/
-            self.create_poly_gate(&PolyTriple {
-                a: variable_index,
-                b: variable_index,
-                c: variable_index,
-                q_m: P::ScalarField::zero(),
-                q_l: P::ScalarField::one(),
-                q_r: -P::ScalarField::one(),
-                q_o: P::ScalarField::zero(),
-                q_c: P::ScalarField::zero(),
-            });
+            create_unconstrained_gate!(
+                self,
+                &mut self.blocks.arithmetic,
+                variable_index,
+                self.zero_idx,
+                self.zero_idx,
+                self.zero_idx
+            );
 
             self.create_new_range_constraint(variable_index, (1u64 << num_bits) - 1);
         } else {
             // The value must be public, otherwise it would have been batch decomposed already
-            self.decompose_into_default_range(
+            self.create_limbed_range_constraint(
                 driver,
                 variable_index,
                 num_bits as u64,
@@ -2882,7 +2865,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         }
     }
 
-    pub(crate) fn decompose_into_default_range(
+    pub(crate) fn create_limbed_range_constraint(
         &mut self,
         driver: &mut T,
         variable_index: u32,
@@ -2901,19 +2884,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         //     self.failure(msg);
         // }
         let sublimb_mask: u64 = (1u64 << target_range_bitnum) - 1;
-        // /**
-        //  * AZTEC TODO: Support this commented-out code!
-        //  * At the moment, `decompose_into_default_range` generates a minimum of 1 arithmetic gate.
-        //  * This is not strictly required iff num_bits <= target_range_bitnum.
-        //  * However, this produces an edge-case where a variable is range-constrained but NOT present in an arithmetic gate.
-        //  * This in turn produces an unsatisfiable circuit (see `create_new_range_constraint`). We would need to check for
-        //  * and accommodate/reject this edge case to support not adding addition gates here if not reqiured
-        //  * if (num_bits <= target_range_bitnum) {
-        //  *     const uint64_t expected_range = (1ULL << num_bits) - 1ULL;
-        //  *     create_new_range_constraint(variable_index, expected_range);
-        //  *     return { variable_index };
-        //  * }
-        //  **/
+
         let has_remainder_bits = !num_bits.is_multiple_of(target_range_bitnum);
         let num_limbs = num_bits / target_range_bitnum + if has_remainder_bits { 1 } else { 0 };
         let last_limb_size = num_bits - (num_bits / target_range_bitnum * target_range_bitnum);
@@ -4356,7 +4327,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // Add range constraint
         // TODO CESAR: Refactor this, create_dyadic_range_constraint
         for constraint in constraint_system.range_constraints.iter() {
-            self.create_range_constraint(driver, constraint.witness, constraint.num_bits)?;
+            self.create_dyadic_range_constraint(driver, constraint.witness, constraint.num_bits)?;
         }
 
         // Add aes128 constraints
@@ -4729,6 +4700,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     // TODO CESAR: Refactor this to match barretenberg's implementation, also add all the missing comments
     // TODO CESAR: Logic has changed completely in cpp/src/barretenberg/dsl/acir_format/ec_operations.cpp, revisit and adapt
     // TODO CESAR: Move to ecc_operations file
+    // NOTE FF: Think it is fine like this actually?
     fn create_ec_add_constraint(
         &mut self,
         constraint: &EcAdd<P::ScalarField>,
@@ -4773,7 +4745,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         )?;
         // Note that input_result is computed by Noir and passed to bb via ACIR. Hence, it is always a valid point on
         // Grumpkin.
-        let mut input_result = CycleGroupCT::new(
+        let input_result = CycleGroupCT::new(
             input_result_x,
             input_result_y,
             input_result_infinite,
@@ -4783,18 +4755,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // Addition
         let mut result = input1_point.add(&input2_point, self, driver)?;
 
-        if !predicate.is_constant() {
-            let mut to_be_asserted_equal =
-                CycleGroupCT::conditional_assign(&predicate, &input_result, &result, self, driver)?;
-            result.assert_equal(&mut to_be_asserted_equal, self, driver)?;
-        } else {
-            // The assert_equal method standardizes both points before comparing, so if either of them is the point at
-            // infinity, the coordinates will be assigned to be (0,0). This is OK as long as Noir developers do not use the
-            // coordinates of a point at infinity (otherwise input_result might be the point at infinity different from (0,
-            // 0, true), and the fact that assert_equal passes doesn't imply anything for the original coordinates of
-            // input_result).
-            result.assert_equal(&mut input_result, self, driver)?;
-        }
+        // The assert_equal method standardizes both points before comparing, so if either of them is the point at
+        // infinity, the coordinates will be assigned to be (0,0). This is OK as long as Noir developers do not use the
+        // coordinates of a point at infinity (otherwise input_result might be the point at infinity different from (0,
+        // 0, true), and the fact that assert_equal passes doesn't imply anything for the original coordinates of
+        // input_result).
+        let mut to_be_asserted_equal =
+            CycleGroupCT::conditional_assign(&predicate, &input_result, &result, self, driver)?;
+        result.assert_equal(&mut to_be_asserted_equal, self, driver)?;
 
         Ok(())
     }
@@ -5066,8 +5034,16 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             if chunk_size != 32 {
                 // TACEO TODO can the decompose in here be batched as well?
                 // If the chunk is smaller than 32 bits, we need to explicitly range constrain it.
-                self.create_range_constraint(driver, a_chunk.witness_index, chunk_size as u32)?;
-                self.create_range_constraint(driver, b_chunk.witness_index, chunk_size as u32)?;
+                self.create_dyadic_range_constraint(
+                    driver,
+                    a_chunk.witness_index,
+                    chunk_size as u32,
+                )?;
+                self.create_dyadic_range_constraint(
+                    driver,
+                    b_chunk.witness_index,
+                    chunk_size as u32,
+                )?;
             }
 
             res.add_assign(
