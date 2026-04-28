@@ -172,6 +172,11 @@ impl TryFrom<usize> for BasicTableId {
 }
 
 impl BasicTableId {
+    // Numeric IDs used by barretenberg for dummy tables.
+    // Keep these constants to preserve table_3 compatibility even if this enum has extra variants.
+    const HONK_DUMMY_BASIC1_BB_ID: u64 = 95;
+    const HONK_DUMMY_BASIC2_BB_ID: u64 = 96;
+
     const MAJORITY_NORMALIZATION_TABLE: [u64; 16] = [
         // xor result = 0
         0, // a + b + c = 0 => (a & b) ^ (a & c) ^ (b & c) = 0
@@ -528,12 +533,12 @@ impl<F: PrimeField> Plookup<F> {
         table.basic_table_ids.push(BasicTableId::HonkDummyBasic1);
         table
             .get_table_values
-            .push(BasicTableId::get_value_from_key::<F, { BasicTableId::HonkDummyBasic1 as u64 }>);
+            .push(BasicTableId::get_value_from_key::<F, { BasicTableId::HONK_DUMMY_BASIC1_BB_ID }>);
         table.slice_sizes.push(number_of_elements_in_argument);
         table.basic_table_ids.push(BasicTableId::HonkDummyBasic2);
         table
             .get_table_values
-            .push(BasicTableId::get_value_from_key::<F, { BasicTableId::HonkDummyBasic2 as u64 }>);
+            .push(BasicTableId::get_value_from_key::<F, { BasicTableId::HONK_DUMMY_BASIC2_BB_ID }>);
         table
     }
 
@@ -2104,7 +2109,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasi
             index_map: LookupHashMap::default(),
             get_values_from_key: BasicTableId::get_value_from_key::<
                 P::ScalarField,
-                { BasicTableId::HonkDummyBasic1 as u64 },
+                { BasicTableId::HONK_DUMMY_BASIC1_BB_ID },
             >,
         }
     }
@@ -2123,7 +2128,12 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasi
     ) -> PlookupBasicTable<P, T> {
         // We do the assertion, since this function is templated, but the general API for these functions contains the id,
         // too. This helps us ensure that the correct instantion is used for a particular BasicTableId
-        assert_eq!(ID, usize::from(id.to_owned()) as u64);
+        let expected_id = match id {
+            BasicTableId::HonkDummyBasic1 => BasicTableId::HONK_DUMMY_BASIC1_BB_ID,
+            BasicTableId::HonkDummyBasic2 => BasicTableId::HONK_DUMMY_BASIC2_BB_ID,
+            _ => panic!("generate_honk_dummy_table expects dummy table ids only"),
+        };
+        assert_eq!(ID, expected_id);
         let base = 1 << 1; // Probably has to be a power of 2
         let mut table = PlookupBasicTable::new();
         table.id = id;
@@ -2545,10 +2555,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         match id {
             BasicTableId::HonkDummyBasic1 => Self::generate_honk_dummy_table::<
-                { BasicTableId::HonkDummyBasic1 as u64 },
+                { BasicTableId::HONK_DUMMY_BASIC1_BB_ID },
             >(id, index),
             BasicTableId::HonkDummyBasic2 => Self::generate_honk_dummy_table::<
-                { BasicTableId::HonkDummyBasic2 as u64 },
+                { BasicTableId::HONK_DUMMY_BASIC2_BB_ID },
             >(id, index),
 
             BasicTableId::UintAndSlice2Rotate0 => {

@@ -1,4 +1,7 @@
-use crate::keys::plain_proving_key::PlainPkTrait;
+use crate::keys::plain_proving_key::{
+    compute_permutation_argument_polynomials, construct_lookup_polynomials,
+    construct_lookup_read_counts, construct_lookup_table_polynomials,
+};
 use crate::keys::types::TraceData;
 use crate::prelude::GenericUltraCircuitBuilder;
 use ark_ec::CurveGroup;
@@ -69,6 +72,15 @@ pub trait ProvingKeyTrait<T: NoirUltraHonkProver<C>, C: CurveGroup>: Sized {
     fn get_public_inputs(&self) -> Vec<C::ScalarField>;
 
     fn new(circuit_size: usize, num_public_inputs: usize, final_active_wire_idx: usize) -> Self;
+
+    fn add_memory_records_to_proving_key<
+        U: NoirWitnessExtensionProtocol<C::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        ram_rom_offset: u32,
+        builder: &GenericUltraCircuitBuilder<C, U>,
+        memory_read_records: &mut Vec<u32>,
+        memory_write_records: &mut Vec<u32>,
+    );
 }
 
 impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> ProvingKeyTrait<T, C>
@@ -92,7 +104,7 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> ProvingKeyTra
         let dyadic_circuit_size = circuit.compute_dyadic_size();
 
         // Complete the public inputs execution trace block from builder.public_inputs
-        circuit.blocks.compute_offsets(false);
+        circuit.blocks.compute_offsets();
 
         // Find index of last non-trivial wire value in the trace
         let mut final_active_wire_idx = 0;
@@ -117,16 +129,16 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> ProvingKeyTra
         proving_key.polynomials.precomputed.lagrange_last_mut()[final_active_wire_idx] =
             C::ScalarField::one();
 
-        PlainProvingKey::construct_lookup_table_polynomials(
+        construct_lookup_table_polynomials(
             proving_key
                 .polynomials
                 .precomputed
                 .get_table_polynomials_mut(),
             &circuit,
             dyadic_circuit_size,
-            0,
+            0 as usize,
         );
-        PlainProvingKey::construct_lookup_read_counts(
+        construct_lookup_read_counts(
             driver,
             proving_key
                 .polynomials
@@ -260,7 +272,7 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> ProvingKeyTra
         let copy_cycles = trace_data.copy_cycles;
         self.pub_inputs_offset = trace_data.pub_inputs_offset;
         self.active_region_data = active_region_data;
-        PlainProvingKey::add_memory_records_to_proving_key(
+        Self::add_memory_records_to_proving_key(
             ram_rom_offset,
             builder,
             &mut self.memory_read_records,
@@ -281,13 +293,34 @@ impl<T: NoirUltraHonkProver<C>, C: HonkCurve<TranscriptFieldType>> ProvingKeyTra
         }
 
         // Compute the permutation argument polynomials (sigma/id) and add them to proving key
-        PlainProvingKey::compute_permutation_argument_polynomials(
+        compute_permutation_argument_polynomials(
             &mut self.polynomials.precomputed,
             builder,
             copy_cycles,
             self.circuit_size as usize,
-            self.pub_inputs_offset as usize,
             &self.active_region_data,
         );
+    }
+
+    fn add_memory_records_to_proving_key<
+        U: NoirWitnessExtensionProtocol<C::ScalarField, ArithmeticShare = T::ArithmeticShare>,
+    >(
+        ram_rom_offset: u32,
+        builder: &GenericUltraCircuitBuilder<C, U>,
+        memory_read_records: &mut Vec<u32>,
+        memory_write_records: &mut Vec<u32>,
+    ) {
+        tracing::trace!("Adding memory records to proving key");
+
+        assert!(memory_read_records.is_empty());
+        assert!(memory_write_records.is_empty());
+
+        for index in builder.memory_read_records.iter() {
+            memory_read_records.push(*index + ram_rom_offset);
+        }
+
+        for index in builder.memory_write_records.iter() {
+            memory_write_records.push(*index + ram_rom_offset);
+        }
     }
 }

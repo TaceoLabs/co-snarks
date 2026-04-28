@@ -30,7 +30,9 @@ pub const BATCHED_RELATION_PARTIAL_LENGTH_ZK: usize = BATCHED_RELATION_PARTIAL_L
 pub const NUM_ALL_ENTITIES: usize =
     WITNESS_ENTITIES_SIZE + PRECOMPUTED_ENTITIES_SIZE + SHIFTED_WITNESS_ENTITIES_SIZE;
 
-pub const PUBLIC_INPUTS_SIZE: usize = 16;
+pub const PUBLIC_INPUTS_SIZE: usize = 8;
+
+pub const NUM_ZERO_ROWS: usize = 1;
 const NUM_FRS_FR: usize = 1;
 const NUM_FRS_COMM: usize = 4;
 
@@ -81,7 +83,7 @@ pub const NUM_SELECTORS: usize = 14;
 // permutation argument polynomials (sigmas, ids) are unique, e.g. id[i][j] == id[m][n] iff (i == m && j == n)
 pub const PERMUTATION_ARGUMENT_VALUE_SEPARATOR: u32 = 1 << 28;
 
-pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 16;
+pub const PAIRING_POINT_ACCUMULATOR_SIZE: u32 = 8;
 
 pub const PUBLIC_INPUT_WIRE_INDEX: usize = ProverWitnessEntities::<
     <PlainUltraHonkDriver as NoirUltraHonkProver<Bn254G1>>::ArithmeticShare,
