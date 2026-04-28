@@ -446,46 +446,21 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     }
 
     pub(crate) fn create_add_gate(&mut self, inp: &AddTriple<P::ScalarField>) {
-        self.assert_valid_variables(&[inp.a, inp.b, inp.c]);
-
-        self.blocks
-            .arithmetic
-            .populate_wires(inp.a, inp.b, inp.c, self.zero_idx);
-        self.blocks.arithmetic.q_m().push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_1().push(inp.a_scaling);
-        self.blocks.arithmetic.q_2().push(inp.b_scaling);
-        self.blocks.arithmetic.q_3().push(inp.c_scaling);
-        self.blocks.arithmetic.q_c().push(inp.const_scaling);
-        self.blocks.arithmetic.q_arith().push(P::ScalarField::one());
-        self.blocks.arithmetic.q_4().push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_delta_range()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_lookup_type()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_elliptic()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_memory()
-            .push(P::ScalarField::zero());
-        self.blocks.arithmetic.q_nnf().push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_poseidon2_external()
-            .push(P::ScalarField::zero());
-        self.blocks
-            .arithmetic
-            .q_poseidon2_internal()
-            .push(P::ScalarField::zero());
-
-        self.check_selector_length_consistency();
-        self.num_gates += 1;
+        // Delegate to create_big_add_gate with 4th wire set to zero
+        self.create_big_add_gate(
+            &AddQuad {
+                a: inp.a,
+                b: inp.b,
+                c: inp.c,
+                d: self.zero_idx,
+                a_scaling: inp.a_scaling,
+                b_scaling: inp.b_scaling,
+                c_scaling: inp.c_scaling,
+                d_scaling: P::ScalarField::zero(),
+                const_scaling: inp.const_scaling,
+            },
+            false,
+        );
     }
 
     pub(crate) fn create_big_mul_add_gate(
@@ -740,7 +715,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.num_gates += 1;
     }
 
-    pub(crate) fn create_ecc_add_gate(&mut self, inp: &EccAddGate<P::ScalarField>) {
+    pub(crate) fn create_ecc_add_gate(&mut self, inp: &EccAddGate) {
         //      /**
         //  * gate structure:
         //  * | 1  | 2  | 3  | 4  |
@@ -750,6 +725,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         //  **/
         self.assert_valid_variables(&[inp.x1, inp.x2, inp.x3, inp.y1, inp.y2, inp.y3]);
 
+        // Convert bool to field element for the relation: +1 for addition, -1 for subtraction
+        // The elliptic curve relation assumes q_sign² = 1 (see elliptic_relation.hpp)
+        let q_sign = if inp.is_addition {
+            P::ScalarField::one()
+        } else {
+            P::ScalarField::from(-1)
+        };
+
         let size = self.blocks.elliptic.len();
         let block_size = self.blocks.elliptic.len();
         let can_fuse_into_previous_gate = block_size > 0 &&                       /* a previous gate exists in the block */
@@ -757,7 +740,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.blocks.elliptic.w_o()[ block_size- 1] == inp.y1; /* output y coord of previous gate is input of this one */
 
         if can_fuse_into_previous_gate {
-            self.blocks.elliptic.q_1()[size - 1] = inp.sign_coefficient;
+            self.blocks.elliptic.q_1()[size - 1] = q_sign;
             self.blocks.elliptic.q_elliptic()[size - 1] = P::ScalarField::one();
         } else {
             self.blocks
@@ -765,7 +748,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 .populate_wires(self.zero_idx, inp.x1, inp.y1, self.zero_idx);
             self.blocks.elliptic.q_3().push(P::ScalarField::zero());
             self.blocks.elliptic.q_4().push(P::ScalarField::zero());
-            self.blocks.elliptic.q_1().push(inp.sign_coefficient);
+            self.blocks.elliptic.q_1().push(q_sign);
 
             self.blocks.elliptic.q_arith().push(P::ScalarField::zero());
             self.blocks.elliptic.q_2().push(P::ScalarField::zero());
@@ -4302,11 +4285,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         metadata: &ProgramMetadata,
     ) -> eyre::Result<()> {
         tracing::trace!("Builder build constraints");
+        println!("constraint system: {:#?}", constraint_system);
 
         // No gate_counter
 
         // Add standard width-4 Ultra arithmetic gates
         for constraint in constraint_system.quad_constraints.iter() {
+            println!("Creating quad constraint");
             // TODO CESAR: This mut and clone are weird
             self.create_quad_constraint(&mut constraint.clone());
         }
@@ -4315,18 +4300,21 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // w4_shift to use the least possible number of intermediate witnesses. See the documentation of
         // split_into_mul_quad_gates for more information.
         for big_constraint in constraint_system.big_quad_constraints.iter() {
+            println!("Creating big quad constraint");
             // TODO CESAR: This mut and clone are weird (Remark FF: I think we can pass it by reference and make it mutable inside the function?)
             self.create_big_quad_constraint(driver, &mut big_constraint.clone())?;
         }
 
         // Add logic constraint
         for constraint in constraint_system.logic_constraints.iter() {
+            println!("Creating logic constraint");
             self.create_logic_gate(driver, constraint)?;
         }
 
         // Add range constraint
         // TODO CESAR: Refactor this, create_dyadic_range_constraint
         for constraint in constraint_system.range_constraints.iter() {
+            println!("Creating range constraint");
             self.create_dyadic_range_constraint(driver, constraint.witness, constraint.num_bits)?;
         }
 
@@ -4474,83 +4462,74 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         key_a_index: u32,
         key_b_index: Option<u32>,
     ) -> ReadData<u32> {
-        let id_usize = id as usize;
-
         let num_lookups = read_values[ColumnIdx::C1].len();
         let mut read_data = ReadData::default();
 
         for i in 0..num_lookups {
-            // get basic lookup table; construct and add to builder.lookup_tables if not already present
+            let is_first_lookup = i == 0;
+            let is_last_lookup = i == num_lookups - 1;
 
-            let basic_table_id = self.plookup.multi_tables[id_usize].basic_table_ids[i].clone();
-            let table = self.get_table(basic_table_id);
+            // Get basic_table_id before mutable operations
+            let basic_table_id = self.plookup.get_multitable(id.clone()).basic_table_ids[i].clone();
 
-            table
-                .lookup_gates
-                .push(read_values.lookup_entries[i].to_owned()); // used for constructing sorted polynomials
-            let table_index = table.table_index;
-
-            let first_idx = if i == 0 {
+            // Create witness variables: first lookup reuses user's input indices, subsequent create new variables
+            let first_idx = if is_first_lookup {
                 key_a_index
             } else {
                 self.add_variable(read_values[ColumnIdx::C1][i].clone())
             };
-            #[expect(clippy::unnecessary_unwrap)]
-            let second_idx = if i == 0 && (key_b_index.is_some()) {
+            let second_idx = if is_first_lookup && key_b_index.is_some() {
                 key_b_index.unwrap()
             } else {
                 self.add_variable(read_values[ColumnIdx::C2][i].clone())
             };
             let third_idx = self.add_variable(read_values[ColumnIdx::C3][i].clone());
+
+            // Get basic lookup table; construct and add to builder.lookup_tables if not already present
+            let table = self.get_table(basic_table_id);
+            table
+                .lookup_gates
+                .push(read_values.lookup_entries[i].clone());
+            let table_index = table.table_index;
+
             read_data[ColumnIdx::C1].push(first_idx);
             read_data[ColumnIdx::C2].push(second_idx);
             read_data[ColumnIdx::C3].push(third_idx);
             self.assert_valid_variables(&[first_idx, second_idx, third_idx]);
 
-            self.blocks
-                .lookup
-                .q_lookup_type()
-                .push(P::ScalarField::one());
-            self.blocks
-                .lookup
-                .q_3()
-                .push(P::ScalarField::from(table_index as u64));
+            // Step size coefficients: zero for last lookup (no next accumulator), negative step sizes otherwise
+            let (step1, step2, step3) = if is_last_lookup {
+                (
+                    P::ScalarField::zero(),
+                    P::ScalarField::zero(),
+                    P::ScalarField::zero(),
+                )
+            } else {
+                let multi_table = self.plookup.get_multitable(id.clone());
+                (
+                    -multi_table.column_1_step_sizes[i + 1],
+                    -multi_table.column_2_step_sizes[i + 1],
+                    -multi_table.column_3_step_sizes[i + 1],
+                )
+            };
+
+            // Populate lookup gate: wire values and selectors
             self.blocks
                 .lookup
                 .populate_wires(first_idx, second_idx, third_idx, self.zero_idx);
-            self.blocks.lookup.q_1().push(P::ScalarField::zero());
-            self.blocks.lookup.q_2().push(if i == (num_lookups - 1) {
-                P::ScalarField::zero()
-            } else {
-                -self.plookup.multi_tables[id_usize].column_1_step_sizes[i + 1]
-            });
-            self.blocks.lookup.q_m().push(if i == (num_lookups - 1) {
-                P::ScalarField::zero()
-            } else {
-                -self.plookup.multi_tables[id_usize].column_2_step_sizes[i + 1]
-            });
-            self.blocks.lookup.q_c().push(if i == (num_lookups - 1) {
-                P::ScalarField::zero()
-            } else {
-                -self.plookup.multi_tables[id_usize].column_3_step_sizes[i + 1]
-            });
-            self.blocks.lookup.q_arith().push(P::ScalarField::zero());
-            self.blocks.lookup.q_4().push(P::ScalarField::zero());
             self.blocks
                 .lookup
-                .q_delta_range()
-                .push(P::ScalarField::zero());
-            self.blocks.lookup.q_elliptic().push(P::ScalarField::zero());
-            self.blocks.lookup.q_memory().push(P::ScalarField::zero());
-            self.blocks.lookup.q_nnf().push(P::ScalarField::zero());
+                .q_lookup_type()
+                .push(P::ScalarField::one()); // mark as lookup gate
             self.blocks
                 .lookup
-                .q_poseidon2_external()
-                .push(P::ScalarField::zero());
-            self.blocks
-                .lookup
-                .q_poseidon2_internal()
-                .push(P::ScalarField::zero());
+                .q_3()
+                .push(P::ScalarField::from(table_index as u64)); // unique table identifier
+            self.blocks.lookup.q_2().push(step1);
+            self.blocks.lookup.q_m().push(step2);
+            self.blocks.lookup.q_c().push(step3);
+            self.blocks.lookup.q_1().push(P::ScalarField::zero()); // unused
+            self.blocks.lookup.q_4().push(P::ScalarField::zero()); // unused
 
             self.check_selector_length_consistency();
             self.num_gates += 1;

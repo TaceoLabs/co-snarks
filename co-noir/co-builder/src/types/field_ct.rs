@@ -3549,7 +3549,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             y2: other.y.get_witness_index(builder, driver),
             x3: result.x.get_witness_index(builder, driver),
             y3: result.y.get_witness_index(builder, driver),
-            sign_coefficient: P::ScalarField::one(),
+            is_addition: true,
         };
         builder.create_ecc_add_gate(&add_gate);
 

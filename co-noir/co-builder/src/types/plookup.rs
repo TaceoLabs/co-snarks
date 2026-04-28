@@ -35,23 +35,12 @@ pub(crate) enum BasicTableId {
     Sha256Base28Rotate3,
     Sha256Base16,
     Sha256Base16Rotate2,
-    Sha256Base16Rotate6,
-    Sha256Base16Rotate7,
-    Sha256Base16Rotate8,
     UintXorSlice6Rotate0,
     UintXorSlice2Rotate0,
     UintXorSlice4Rotate0,
     UintAndSlice6Rotate0,
     UintAndSlice2Rotate0,
     UintAndSlice4Rotate0,
-    Bn254XloBasic,
-    Bn254XhiBasic,
-    Bn254YloBasic,
-    Bn254YhiBasic,
-    Bn254XyprimeBasic,
-    Bn254XloEndoBasic,
-    Bn254XhiEndoBasic,
-    Bn254XyprimeEndoBasic,
     Secp256k1XloBasic,
     Secp256k1XhiBasic,
     Secp256k1YloBasic,
@@ -468,14 +457,6 @@ pub(crate) enum MultiTableId {
     Uint16And,
     Uint32And,
     Uint64And,
-    Bn254Xlo,
-    Bn254Xhi,
-    Bn254Ylo,
-    Bn254Yhi,
-    Bn254Pyrite,
-    Bn254XloEndo,
-    Bn254XhiEndo,
-    Bn254XyprimeEndo,
     Secp256k1Xlo,
     Secp256k1Xhi,
     Secp256k1Ylo,
@@ -519,9 +500,9 @@ impl<F: PrimeField> Plookup<F> {
 
     fn get_honk_dummy_multitable() -> PlookupMultiTable<F> {
         let id = MultiTableId::HonkDummyMulti;
-        let number_of_elements_in_argument = 1 << 1; // Probably has to be a power of 2
+        let number_of_elements_in_argument = 2; // must be >= 2 so table key columns include non-zero values
         let number_of_elements_in_argument_f = F::from(number_of_elements_in_argument);
-        let number_of_lookups = 2;
+        let number_of_lookups = 2; // need 2 basic tables so table_4 (table index column) has non-zero values
         let mut table = PlookupMultiTable::new(
             id,
             number_of_elements_in_argument_f,
@@ -2134,7 +2115,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasi
             _ => panic!("generate_honk_dummy_table expects dummy table ids only"),
         };
         assert_eq!(ID, expected_id);
-        let base = 1 << 1; // Probably has to be a power of 2
+        let base = 2; // must be >= 2 so table key columns include non-zero values
         let mut table = PlookupBasicTable::new();
         table.id = id;
         table.table_index = table_index;

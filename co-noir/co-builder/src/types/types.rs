@@ -91,14 +91,14 @@ pub(crate) struct Poseidon2InternalGate {
 }
 
 #[derive(Default, PartialEq, Eq)]
-pub(crate) struct EccAddGate<F: PrimeField> {
+pub(crate) struct EccAddGate {
     pub(crate) x1: u32,
     pub(crate) y1: u32,
     pub(crate) x2: u32,
     pub(crate) y2: u32,
     pub(crate) x3: u32,
     pub(crate) y3: u32,
-    pub(crate) sign_coefficient: F,
+    pub(crate) is_addition: bool, // else, subtraction
 }
 
 #[derive(Default, PartialEq, Eq)]
