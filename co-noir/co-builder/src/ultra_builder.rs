@@ -2,7 +2,6 @@ use crate::acir_format::{HonkRecursion, ProgramMetadata};
 use crate::keys::plain_proving_key::create_prover_instance;
 use crate::transcript_ct::Poseidon2SpongeCT;
 use crate::types::aes128;
-use crate::types::big_field::BigField;
 use crate::types::blake2s::Blake2s;
 use crate::types::blake3::blake3s;
 use crate::types::field_ct::{CycleGroupCT, CycleScalarCT};
@@ -32,9 +31,9 @@ use crate::{
     },
 };
 use ark_ec::pairing::Pairing;
-use ark_ec::{AffineRepr, CurveGroup, PrimeGroup};
+use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::AdditiveGroup;
-use ark_ff::{Field, One, PrimeField, Zero};
+use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
 use co_acvm::Rep3AcvmSolver;
 use co_acvm::ShamirAcvmSolver;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
@@ -396,7 +395,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
     // TODO CESAR: Implement this function, or not?
     // TODO CESAR: Move to arithmetic_constraints file
-    fn check_mul_add_gate(&self, mul_quad: &MulQuad<P::ScalarField>, next_wire_w4: T::AcvmType) {
+    fn check_mul_add_gate(&self, _mul_quad: &MulQuad<P::ScalarField>, _next_wire_w4: T::AcvmType) {
         tracing::warn!(
             "check_mul_add_gate is currently a placeholder that always returns true. Implement the actual checks or remove this function if not needed."
         );
@@ -4450,18 +4449,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         Ok(())
-    }
-
-    fn create_ecdsa_k1_constraints_placeholder(&self) {
-        todo!("ECDSA k1 constraints placeholder")
-    }
-
-    fn create_ecdsa_r1_constraints_placeholder(&self) {
-        todo!("ECDSA r1 constraints placeholder")
-    }
-
-    fn create_keccak_permutations_constraints_placeholder(&self) {
-        todo!("Keccak permutations constraints placeholder")
     }
 
     fn process_hn_recursion_constraints_placeholder(&self) {

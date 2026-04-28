@@ -18,7 +18,8 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use ark_ff::{One, Zero};
+use ark_ec::AffineRepr;
+use ark_ff::{BigInteger, One, PrimeField, Zero};
 use co_noir_common::{
     CoUtils,
     constants::PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
@@ -63,6 +64,34 @@ impl<
     N: Network,
 > CoOink<'a, T, C, H, N>
 {
+    fn field_to_hex<F: PrimeField>(value: &F) -> String {
+        let mut bytes = value.into_bigint().to_bytes_be();
+        let byte_len = (F::MODULUS_BIT_SIZE as usize).div_ceil(8);
+        if bytes.len() < byte_len {
+            let mut padded = vec![0u8; byte_len - bytes.len()];
+            padded.extend_from_slice(&bytes);
+            bytes = padded;
+        }
+        let hex = bytes
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        format!("0x{hex}")
+    }
+
+    fn print_point_hex(label: &str, point: &C::Affine) {
+        if point.is_zero() {
+            println!("{label}: INF");
+            return;
+        }
+        let (x, y) = C::g1_affine_to_xy(point);
+        println!(
+            "{label}: x={} y={}",
+            Self::field_to_hex(&x),
+            Self::field_to_hex(&y)
+        );
+    }
+
     pub(crate) fn new(net: &'a N, state: &'a mut T::State, has_zk: ZeroKnowledge) -> Self {
         Self {
             net,
@@ -113,8 +142,8 @@ impl<
         *target = T::add(*target, mul3);
     }
 
-    fn compute_w4(&mut self, proving_key: &ProvingKey<T, C>) {
-        tracing::trace!("compute w4");
+    fn add_ram_rom_memory_records_to_wire_4(&mut self, proving_key: &ProvingKey<T, C>) {
+        tracing::trace!("add_ram_rom_memory_records_to_wire_4");
         // The memory record values are computed at the indicated indices as
         // w4 = w3 * eta^3 + w2 * eta^2 + w1 * eta + read_write_flag;
 
@@ -126,6 +155,7 @@ impl<
             proving_key.polynomials.witness.w_l().len(),
             proving_key.polynomials.witness.w_o().len()
         );
+
         self.memory.w_4 = proving_key.polynomials.witness.w_4().clone();
         self.memory.w_4.resize(
             proving_key.polynomials.witness.w_l().len(),
@@ -155,23 +185,26 @@ impl<
         }
     }
 
-    fn compute_read_term(
+    fn compute_lookup_term(
         &mut self,
         proving_key: &ProvingKey<T, C>,
         i: usize,
     ) -> T::ArithmeticShare {
-        tracing::trace!("compute read term");
+        tracing::trace!("compute lookup term");
 
         let gamma = self.memory.challenges.gamma;
-        let eta_1 = self.memory.challenges.eta_1;
-        let eta_2 = self.memory.challenges.eta_2;
-        let eta_3 = self.memory.challenges.eta_3;
+        let beta = self.memory.challenges.beta;
+        let beta_sqr = self.memory.challenges.beta_sqr;
+        let beta_cube = self.memory.challenges.beta_cube;
+
         let w_1 = proving_key.polynomials.witness.w_l()[i];
         let w_2 = proving_key.polynomials.witness.w_r()[i];
         let w_3 = proving_key.polynomials.witness.w_o()[i];
+
         let w_1_shift = proving_key.polynomials.witness.w_l().shifted()[i];
         let w_2_shift = proving_key.polynomials.witness.w_r().shifted()[i];
         let w_3_shift = proving_key.polynomials.witness.w_o().shifted()[i];
+
         let table_index = proving_key.polynomials.precomputed.q_o()[i];
         let negative_column_1_step_size = proving_key.polynomials.precomputed.q_r()[i];
         let negative_column_2_step_size = proving_key.polynomials.precomputed.q_m()[i];
@@ -192,30 +225,31 @@ impl<
         let mul = T::mul_with_public(negative_column_3_step_size, w_3_shift);
         let derived_table_entry_3 = T::add(w_3, mul);
 
+        let table_index_entry = beta_cube * table_index;
+
         // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
         // deg 2 or 3
-        // TACEO TODO add_assign?
-        let mul = T::mul_with_public(eta_1, derived_table_entry_2);
+        let mul = T::mul_with_public(beta, derived_table_entry_2);
         let res = T::add(derived_table_entry_1, mul);
-        let mul = T::mul_with_public(eta_2, derived_table_entry_3);
+        let mul = T::mul_with_public(beta_sqr, derived_table_entry_3);
         let res = T::add(res, mul);
-        T::add_with_public(table_index * eta_3, res, id)
+        T::add_with_public(table_index_entry, res, id)
     }
 
     // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
-    fn compute_write_term(&self, proving_key: &ProvingKey<T, C>, i: usize) -> C::ScalarField {
-        tracing::trace!("compute write term");
+    fn compute_table_term(&self, proving_key: &ProvingKey<T, C>, i: usize) -> C::ScalarField {
+        tracing::trace!("compute table term");
 
         let gamma = &self.memory.challenges.gamma;
-        let eta_1 = &self.memory.challenges.eta_1;
-        let eta_2 = &self.memory.challenges.eta_2;
-        let eta_3 = &self.memory.challenges.eta_3;
+        let beta = self.memory.challenges.beta;
+        let beta_sqr = self.memory.challenges.beta_sqr;
+        let beta_cube = self.memory.challenges.beta_cube;
         let table_1 = &proving_key.polynomials.precomputed.table_1()[i];
         let table_2 = &proving_key.polynomials.precomputed.table_2()[i];
         let table_3 = &proving_key.polynomials.precomputed.table_3()[i];
         let table_4 = &proving_key.polynomials.precomputed.table_4()[i];
 
-        *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
+        *table_1 + gamma + *table_2 * beta + *table_3 * beta_sqr + *table_4 * beta_cube
     }
 
     fn compute_logderivative_inverses(
@@ -232,6 +266,7 @@ impl<
             proving_key.polynomials.witness.lookup_read_tags().len(),
             proving_key.circuit_size as usize
         );
+
         self.memory
             .lookup_inverses
             .resize(proving_key.circuit_size as usize, Default::default());
@@ -262,8 +297,8 @@ impl<
             ));
 
             // READ_TERMS and WRITE_TERMS are 1, so we skip the loop
-            let read_term = self.compute_read_term(proving_key, i);
-            let write_term = self.compute_write_term(proving_key, i);
+            let read_term = self.compute_lookup_term(proving_key, i);
+            let write_term = self.compute_table_term(proving_key, i);
             self.memory.lookup_inverses[i] = T::mul_with_public(write_term, read_term);
         }
         self.memory.lookup_inverses = Polynomial::new(T::mul_many(
@@ -319,11 +354,14 @@ impl<
             - self.memory.challenges.beta
                 * C::ScalarField::from((1 + proving_key.pub_inputs_offset) as u64);
 
-        for x_i in proving_key.public_inputs.iter() {
+        for (i, x_i) in proving_key.public_inputs.iter().enumerate() {
             num *= num_acc + x_i;
             denom *= denom_acc + x_i;
-            num_acc += self.memory.challenges.beta;
-            denom_acc -= self.memory.challenges.beta;
+
+            if i < proving_key.public_inputs.len() - 1 {
+                num_acc += self.memory.challenges.beta;
+                denom_acc -= self.memory.challenges.beta;
+            }
         }
         num / denom
     }
@@ -499,6 +537,7 @@ impl<
         tracing::trace!("generate alpha round");
 
         let alpha = transcript.get_challenge::<C>("alpha".to_string());
+        println!("ALPHA: {}", Self::field_to_hex(&alpha));
         let mut alpha_powers = [C::ScalarField::one(); NUM_ALPHAS];
         alpha_powers[0] = alpha;
         for i in 1..NUM_ALPHAS {
@@ -508,14 +547,15 @@ impl<
     }
 
     // Add circuit size public input size and public inputs to transcript
-    fn execute_preamble_round(
+    fn send_vk_hash_and_public_inputs(
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<T, C>,
         verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
 
-        let vk_hash = verifying_key.hash_through_transcript::<H>("", transcript);
+        let vk_hash = verifying_key.hash_with_origin_tagging::<H>("", transcript);
+        println!("VK_HASH: {}", Self::field_to_hex(&vk_hash));
         transcript.add_fr_to_hash_buffer::<C>("VK_HASH".to_string(), vk_hash);
 
         if proving_key.num_public_inputs as usize != proving_key.public_inputs.len() {
@@ -527,12 +567,13 @@ impl<
         for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
             // transcript.add_scalar(*public_input);
             transcript.send_fr_to_verifier::<C>(format!("PUBLIC_INPUT_{i}"), *public_input);
+            println!("PUBLIC_INPUT_{i}: {}", Self::field_to_hex(public_input));
         }
         Ok(())
     }
 
     // Compute first three wire commitments
-    fn execute_wire_commitments_round(
+    fn commit_to_wires(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &mut ProvingKey<T, C>,
@@ -553,19 +594,24 @@ impl<
         let w_l = CoUtils::commit::<T, C>(proving_key.polynomials.witness.w_l().as_ref(), crs);
         let w_r = CoUtils::commit::<T, C>(proving_key.polynomials.witness.w_r().as_ref(), crs);
         let w_o = CoUtils::commit::<T, C>(proving_key.polynomials.witness.w_o().as_ref(), crs);
-
         let open = T::open_point_many(&[w_l, w_r, w_o], self.net, self.state)?;
 
-        transcript.send_point_to_verifier::<C>("W_L".to_string(), open[0].into());
-        transcript.send_point_to_verifier::<C>("W_R".to_string(), open[1].into());
-        transcript.send_point_to_verifier::<C>("W_O".to_string(), open[2].into());
+        let w_l: C::Affine = open[0].into();
+        let w_r: C::Affine = open[1].into();
+        let w_o: C::Affine = open[2].into();
+        Self::print_point_hex("W_L", &w_l);
+        Self::print_point_hex("W_R", &w_r);
+        Self::print_point_hex("W_O", &w_o);
+        transcript.send_point_to_verifier::<C>("W_L".to_string(), w_l);
+        transcript.send_point_to_verifier::<C>("W_R".to_string(), w_r);
+        transcript.send_point_to_verifier::<C>("W_O".to_string(), w_o);
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())
     }
 
-    // Compute sorted list accumulator and commitment
-    fn execute_sorted_list_accumulator_round(
+    // Compute sorted witness-table accumulator and commit to the resulting polynomials.
+    fn commit_to_lookup_counts_and_w4(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &mut ProvingKey<T, C>,
@@ -573,15 +619,12 @@ impl<
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
-        let challs = transcript.get_challenges::<C>(&[
-            "ETA".to_string(),
-            "ETA_TWO".to_string(),
-            "ETA_THREE".to_string(),
-        ]);
-        self.memory.challenges.eta_1 = challs[0];
-        self.memory.challenges.eta_2 = challs[1];
-        self.memory.challenges.eta_3 = challs[2];
-        self.compute_w4(proving_key);
+        let eta = transcript.get_challenge::<C>("eta".to_string());
+        self.memory.challenges.eta_1 = eta;
+        self.memory.challenges.eta_2 = eta * eta;
+        self.memory.challenges.eta_3 = eta * eta * eta;
+
+        self.add_ram_rom_memory_records_to_wire_4(proving_key);
 
         // Mask the polynomial when proving in zero-knowledge
         if self.has_zk == ZeroKnowledge::Yes {
@@ -607,31 +650,43 @@ impl<
             crs,
         );
         let w_4 = CoUtils::commit::<T, C>(self.memory.w_4.as_ref(), crs);
+
         let opened = T::open_point_many(
             &[lookup_read_counts, lookup_read_tags, w_4],
             self.net,
             self.state,
         )?;
 
-        transcript.send_point_to_verifier::<C>("LOOKUP_READ_COUNTS".to_string(), opened[0].into());
-        transcript.send_point_to_verifier::<C>("LOOKUP_READ_TAGS".to_string(), opened[1].into());
-        transcript.send_point_to_verifier::<C>("W_4".to_string(), opened[2].into());
+        let lookup_read_counts: C::Affine = opened[0].into();
+        let lookup_read_tags: C::Affine = opened[1].into();
+        let w_4: C::Affine = opened[2].into();
+
+        Self::print_point_hex("LOOKUP_READ_COUNTS", &lookup_read_counts);
+        Self::print_point_hex("LOOKUP_READ_TAGS", &lookup_read_tags);
+        Self::print_point_hex("W_4", &w_4);
+
+        transcript.send_point_to_verifier::<C>("LOOKUP_READ_COUNTS".to_string(), lookup_read_counts);
+        transcript.send_point_to_verifier::<C>("LOOKUP_READ_TAGS".to_string(), lookup_read_tags);
+        transcript.send_point_to_verifier::<C>("W_4".to_string(), w_4);
 
         Ok(())
     }
 
-    // Fiat-Shamir: beta & gamma
-    fn execute_log_derivative_inverse_round(
+    // Compute log derivative inverse polynomial and its commitment, if required
+    fn commit_to_logderiv_inverses(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<T, C>,
     ) -> HonkProofResult<()> {
-        tracing::trace!("executing log derivative inverse round");
+        tracing::trace!("commit_to_logderiv_inverses");
 
-        let challs = transcript.get_challenges::<C>(&["BETA".to_string(), "GAMMA".to_string()]);
-        self.memory.challenges.beta = challs[0];
-        self.memory.challenges.gamma = challs[1];
+        let [beta, gamma] = transcript.get_challenges::<C>(&["beta".to_string(), "gamma".to_string()]).try_into().unwrap();
+        self.memory.challenges.beta = beta;
+        self.memory.challenges.beta_sqr = beta * beta;
+        self.memory.challenges.beta_cube = beta * beta * beta;
+        self.memory.challenges.gamma = gamma;
 
+        // Compute the inverses used in log-derivative lookup relations
         self.compute_logderivative_inverses(proving_key)?;
 
         // We moved the commiting and opening of the lookup inverses to be at the same time as z_perm
@@ -640,8 +695,8 @@ impl<
         Ok(())
     }
 
-    // Compute grand product(s) and commitments.
-    fn execute_grand_product_computation_round(
+    // Compute the permutation grand product polynomial and commit to it.
+    fn commit_to_z_perm(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
         proving_key: &ProvingKey<T, C>,
@@ -670,8 +725,12 @@ impl<
 
         let open = T::open_point_many(&[lookup_inverses, z_perm], self.net, self.state)?;
 
-        transcript.send_point_to_verifier::<C>("LOOKUP_INVERSES".to_string(), open[0].into());
-        transcript.send_point_to_verifier::<C>("Z_PERM".to_string(), open[1].into());
+        let lookup_inverses: C::Affine = open[0].into();
+        let z_perm: C::Affine = open[1].into();
+        Self::print_point_hex("LOOKUP_INVERSES", &lookup_inverses);
+        Self::print_point_hex("Z_PERM", &z_perm);
+        transcript.send_point_to_verifier::<C>("LOOKUP_INVERSES".to_string(), lookup_inverses);
+        transcript.send_point_to_verifier::<C>("Z_PERM".to_string(), z_perm);
         Ok(())
     }
 
@@ -683,18 +742,19 @@ impl<
         verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> HonkProofResult<ProverMemory<T, C>> {
         tracing::trace!("Oink prove");
+        println!("Starting proof generation");
 
         // Add circuit size public input size and public inputs to transcript
-        Self::execute_preamble_round(transcript, proving_key, verifying_key)?;
+        Self::send_vk_hash_and_public_inputs(transcript, proving_key, verifying_key)?;
         // Compute first three wire commitments
-        self.execute_wire_commitments_round(transcript, proving_key, crs)?;
+        self.commit_to_wires(transcript, proving_key, crs)?;
         // Compute sorted list accumulator and commitment
-        self.execute_sorted_list_accumulator_round(transcript, proving_key, crs)?;
+        self.commit_to_lookup_counts_and_w4(transcript, proving_key, crs)?;
 
         // Fiat-Shamir: beta & gamma
-        self.execute_log_derivative_inverse_round(transcript, proving_key)?;
+        self.commit_to_logderiv_inverses(transcript, proving_key)?;
         // Compute grand product(s) and commitments.
-        self.execute_grand_product_computation_round(transcript, proving_key, crs)?;
+        self.commit_to_z_perm(transcript, proving_key, crs)?;
 
         // Generate relation separators alphas for sumcheck/combiner computation
         self.generate_alphas_round(transcript);

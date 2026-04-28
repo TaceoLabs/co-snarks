@@ -77,13 +77,17 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T> + Default
     }
 
     fn split_challenge(challenge: Self::DataType) -> [Self::DataType; 2] {
-        // match the parameter used in stdlib, which is derived from cycle_scalar (is 128)
-        const LO_BITS: usize = 128;
+        // Match barretenberg field_conversion::split_challenge:
+        // split a 254-bit challenge into two 127-bit limbs.
+        let total_bits = F::MODULUS_BIT_SIZE as usize;
+        let lo_bits = total_bits / 2;
+        let hi_bits = total_bits - lo_bits;
         let biguint: BigUint = challenge.into();
 
-        let lower_mask = (BigUint::one() << LO_BITS) - BigUint::one();
+        let lower_mask = (BigUint::one() << lo_bits) - BigUint::one();
         let lo = &biguint & lower_mask;
-        let hi = biguint >> LO_BITS;
+        let upper_mask = (BigUint::one() << hi_bits) - BigUint::one();
+        let hi = (biguint >> lo_bits) & upper_mask;
 
         let lo = F::from(lo);
         let hi = F::from(hi);
@@ -173,8 +177,7 @@ where
         HonkProof::new(self.proof_data)
     }
 
-    #[expect(dead_code)]
-    pub(crate) fn print(&self) {
+    pub fn print(&self) {
         self.manifest.print();
     }
 

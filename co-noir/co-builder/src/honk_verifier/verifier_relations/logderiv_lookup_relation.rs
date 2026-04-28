@@ -55,9 +55,9 @@ impl LogDerivLookupRelation {
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let gamma = &relation_parameters.gamma;
-        let eta_1 = relation_parameters.eta_1.to_owned();
-        let eta_2 = relation_parameters.eta_2.to_owned();
-        let eta_3 = relation_parameters.eta_3.to_owned();
+        let beta = relation_parameters.beta.to_owned();
+        let beta_sqr = beta.multiply(&beta, builder, driver)?;
+        let beta_cube = beta_sqr.multiply(&beta, builder, driver)?;
         let w_1 = input.witness.w_l().to_owned();
         let w_2 = input.witness.w_r().to_owned();
         let w_3 = input.witness.w_o().to_owned();
@@ -76,7 +76,7 @@ impl LogDerivLookupRelation {
             .multiply(&w_1_shift, builder, driver)?
             .add(&(w_1.add(gamma, builder, driver)), builder, driver);
 
-        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
+        // (w_1 + \gamma q_2*w_1_shift) + β(w_2 + q_m*w_2_shift) + β²(w_3 + q_c*w_3_shift) + β³q_index.
         let derived_table_entry_2 = negative_column_2_step_size
             .multiply(&w_2_shift, builder, driver)?
             .add(&w_2, builder, driver);
@@ -91,7 +91,7 @@ impl LogDerivLookupRelation {
             derived_table_entry_3,
         ] = FieldCT::multiply_many(
             &[table_index, derived_table_entry_2, derived_table_entry_3],
-            &[eta_3, eta_1, eta_2],
+            &[beta_cube, beta, beta_sqr],
             builder,
             driver,
         )?
@@ -117,9 +117,9 @@ impl LogDerivLookupRelation {
         driver: &mut T,
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let gamma = &relation_parameters.gamma;
-        let eta_1 = relation_parameters.eta_1.to_owned();
-        let eta_2 = relation_parameters.eta_2.to_owned();
-        let eta_3 = relation_parameters.eta_3.to_owned();
+        let beta = relation_parameters.beta.to_owned();
+        let beta_sqr = beta.multiply(&beta, builder, driver)?;
+        let beta_cube = beta_sqr.multiply(&beta, builder, driver)?;
 
         let table_1 = input.precomputed.table_1().to_owned();
         let table_2 = input.precomputed.table_2().to_owned();
@@ -128,7 +128,7 @@ impl LogDerivLookupRelation {
 
         let mut mul_raw = FieldCT::multiply_many_raw(
             &[table_2, table_3, table_4],
-            &[eta_1, eta_2, eta_3],
+            &[beta, beta_sqr, beta_cube],
             builder,
             driver,
         )?;

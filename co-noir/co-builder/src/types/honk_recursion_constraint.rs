@@ -3,7 +3,7 @@ use crate::honk_verifier::recursive_decider_verification_key::{
     RecursiveDeciderVerificationKey, VKAndHash,
 };
 use crate::honk_verifier::ultra_recursive_verifier::UltraRecursiveVerifier;
-use crate::keys::proving_key::ProvingKeyTrait;
+use crate::keys::proving_key::create_keys_barretenberg;
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{Poseidon2SpongeCT, TranscriptCT, TranscriptHasherCT};
 use crate::types::big_field::BigField;
@@ -18,12 +18,11 @@ use co_noir_common::constants::{
     BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, CONST_PROOF_SIZE_LOG_N,
     DECIDER_PROOF_LENGTH, NUM_ALL_ENTITIES, NUM_SMALL_IPA_EVALUATIONS, NUM_ZERO_ROWS,
     OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS, PUBLIC_INPUTS_SIZE,
-    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS, ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK,
+    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS,
 };
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofResult;
-use co_noir_common::keys::proving_key::ProvingKey;
 use co_noir_common::keys::verification_key::VerifyingKeyBarretenberg;
 use co_noir_common::mpc::plain::PlainUltraHonkDriver;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, WITNESS_ENTITIES_SIZE};
@@ -229,7 +228,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
         // Step 3.
         let mut transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
-        let honk_vk_hash = honk_vk_to_be_set.hash_through_transcript("", &mut transcript);
+        let honk_vk_hash = honk_vk_to_be_set.hash_with_origin_tagging("", &mut transcript);
 
         if !predicate.is_constant() {
             // If the predicate is a witness, we conditionally assign a valid vk, proof and vk hash so that verification
@@ -364,7 +363,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
         // prove the circuit constructed above
         // Create the decider proving key
-        let (pk, vk) = ProvingKey::create_keys_barretenberg::<PlainAcvmSolver<_>>(
+        let (pk, vk) = create_keys_barretenberg::<_, _, PlainAcvmSolver<_>>(
             ().id(),
             builder,
             crs,

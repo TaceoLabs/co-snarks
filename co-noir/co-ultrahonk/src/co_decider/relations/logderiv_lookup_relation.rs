@@ -95,9 +95,9 @@ impl LogDerivLookupRelation {
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> Vec<T::ArithmeticShare> {
         let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
+        let beta = relation_parameters.beta;
+        let beta_sqr = beta * beta;
+        let beta_cube = beta_sqr * beta;
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
         let w_3 = input.witness.w_o();
@@ -125,28 +125,28 @@ impl LogDerivLookupRelation {
             T::mul_with_public_many(negative_column_3_step_size, w_3_shift);
         T::add_assign_many(&mut derived_table_entry_3, w_3);
 
-        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
+        // (w_1 + \gamma q_2*w_1_shift) + β(w_2 + q_m*w_2_shift) + β²(w_3 + q_c*w_3_shift) + β³q_index.
         // deg 2 or 3
-        T::scale_many_in_place(&mut derived_table_entry_2, *eta_1);
-        T::scale_many_in_place(&mut derived_table_entry_3, *eta_2);
+        T::scale_many_in_place(&mut derived_table_entry_2, beta);
+        T::scale_many_in_place(&mut derived_table_entry_3, beta_sqr);
 
         T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_2);
         T::add_assign_many(&mut derived_table_entry_1, &derived_table_entry_3);
         // 0xThemis TODO we dont need to collect this
-        let table_index = table_index.iter().map(|x| *x * *eta_3).collect_vec();
+        let table_index = table_index.iter().map(|x| *x * beta_cube).collect_vec();
         T::add_assign_public_many(&mut derived_table_entry_1, &table_index, id);
         derived_table_entry_1
     }
 
-    // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
+    // Compute table_1 + gamma + table_2 * beta + table_3 * beta^2 + table_4 * beta^3
     fn compute_write_term<T: NoirUltraHonkProver<P>, P: CurveGroup>(
         input: &ProverUnivariatesBatch<T, P>,
         relation_parameters: &RelationParameters<P::ScalarField>,
     ) -> Vec<P::ScalarField> {
         let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
+        let beta = relation_parameters.beta;
+        let beta_sqr = beta * beta;
+        let beta_cube = beta_sqr * beta;
 
         let table_1 = input.precomputed.table_1();
         let table_2 = input.precomputed.table_2();
@@ -158,9 +158,9 @@ impl LogDerivLookupRelation {
             result.push(
                 table_1.to_owned()
                     + gamma
-                    + table_2.to_owned() * eta_1
-                    + table_3.to_owned() * eta_2
-                    + table_4.to_owned() * eta_3,
+                    + table_2.to_owned() * beta
+                    + table_3.to_owned() * beta_sqr
+                    + table_4.to_owned() * beta_cube,
             );
         }
 

@@ -18,7 +18,6 @@ use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
-use std::ops::Mul;
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct PolyTriple<F: PrimeField> {
@@ -70,8 +69,8 @@ pub(crate) struct MulQuad<F: PrimeField> {
     pub(crate) const_scaling: F,
 }
 
-pub type QuadConstraint<F> = MulQuad<F>;
-pub type BigQuadConstraint<F> = Vec<QuadConstraint<F>>;
+pub(crate) type QuadConstraint<F> = MulQuad<F>;
+pub(crate) type BigQuadConstraint<F> = Vec<QuadConstraint<F>>;
 
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct Poseidon2ExternalGate {

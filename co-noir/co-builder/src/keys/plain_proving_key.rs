@@ -1,7 +1,6 @@
 use crate::{
-    keys::proving_key,
     prelude::{GenericUltraCircuitBuilder, UltraCircuitBuilder},
-    types::types::{CycleNode, CyclicPermutation, Mapping, PermutationMapping, TraceData},
+    types::types::{CycleNode, CyclicPermutation, Mapping, PermutationMapping},
 };
 use ark_ec::CurveGroup;
 use ark_ff::One;
@@ -216,6 +215,7 @@ pub fn compute_permutation_argument_polynomials<
         active_region_data,
     );
 }
+
 pub(crate) fn compute_permutation_mapping<
     T: NoirWitnessExtensionProtocol<P::ScalarField>,
     P: CurveGroup,

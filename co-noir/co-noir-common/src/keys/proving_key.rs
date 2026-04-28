@@ -44,6 +44,24 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub phantom: PhantomData<T>,
 }
 
+impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for ProvingKey<T, C> {
+    fn default() -> Self {
+        Self {
+            circuit_size: 0,
+            public_inputs: Vec::new(),
+            num_public_inputs: 0,
+            pub_inputs_offset: 0,
+            polynomials: Polynomials::default(),
+            memory_read_records: Vec::new(),
+            memory_write_records: Vec::new(),
+            memory_records_shared: BTreeMap::new(),
+            final_active_wire_idx: 0,
+            active_region_data: ActiveRegionData::default(),
+            phantom: PhantomData,
+        }
+    }
+}
+
 pub type Rep3ProvingKey<P> = ProvingKey<Rep3UltraHonkDriver, P>;
 pub type ShamirProvingKey<P> = ProvingKey<ShamirUltraHonkDriver, P>;
 

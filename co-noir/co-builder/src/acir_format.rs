@@ -7,7 +7,7 @@ use acir::{
     },
     native_types::{Expression, Witness, WitnessMap},
 };
-use ark_ff::{PrimeField, Zero};
+use ark_ff::PrimeField;
 use co_noir_common::{constants::MOCK_PROOF_DYADIC_SIZE, honk_curve::HonkCurve};
 use std::{array, cmp::max, collections::BTreeMap};
 

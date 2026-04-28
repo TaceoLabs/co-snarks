@@ -418,7 +418,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkProofResult<()> {
         tracing::trace!("executing preamble round");
 
-        let vk_hash = verifying_key.hash_through_transcript::<H>("", transcript);
+        let vk_hash = verifying_key.hash_with_origin_tagging::<H>("", transcript);
         transcript.add_fr_to_hash_buffer::<C>("VK_HASH".to_string(), vk_hash);
 
         if proving_key.num_public_inputs as usize != proving_key.public_inputs.len() {

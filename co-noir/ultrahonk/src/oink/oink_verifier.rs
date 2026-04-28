@@ -48,7 +48,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let public_input_size = verifying_key.inner_vk.num_public_inputs;
 
         let vk_hash =
-            verifying_key.hash_through_transcript::<H, C>(&self.domain_separator, transcript);
+            verifying_key.hash_with_origin_tagging::<H, C>(&self.domain_separator, transcript);
         transcript.add_fr_to_hash_buffer::<C>(self.domain_separator.clone() + "vk_hash", vk_hash);
 
         self.public_inputs = Vec::with_capacity(public_input_size as usize);

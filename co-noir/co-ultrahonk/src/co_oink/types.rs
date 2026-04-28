@@ -12,26 +12,16 @@ pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
+#[derive(Default, Clone)]
 pub(crate) struct Challenges<F: PrimeField> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
-    pub(crate) beta: F,
     pub(crate) gamma: F,
     pub(crate) alphas: [F; NUM_ALPHAS],
-}
-
-impl<F: PrimeField> Default for Challenges<F> {
-    fn default() -> Self {
-        Self {
-            eta_1: Default::default(),
-            eta_2: Default::default(),
-            eta_3: Default::default(),
-            beta: Default::default(),
-            gamma: Default::default(),
-            alphas: Default::default(),
-        }
-    }
+    pub(crate) beta: F,
+    pub(crate) beta_sqr: F,
+    pub(crate) beta_cube: F,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for ProverMemory<T, P> {

@@ -39,7 +39,7 @@ impl<P: Pairing> VerifyingKey<P> {
         }
     }
 
-    pub fn hash_through_transcript<H, C>(
+    pub fn hash_with_origin_tagging<H, C>(
         &self,
         domain_separator: &str,
         transcript: &mut Transcript<TranscriptFieldType, H>,
@@ -258,7 +258,7 @@ impl<C: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<C> {
         })
     }
 
-    pub fn hash_through_transcript<H>(
+    pub fn hash_with_origin_tagging<H>(
         &self,
         domain_separator: &str,
         transcript: &mut Transcript<TranscriptFieldType, H>,
