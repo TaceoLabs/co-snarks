@@ -227,7 +227,7 @@ impl<
 
         let table_index_entry = beta_cube * table_index;
 
-        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
+        // (w_1 + \gamma + q_2*w_1_shift) + β(w_2 + q_m*w_2_shift) + β²(w_3 + q_c*w_3_shift) + β³q_index.
         // deg 2 or 3
         let mul = T::mul_with_public(beta, derived_table_entry_2);
         let res = T::add(derived_table_entry_1, mul);
@@ -236,7 +236,7 @@ impl<
         T::add_with_public(table_index_entry, res, id)
     }
 
-    // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
+    // Compute table_1 + gamma + table_2 * beta + table_3 * beta^2 + table_4 * beta^3
     fn compute_table_term(&self, proving_key: &ProvingKey<T, C>, i: usize) -> C::ScalarField {
         tracing::trace!("compute table term");
 

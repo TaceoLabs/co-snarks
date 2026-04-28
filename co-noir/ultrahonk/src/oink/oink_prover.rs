@@ -128,9 +128,9 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         tracing::trace!("compute read term");
 
         let gamma = &self.memory.challenges.gamma;
-        let eta_1 = &self.memory.challenges.eta_1;
-        let eta_2 = &self.memory.challenges.eta_2;
-        let eta_3 = &self.memory.challenges.eta_3;
+        let beta = &self.memory.challenges.beta;
+        let beta_sqr = *beta * *beta;
+        let beta_cube = beta_sqr * *beta;
         let w_1 = &proving_key.polynomials.witness.w_l()[i];
         let w_2 = &proving_key.polynomials.witness.w_r()[i];
         let w_3 = &proving_key.polynomials.witness.w_o()[i];
@@ -149,28 +149,28 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let derived_table_entry_2 = *w_2 + *negative_column_2_step_size * w_2_shift;
         let derived_table_entry_3 = *w_3 + *negative_column_3_step_size * w_3_shift;
 
-        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
+        // (w_1 + \gamma q_2*w_1_shift) + β(w_2 + q_m*w_2_shift) + β²(w_3 + q_c*w_3_shift) + β³q_index.
         // deg 2 or 3
         derived_table_entry_1
-            + derived_table_entry_2 * eta_1
-            + derived_table_entry_3 * eta_2
-            + *table_index * eta_3
+            + derived_table_entry_2 * beta
+            + derived_table_entry_3 * beta_sqr
+            + *table_index * beta_cube
     }
 
-    /// Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
+    /// Compute table_1 + gamma + table_2 * beta + table_3 * beta^2 + table_4 * beta^3
     fn compute_write_term(&self, proving_key: &PlainProvingKey<C>, i: usize) -> C::ScalarField {
         tracing::trace!("compute write term");
 
         let gamma = &self.memory.challenges.gamma;
-        let eta_1 = &self.memory.challenges.eta_1;
-        let eta_2 = &self.memory.challenges.eta_2;
-        let eta_3 = &self.memory.challenges.eta_3;
+        let beta = &self.memory.challenges.beta;
+        let beta_sqr = *beta * *beta;
+        let beta_cube = beta_sqr * *beta;
         let table_1 = &proving_key.polynomials.precomputed.table_1()[i];
         let table_2 = &proving_key.polynomials.precomputed.table_2()[i];
         let table_3 = &proving_key.polynomials.precomputed.table_3()[i];
         let table_4 = &proving_key.polynomials.precomputed.table_4()[i];
 
-        *table_1 + gamma + *table_2 * eta_1 + *table_3 * eta_2 + *table_4 * eta_3
+        *table_1 + gamma + *table_2 * beta + *table_3 * beta_sqr + *table_4 * beta_cube
     }
 
     fn compute_logderivative_inverses(&mut self, proving_key: &PlainProvingKey<C>) {
@@ -480,14 +480,10 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
-        let challs = transcript.get_challenges::<C>(&[
-            "ETA".to_string(),
-            "ETA_TWO".to_string(),
-            "ETA_THREE".to_string(),
-        ]);
-        self.memory.challenges.eta_1 = challs[0];
-        self.memory.challenges.eta_2 = challs[1];
-        self.memory.challenges.eta_3 = challs[2];
+        let eta = transcript.get_challenge::<C>("eta".to_string());
+        self.memory.challenges.eta_1 = eta;
+        self.memory.challenges.eta_2 = eta * eta;
+        self.memory.challenges.eta_3 = eta * eta * eta;
         self.compute_w4(proving_key);
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial
@@ -520,7 +516,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkProofResult<()> {
         tracing::trace!("executing log derivative inverse round");
 
-        let challs = transcript.get_challenges::<C>(&["BETA".to_string(), "GAMMA".to_string()]);
+        let challs = transcript.get_challenges::<C>(&["beta".to_string(), "gamma".to_string()]);
         self.memory.challenges.beta = challs[0];
         self.memory.challenges.gamma = challs[1];
 

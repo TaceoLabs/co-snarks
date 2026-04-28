@@ -5,8 +5,8 @@ use crate::co_decider::{
     co_sumcheck::co_sumcheck_round::SumcheckRound,
     types::{ClaimedEvaluations, PartiallyEvaluatePolys},
 };
-use ark_ff::{BigInteger, One, PrimeField};
 use ark_ff::Zero;
+use ark_ff::{BigInteger, One, PrimeField};
 use co_noir_common::{
     constants::BATCHED_RELATION_PARTIAL_LENGTH_ZK, polynomials::entities::AllEntities,
 };
@@ -153,28 +153,41 @@ impl<
 
         let mut sum_check_round = SumcheckRound::new(multivariate_n as usize);
 
-        println!("Gate challenges = {:?}", self.memory.gate_challenges.iter().map(|v| {
-            let bytes = v.into_bigint().to_bytes_be();
-            bytes
+        println!(
+            "Gate challenges = {:?}",
+            self.memory
+                .gate_challenges
                 .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        }).collect::<Vec<_>>());
+                .map(|v| {
+                    let bytes = v.into_bigint().to_bytes_be();
+                    bytes
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+        );
 
-        println!("Relation parameters = {:?}", [
-            self.memory.relation_parameters.eta_1,
-            self.memory.relation_parameters.eta_2,
-            self.memory.relation_parameters.eta_3,
-            self.memory.relation_parameters.beta,
-            self.memory.relation_parameters.gamma,
-            self.memory.relation_parameters.public_input_delta,
-        ].iter().map(|v| {
-            let bytes = v.into_bigint().to_bytes_be();
-            bytes
-                .iter()
-                .map(|byte| format!("{byte:02x}"))
-                .collect::<String>()
-        }).collect::<Vec<_>>());
+        println!(
+            "Relation parameters = {:?}",
+            [
+                self.memory.relation_parameters.eta_1,
+                self.memory.relation_parameters.eta_2,
+                self.memory.relation_parameters.eta_3,
+                self.memory.relation_parameters.beta,
+                self.memory.relation_parameters.gamma,
+                self.memory.relation_parameters.public_input_delta,
+            ]
+            .iter()
+            .map(|v| {
+                let bytes = v.into_bigint().to_bytes_be();
+                bytes
+                    .iter()
+                    .map(|byte| format!("{byte:02x}"))
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+        );
 
         let mut gate_separators = GateSeparatorPolynomial::new(
             self.memory.gate_challenges.to_owned(),
@@ -200,14 +213,19 @@ impl<
         )?;
         let round_univariate = T::open_many(&round_univariate.evaluations, self.net, self.state)?;
 
-        println!("Round univariate evaluations: {:?}", round_univariate.iter().map(
-            |v| {
-                v.into_bigint().to_bytes_be()
-                    .iter()
-                    .map(|byte| format!("{byte:02x}"))
-                    .collect::<String>()
-            }
-        ).collect::<Vec<_>>());
+        println!(
+            "Round univariate evaluations: {:?}",
+            round_univariate
+                .iter()
+                .map(|v| {
+                    v.into_bigint()
+                        .to_bytes_be()
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect::<String>()
+                })
+                .collect::<Vec<_>>()
+        );
 
         // Place the evaluations of the round univariate into transcript.
         transcript.send_fr_iter_to_verifier::<P, _>(

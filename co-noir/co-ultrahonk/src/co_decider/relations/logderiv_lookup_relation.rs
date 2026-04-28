@@ -210,9 +210,9 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      *
      * \sum{i=0}^{n-1} \frac{read_counts_i}{write_term_i} - \frac{q_lookup}{read_term_i} = 0
      *
-     * where write_term = table_col_1 + \gamma + table_col_2 * \eta_1 + table_col_3 * \eta_2 + table_index * \eta_3
-     * and read_term = derived_table_entry_1 + \gamma + derived_table_entry_2 * \eta_1 + derived_table_entry_3 * \eta_2
-     * + table_index * \eta_3, with derived_table_entry_i = w_i - col_step_size_i\cdot w_i_shift. (The table entries
+     * where write_term = table_col_1 + \gamma + table_col_2 * \beta + table_col_3 * \beta^2 + table_index * \beta^3
+     * and read_term = derived_table_entry_1 + \gamma + derived_table_entry_2 * \beta + derived_table_entry_3 * \beta^2
+     * + table_index * \beta^3, with derived_table_entry_i = w_i - col_step_size_i\cdot w_i_shift. (The table entries
      *   must be 'derived' from wire values in this way since the stored witnesses are actually successive accumulators,
      *   the differences of which are equal to entries in a table. This is an efficiency trick to avoid using additional
      *   gates to reconstruct full size values from the limbs contained in tables).
