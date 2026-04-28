@@ -4344,7 +4344,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // w4_shift to use the least possible number of intermediate witnesses. See the documentation of
         // split_into_mul_quad_gates for more information.
         for big_constraint in constraint_system.big_quad_constraints.iter() {
-            // TODO CESAR: This mut and clone are weird
+            // TODO CESAR: This mut and clone are weird (Remark FF: I think we can pass it by reference and make it mutable inside the function?)
             self.create_big_quad_constraint(driver, &mut big_constraint.clone())?;
         }
 
@@ -4595,15 +4595,53 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     ) -> eyre::Result<()> {
         let padding_size = 16 - (constraint.inputs.len() % 16);
 
+        // Packs 16 bytes from the inputs (plaintext, iv, key) into a field element.
+        // Note that noir-stdlib already pads the inputs in accordance with PKCS7 padding scheme.
+        assert!(
+            constraint.inputs.len() % 16 == 0,
+            "Inputs must be a multiple of 16"
+        );
+        let convert_input = |inputs: &[WitnessOrConstant<P::ScalarField>],
+                             builder: &mut Self,
+                             driver: &mut T|
+         -> eyre::Result<FieldCT<P::ScalarField>> {
+            let mut converted: FieldCT<P::ScalarField> = P::ScalarField::zero().into();
+            for input in inputs.iter().take(16) {
+                converted.mul_assign(&P::ScalarField::from(256u64).into(), builder, driver)?;
+                let byte = input.to_field_ct();
+                // Noir enforces bytes to be in the range [0, 255] by type declarations, however, if
+                // inputs are taken from ACIR directly, these ranges should be enforced by the range
+                // constraint. In case these range constraints already exist we won't be paying for
+                // the extra constraint.
+                byte.create_range_constraint(8, builder, driver)?;
+                converted.add_assign(&byte, builder, driver);
+            }
+            Ok(converted)
+        };
+
+        // Packs 16 bytes from the outputs (witness indexes) into a field element for comparison
+        let convert_output = |outputs: &[u32; 16],
+                              builder: &mut Self,
+                              driver: &mut T|
+         -> eyre::Result<FieldCT<P::ScalarField>> {
+            let mut converted: FieldCT<P::ScalarField> = P::ScalarField::zero().into();
+            for &output in outputs.iter() {
+                converted.mul_assign(&P::ScalarField::from(256u64).into(), builder, driver)?;
+                let byte = FieldCT::from_witness_index(output);
+                // Noir enforces bytes to be in the range [0, 255] by type declarations, however, if
+                // inputs are taken from ACIR directly, these ranges should be enforced by the range
+                // constraint. In case these range constraints already exist we won't be paying for
+                // the extra constraint.
+                byte.create_range_constraint(8, builder, driver)?;
+                converted.add_assign(&byte, builder, driver);
+            }
+            Ok(converted)
+        };
+
         // Perform the conversions from array of bytes to field elements
-        let mut converted_inputs = Vec::with_capacity(constraint.inputs.len().div_ceil(16));
+        let mut converted_inputs = Vec::with_capacity(constraint.inputs.len() / 16);
         for chunk in constraint.inputs.chunks(16) {
-            let to_add = if chunk.len() < 16 {
-                aes128::pack_input_bytes_into_field(chunk, padding_size, self, driver)?
-            } else {
-                aes128::pack_input_bytes_into_field(chunk, 0, self, driver)?
-            };
-            converted_inputs.push(to_add);
+            converted_inputs.push(convert_input(chunk, self, driver)?);
         }
 
         let mut converted_outputs = Vec::with_capacity(constraint.outputs.len() / 16);
@@ -4611,21 +4649,19 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let outputs: [u32; 16] = chunk
                 .try_into()
                 .expect("Output chunk must have 16 elements");
-            converted_outputs.push(aes128::pack_output_bytes_into_field(
-                &outputs, self, driver,
-            )?);
+            converted_outputs.push(convert_output(&outputs, self, driver)?);
         }
 
         let output_bytes = aes128::AES128::encrypt_buffer_cbc(
             &converted_inputs,
-            &aes128::pack_input_bytes_into_field(&constraint.iv, 0, self, driver)?,
-            &aes128::pack_input_bytes_into_field(&constraint.key, 0, self, driver)?,
+            &convert_input(&constraint.iv, self, driver)?,
+            &convert_input(&constraint.key, self, driver)?,
             self,
             driver,
         )?;
 
-        for (i, output_byte) in output_bytes.iter().enumerate() {
-            output_byte.assert_equal(&converted_outputs[i], self, driver);
+        for (output_byte, converted_output) in output_bytes.iter().zip(converted_outputs.iter()) {
+            output_byte.assert_equal(converted_output, self, driver);
         }
 
         Ok(())
