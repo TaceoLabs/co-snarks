@@ -6,7 +6,7 @@ BARRETENBERG_VERSION=5.0.0-nightly.20260324 ##specify the desired barretenberg v
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
-REMOVE_OUTPUT=0
+REMOVE_OUTPUT=1
 PIPE=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];
 then

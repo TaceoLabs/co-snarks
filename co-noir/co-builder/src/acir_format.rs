@@ -15,9 +15,9 @@ use crate::{
     transcript_ct::TranscriptFieldType,
     types::types::{
         AES128Constraint, AcirFormatOriginalOpcodeIndices, BigQuadConstraint, Blake2sConstraint,
-        Blake2sInput, Blake3Constraint, Blake3Input, BlockConstraint, BlockType, EcAdd,
-        LogicConstraint, MemOp, MulQuad, MultiScalarMul, PolyTriple, Poseidon2Constraint,
-        QuadConstraint, RangeConstraint, RecursionConstraint, Sha256Compression, WitnessOrConstant,
+        Blake3Constraint, BlockConstraint, BlockType, EcAdd, LogicConstraint, MemOp, MulQuad,
+        MultiScalarMul, PolyTriple, Poseidon2Constraint, QuadConstraint, RangeConstraint,
+        RecursionConstraint, Sha256Compression, WitnessOrConstant,
     },
 };
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -737,10 +737,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 af.blake2s_constraints.push(Blake2sConstraint {
                     inputs: inputs
                         .into_iter()
-                        .map(|e| Blake2sInput {
-                            blackbox_input: to_witness_or_constant(e),
-                            num_bits: 8, // hardcoded to 8 to match current behavior
-                        })
+                        .map(|e| to_witness_or_constant(e))
                         .collect(),
                     result: array::from_fn(|i| to_witness(outputs[i])),
                 });
@@ -752,10 +749,7 @@ impl<F: PrimeField> AcirFormat<F> {
                 af.blake3_constraints.push(Blake3Constraint {
                     inputs: inputs
                         .into_iter()
-                        .map(|e| Blake3Input {
-                            blackbox_input: to_witness_or_constant(e),
-                            num_bits: 8, // hardcoded to 8 to match current behavior
-                        })
+                        .map(|e| to_witness_or_constant(e))
                         .collect(),
                     result: array::from_fn(|i| to_witness(outputs[i])),
                 });

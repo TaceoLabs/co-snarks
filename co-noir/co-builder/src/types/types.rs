@@ -489,26 +489,14 @@ impl<F: PrimeField> RecursionConstraint<F> {
 }
 
 #[derive(Debug)]
-pub(crate) struct Blake2sInput<F: PrimeField> {
-    pub(crate) blackbox_input: WitnessOrConstant<F>,
-    pub(crate) num_bits: u32,
-}
-
-#[derive(Debug)]
 pub(crate) struct Blake2sConstraint<F: PrimeField> {
-    pub(crate) inputs: Vec<Blake2sInput<F>>,
+    pub(crate) inputs: Vec<WitnessOrConstant<F>>,
     pub(crate) result: [u32; 32],
 }
 
 #[derive(Debug)]
-pub(crate) struct Blake3Input<F: PrimeField> {
-    pub(crate) blackbox_input: WitnessOrConstant<F>,
-    pub(crate) num_bits: u32,
-}
-
-#[derive(Debug)]
 pub(crate) struct Blake3Constraint<F: PrimeField> {
-    pub(crate) inputs: Vec<Blake3Input<F>>,
+    pub(crate) inputs: Vec<WitnessOrConstant<F>>,
     pub(crate) result: [u32; 32],
 }
 

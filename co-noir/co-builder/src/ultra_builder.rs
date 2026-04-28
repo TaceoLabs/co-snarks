@@ -4799,8 +4799,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(())
     }
 
-    // TODO CESAR: Refactor this to match barretenberg's create_dyadic_range_constraint
-    // TODO CESAR: Move to sha256 constraint file
     fn create_sha256_compression_constraints(
         &mut self,
         driver: &mut T,
@@ -4831,7 +4829,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(())
     }
 
-    // TODO CESAR: Move to blake2s constraint file
     fn create_blake2s_constraints(
         &mut self,
         driver: &mut T,
@@ -4842,15 +4839,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         // Get the witness assignment for each witness index
         // Write the witness assignment to the byte_array
-        for witness_index_num_bits in &constraint.inputs {
-            let witness_index = &witness_index_num_bits.blackbox_input;
-            let num_bits = witness_index_num_bits.num_bits;
-
-            // XXX: The implementation requires us to truncate the element to the nearest byte and not bit
-            let num_bytes = Utils::round_to_nearest_byte(num_bits);
+        for witness_index in &constraint.inputs {
             let element = WitnessOrConstant::to_field_ct(witness_index);
-            let element_bytes =
-                ByteArray::from_field_ct(&element, num_bytes as usize, self, driver)?;
+
+            // byte_array_ct(field, num_bytes) constructor adds range constraints for each byte. Note that num_bytes =
+            // ceil(witness_index_num_bits.num_bits/8). Here, num_bits is set to 8 when constructing the vector of inputs in
+            // the Blake2s constraint. Hence, we set num_bytes = 1.
+            let element_bytes = ByteArray::from_field_ct(&element, 1, self, driver)?;
 
             arr.write(&element_bytes);
         }
@@ -4870,8 +4865,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(())
     }
 
-    // TODO CESAR: Refactor this to match barretenberg's implementation
-    // TODO CESAR: Move to blake3 constraint file
     fn create_blake3_constraints(
         &mut self,
         driver: &mut T,
@@ -4882,15 +4875,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         // Get the witness assignment for each witness index
         // Write the witness assignment to the byte_array
-        for witness_index_num_bits in &constraint.inputs {
-            let witness_index = &witness_index_num_bits.blackbox_input;
-            let num_bits = witness_index_num_bits.num_bits;
-
-            // XXX: The implementation requires us to truncate the element to the nearest byte and not bit
-            let num_bytes = Utils::round_to_nearest_byte(num_bits);
+        for witness_index in &constraint.inputs {
             let element = WitnessOrConstant::to_field_ct(witness_index);
-            let element_bytes =
-                ByteArray::from_field_ct(&element, num_bytes as usize, self, driver)?;
+
+            // byte_array_ct(field, num_bytes) constructor adds range constraints for each byte. Note that num_bytes =
+            // ceil(witness_index_num_bits.num_bits/8). Here, num_bits is set to 8 when constructing the vector of inputs in
+            // the Blake3 constraint. Hence, we set num_bytes = 1.
+            let element_bytes = ByteArray::from_field_ct(&element, 1, self, driver)?;
 
             arr.write(&element_bytes);
         }
