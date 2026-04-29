@@ -957,7 +957,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         let constant_coordinates = input_x.is_constant && input_y.is_constant;
         let mut point_x = input_x.to_field_ct();
         let mut point_y = input_y.to_field_ct();
-        let mut infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
+        let infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
 
         // If a witness is not provided (we are in a write_vk scenario) we ensure the coordinates correspond to a valid
         // point to avoid erroneous failures during circuit construction. We only do this if the coordinates are
@@ -990,7 +990,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
                 builder,
                 driver,
             )?;
-            infinity = BoolCT::conditional_assign(
+            let _ = BoolCT::conditional_assign(
                 predicate,
                 &infinity,
                 &BoolCT::from(false),
@@ -999,7 +999,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
             )?;
         }
 
-        CycleGroupCT::new_with_infinity_control(point_x, point_y, infinity, true, builder, driver)
+        CycleGroupCT::new(point_x, point_y, true, builder, driver)
     }
 
     pub(crate) fn to_grumpkin_scalar<

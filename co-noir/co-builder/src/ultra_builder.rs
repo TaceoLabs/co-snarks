@@ -267,7 +267,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         }
     }
 
-    pub(crate) fn create_poly_gate(&mut self, inp: &PolyTriple<P::ScalarField>) {
+    pub(crate) fn create_arithmetic_gate(&mut self, inp: &PolyTriple<P::ScalarField>) {
         self.assert_valid_variables(&[inp.a, inp.b, inp.c]);
 
         self.blocks

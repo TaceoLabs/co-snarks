@@ -318,7 +318,7 @@ impl<F: PrimeField> FieldCT<F> {
             driver.add_assign_with_public(q_c, &mut out);
 
             result.witness_index = builder.add_variable(out);
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
@@ -405,7 +405,7 @@ impl<F: PrimeField> FieldCT<F> {
                 driver.add_assign_with_public(q_c, &mut out);
 
                 result.witness_index = builder.add_variable(out);
-                builder.create_poly_gate(&PolyTriple {
+                builder.create_arithmetic_gate(&PolyTriple {
                     a: l.witness_index,
                     b: r.witness_index,
                     c: result.witness_index,
@@ -538,7 +538,7 @@ impl<F: PrimeField> FieldCT<F> {
         if let Some((poly_triple, out_value)) = &mut mul_raw_data.0 {
             let result = Self::from_witness_index(builder.add_variable(out_value.clone()));
             poly_triple.c = result.witness_index;
-            builder.create_poly_gate(poly_triple);
+            builder.create_arithmetic_gate(poly_triple);
             Ok(result)
         } else if let Some(res) = &mut mul_raw_data.1 {
             Ok(res.clone())
@@ -634,7 +634,7 @@ impl<F: PrimeField> FieldCT<F> {
                 let inverse = driver.invert(other_val)?;
                 let out_value = driver.mul_with_public(val, inverse);
                 result.witness_index = builder.add_variable(out_value);
-                builder.create_poly_gate(&PolyTriple {
+                builder.create_arithmetic_gate(&PolyTriple {
                     a: result.witness_index,
                     b: other.witness_index,
                     c: result.witness_index,
@@ -679,7 +679,7 @@ impl<F: PrimeField> FieldCT<F> {
             let q_o = -self.multiplicative_constant;
             let q_c = -self.additive_constant;
 
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: result.witness_index,
                 b: other.witness_index,
                 c: self.witness_index,
@@ -1159,7 +1159,7 @@ impl<F: PrimeField> FieldCT<F> {
             builder.update_variable(self.witness_index as usize, val.into());
         }
 
-        builder.create_poly_gate(&PolyTriple {
+        builder.create_arithmetic_gate(&PolyTriple {
             a: self.witness_index,
             b: builder.zero_idx,
             c: builder.zero_idx,
@@ -1231,7 +1231,7 @@ impl<F: PrimeField> FieldCT<F> {
         // <=> this.v * inverse.v * [   q_m  ] + this.v * [q_l] + inverse.v * [   q_r  ] + 0 * [q_o] + [q_c] == 0
 
         // (a * mul_const + add_const) * b - 1 = 0
-        builder.create_poly_gate(&PolyTriple {
+        builder.create_arithmetic_gate(&PolyTriple {
             a: self.witness_index,             // input value
             b: inverse.witness_index,          // inverse
             c: builder.zero_idx,               // no output
@@ -2382,7 +2382,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
             };
             let q3 = -P::ScalarField::one();
             let qc = P::ScalarField::from(i_a * i_b);
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
@@ -2466,7 +2466,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
             // Let r := a | b;
             // Constrain
             //      q_m * w_a * w_b + q_l * w_a + q_r * w_b + q_o * r + q_c = 0
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
@@ -2571,7 +2571,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
                 right_coefficient = P::ScalarField::one();
                 constant_coefficient = P::ScalarField::zero();
             }
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
@@ -2612,7 +2612,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
         let q_o = -P::ScalarField::one();
         let q_m = P::ScalarField::zero();
         let q_r = P::ScalarField::zero();
-        builder.create_poly_gate(&PolyTriple {
+        builder.create_arithmetic_gate(&PolyTriple {
             a: self.witness_index,
             b: self.witness_index,
             c: new_witness,
@@ -2655,6 +2655,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for C
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P, T> {
     const ULTRA_NUM_TABLE_BITS: usize = 4;
     const TABLE_BITS: usize = Self::ULTRA_NUM_TABLE_BITS;
+    const NUM_BITS: usize = <P::ScalarField as PrimeField>::MODULUS_BIT_SIZE as usize;
 
     pub(crate) fn new_from_parts(x: P::ScalarField, y: P::ScalarField, is_infinity: bool) -> Self {
         if is_infinity {
@@ -2680,23 +2681,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        assert!(
-            self.is_constant()
-                == (self.x.is_constant() && self.y.is_constant() && self.is_infinity.is_constant())
-        );
-        if self.is_infinity.is_constant()
-            && !T::get_public(&self.is_infinity.get_value(driver))
-                .expect("Constants are public")
-                .is_zero()
-        {
-            assert!(self.is_constant && self.is_standard);
-        }
-
-        if self.is_standard {
-            return Ok(());
-        }
-
-        self.is_standard = true;
+        // Set coordinates to (0, 0) if point is at infinity for canonical representation
         let zero = FieldCT::default();
         self.x = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?;
         self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?;
@@ -2911,8 +2896,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let xx = self.x.multiply(&self.x, builder, driver)?;
         let xxx = xx.multiply(&self.x, builder, driver)?;
         let curve_b = FieldCT::from(P::get_curve_b());
-        let rhs = xxx.add(&curve_b, builder, driver);
-        let mut res = self.y.madd(&self.y, &rhs.neg(), builder, driver)?;
+        let rhs = xxx.neg().sub(&curve_b, builder, driver);
+        let mut res = self.y.madd(&self.y, &rhs, builder, driver)?;
 
         // If this is the point at infinity, then res is changed to 0, otherwise it remains unchanged
         let is_not_infinity = self.is_point_at_infinity().not();
@@ -3029,6 +3014,25 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 let point_val = T::get_public_point(&point_val).expect("Constants are public");
                 if point_val.is_zero() {
                     // oi mate, why are you creating a circuit that multiplies a known point at infinity?
+
+                    // Constant infinity * witness scalar contributes nothing to the result, however, we must still apply
+                    // the range constraints that the cycle_scalar constructor defers to this method.
+                    let scalar_lo_index = scalar.lo.get_witness_index(builder, driver);
+                    let scalar_hi_index = scalar.hi.get_witness_index(builder, driver);
+                    builder.create_limbed_range_constraint(
+                        driver,
+                        scalar_lo_index,
+                        CycleScalarCT::<P::ScalarField>::LO_BITS as u64,
+                        None,
+                        Self::TABLE_BITS as u64,
+                    )?;
+                    builder.create_limbed_range_constraint(
+                        driver,
+                        scalar_hi_index,
+                        CycleScalarCT::<P::ScalarField>::HI_BITS as u64,
+                        None,
+                        Self::TABLE_BITS as u64,
+                    )?;
                     continue;
                 }
                 // We are a UltraCircuit
@@ -3260,7 +3264,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
-        let num_rounds = num_bits.div_ceil(Self::TABLE_BITS);
+        let num_rounds = Self::NUM_BITS.div_ceil(Self::TABLE_BITS);
         let num_points = scalars.len();
         let table_size = (1 << Self::TABLE_BITS) as usize;
 
