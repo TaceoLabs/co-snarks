@@ -1972,6 +1972,70 @@ impl<F: PrimeField> FieldCT<F> {
         // Scale the sum by the value of B(x)
         result.multiply(&full_numerator_value, builder, driver)
     }
+
+    /// Return (a < b) as bool circuit type.
+    /// Assumes both a and b are < 2^{num_bits}; this is not checked here.
+    pub fn ranged_less_than<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &Self,
+        num_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BoolCT<F, T>> {
+        let a = self;
+        let b = other;
+
+        if a.is_constant() && b.is_constant() {
+            let a_val: BigUint = T::get_public(&a.get_value(builder, driver))
+                .expect("Constants are public")
+                .into();
+            let b_val: BigUint = T::get_public(&b.get_value(builder, driver))
+                .expect("Constants are public")
+                .into();
+            return Ok(BoolCT::from(a_val < b_val));
+        }
+
+        // Let q = (a < b)
+        // Assume both a and b are < K where K = 2^{num_bits}
+        //    q == 1 <=>  0 < b - a - 1     < K
+        //    q == 0 <=>  0 < b - a + K - 1 < K
+        // i.e. for any bool value of q:
+        //    (b - a - 1) * q + (b - a + K - 1) * (1 - q) = r < K
+        //     q * (b - a - b + a) + b - a + K - 1 - (K - 1) * q - q = r < K
+        //     b - a + (K - 1) - K * q = r < K
+        let range_biguint = BigUint::from(1u32) << num_bits;
+        let half_modulus: BigUint = F::MODULUS.into();
+        debug_assert!(
+            range_biguint < (half_modulus >> 1usize),
+            "ranged_less_than: 2^num_bits must be less than half the field modulus"
+        );
+        let range_constant_f = F::from(range_biguint);
+
+        let a_val = a.get_value(builder, driver);
+        let b_val = b.get_value(builder, driver);
+        let predicate_witness = driver.lt(a_val, b_val)?;
+        let predicate_witness_ct = WitnessCT::from_acvm_type(predicate_witness, builder);
+        let predicate = BoolCT::from_witness_ct(predicate_witness_ct, builder, false);
+
+        let neg_a_plus_k_minus_1 = {
+            let k_minus_1 = FieldCT::from(range_constant_f - F::one());
+            a.neg().add(&k_minus_1, builder, driver)
+        };
+        let neg_pred_times_k = {
+            let k = FieldCT::from(range_constant_f);
+            predicate
+                .to_field_ct(driver)
+                .neg()
+                .multiply(&k, builder, driver)?
+        };
+        let predicate_valid = b.add_two(&neg_a_plus_k_minus_1, &neg_pred_times_k, builder, driver);
+        predicate_valid.create_range_constraint(num_bits, builder, driver)?;
+
+        Ok(predicate)
+    }
 }
 
 impl<F: PrimeField> From<F> for FieldCT<F> {

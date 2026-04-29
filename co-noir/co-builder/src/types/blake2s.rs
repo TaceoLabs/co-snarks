@@ -84,23 +84,14 @@ impl<F: PrimeField> Blake2s<F> {
         driver: &mut T,
     ) -> eyre::Result<()> {
         let inc_scalar = FieldCT::from(F::from(inc));
+
+        // Note that the initial blake2s_state values are circuit constants.
         s.t[0] = s.t[0].add(&inc_scalar, builder, driver);
-        let s_t_val = s.t[0].get_value(builder, driver);
-        let to_inc = T::lt(driver, s_t_val, F::from(inc).into())?;
-        // AZTEC TODO: Secure!? Think so as inc is known at "compile" time as it's derived
-        // from the msg length.
-        // TACEO: We open here since this does not get constrained in the original code, as in the following:
-        // const bool to_inc = uint32_t(uint256_t(S.t[0].get_value())) < inc;
-        // S.t[1] = S.t[1] + (to_inc ? field_pt(1) : field_pt(0));
-        let opened = if T::is_shared(&to_inc) {
-            T::open_many(
-                driver,
-                &[T::get_shared(&to_inc).expect("Already checked it is shared")],
-            )?[0]
-        } else {
-            T::get_public(&to_inc).expect("Already checked it is public")
-        };
-        s.t[1] = s.t[1].add(&FieldCT::from(opened), builder, driver);
+
+        // Note that although blake2s_state is a circuit constant, we use designated functions such as
+        // `ranged_less_than` to enforce constraints as appropriate.
+        let to_inc = s.t[0].ranged_less_than(&inc_scalar, 32, builder, driver)?;
+        s.t[1] = s.t[1].add(&to_inc.to_field_ct(driver), builder, driver);
         Ok(())
     }
 

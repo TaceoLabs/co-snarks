@@ -1,10 +1,8 @@
-use crate::ultra_builder::GenericUltraCircuitBuilder;
+use crate::{types::sha_compression::SHA256, ultra_builder::GenericUltraCircuitBuilder};
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
-use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use num_bigint::BigUint;
 use std::marker::PhantomData;
 
 use super::{
@@ -79,7 +77,6 @@ impl<F: PrimeField> BlakeUtils<F> {
             12,
             &msg[schedule[0] as usize],
             &msg[schedule[1] as usize],
-            false,
             builder,
             driver,
         )?;
@@ -91,7 +88,6 @@ impl<F: PrimeField> BlakeUtils<F> {
             13,
             &msg[schedule[2] as usize],
             &msg[schedule[3] as usize],
-            false,
             builder,
             driver,
         )?;
@@ -103,7 +99,6 @@ impl<F: PrimeField> BlakeUtils<F> {
             14,
             &msg[schedule[4] as usize],
             &msg[schedule[5] as usize],
-            false,
             builder,
             driver,
         )?;
@@ -115,7 +110,6 @@ impl<F: PrimeField> BlakeUtils<F> {
             15,
             &msg[schedule[6] as usize],
             &msg[schedule[7] as usize],
-            false,
             builder,
             driver,
         )?;
@@ -129,7 +123,6 @@ impl<F: PrimeField> BlakeUtils<F> {
             15,
             &msg[schedule[8] as usize],
             &msg[schedule[9] as usize],
-            true,
             builder,
             driver,
         )?;
@@ -141,7 +134,6 @@ impl<F: PrimeField> BlakeUtils<F> {
             12,
             &msg[schedule[10] as usize],
             &msg[schedule[11] as usize],
-            true,
             builder,
             driver,
         )?;
@@ -153,7 +145,6 @@ impl<F: PrimeField> BlakeUtils<F> {
             13,
             &msg[schedule[12] as usize],
             &msg[schedule[13] as usize],
-            true,
             builder,
             driver,
         )?;
@@ -165,7 +156,6 @@ impl<F: PrimeField> BlakeUtils<F> {
             14,
             &msg[schedule[14] as usize],
             &msg[schedule[15] as usize],
-            true,
             builder,
             driver,
         )?;
@@ -176,38 +166,36 @@ impl<F: PrimeField> BlakeUtils<F> {
      *
      * Function `G' in the Blake2s and Blake3s algorithm which is the core
      * mixing step with additions, xors and right-rotates. This function is
-     * used in  UltraPlonk version (with lookup tables).
+     * used in  Ultra version (with lookup tables).
      *
      * Inputs: - A pointer to a 16-word `state`,
      *         - indices a, b, c, d,
      *         - addition messages x and y
-     *         - boolean `last_update` to make sure addition is normalised only in
-     *           last update of the state
      *
      * Gate costs per call to function G in lookup case:
      *
      * Read sequence from table = 6 gates per read => 6 * 4 = 24
-     * Addition gates = 4 gates
+     * Addition gates = 2 gates
      * Range gates = 2 gates
      * Addition gate for correct output of XOR rotate 12 = 1 gate
      * Normalizing scaling factors = 2 gates
      *
-     * Subtotal = 33 gates
+     * Subtotal = 31 gates
      * Outside rounds, each of Blake2s and Blake3s needs 20 and 24 lookup reads respectively.
      *
      * +-----------+--------------+-----------------------+---------------------------+--------------+
      * |           |  calls to G  | gate count for rounds | gate count outside rounds |    total     |
      * |-----------|--------------|-----------------------|---------------------------|--------------|
-     * |  Blake2s  |      80      |        80 * 33        |          20 * 6           |     2760     |
-     * |  Blake3s  |      56      |        56 * 33        |          24 * 6           |     1992     |
+     * |  Blake2s  |      80      |        80 * 31        |          20 * 6           |     2600     |
+     * |  Blake3s  |      56      |        56 * 31        |          24 * 6           |     1880     |
      * +-----------+--------------+-----------------------+---------------------------+--------------+
      *
      * P.S. This doesn't include some more addition gates required after the rounds.
      *      This cost would be negligible as compared to the above gate counts.
      *
      *
-     * TODO: Idea for getting rid of extra addition and multiplication gates by tweaking gate structure.
-     *       To be implemented later.
+     * NOTE: As a future optimization, the following idea can be used for getting rid of extra addition and multiplication
+     * gates by tweaking gate structure. To be implemented later.
      *
      *   q_plookup = 1        | d0 | a0 | d'0 | --  |
      *   q_plookup = 1        | d1 | a1 | d'1 | d2  | <--- set q_arith = 1 and validate d2 - d'5 * scale_factor = 0
@@ -231,11 +219,16 @@ impl<F: PrimeField> BlakeUtils<F> {
         d: usize,
         x: &FieldCT<F>,
         y: &FieldCT<F>,
-        last_update: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
+        // For simplicity, state[a] is written as `a' in comments.
+        // a = a + b + x
         state[a] = state[a].add_two(&state[b], x, builder, driver);
+
+        // d = (d ^ a).ror(16)
+        // Get the lookup accumulator where `lookup_1[ColumnIdx::C3][0]` contains the
+        // XORed and rotated (by 16) value scaled by 2^{-16}.
         let lookup_1 = Plookup::get_lookup_accumulators_ct(
             builder,
             driver,
@@ -244,7 +237,9 @@ impl<F: PrimeField> BlakeUtils<F> {
             &state[a],
             true,
         )?;
+        // Compute the scaling factor 2^{32-16} = 2^{16} to get the correct rotated value.
         let scaling_factor_1 = F::from(1u32 << (32 - 16));
+        // Multiply by the scaling factor to get the final rotated value.
         state[d] = lookup_1[ColumnIdx::C3][0].multiply(
             &FieldCT::from(scaling_factor_1),
             builder,
@@ -254,6 +249,21 @@ impl<F: PrimeField> BlakeUtils<F> {
         // c = c + d
         state[c] = state[c].add(&state[d], builder, driver);
 
+        // b = (b ^ c).ror(12)
+        // Does not require a special XOR_ROTATE_12 table since we can get the correct value
+        // by combining values from BLAKE_XOR table itself.
+        // Let u = s_0 + 2^6 * s_1 + 2^{12} * s_2 + 2^{18} * s_3 + 2^{24} * s_4 + 2^{30} * s_5
+        // be a 32-bit output of XOR, split into slices s_0, s_1, s_2, s_3, s_4 (6-bits each) and s_5 (5-bit).
+        // We want to compute ROTATE_12(u) = s_2 + 2^6 * s_3 + 2^{12} * s_4 + 2^{18} * s_5 + 2^{20} * s_0 + 2^{26} * s_1.
+        // The BLAKE_XOR table gives:
+        // lookup_2[ColumnIdx::C3][0] = s_0 + 2^6 * s_1 + 2^{12} * s_2 + 2^{18} * s_3 + 2^{24} * s_4 + 2^{30} * s_5 = u.
+        // lookup_2[ColumnIdx::C3][2] = s_2 + 2^6 * s_3 + 2^{12} * s_4 + 2^{18} * s_5 (i.e., u without s_0 and s_1).
+        // Thus, we can compute ROTATE_12(u) as:
+        // ROTATE_12(u) = lookup_2[ColumnIdx::C3][2] + (lookup_2[ColumnIdx::C3][0] - 2^{12} * lookup_2[ColumnIdx::C3][2]) *
+        // 2^{20}.
+
+        // Get the lookup accumulator for BLAKE_XOR table where lookup_2[ColumnIdx::C3][0] = u.
+
         let lookup_2 = Plookup::get_lookup_accumulators_ct(
             builder,
             driver,
@@ -262,12 +272,15 @@ impl<F: PrimeField> BlakeUtils<F> {
             &state[c],
             true,
         )?;
+        // lookup_2[ColumnIdx::C3][2] = s_2 + 2^6 * s_3 + 2^{12} * s_4 + 2^{18} * s_5 (i.e., u without s_0 and s_1).
         let lookup_output = &lookup_2[ColumnIdx::C3][2];
+        // Compute 2^{12} * lookup_2[ColumnIdx::C3][2].
         let t2_term = FieldCT::from(F::from(1u32 << 12)).multiply(
             &lookup_2[ColumnIdx::C3][2],
             builder,
             driver,
         )?;
+        // Compute the final rotated value as described for ROTATE_12(u) above.
         let lookup_output = lookup_output.add(
             &lookup_2[ColumnIdx::C3][0]
                 .sub(&t2_term, builder, driver)
@@ -278,19 +291,17 @@ impl<F: PrimeField> BlakeUtils<F> {
         state[b] = lookup_output;
 
         // a = a + b + y
-        if !last_update {
-            state[a] = state[a].add_two(&state[b], y, builder, driver);
-        } else {
-            state[a] = Self::add_normalize(
-                &state[a],
-                &state[b].add(y, builder, driver),
-                builder,
-                driver,
-            )?;
-        }
+        state[a] = SHA256::add_normalize_unsafe(
+            &state[a],
+            &state[b].add(y, builder, driver),
+            3,
+            builder,
+            driver,
+        )?;
 
         // d = (d ^ a).ror(8)
-
+        // Get the lookup accumulator where `lookup_3[ColumnIdx::C3][0]` contains the
+        // XORed and rotated (by 8) value scaled by 2^{-24}.
         let lookup_3 = Plookup::get_lookup_accumulators_ct(
             builder,
             driver,
@@ -299,7 +310,9 @@ impl<F: PrimeField> BlakeUtils<F> {
             &state[a],
             true,
         )?;
+        // Compute the scaling factor 2^{32-8} = 2^{24} to get the correct rotated value.
         let scaling_factor_3 = F::from(1u32 << (32 - 8));
+        // Multiply by the scaling factor to get the final rotated value.
         state[d] = lookup_3[ColumnIdx::C3][0].multiply(
             &FieldCT::from(scaling_factor_3),
             builder,
@@ -307,14 +320,11 @@ impl<F: PrimeField> BlakeUtils<F> {
         )?;
 
         // c = c + d
-        if !last_update {
-            state[c] = state[c].add(&state[d], builder, driver);
-        } else {
-            state[c] = Self::add_normalize(&state[c], &state[d], builder, driver)?;
-        }
+        state[c] = SHA256::add_normalize_unsafe(&state[c], &state[d], 3, builder, driver)?;
 
         // b = (b ^ c).ror(7)
-
+        // Get the lookup accumulator where `lookup_4[ColumnIdx::C3][0]` contains the
+        // XORed and rotated (by 7) value scaled by 2^{-25}.
         let lookup_4 = Plookup::get_lookup_accumulators_ct(
             builder,
             driver,
@@ -323,70 +333,14 @@ impl<F: PrimeField> BlakeUtils<F> {
             &state[c],
             true,
         )?;
+        // Compute the scaling factor 2^{32-7} = 2^{25} to get the correct rotated value.
         let scaling_factor_4 = F::from(1u32 << (32 - 7));
+        // Multiply by the scaling factor to get the final rotated value.
         state[b] = lookup_4[ColumnIdx::C3][0].multiply(
             &FieldCT::from(scaling_factor_4),
             builder,
             driver,
         )?;
         Ok(())
-    }
-
-    /**
-     * Addition with normalisation (to ensure the addition is in the scalar field.)
-     * Given two field_t elements a and b, this function computes ((a + b) % 2^{32}).
-     * Additionally, it checks if the overflow of the addition is a maximum of 3 bits.
-     * This is to ascertain that the additions of two 32-bit scalars in blake2s and blake3s do not exceed 35 bits.
-     */
-    fn add_normalize<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        a: &FieldCT<F>,
-        b: &FieldCT<F>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<FieldCT<F>> {
-        if a.is_constant() && b.is_constant() {
-            let a_value = a.get_value(builder, driver);
-            let b_value = b.get_value(builder, driver);
-
-            let a_val = T::get_public(&a_value).expect("Already checked it is public");
-            let b_val = T::get_public(&b_value).expect("Already checked it is public");
-
-            let sum: BigUint = (a_val + b_val).into();
-
-            let normalized_sum = F::from(sum % (1u64 << 32));
-
-            Ok(FieldCT::from(normalized_sum))
-        } else {
-            let a_value = a.get_value(builder, driver);
-            let b_value = b.get_value(builder, driver);
-
-            let sum = T::add(driver, a_value, b_value);
-            let overflow = if T::is_shared(&sum) {
-                let sum_val = T::get_shared(&sum).expect("Already checked it is shared");
-                // The same function is used in SHA, it also is range constraint to 3-bit there
-                FieldCT::from_witness(T::sha256_get_overflow_bit(driver, sum_val)?.into(), builder)
-            } else {
-                let sum_val: BigUint = T::get_public(&sum)
-                    .expect("Already checked it is public")
-                    .into();
-                let normalized_sum = sum_val.clone().to_u32_digits()[0];
-                let overflow = (sum_val - normalized_sum) >> 32;
-                FieldCT::from_witness(F::from(overflow).into(), builder)
-            };
-
-            overflow.create_range_constraint(3, builder, driver)?;
-
-            let result = a.add_two(
-                b,
-                &overflow.multiply(&FieldCT::from(-F::from(1u64 << 32)), builder, driver)?,
-                builder,
-                driver,
-            );
-
-            Ok(result)
-        }
     }
 }

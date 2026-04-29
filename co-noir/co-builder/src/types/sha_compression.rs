@@ -474,7 +474,10 @@ impl<F: PrimeField> SHA256<F> {
         Ok(majority_result)
     }
 
-    fn add_normalize_unsafe<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    pub(crate) fn add_normalize_unsafe<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
         a: &FieldCT<F>,
         b: &FieldCT<F>,
         overflow_bits: usize,
