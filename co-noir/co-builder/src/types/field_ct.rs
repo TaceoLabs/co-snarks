@@ -3948,36 +3948,38 @@ impl<F: PrimeField> CycleScalarCT<F> {
             P::BaseField::MODULUS.into()
         };
         let (r_lo, r_hi) = Self::slice(cycle_group_modulus);
+        let r_lo_minus_one = r_lo.to_owned() - BigUint::one();
+        let both_constant = self.lo.is_constant() && self.hi.is_constant();
 
         let lo_value = self.lo.get_value(builder, driver);
-        let borrow = if self.lo.is_constant() {
+        let borrow = if both_constant {
             let lo_value: BigUint = T::get_public(&lo_value)
                 .expect("Constants are public")
                 .into();
-            let need_borrow = lo_value > r_lo;
+            let need_borrow = lo_value > r_lo_minus_one;
             FieldCT::from(P::ScalarField::from(need_borrow as u64))
         } else {
             let need_borrow = if T::is_shared(&lo_value) {
-                driver.gt(lo_value, F::from(r_lo.to_owned()).into())?
+                driver.gt(lo_value, F::from(r_lo_minus_one.to_owned()).into())?
             } else {
                 let lo_value: BigUint = T::get_public(&lo_value)
                     .expect("Already checked it is public")
                     .into();
-                let need_borrow = lo_value > r_lo;
+                let need_borrow = lo_value > r_lo_minus_one;
                 P::ScalarField::from(need_borrow as u64).into()
             };
             FieldCT::from_witness(need_borrow, builder)
         };
 
         // directly call `create_new_range_constraint` to avoid creating an arithmetic gate
-        if !self.lo.is_constant() {
+        if !both_constant {
             // We have a ultra builder
             let index = borrow.get_witness_index(builder, driver);
             builder.create_new_range_constraint(index, 1);
         }
 
         // Hi range check = r_hi - y_hi - borrow
-        // Lo range check = r_lo - y_lo + borrow * 2^{126}
+        // Lo range check = (r_lo - 1) - y_lo + borrow * 2^{LO_BITS}
         let borrow_scaled = borrow.multiply(
             &FieldCT::from(P::ScalarField::from(BigUint::one() << Self::LO_BITS)),
             builder,
@@ -3991,7 +3993,11 @@ impl<F: PrimeField> CycleScalarCT<F> {
         let lo_diff = self
             .lo
             .neg()
-            .add(&FieldCT::from(P::ScalarField::from(r_lo)), builder, driver)
+            .add(
+                &FieldCT::from(P::ScalarField::from(r_lo_minus_one)),
+                builder,
+                driver,
+            )
             .add(&borrow_scaled, builder, driver);
 
         hi_diff.create_range_constraint(Self::HI_BITS, builder, driver)?;

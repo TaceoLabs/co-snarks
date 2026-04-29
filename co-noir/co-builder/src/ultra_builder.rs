@@ -16,7 +16,7 @@ use crate::types::types::{
 use crate::{
     acir_format::AcirFormat,
     types::{
-        field_ct::{ByteArray, FieldCT},
+        field_ct::{BoolCT, ByteArray, FieldCT},
         plookup::{BasicTableId, ColumnIdx, MultiTableId, Plookup, PlookupBasicTable, ReadData},
         poseidon2::Poseidon2CT,
         rom_ram::{
@@ -56,6 +56,13 @@ use std::{
 };
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
+
+struct MsmInputs<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> {
+    predicate: BoolCT<P::ScalarField, T>,
+    result: CycleGroupCT<P, T>,
+    points: Vec<CycleGroupCT<P, T>>,
+    scalars: Vec<CycleScalarCT<P::ScalarField>>,
+}
 
 pub type UltraCircuitBuilder<P> =
     GenericUltraCircuitBuilder<P, PlainAcvmSolver<<P as PrimeGroup>::ScalarField>>;
@@ -4285,7 +4292,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         metadata: &ProgramMetadata,
     ) -> eyre::Result<()> {
         tracing::trace!("Builder build constraints");
-        println!("constraint system: {:#?}", constraint_system);
+        // println!("constraint system: {:#?}", constraint_system);
 
         // No gate_counter
 
@@ -4617,61 +4624,98 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(())
     }
 
-    // TODO CESAR: Move to multi_scalar_mul file together with reconstruct_msm_inputs
-    // TODO CESAR: Refactor this to match barretenberg's implementation, which uses reconstruct_msm_inputs as a helper
-    // Also add the same comments
+    fn reconstruct_msm_inputs(
+        &mut self,
+        input: &MultiScalarMul<P::ScalarField>,
+        driver: &mut T,
+    ) -> eyre::Result<MsmInputs<P, T>> {
+        let predicate = input.predicate.to_field_ct().to_bool_ct(self, driver);
+
+        // Reconstruct expected result
+        let input_result_x = FieldCT::from_witness_index(input.out_point_x);
+        let input_result_y = FieldCT::from_witness_index(input.out_point_y);
+        // If no valid witness assignments, set result to generator point to avoid errors during circuit construction.
+        if self.is_write_vk_mode {
+            let g1_y = P::ScalarField::from(BigUint::new(vec![
+                2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
+            ]));
+            self.set_variable(input.out_point_x, P::ScalarField::one().into());
+            self.set_variable(input.out_point_y, g1_y.into());
+        }
+
+        // Match bb: reconstruct expected result from (x,y) only and auto-detect infinity via x^2 + 5*y^2 == 0.
+        let x_sqr = input_result_x.multiply(&input_result_x, self, driver)?;
+        let five_y =
+            input_result_y.multiply(&FieldCT::from(P::ScalarField::from(5u64)), self, driver)?;
+        let input_result_infinity = input_result_y
+            .madd(&five_y, &x_sqr, self, driver)?
+            .is_zero(self, driver)?;
+        let input_result = CycleGroupCT::new_with_assert(
+            input_result_x,
+            input_result_y,
+            input_result_infinity,
+            false,
+            self,
+            driver,
+        )?;
+
+        // Reconstruct points and scalars
+        assert!(
+            input.points.len() * 2 == input.scalars.len() * 3,
+            "MultiScalarMul input size mismatch"
+        );
+
+        let mut points = Vec::with_capacity(input.points.len() / 3);
+        let mut scalars = Vec::with_capacity(input.points.len() / 3);
+
+        for i in (0..input.points.len()).step_by(3) {
+            let input_point = WitnessOrConstant::to_grumpkin_point(
+                &input.points[i],
+                &input.points[i + 1],
+                &input.points[i + 2],
+                &predicate,
+                self,
+                driver,
+            )?;
+
+            let scalar = WitnessOrConstant::to_grumpkin_scalar(
+                &input.scalars[2 * (i / 3)],
+                &input.scalars[2 * (i / 3) + 1],
+                &predicate,
+                self,
+                driver,
+            )?;
+
+            points.push(input_point);
+            scalars.push(scalar);
+        }
+
+        Ok(MsmInputs {
+            predicate,
+            result: input_result,
+            points,
+            scalars,
+        })
+    }
+
     fn create_multi_scalar_mul_constraint(
         &mut self,
         constraint: &MultiScalarMul<P::ScalarField>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        let len = constraint.points.len() / 3;
-        debug_assert_eq!(len * 3, constraint.points.len());
-        debug_assert_eq!(len * 2, constraint.scalars.len());
+        // Step 1: Reconstruct inputs (points, scalars, expected result)
+        let input = self.reconstruct_msm_inputs(constraint, driver)?;
 
-        let mut points = Vec::with_capacity(len);
-        let mut scalars = Vec::with_capacity(len);
-
-        let predicate = constraint.predicate.to_field_ct().to_bool_ct(self, driver);
-
-        for (p, s) in constraint
-            .points
-            .chunks_exact(3)
-            .zip(constraint.scalars.chunks_exact(2))
-        {
-            // Instantiate the input point/variable base as `cycle_group_ct`
-            let input_point = WitnessOrConstant::to_grumpkin_point(
-                &p[0], &p[1], &p[2], &predicate, self, driver,
-            )?;
-
-            //  Reconstruct the scalar from the low and high limbs
-            let scalar_low_as_field = s[0].to_field_ct();
-            let scalar_high_as_field = s[1].to_field_ct();
-            let scalar = CycleScalarCT::new(
-                scalar_low_as_field,
-                scalar_high_as_field,
-                false,
-                self,
-                driver,
-            )?;
-            points.push(input_point);
-            scalars.push(scalar);
-        }
-        // Call batch_mul to multiply the points and scalars and sum the results
-        let output_point = CycleGroupCT::batch_mul(points, scalars, self, driver)?
-            .get_standard_form(self, driver)?;
-
-        // Create copy-constraints between the computed result and the expected result stored in the input witness indices
-        let input_result_x = FieldCT::from_witness_index(constraint.out_point_x);
-        let input_result_y = FieldCT::from_witness_index(constraint.out_point_y);
-        let input_result_infinite =
-            FieldCT::from_witness_index(constraint.out_point_is_infinity).to_bool_ct(self, driver);
-
-        output_point.x.assert_equal(&input_result_x, self, driver);
-        output_point.y.assert_equal(&input_result_y, self, driver);
-        output_point
-            .is_point_at_infinity()
-            .assert_equal(&input_result_infinite, self, driver);
+        // Step 2: Compute result and connect it to the expected result reconstructed from inputs
+        let mut result = CycleGroupCT::batch_mul(input.points, input.scalars, self, driver)?;
+        let mut to_be_asserted_equal = CycleGroupCT::conditional_assign(
+            &input.predicate,
+            &input.result,
+            &result,
+            self,
+            driver,
+        )?;
+        result.assert_equal(&mut to_be_asserted_equal, self, driver)?;
 
         Ok(())
     }

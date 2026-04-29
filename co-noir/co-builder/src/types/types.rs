@@ -1,5 +1,5 @@
 use super::big_group::BigGroup;
-use super::field_ct::{CycleGroupCT, FieldCT};
+use super::field_ct::{CycleGroupCT, CycleScalarCT, FieldCT};
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT};
 use crate::types::field_ct::BoolCT;
@@ -997,6 +997,60 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         }
 
         CycleGroupCT::new_with_assert(point_x, point_y, infinity, true, builder, driver)
+    }
+
+    pub(crate) fn to_grumpkin_scalar<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        scalar_lo: &Self,
+        scalar_hi: &Self,
+        predicate: &BoolCT<P::ScalarField, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<CycleScalarCT<F>> {
+        let mut lo_as_field = scalar_lo.to_field_ct();
+        let mut hi_as_field = scalar_hi.to_field_ct();
+
+        assert!(
+            !(scalar_lo.is_constant && !scalar_hi.is_constant),
+            "to_grumpkin_scalar: scalar_lo is constant while scalar_hi is not."
+        );
+
+        if builder.is_write_vk_mode {
+            if !scalar_lo.is_constant {
+                builder.set_variable(scalar_lo.index, F::one().into());
+            }
+            if !scalar_hi.is_constant {
+                builder.set_variable(scalar_hi.index, F::zero().into());
+            }
+        }
+
+        if !predicate.is_constant() {
+            lo_as_field = FieldCT::conditional_assign(
+                predicate,
+                &lo_as_field,
+                &FieldCT::from(F::one()),
+                builder,
+                driver,
+            )?;
+            hi_as_field = FieldCT::conditional_assign(
+                predicate,
+                &hi_as_field,
+                &FieldCT::from(F::zero()),
+                builder,
+                driver,
+            )?;
+        } else {
+            let predicate_value = predicate.get_value(driver);
+            let predicate_value = T::get_public(&predicate_value).expect("Constants are public");
+            assert!(
+                !predicate_value.is_zero(),
+                "Creating Grumpkin scalar with a constant predicate equal to false."
+            );
+        }
+
+        CycleScalarCT::new(lo_as_field, hi_as_field, false, builder, driver)
     }
 }
 
