@@ -2592,32 +2592,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
     const ULTRA_NUM_TABLE_BITS: usize = 4;
     const TABLE_BITS: usize = Self::ULTRA_NUM_TABLE_BITS;
 
-    pub(crate) fn new(
-        x: FieldCT<P::ScalarField>,
-        y: FieldCT<P::ScalarField>,
-        is_infinity: BoolCT<P::ScalarField, T>,
-        driver: &mut T,
-    ) -> Self {
-        let is_standard = is_infinity.is_constant();
-        let is_constant = x.is_constant() && y.is_constant() && is_standard;
-
-        if is_standard
-            && !T::get_public(&is_infinity.get_value(driver))
-                .expect("Constants are public")
-                .is_zero()
-        {
-            return Self::default();
-        }
-
-        Self {
-            x,
-            y,
-            is_infinity,
-            is_standard,
-            is_constant,
-        }
-    }
-
     pub(crate) fn new_from_parts(x: P::ScalarField, y: P::ScalarField, is_infinity: bool) -> Self {
         if is_infinity {
             return Self::default();
@@ -2785,7 +2759,50 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 {
     const OFFSET_GENERATOR_DOMAIN_SEPARATOR: &[u8] = "cycle_group_offset_generator".as_bytes();
 
-    pub(crate) fn new_with_assert(
+    pub(crate) fn new(
+        mut x: FieldCT<P::ScalarField>,
+        mut y: FieldCT<P::ScalarField>,
+        assert_on_curve: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        // Auto-detect infinity: point is at infinity iff both coordinates are zero
+        // we can check this efficiently using the observation that:
+        // (x^2 + 5 * y^2 = 0) has no non-trivial solutions in fr, since fr modulus p == 2 mod 5
+        let x_sqr = x.multiply(&x, builder, driver)?;
+        let five_y = y.multiply(&FieldCT::from(P::ScalarField::from(5u64)), builder, driver)?;
+        let is_infinity = y
+            .madd(&five_y, &x_sqr, builder, driver)?
+            .is_zero(builder, driver)?;
+
+        // For the simplicity of methods in this class, we ensure that the coordinates of a point always have the same
+        // constancy. If they don't, we convert the non-constant coordinate to a fixed witness. Should be rare.
+        if x.is_constant() != y.is_constant() {
+            if x.is_constant() {
+                x.convert_constant_to_fixed_witness(builder, driver);
+            } else {
+                y.convert_constant_to_fixed_witness(builder, driver);
+            }
+        }
+
+        let is_standard = is_infinity.is_constant();
+        let is_constant = x.is_constant() && y.is_constant() && is_standard;
+
+        let res = Self {
+            x,
+            y,
+            is_infinity,
+            is_standard,
+            is_constant,
+        };
+        if assert_on_curve {
+            res.validate_on_curve(builder, driver)?;
+        }
+
+        Ok(res)
+    }
+
+    pub(crate) fn new_with_infinity_control(
         x: FieldCT<P::ScalarField>,
         y: FieldCT<P::ScalarField>,
         is_infinity: BoolCT<P::ScalarField, T>,
@@ -3113,7 +3130,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             for j in 0..lookup_data[ColumnIdx::C2].len() {
                 let x = lookup_data[ColumnIdx::C2][j].to_owned();
                 let y = lookup_data[ColumnIdx::C3][j].to_owned();
-                lookup_points.push(CycleGroupCT::new(x, y, BoolCT::from(false), driver));
+                lookup_points.push(CycleGroupCT::new_with_infinity_control(
+                    x,
+                    y,
+                    BoolCT::from(false),
+                    false,
+                    builder,
+                    driver,
+                )?);
             }
 
             let offset_1 =
@@ -3408,18 +3432,27 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             if self.is_constant() {
                 let x3 = T::get_public(&x3).expect("Constants are public");
                 let y3 = T::get_public(&y3).expect("Constants are public");
-                result = CycleGroupCT::new(
+                result = CycleGroupCT::new_with_infinity_control(
                     FieldCT::from(x3),
                     FieldCT::from(y3),
                     self.is_point_at_infinity().to_owned(),
+                    false,
+                    builder,
                     driver,
-                );
+                )?;
                 return Ok(result);
             }
 
             let x = FieldCT::from_witness(x3, builder);
             let y = FieldCT::from_witness(y3, builder);
-            result = CycleGroupCT::new(x, y, self.is_point_at_infinity().to_owned(), driver);
+            result = CycleGroupCT::new_with_infinity_control(
+                x,
+                y,
+                self.is_point_at_infinity().to_owned(),
+                false,
+                builder,
+                driver,
+            )?;
         } else {
             let x1 = self.x.get_value(builder, driver);
             let y1 = modified_y.get_value(builder, driver);
@@ -3454,12 +3487,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 let result = CycleGroupCT::new_from_parts(x3, y3, inf_value.is_one());
                 return Ok(result);
             }
-            result = CycleGroupCT::new(
+            result = CycleGroupCT::new_with_infinity_control(
                 FieldCT::from_witness(x3, builder),
                 FieldCT::from_witness(y3, builder),
                 self.is_point_at_infinity().to_owned(),
+                false,
+                builder,
                 driver,
-            );
+            )?;
         }
         let ecc_dbl_gate = EccDblGate {
             x1: self.x.get_witness_index(builder, driver),
@@ -3525,7 +3560,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
             let x = FieldCT::from_witness(x3, builder);
             let y = FieldCT::from_witness(y3, builder);
-            result = CycleGroupCT::new(x, y, BoolCT::from(false), driver);
+            result = CycleGroupCT::new_with_infinity_control(
+                x,
+                y,
+                BoolCT::from(false),
+                false,
+                builder,
+                driver,
+            )?;
         } else {
             let p1 = self.get_value(builder, driver)?;
             let p2 = other.get_value(builder, driver)?;
@@ -3539,7 +3581,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let (x, y, _) = driver.pointshare_to_field_shares(p3)?;
             let r_x = FieldCT::from_witness(x, builder);
             let r_y = FieldCT::from_witness(y, builder);
-            result = CycleGroupCT::new(r_x, r_y, BoolCT::from(false), driver);
+            result = CycleGroupCT::new_with_infinity_control(
+                r_x,
+                r_y,
+                BoolCT::from(false),
+                false,
+                builder,
+                driver,
+            )?;
         }
 
         let add_gate = EccAddGate {
@@ -3664,7 +3713,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
         let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
 
-        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, driver);
+        let result = CycleGroupCT::new_with_infinity_control(
+            result_x,
+            result_y,
+            result_is_infinity,
+            false,
+            builder,
+            driver,
+        )?;
 
         Ok(result)
     }
@@ -3720,9 +3776,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             lambda
         };
 
-        let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
-        let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
-        let add_result = CycleGroupCT::<P, T>::new(x3, y3, x_coordinates_match.to_owned(), driver);
+        let sub_result_x =
+            lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
+        let sub_result_y = lambda.madd(
+            &x1.sub(&sub_result_x, builder, driver),
+            &y1.neg(),
+            builder,
+            driver,
+        )?;
 
         let dbl_result = self.dbl(None, builder, driver)?;
 
@@ -3734,14 +3795,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let mut result_x = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.x,
-            &add_result.x,
+            &sub_result_x,
             builder,
             driver,
         )?;
         let mut result_y = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.y,
-            &add_result.y,
+            &sub_result_y,
             builder,
             driver,
         )?;
@@ -3774,8 +3835,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
         let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
 
-        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, driver);
-        Ok(result)
+        CycleGroupCT::new_with_infinity_control(
+            result_x,
+            result_y,
+            result_is_infinity,
+            false,
+            builder,
+            driver,
+        )
     }
 
     fn neg(
@@ -3795,7 +3862,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let mut x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
+        let x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
         let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?;
         let is_infinity = BoolCT::conditional_assign(
             predicate,
@@ -3804,30 +3871,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         )?;
-
-        let mut is_standard = lhs.is_standard && rhs.is_standard;
-        if predicate.is_constant() {
-            let value = T::get_public(&predicate.get_value(driver))
-                .expect("Constants are public")
-                .is_zero();
-            is_standard = if value {
-                rhs.is_standard
-            } else {
-                lhs.is_standard
-            };
-        }
-
-        // Rare case when we bump into two constants, s.t. lhs = -rhs
-        if x.is_constant() && !y.is_constant() {
-            x = FieldCT::from_witness_index(builder.put_constant_variable(
-                T::get_public(&x.get_value(builder, driver)).expect("Constants are public"),
-            ));
-        }
-
-        let mut result = CycleGroupCT::new(x, y, is_infinity, driver);
-        result.is_standard = is_standard;
-
-        Ok(result)
+        CycleGroupCT::new_with_infinity_control(x, y, is_infinity, false, builder, driver)
     }
 
     pub(crate) fn assert_equal(
@@ -4170,8 +4214,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         )?;
-        let mut modded_base_point =
-            CycleGroupCT::new(modded_x, modded_y, BoolCT::from(false), driver);
+        let mut modded_base_point = CycleGroupCT::new_with_infinity_control(
+            modded_x,
+            modded_y,
+            BoolCT::from(false),
+            false,
+            builder,
+            driver,
+        )?;
 
         // if the input point is constant, it is cheaper to fix the point as a witness and then derive the table, than it is
         // to derive the table and fix its witnesses to be constant! (due to group additions = 1 gate, and fixing x/y coords
@@ -4302,7 +4352,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let output_indices = builder.read_rom_array_pair(self.rom_id, index, driver)?;
         let x = FieldCT::from_witness_index(output_indices[0]);
         let y = FieldCT::from_witness_index(output_indices[1]);
-        Ok(CycleGroupCT::new(x, y, BoolCT::from(false), driver))
+        CycleGroupCT::new_with_infinity_control(x, y, BoolCT::from(false), false, builder, driver)
     }
 }
 

@@ -803,7 +803,7 @@ impl<'a, P: CurveGroup> TraceData<'a, P> {
     pub(crate) fn construct_trace_data(
         &mut self,
         builder: &mut UltraCircuitBuilder<P>,
-        is_structured: bool,
+        _is_structured: bool,
         active_region_data: &mut ActiveRegionData,
     ) {
         tracing::trace!("Construct trace data");
@@ -996,7 +996,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
             )?;
         }
 
-        CycleGroupCT::new_with_assert(point_x, point_y, infinity, true, builder, driver)
+        CycleGroupCT::new_with_infinity_control(point_x, point_y, infinity, true, builder, driver)
     }
 
     pub(crate) fn to_grumpkin_scalar<

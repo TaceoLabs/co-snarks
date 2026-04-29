@@ -4550,8 +4550,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         driver: &mut T,
         constraint: &AES128Constraint<P::ScalarField>,
     ) -> eyre::Result<()> {
-        let padding_size = 16 - (constraint.inputs.len() % 16);
-
         // Packs 16 bytes from the inputs (plaintext, iv, key) into a field element.
         // Note that noir-stdlib already pads the inputs in accordance with PKCS7 padding scheme.
         assert!(
@@ -4768,12 +4766,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         )?;
         // Note that input_result is computed by Noir and passed to bb via ACIR. Hence, it is always a valid point on
         // Grumpkin.
-        let input_result = CycleGroupCT::new(
-            input_result_x,
-            input_result_y,
-            input_result_infinite,
-            driver,
-        );
+        let input_result = CycleGroupCT::new(input_result_x, input_result_y, false, self, driver)?;
 
         // Addition
         let mut result = input1_point.add(&input2_point, self, driver)?;
