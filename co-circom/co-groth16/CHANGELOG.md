@@ -11,6 +11,26 @@
     * co-circom-snarks bumped from 0.1.1 to 0.1.2
     * mpc-core bumped from 0.4.0 to 0.5.0
 
+## [0.11.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.10.0...co-groth16-v0.11.0) (2026-04-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* increase visibility of circom drivers ([#518](https://github.com/TaceoLabs/co-snarks/issues/518))
+
+### Features
+
+* increase visibility of circom drivers ([#518](https://github.com/TaceoLabs/co-snarks/issues/518)) ([16592d0](https://github.com/TaceoLabs/co-snarks/commit/16592d08541ca4213cb827b94614a83361d63ca9))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-circom-types bumped from 0.6.0 to 0.6.1
+    * mpc-core bumped from 0.10.0 to 0.11.0
+    * mpc-net bumped from 0.5.0 to 0.6.0
+
 ## [0.10.0](https://github.com/TaceoLabs/co-snarks/compare/co-groth16-v0.9.0...co-groth16-v0.10.0) (2025-11-06)
 
 
