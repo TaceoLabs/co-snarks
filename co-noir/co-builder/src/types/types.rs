@@ -859,7 +859,7 @@ impl<'a, P: CurveGroup> TraceData<'a, P> {
 
             // If the trace is structured, we populate the data from the next block at a fixed block size offset
             // otherwise, the next block starts immediately following the previous one
-            offset += block.len() as usize;
+            offset += block.len();
         }
     }
 }
