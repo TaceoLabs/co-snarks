@@ -4641,21 +4641,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.set_variable(input.out_point_y, g1_y.into());
         }
 
-        // Match bb: reconstruct expected result from (x,y) only and auto-detect infinity via x^2 + 5*y^2 == 0.
-        let x_sqr = input_result_x.multiply(&input_result_x, self, driver)?;
-        let five_y =
-            input_result_y.multiply(&FieldCT::from(P::ScalarField::from(5u64)), self, driver)?;
-        let input_result_infinity = input_result_y
-            .madd(&five_y, &x_sqr, self, driver)?
-            .is_zero(self, driver)?;
-        let input_result = CycleGroupCT::new_with_assert(
-            input_result_x,
-            input_result_y,
-            input_result_infinity,
-            false,
-            self,
-            driver,
-        )?;
+        // Use public constructor which auto-detects infinity from (0,0) coordinates.
+        // Note that input_result is computed by Noir and passed to bb via ACIR. Hence, it is always a valid point on
+        // Grumpkin, so we don't need to assert on curve.
+        let input_result = CycleGroupCT::new(input_result_x, input_result_y, false, self, driver)?;
 
         // Reconstruct points and scalars
         assert!(
