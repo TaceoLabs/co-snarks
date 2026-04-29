@@ -19,6 +19,7 @@ add_rep3_acvm_test!("poseidon");
 add_rep3_acvm_test!("poseidon2");
 add_rep3_acvm_test!("poseidon_assert");
 add_rep3_acvm_test!("poseidon_input2");
+add_rep3_acvm_test!("poseidon_stdlib");
 add_rep3_acvm_test!("quantized");
 add_rep3_acvm_test!("random_access");
 add_rep3_acvm_test!("slice");
