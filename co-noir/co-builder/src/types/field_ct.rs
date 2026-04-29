@@ -175,7 +175,7 @@ impl<F: PrimeField> FieldCT<F> {
             result_inverted = inverted_check;
         } else {
             // In general, the witness has to be normalized.
-            witness_idx = self.get_witness_index(builder, driver);
+            witness_idx = self.normalize(builder, driver).witness_index;
         }
         // Get the normalized value of the witness
         let witness = builder.get_variable(witness_idx as usize);

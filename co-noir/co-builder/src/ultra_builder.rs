@@ -4721,8 +4721,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let input_result_x = FieldCT::from_witness_index(constraint.result_x);
         let input_result_y = FieldCT::from_witness_index(constraint.result_y);
-        let input_result_infinite =
-            FieldCT::from_witness_index(constraint.result_infinite).to_bool_ct(self, driver);
 
         let g1_y = P::ScalarField::from(BigUint::new(vec![
             2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
@@ -4732,8 +4730,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let index_y = input_result_y.get_witness_index(self, driver);
             self.set_variable(index_x, P::ScalarField::one().into());
             self.set_variable(index_y, g1_y.into());
-            let index = input_result_infinite.get_witness_index(self, driver);
-            self.set_variable(index, P::ScalarField::zero().into());
         }
         // Input to cycle_group points
         let input1_point = WitnessOrConstant::to_grumpkin_point(
