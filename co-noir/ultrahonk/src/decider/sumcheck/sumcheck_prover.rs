@@ -70,8 +70,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> ClaimedEvaluations<P::ScalarField> {
         let mut multivariate_evaluations = ClaimedEvaluations::default();
 
-        #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
-        for (src, mut des) in partially_evaluated_polynomials
+        for (src, des) in partially_evaluated_polynomials
             .into_iter()
             .zip(multivariate_evaluations.iter_mut())
         {

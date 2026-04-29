@@ -1122,8 +1122,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             }
             list_size += padding;
 
-            #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
-            for (time_stamp, mut ram_range_exist) in ram_timestamps
+            for (time_stamp, ram_range_exist) in ram_timestamps
                 .iter()
                 .cloned()
                 .zip(ram_range_exists.iter_mut())

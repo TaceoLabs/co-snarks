@@ -259,8 +259,7 @@ impl<F: PrimeField> Blake2s<F> {
     ) -> eyre::Result<ByteArray<F>> {
         let mut s = Blake2sState::<F>::new();
 
-        #[expect(unused_mut)] // TACEO TODO: This is for the linter, remove once its fixed...
-        for (mut el, init) in izip!(s.h.iter_mut().take(8), INITIAL_H.iter().take(8)) {
+        for (el, init) in izip!(s.h.iter_mut().take(8), INITIAL_H.iter().take(8)) {
             *el = FieldCT::from(F::from(*init));
         }
 
