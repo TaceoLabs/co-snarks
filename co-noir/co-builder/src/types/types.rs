@@ -970,6 +970,9 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         if builder.is_write_vk_mode && !constant_coordinates {
             builder.set_variable(input_x.index, F::one().into());
             builder.set_variable(input_y.index, g1_y.into());
+            if !input_infinity.is_constant {
+                builder.set_variable(input_infinity.index, F::zero().into());
+            }
         }
 
         if !predicate.is_constant() {
