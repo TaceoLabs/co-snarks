@@ -4319,6 +4319,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         // Add range constraint
         // TODO CESAR: Refactor this, create_dyadic_range_constraint
+        // TODO Reinstate prepare_for_range_decompose in order to batch the decompositions
         for constraint in constraint_system.range_constraints.iter() {
             println!("Creating range constraint");
             self.create_dyadic_range_constraint(driver, constraint.witness, constraint.num_bits)?;
