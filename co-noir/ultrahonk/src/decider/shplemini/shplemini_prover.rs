@@ -1,5 +1,5 @@
 use crate::{
-    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
+     NUM_SMALL_IPA_EVALUATIONS, Utils,
     decider::{
         decider_prover::Decider,
         decider_verifier::DeciderVerifier,
@@ -567,7 +567,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Take into account the constant proof size in Gemini
         if has_zk == ZeroKnowledge::Yes {
             current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 + NUM_INTERLEAVING_CLAIMS as u64]);
+                nu_challenge.pow([2 * virtual_log_n as u64 ]);
         }
 
         if has_zk == ZeroKnowledge::Yes {
@@ -658,7 +658,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // interleaving.
         if has_zk == ZeroKnowledge::Yes {
             current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 + NUM_INTERLEAVING_CLAIMS as u64]);
+                nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if let Some(libra_claims) = libra_opening_claims {

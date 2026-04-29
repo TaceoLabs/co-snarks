@@ -20,7 +20,7 @@ use co_noir_common::{
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use ultrahonk::{NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils};
+use ultrahonk::{ NUM_SMALL_IPA_EVALUATIONS, Utils};
 
 impl<
     T: NoirUltraHonkProver<P>,
@@ -648,7 +648,7 @@ impl<
         // Take into account the constant proof size in Gemini
         if has_zk == ZeroKnowledge::Yes {
             current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 + NUM_INTERLEAVING_CLAIMS as u64]);
+                nu_challenge.pow([2 * virtual_log_n as u64 ]);
         }
 
         if has_zk == ZeroKnowledge::Yes {
@@ -741,7 +741,7 @@ impl<
         // interleaving.
         if has_zk == ZeroKnowledge::Yes {
             current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 + NUM_INTERLEAVING_CLAIMS as u64]);
+                nu_challenge.pow([2 * virtual_log_n as u64 ]);
         }
 
         if let Some(libra_claims) = libra_opening_claims {

@@ -301,9 +301,6 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
                 T::mul_with_public(self.libra_scaling_factor.inverse().expect("non-zero"), eval);
             // place the evalution into the vector of Libra evaluations
             self.libra_evaluations.push(libra_evaluation);
-            for univariate in &mut self.libra_univariates {
-                univariate.mul_assign(self.libra_challenge.inverse().expect("non-zero"));
-            }
         }
     }
 }

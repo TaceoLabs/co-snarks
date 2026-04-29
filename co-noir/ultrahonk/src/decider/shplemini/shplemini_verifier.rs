@@ -1,6 +1,6 @@
 use super::types::{PolyF, PolyG, PolyGShift};
 use crate::{
-    CONST_PROOF_SIZE_LOG_N, NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS,
+    CONST_PROOF_SIZE_LOG_N,  NUM_LIBRA_COMMITMENTS,
     NUM_SMALL_IPA_EVALUATIONS,
     decider::{
         decider_verifier::DeciderVerifier,
@@ -597,7 +597,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         for idx in 0..NUM_SMALL_IPA_EVALUATIONS {
             let scaling_factor = denominators[idx]
                 * shplonk_batching_challenge_powers
-                    [2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize + idx];
+                    [2 * virtual_log_n + idx];
             batching_scalars[idx] = -scaling_factor;
             *constant_term_accumulator += scaling_factor * libra_evaluations[idx];
         }
@@ -738,7 +738,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         has_zk: ZeroKnowledge,
         // committed_sumcheck: bool, we don't have this (yet)
     ) -> Vec<P::ScalarField> {
-        let mut num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
+        let mut num_powers = 2 * virtual_log_n;
         // // Each round univariate is opened at 0, 1, and a round challenge.
         // const NUM_COMMITTED_SUMCHECK_CLAIMS_PER_ROUND: usize = 3;
 
