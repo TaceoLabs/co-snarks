@@ -219,8 +219,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     pub(crate) const NUM_RESERVED_GATES: usize = 4;
     pub(crate) const DEFAULT_PLOOKUP_RANGE_BITNUM: usize = 14;
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
-    // number of gates created per non-native field operation in process_non_native_field_multiplications
-    pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 7;
+    // Each queued partial non-native multiplication materializes into 4 NNF gates at finalization.
+    pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 4;
     pub(crate) const DEFAULT_NON_NATIVE_FIELD_LIMB_BITS: usize = 68;
 
     pub(crate) fn assert_if_has_witness(&self, input: bool) {
@@ -1020,23 +1020,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     }
 
     pub(crate) fn get_num_gates(&self) -> usize {
-        // if circuit finalized already added extra gates
-        if self.circuit_finalized {
-            return self.num_gates;
-        }
-        let mut count = 0;
-        let mut rangecount = 0;
-        let mut romcount = 0;
-        let mut ramcount = 0;
-        let mut nnfcount = 0;
-        self.get_num_gates_split_into_components(
-            &mut count,
-            &mut rangecount,
-            &mut romcount,
-            &mut ramcount,
-            &mut nnfcount,
-        );
-        count + romcount + ramcount + rangecount + nnfcount
+        self.num_gates
     }
 
     pub(crate) fn get_tables_size(&self) -> usize {
@@ -2991,7 +2975,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             T::add_assign(driver, &mut subtrahend, term0);
             T::add_assign(driver, &mut subtrahend, term1);
 
-            let new_accumulator = T::sub(driver, accumulator, subtrahend);
+            let new_accumulator = T::sub(driver, accumulator.clone(), subtrahend);
 
             self.create_big_add_gate(
                 &AddQuad {
@@ -3007,8 +2991,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 },
                 i != num_limb_triples - 1,
             );
-            accumulator_idx = self.add_variable(new_accumulator.clone());
-            accumulator = new_accumulator;
+            if i != num_limb_triples - 1 {
+                accumulator_idx = self.add_variable(new_accumulator.clone());
+                accumulator = new_accumulator;
+            }
         }
 
         Ok(sublimb_indices)
@@ -4187,21 +4173,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             constraint_system.public_inputs.to_owned(),
             is_write_vk_mode,
         );
-
-        println!(
-            "num public_input after init: {}",
-            builder.public_inputs.len()
-        );
         let metadata = ProgramMetadata {
             honk_recursion,
             size_hint,
         };
         builder.build_constraints(driver, constraint_system, crs, &metadata)?;
-
-        println!(
-            "num public_input after build_constraints: {}",
-            builder.public_inputs.len()
-        );
 
         // TACEO TODO: Not happening in bb
         builder.finalize_circuit(true, driver)?;
@@ -4297,7 +4273,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         // Add standard width-4 Ultra arithmetic gates
         for constraint in constraint_system.quad_constraints.iter() {
-            println!("Creating quad constraint");
             // TODO CESAR: This mut and clone are weird
             self.create_quad_constraint(&mut constraint.clone());
         }
@@ -4306,14 +4281,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // w4_shift to use the least possible number of intermediate witnesses. See the documentation of
         // split_into_mul_quad_gates for more information.
         for big_constraint in constraint_system.big_quad_constraints.iter() {
-            println!("Creating big quad constraint");
             // TODO CESAR: This mut and clone are weird (Remark FF: I think we can pass it by reference and make it mutable inside the function?)
             self.create_big_quad_constraint(driver, &mut big_constraint.clone())?;
         }
 
         // Add logic constraint
         for constraint in constraint_system.logic_constraints.iter() {
-            println!("Creating logic constraint");
             self.create_logic_gate(driver, constraint)?;
         }
 
@@ -4321,7 +4294,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // TODO CESAR: Refactor this, create_dyadic_range_constraint
         // TODO Reinstate prepare_for_range_decompose in order to batch the decompositions
         for constraint in constraint_system.range_constraints.iter() {
-            println!("Creating range constraint");
             self.create_dyadic_range_constraint(driver, constraint.witness, constraint.num_bits)?;
         }
 
@@ -4418,11 +4390,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
     }
 
     fn process_hn_recursion_constraints_placeholder(&self) {
-        todo!("HN recursion constraints placeholder")
+        tracing::trace!("Processing HN recursion constraints placeholder");
     }
 
     fn process_chonk_recursion_constraints_placeholder(&self) {
-        todo!("CHONK recursion constraints placeholder")
+        tracing::trace!("Processing CHONK recursion constraints placeholder");
     }
 
     fn process_honk_recursion_constraints(
@@ -4434,7 +4406,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let mut output = PairingPoints::default();
         // Add recursion constraints
         for constraint in constraint_system.honk_recursion_constraints.iter() {
-            println!("Processing HONK recursion constraint");
             let honk_recursion_constraint =
                 self.create_honk_recursion_constraints(constraint, crs, driver)?;
             output.update::<Poseidon2SpongeCT<P>>(honk_recursion_constraint, self, driver)?;

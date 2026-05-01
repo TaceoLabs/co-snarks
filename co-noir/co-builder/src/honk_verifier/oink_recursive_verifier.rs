@@ -63,6 +63,16 @@ impl OinkRecursiveVerifier {
             public_inputs.push(pi);
         }
 
+        verification_key
+            .vk_and_hash
+            .vk
+            .num_public_inputs
+            .assert_equal(
+                &FieldCT::from(C::ScalarField::from(num_public_inputs_usize as u64)),
+                builder,
+                driver,
+            );
+
         let mut commitments = WitnessCommitments::<C::ScalarField, T>::default();
 
         // TACEO TODO: batch `is_zero` calls on `receive_point_from_prover`
@@ -73,16 +83,17 @@ impl OinkRecursiveVerifier {
             transcript.receive_point_from_prover("W_R".to_owned(), builder, driver)?;
         *commitments.w_o_mut() =
             transcript.receive_point_from_prover("W_O".to_owned(), builder, driver)?;
+        println!("OinkVerifier::receive_wire_commitments commitments begin");
+        print_point_hex("W_L", commitments.w_l(), builder, driver)?;
+        print_point_hex("W_R", commitments.w_r(), builder, driver)?;
+        print_point_hex("W_O", commitments.w_o(), builder, driver)?;
+        println!("OinkVerifier::receive_wire_commitments commitments end");
 
-        // Get eta challenges: used in RAM/ROM memory records and log derivative lookup argument
-        let [eta_1, eta_2, eta_3] = transcript
-            .get_challenges(
-                &["eta_1".to_owned(), "eta_2".to_owned(), "eta_3".to_owned()],
-                builder,
-                driver,
-            )?
-            .try_into()
-            .unwrap();
+        // Get eta challenge and derive eta, eta² and eta³ used in memory and lookup arguments.
+        let eta = transcript.get_challenge("eta".to_string(), builder, driver)?;
+        let eta_1 = eta.clone();
+        let eta_2 = eta.multiply(&eta, builder, driver)?;
+        let eta_3 = eta_2.multiply(&eta, builder, driver)?;
 
         // Get commitments to lookup argument polynomials and fourth wire
         *commitments.lookup_read_counts_mut() = transcript.receive_point_from_prover(
@@ -100,6 +111,8 @@ impl OinkRecursiveVerifier {
             .get_challenges(&["beta".to_owned(), "gamma".to_owned()], builder, driver)?
             .try_into()
             .unwrap();
+        let beta_sqr = beta.multiply(&beta, builder, driver)?;
+        let beta_cube = beta_sqr.multiply(&beta, builder, driver)?;
 
         *commitments.lookup_inverses_mut() =
             transcript.receive_point_from_prover("LOOKUP_INVERSES".to_owned(), builder, driver)?;
@@ -122,6 +135,8 @@ impl OinkRecursiveVerifier {
 
         verification_key.relation_parameters = RelationParameters {
             beta,
+            beta_sqr,
+            beta_cube,
             gamma,
             eta_1,
             eta_2,

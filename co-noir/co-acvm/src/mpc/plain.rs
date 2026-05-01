@@ -967,7 +967,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         scalar: &Self::AcvmType,
         max_num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        let mut scalar_multiplier: BigUint = (*scalar).into();
+        let modulus: BigUint = F::MODULUS.into();
+        let scalar_value: BigUint = (*scalar).into();
+        let mut scalar_multiplier = scalar_value % &modulus;
 
         let num_rounds = if max_num_bits == 0 || scalar_multiplier.is_zero() {
             F::MODULUS_BIT_SIZE as usize
@@ -976,22 +978,24 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         };
 
         // NAF can't handle 0 so we set scalar = r in this case.
-        if scalar.is_zero() {
-            scalar_multiplier = F::MODULUS.into();
+        if scalar_multiplier.is_zero() {
+            scalar_multiplier = modulus;
         }
 
-        let mut bits = Vec::with_capacity(num_rounds);
-        for _ in 0..num_rounds {
-            let bit = if (&scalar_multiplier & BigUint::one()).is_zero() {
-                F::one()
-            } else {
-                F::zero()
-            };
-            bits.push(bit);
-            scalar_multiplier >>= 1;
+        let skew = (&scalar_multiplier & BigUint::one()).is_zero();
+        if skew {
+            scalar_multiplier += BigUint::one();
         }
 
-        Ok(bits)
+        let mut entries = Vec::with_capacity(num_rounds);
+        entries.push(F::from(skew as u64));
+
+        for i in 0..num_rounds - 1 {
+            let next_bit_is_set = ((&scalar_multiplier >> (i + 1)) & BigUint::one()).is_one();
+            entries.push(F::from((!next_bit_is_set) as u64));
+        }
+
+        Ok(entries)
     }
 
     fn add_other_acvm_types<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(

@@ -535,27 +535,33 @@ impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoin
         public_inputs: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> eyre::Result<Self> {
+    ) -> eyre::Result<Self>
+    where
+        C::BaseField: PrimeField,
+    {
         // Assumes that the app-io public inputs are at the end of the public_inputs vector
         let index = public_inputs.len() - PAIRING_POINT_ACCUMULATOR_SIZE as usize;
         let (p0_limbs, p1_limbs) =
             public_inputs[index..].split_at(PAIRING_POINT_ACCUMULATOR_SIZE as usize / 2);
 
-        Ok(Self {
+        let result = Self {
             p0: BigGroup::reconstruct_from_public(p0_limbs, builder, driver)?,
             p1: BigGroup::reconstruct_from_public(p1_limbs, builder, driver)?,
             has_data: true,
-        })
+        };
+        Ok(result)
     }
 
     pub fn set_public(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> usize {
+    ) -> usize
+    where
+        C::BaseField: PrimeField,
+    {
         let start_idx = self.p0.set_public(driver, builder);
         self.p1.set_public(driver, builder);
-
         start_idx
     }
 }
@@ -616,7 +622,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         )?;
         let recursion_separator =
             transcript.get_challenge("recursion_separator".to_string(), builder, driver)?;
-
         // Save gates using short scalars. We don't apply `bn254_endo_batch_mul` to the vector {1,
         // recursion_separator} directly to avoid edge cases.
         let mut point_to_aggregate =

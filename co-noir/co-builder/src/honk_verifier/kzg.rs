@@ -44,10 +44,6 @@ impl KZG {
         let mut quotient_commitment =
             transcript.receive_point_from_prover("KZG:W".to_owned(), builder, driver)?;
 
-        // This challenge is used to compute offset generators in the batch_mul call below
-        let masking_challenge =
-            transcript.get_challenge("KZG:masking_challenge".to_owned(), builder, driver)?;
-
         // The pairing check can be expressed as
         // e(C + [W]₁ ⋅ z, [1]₂) * e(−[W]₁, [X]₂) = 1, where C = ∑ commitmentsᵢ ⋅ scalarsᵢ.
 
@@ -65,7 +61,6 @@ impl KZG {
             &batch_opening_claim.scalars,
             0,
             true,
-            &masking_challenge,
             builder,
             driver,
         )?;

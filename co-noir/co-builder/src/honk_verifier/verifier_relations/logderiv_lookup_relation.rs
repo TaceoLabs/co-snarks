@@ -56,8 +56,8 @@ impl LogDerivLookupRelation {
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let gamma = &relation_parameters.gamma;
         let beta = relation_parameters.beta.to_owned();
-        let beta_sqr = beta.multiply(&beta, builder, driver)?;
-        let beta_cube = beta_sqr.multiply(&beta, builder, driver)?;
+        let beta_sqr = relation_parameters.beta_sqr.to_owned();
+        let beta_cube = relation_parameters.beta_cube.to_owned();
         let w_1 = input.witness.w_l().to_owned();
         let w_2 = input.witness.w_r().to_owned();
         let w_3 = input.witness.w_o().to_owned();
@@ -118,8 +118,8 @@ impl LogDerivLookupRelation {
     ) -> HonkProofResult<FieldCT<C::ScalarField>> {
         let gamma = &relation_parameters.gamma;
         let beta = relation_parameters.beta.to_owned();
-        let beta_sqr = beta.multiply(&beta, builder, driver)?;
-        let beta_cube = beta_sqr.multiply(&beta, builder, driver)?;
+        let beta_sqr = relation_parameters.beta_sqr.to_owned();
+        let beta_cube = relation_parameters.beta_cube.to_owned();
 
         let table_1 = input.precomputed.table_1().to_owned();
         let table_2 = input.precomputed.table_2().to_owned();

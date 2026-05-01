@@ -3,7 +3,7 @@ use crate::types::types::{AddQuad, NonNativeMultiplicationFieldWitnesses};
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use ark_bn254::Fq;
 use ark_ec::CurveGroup;
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{BigInteger, One, PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::utils::Utils;
 use core::panic;
@@ -18,6 +18,14 @@ use super::field_ct::BoolCT;
 pub(crate) const NUM_LIMBS: usize = 4;
 pub(crate) const NUM_LIMB_BITS: usize = 68;
 pub(crate) const DEFAULT_MAXIMUM_LIMB: u128 = (1 << NUM_LIMB_BITS) - 1;
+
+fn debug_hex(value: impl BigInteger) -> String {
+    let mut out = String::from("0x");
+    for byte in value.to_bytes_be() {
+        out.push_str(&format!("{byte:02x}"));
+    }
+    out
+}
 
 #[derive(Debug, Clone)]
 pub struct BigField<F: PrimeField> {
@@ -84,16 +92,41 @@ impl<F: PrimeField> BigField<F> {
     /// Set the witness indices of the binary basis limbs to public
     ///
     /// Returns the public input index at which the representation of the BigField starts.
-    pub(crate) fn set_public<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
+    pub(crate) fn set_public<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
         &self,
         driver: &mut T,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
     ) -> usize {
+        let mut reduced = self.clone();
+        reduced
+            .self_reduce(builder, driver)
+            .expect("failed to reduce bigfield before set_public");
+
+        let shift = FieldCT::from(F::from(BigUint::from(1u64) << NUM_LIMB_BITS));
         let start_index = builder.public_inputs.len();
-        for limb in &self.binary_basis_limbs {
-            let wtns_idx = limb.element.get_witness_index(builder, driver);
-            builder.set_public_input(wtns_idx);
-        }
+        let lo = reduced.binary_basis_limbs[0].element.add(
+            &reduced.binary_basis_limbs[1]
+                .element
+                .multiply(&shift, builder, driver)
+                .expect("failed to pack bigfield lo limb"),
+            builder,
+            driver,
+        );
+        let hi = reduced.binary_basis_limbs[2].element.add(
+            &reduced.binary_basis_limbs[3]
+                .element
+                .multiply(&shift, builder, driver)
+                .expect("failed to pack bigfield hi limb"),
+            builder,
+            driver,
+        );
+        let lo_witness = lo.get_witness_index(builder, driver);
+        let hi_witness = hi.get_witness_index(builder, driver);
+        builder.set_public_input(lo_witness);
+        builder.set_public_input(hi_witness);
         start_index
     }
 
@@ -768,6 +801,166 @@ impl<F: PrimeField> BigField<F> {
         Ok(limb_witness_indices)
     }
 
+    /// Enforce that this bigfield value is canonically in [0, Fq::modulus).
+    pub(crate) fn assert_is_in_field<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        &self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        let modulus: BigUint = Fq::MODULUS.into();
+        self.assert_less_than::<P, T>(&modulus, builder, driver)
+    }
+
+    fn assert_less_than<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        &self,
+        upper_limit: &BigUint,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        // Constant values are checked natively (no constraints required).
+        if self.is_constant() {
+            let value = self.get_value_fq(builder, driver)?;
+            let value = T::get_public_other_acvm_type(&value).expect("Constants should be public");
+            let value: BigUint = value.into_bigint().into();
+            assert!(value < *upper_limit, "bigfield::assert_less_than failed");
+            return Ok(());
+        }
+
+        let limb_0_idx = self.binary_basis_limbs[0]
+            .element
+            .get_witness_index(builder, driver);
+        let limb_1_idx = self.binary_basis_limbs[1]
+            .element
+            .get_witness_index(builder, driver);
+        let limb_2_idx = self.binary_basis_limbs[2]
+            .element
+            .get_witness_index(builder, driver);
+        let limb_3_idx = self.binary_basis_limbs[3]
+            .element
+            .get_witness_index(builder, driver);
+
+        builder.range_constrain_two_limbs(
+            limb_0_idx,
+            limb_1_idx,
+            NUM_LIMB_BITS,
+            NUM_LIMB_BITS,
+            driver,
+        )?;
+        builder.range_constrain_two_limbs(
+            limb_2_idx,
+            limb_3_idx,
+            NUM_LIMB_BITS,
+            Self::NUM_LAST_LIMB_BITS,
+            driver,
+        )?;
+
+        self.unsafe_assert_less_than::<P, T>(upper_limit, builder, driver)
+    }
+
+    fn unsafe_assert_less_than<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        &self,
+        upper_limit: &BigUint,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        assert!(!upper_limit.is_zero(), "upper_limit must be non-zero");
+
+        let strict_upper_limit = upper_limit - BigUint::one();
+        let upper_limit_value_0 = Utils::slice_u256(&strict_upper_limit, 0, NUM_LIMB_BITS as u64);
+        let upper_limit_value_1 = Utils::slice_u256(
+            &strict_upper_limit,
+            NUM_LIMB_BITS as u64,
+            (NUM_LIMB_BITS * 2) as u64,
+        );
+        let upper_limit_value_2 = Utils::slice_u256(
+            &strict_upper_limit,
+            (NUM_LIMB_BITS * 2) as u64,
+            (NUM_LIMB_BITS * 3) as u64,
+        );
+        let upper_limit_value_3 = Utils::slice_u256(
+            &strict_upper_limit,
+            (NUM_LIMB_BITS * 3) as u64,
+            (NUM_LIMB_BITS * 4) as u64,
+        );
+
+        let value = self.get_value_fq::<P, T>(builder, driver)?;
+        let [limb_0_value, limb_1_value, limb_2_value, _] = driver
+            .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, P>(&value)?;
+
+        let borrow_0_val = driver.gt(
+            limb_0_value,
+            T::AcvmType::from(F::from(upper_limit_value_0.clone())),
+        )?;
+        let borrow_0 = BoolCT::from_witness_ct(
+            WitnessCT::from_acvm_type(borrow_0_val, builder),
+            builder,
+            false,
+        );
+
+        let borrow_0_value = borrow_0.get_value(driver);
+        let limb_1_plus_borrow_0 = driver.add(limb_1_value, borrow_0_value);
+        let borrow_1_val = driver.gt(
+            limb_1_plus_borrow_0,
+            T::AcvmType::from(F::from(upper_limit_value_1.clone())),
+        )?;
+        let borrow_1 = BoolCT::from_witness_ct(
+            WitnessCT::from_acvm_type(borrow_1_val, builder),
+            builder,
+            false,
+        );
+
+        let borrow_1_value = borrow_1.get_value(driver);
+        let limb_2_plus_borrow_1 = driver.add(limb_2_value, borrow_1_value);
+        let borrow_2_val = driver.gt(
+            limb_2_plus_borrow_1,
+            T::AcvmType::from(F::from(upper_limit_value_2.clone())),
+        )?;
+        let borrow_2 = BoolCT::from_witness_ct(
+            WitnessCT::from_acvm_type(borrow_2_val, builder),
+            builder,
+            false,
+        );
+
+        let upper_0 = FieldCT::from(F::from(upper_limit_value_0));
+        let upper_1 = FieldCT::from(F::from(upper_limit_value_1));
+        let upper_2 = FieldCT::from(F::from(upper_limit_value_2));
+        let upper_3 = FieldCT::from(F::from(upper_limit_value_3));
+        let shift_1 = FieldCT::from(F::from(BigUint::one() << NUM_LIMB_BITS));
+
+        let r0 = upper_0
+            .sub(&self.binary_basis_limbs[0].element, builder, driver)
+            .add(&borrow_0.to_field_ct(driver).multiply(&shift_1, builder, driver)?, builder, driver);
+        let r1 = upper_1
+            .sub(&self.binary_basis_limbs[1].element, builder, driver)
+            .add(&borrow_1.to_field_ct(driver).multiply(&shift_1, builder, driver)?, builder, driver)
+            .sub(&borrow_0.to_field_ct(driver), builder, driver);
+        let r2 = upper_2
+            .sub(&self.binary_basis_limbs[2].element, builder, driver)
+            .add(&borrow_2.to_field_ct(driver).multiply(&shift_1, builder, driver)?, builder, driver)
+            .sub(&borrow_1.to_field_ct(driver), builder, driver);
+        let r3 = upper_3
+            .sub(&self.binary_basis_limbs[3].element, builder, driver)
+            .sub(&borrow_2.to_field_ct(driver), builder, driver);
+
+        let r0_idx = r0.get_witness_index(builder, driver);
+        let r1_idx = r1.get_witness_index(builder, driver);
+        builder.range_constrain_two_limbs(r0_idx, r1_idx, NUM_LIMB_BITS, NUM_LIMB_BITS, driver)?;
+        let r2_idx = r2.get_witness_index(builder, driver);
+        let r3_idx = r3.get_witness_index(builder, driver);
+        builder.range_constrain_two_limbs(r2_idx, r3_idx, NUM_LIMB_BITS, NUM_LIMB_BITS, driver)?;
+
+        Ok(())
+    }
+
     /// Checks that two BigField elements are equal modulo p by proving their integer difference is a multiple of p.
     /// This relies on the minus operator for a-b increasing a by a multiple of p large enough so diff is non-negative.
     /// When one of the elements is a constant and another is a witness, we check equality of limbs, so if the witness
@@ -868,6 +1061,28 @@ impl<F: PrimeField> BigField<F> {
 
             Ok(())
         }
+    }
+
+    pub(crate) fn assert_zero_if<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        &self,
+        predicate: &BoolCT<F, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<()> {
+        let predicate_field = predicate.to_field_ct(driver);
+
+        for limb in &self.binary_basis_limbs {
+            FieldCT::multiply(&limb.element, &predicate_field, builder, driver)?
+                .assert_is_zero(builder);
+        }
+
+        FieldCT::multiply(&self.prime_basis_limb, &predicate_field, builder, driver)?
+            .assert_is_zero(builder);
+
+        Ok(())
     }
 
     // construct a proof that points are different mod p, when they are different mod r
@@ -1728,6 +1943,18 @@ impl<F: PrimeField> BigField<F> {
         driver: &mut T,
     ) -> eyre::Result<Self> {
         Self::internal_div(numerators, denominator, false, builder, driver)
+    }
+
+    pub(crate) fn div<
+        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        numerators: &mut [Self],
+        denominator: &mut Self,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        Self::internal_div(numerators, denominator, true, builder, driver)
     }
 
     //

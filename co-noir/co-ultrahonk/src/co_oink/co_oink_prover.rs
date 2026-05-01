@@ -537,7 +537,6 @@ impl<
         tracing::trace!("generate alpha round");
 
         let alpha = transcript.get_challenge::<C>("alpha".to_string());
-        println!("ALPHA: {}", Self::field_to_hex(&alpha));
         let mut alpha_powers = [C::ScalarField::one(); NUM_ALPHAS];
         alpha_powers[0] = alpha;
         for i in 1..NUM_ALPHAS {
@@ -555,7 +554,6 @@ impl<
         tracing::trace!("executing preamble round");
 
         let vk_hash = verifying_key.hash_with_origin_tagging::<H>("", transcript);
-        println!("VK_HASH: {}", Self::field_to_hex(&vk_hash));
         transcript.add_fr_to_hash_buffer::<C>("VK_HASH".to_string(), vk_hash);
 
         if proving_key.num_public_inputs as usize != proving_key.public_inputs.len() {
@@ -567,7 +565,6 @@ impl<
         for (i, public_input) in proving_key.public_inputs.iter().enumerate() {
             // transcript.add_scalar(*public_input);
             transcript.send_fr_to_verifier::<C>(format!("PUBLIC_INPUT_{i}"), *public_input);
-            println!("PUBLIC_INPUT_{i}: {}", Self::field_to_hex(public_input));
         }
         Ok(())
     }

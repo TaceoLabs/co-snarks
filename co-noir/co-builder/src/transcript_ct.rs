@@ -14,6 +14,7 @@ use ark_ec::AffineRepr;
 use ark_ec::CurveGroup;
 use ark_ec::PrimeGroup;
 use ark_ec::pairing::Pairing;
+use ark_ff::PrimeField;
 use ark_ff::Zero;
 use ark_poly::domain::general::GeneralElements;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -193,23 +194,9 @@ where
         builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> HonkProofResult<BigGroup<C::ScalarField, WT>> {
-        let mut elements = self.receive_n_from_prover(label, C::NUM_BASEFIELD_ELEMENTS * 2)?;
+        let elements = self.receive_n_from_prover(label, C::NUM_BASEFIELD_ELEMENTS * 2)?;
         debug_assert!(elements.len() == C::NUM_BASEFIELD_ELEMENTS * 2);
-
-        let [x_lo, x_hi] = [&elements[0], &elements[1]];
-        let [y_lo, y_hi] = [&elements[2], &elements[3]];
-
-        let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
-        let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
-        let is_zero = FieldCT::check_point_at_infinity::<C, WT>(&elements, builder, driver)?;
-
-        let mut result = BigGroup::new(x, y);
-
-        result.set_point_at_infinity(is_zero, builder, driver);
-        // Note that in the case of bn254 with Mega arithmetization, the check is delegated to ECCVM, see
-        // `on_curve_check` in `ECCVMTranscriptRelationImpl`.
-        result.validate_on_curve(builder, driver)?;
-        Ok(result)
+        Ok(BigGroup::reconstruct_from_public(&elements, builder, driver)?)
     }
 
     pub fn send_point_to_verifier<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
@@ -239,7 +226,7 @@ where
         builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> eyre::Result<[FieldCT<C::ScalarField>; 2]> {
-        let lo = CycleScalarCT::<C::ScalarField>::MAX_BITS_PER_ENDOMORPHISM_SCALAR;
+        let lo = (<C::ScalarField as PrimeField>::MODULUS_BIT_SIZE as usize) / 2;
         challenge.split_unique(lo, builder, driver)
     }
 

@@ -1874,6 +1874,7 @@ impl<F: PrimeField> FieldCT<F> {
         // Split the field modulus at the same position
         let r_lo = Utils::slice_u256(field_modulus, 0, lo_bits as u64);
         let r_hi = Utils::slice_u256(field_modulus, lo_bits as u64, modulus_bits as u64);
+        let r_lo_minus_one = r_lo.clone() - BigUint::one();
 
         // Check if we need to borrow
         let lo_value = lo.get_value(builder, driver);
@@ -1881,16 +1882,16 @@ impl<F: PrimeField> FieldCT<F> {
             let lo_value: BigUint = T::get_public(&lo_value)
                 .expect("Constants are public")
                 .into();
-            let need_borrow = lo_value > r_lo;
+            let need_borrow = lo_value > r_lo_minus_one;
             FieldCT::from(F::from(need_borrow as u64))
         } else {
             let need_borrow = if T::is_shared(&lo_value) {
-                driver.gt(lo_value.to_owned(), F::from(r_lo.clone()).into())?
+                driver.gt(lo_value.to_owned(), F::from(r_lo_minus_one.clone()).into())?
             } else {
                 let lo_big: BigUint = T::get_public(&lo_value)
                     .expect("Already checked it is public")
                     .into();
-                F::from((lo_big > r_lo) as u64).into()
+                F::from((lo_big > r_lo_minus_one) as u64).into()
             };
             FieldCT::from_witness(need_borrow, builder)
         };
@@ -1910,7 +1911,11 @@ impl<F: PrimeField> FieldCT<F> {
         let shift = FieldCT::from(F::from(BigUint::one() << lo_bits));
         let lo_diff = lo
             .neg()
-            .add(&FieldCT::from(F::from(r_lo.clone())), builder, driver)
+            .add(
+                &FieldCT::from(F::from(r_lo_minus_one)),
+                builder,
+                driver,
+            )
             .add(&borrow.multiply(&shift, builder, driver)?, builder, driver);
 
         hi_diff.create_range_constraint(hi_bits, builder, driver)?;

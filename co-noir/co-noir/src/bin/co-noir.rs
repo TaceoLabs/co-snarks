@@ -897,9 +897,6 @@ fn main() -> color_eyre::Result<ExitCode> {
                     .public_inputs()
                     .indices(),
             )?;
-            println!("circuit_size = {circuit_size}");
-            println!("abi = {abi}");
-            println!("public_inputs = {public_inputs}");
             Ok(ExitCode::SUCCESS)
         }
     }

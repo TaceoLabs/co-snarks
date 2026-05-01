@@ -11,7 +11,7 @@ use ark_ff::Field;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{
-    constants::{NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS},
+    constants::{NUM_LIBRA_COMMITMENTS},
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::entities::WITNESS_ENTITIES_SIZE,
@@ -682,7 +682,7 @@ impl ShpleminiVerifier {
         for idx in 0..NUM_SMALL_IPA_EVALUATIONS {
             let scaling_factor = denominators[idx].multiply(
                 &shplonk_batching_challenge_powers
-                    [2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize + idx],
+                    [2 * virtual_log_n + idx],
                 builder,
                 driver,
             )?;
@@ -940,8 +940,8 @@ impl ShpleminiVerifier {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
-        // Minimum size of denominators
-        let mut num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
+        // Minimum number of powers: 2 * virtual_log_n for the Gemini fold claims.
+        let mut num_powers = 2 * virtual_log_n;
 
         if has_zk {
             num_powers += NUM_SMALL_IPA_EVALUATIONS;

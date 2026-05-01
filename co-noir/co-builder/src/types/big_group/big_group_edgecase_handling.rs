@@ -1,10 +1,10 @@
 use crate::types::big_group::BigGroup;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
-use ark_ec::CurveGroup;
-use ark_ff::{One, PrimeField};
+use ark_ec::{CurveGroup};
+use ark_ff::{One, PrimeField, UniformRand};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
-
+use rand::thread_rng;
 /**
  * @brief Given two lists of points that need to be multiplied by scalars, create a new list of length +1 with original
  * points masked, but the same scalar product sum
@@ -20,7 +20,6 @@ pub(crate) fn mask_points<
 >(
     points: &mut [BigGroup<F, T>],
     scalars: &[FieldCT<F>],
-    masking_scalar: &FieldCT<F>,
     builder: &mut GenericUltraCircuitBuilder<P, T>,
     driver: &mut T,
 ) -> eyre::Result<(Vec<BigGroup<F, T>>, Vec<FieldCT<F>>)> {
@@ -29,15 +28,14 @@ pub(crate) fn mask_points<
 
     debug_assert!(points.len() == scalars.len());
 
-    // Get the offset generator G_offset in native and in-circuit form
-    let native_offset_generator =
-        BigGroup::<F, T>::precomputed_native_table_offset_generator::<P>()?;
+    // TODO TACEO: Is thread_rng fine here?
+    // Sample a random curve point as the offset generator (free witness).
+    // The prover provides this point: the circuit only constrains it to lie on the curve.
+    let native_offset_generator = P::Affine::rand(&mut thread_rng());
     let mut offset_generator_element =
         BigGroup::from_witness(&native_offset_generator, driver, builder)?;
 
-    // Compute initial point to be added: (δ)⋅G_offset
-    let mut running_point =
-        offset_generator_element.scalar_mul(masking_scalar, 128, builder, driver)?;
+    let mut running_point = offset_generator_element;
 
     // Start the running scalar at 1
     let mut running_scalar = FieldCT::from(F::ONE);

@@ -71,21 +71,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             .iter_mut()
             .zip(elements[3..].chunks(BigGroup::<C::ScalarField, T>::NUM_BN254_FRS))
         {
-            let [x_lo, x_hi] = [&src[0], &src[1]];
-            let [y_lo, y_hi] = [&src[2], &src[3]];
-
-            let x = BigField::from_slices(x_lo, x_hi, driver, builder)?;
-            let y = BigField::from_slices(y_lo, y_hi, driver, builder)?;
-            let is_zero = FieldCT::check_point_at_infinity::<C, T>(src, builder, driver)?;
-
-            let mut result = BigGroup::new(x, y);
-
-            result.set_point_at_infinity(is_zero, builder, driver);
-
-            // Note that in the case of bn254 with Mega arithmetization, the check is delegated to ECCVM, see
-            // `on_curve_check` in `ECCVMTranscriptRelationImpl`.
-            result.validate_on_curve(builder, driver)?;
-            *des = result;
+            *des = BigGroup::reconstruct_from_public(src, builder, driver)?;
         }
 
         Ok(RecursiveVerificationKey {
@@ -189,26 +175,19 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
         // Construct a Honk proof and vk with the correct number of public inputs.
         // If we are in a write vk scenario, the proof and vk are not necessarily valid
-        let (honk_proof_to_be_set, honk_vk_to_be_set) =
-            (|| -> eyre::Result<(Vec<C::ScalarField>, VerifyingKeyBarretenberg<C>)> {
-                if self.is_write_vk_mode {
-                    Ok((
-                        self.create_mock_honk_proof(input.public_inputs.len(), has_zk, driver)?,
-                        Self::create_mock_honk_vk(
-                            1 << CONST_PROOF_SIZE_LOG_N,
-                            input.public_inputs.len(),
-                        ),
-                    ))
-                } else {
-                    // TODO TACEO: Rename and refactor
-                    self.construct_honk_proof_for_simple_circuit(
-                        input.public_inputs.len(),
-                        crs,
-                        has_zk,
-                        driver,
-                    )
-                }
-            })()?;
+        let (honk_proof_to_be_set, honk_vk_to_be_set) = if self.is_write_vk_mode {
+            (
+                self.create_mock_honk_proof(input.public_inputs.len(), has_zk, driver)?,
+                Self::create_mock_honk_vk(1 << CONST_PROOF_SIZE_LOG_N, input.public_inputs.len()),
+            )
+        } else {
+            self.construct_honk_proof_for_simple_circuit(
+                input.public_inputs.len(),
+                crs,
+                has_zk,
+                driver,
+            )?
+        };
 
         // Step 2.
         if self.is_write_vk_mode {
@@ -227,10 +206,9 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         }
 
         // Step 3.
-        let mut transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
-        let honk_vk_hash = honk_vk_to_be_set.hash_with_origin_tagging("", &mut transcript);
-
         if !predicate.is_constant() {
+            let mut transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
+            let honk_vk_hash = honk_vk_to_be_set.hash_with_origin_tagging("", &mut transcript);
             // If the predicate is a witness, we conditionally assign a valid vk, proof and vk hash so that verification
             // succeeds. Note: in doing this, we create some new witnesses that are only used in the conditional assignment.
             // It would be optimal to hard-code these values in the selectors, but due to the randomness needed to generate
