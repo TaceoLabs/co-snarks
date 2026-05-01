@@ -1,6 +1,6 @@
 global HONK_VK_SIZE: u32 = 115;
-global HONK_PROOF_SIZE: u32 = 457;
-global HONK_IDENTIFIER: u32 = 1;
+global HONK_PROOF_SIZE: u32 = 410;
+global HONK_IDENTIFIER: u32 = 0;
 
 fn main(
     verification_key: [Field; HONK_VK_SIZE],
