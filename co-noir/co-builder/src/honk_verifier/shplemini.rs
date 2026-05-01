@@ -275,7 +275,6 @@ impl ShpleminiVerifier {
         // Finalize the batch opening claim
         commitments.push(g1_identity.clone());
         scalars.push(constant_term_accumulator);
-
         HonkProofResult::Ok(BatchOpeningClaim {
             commitments,
             scalars,
@@ -370,9 +369,6 @@ impl ShpleminiVerifier {
         let evals = fold_neg_evals.to_vec();
         let mut eval_pos_prev = batched_evaluation.clone();
         let one = FieldCT::from(C::ScalarField::ONE);
-
-        let mut zero = FieldCT::from(C::ScalarField::ZERO);
-        zero.convert_constant_to_fixed_witness(builder, driver);
 
         let mut fold_pos_evaluations = Vec::with_capacity(virtual_log_n);
 

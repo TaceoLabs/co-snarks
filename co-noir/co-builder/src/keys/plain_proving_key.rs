@@ -297,7 +297,6 @@ fn compute_honk_style_permutation_lagrange_polynomials_from_mapping<P: CurveGrou
     permutation_mappings: Mapping,
     active_region_data: &ActiveRegionData,
 ) {
-    println!("Computing permutation polynomials from mapping...");
     // SEPARATOR ensures that the evaluations of `id_i` (`sigma_i`) and `id_j`(`sigma_j`) polynomials on the boolean
     // hypercube do not intersect for i != j.
     assert!(permutation_polynomials[0].len() < PERMUTATION_ARGUMENT_VALUE_SEPARATOR as usize);

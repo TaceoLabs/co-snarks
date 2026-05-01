@@ -265,14 +265,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let (mut points, mut scalars) =
             handle_points_at_infinity(points, scalars, builder, driver)?;
 
-        // If with_edgecases is false, masking_scalar must be constant and equal to 1 (as it is unused).
-        if !with_edgecases {
-            debug_assert!(
-                masking_scalar.is_constant()
-                    && masking_scalar.get_value(builder, driver) == F::ONE.into(),
-            );
-        }
-
         if with_edgecases {
             // If points are linearly dependent, we randomise them using a masking scalar.
             // We do this to ensure that the x-coordinates of the points are all distinct. This is required
