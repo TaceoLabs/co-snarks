@@ -1,6 +1,4 @@
-use super::{
-    plookup::{ColumnIdx, MultiTableId, Plookup},
-};
+use super::plookup::{ColumnIdx, MultiTableId, Plookup};
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 

@@ -49,9 +49,7 @@ impl<
     fn compute_batched_polys(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        multilinear_challenge: &[P::ScalarField],
         log_n: usize,
-        commitment_key: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(SharedPolynomial<T, P>, SharedPolynomial<T, P>)> {
         let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
@@ -61,28 +59,12 @@ impl<
 
         // To achieve ZK, we mask the batched polynomial by a random polynomial of the same size
         if has_zk == ZeroKnowledge::Yes {
-            batched_unshifted = SharedPolynomial::<T, P>::random(n, self.net, self.state)?;
-            let masking_poly_comm_shared =
-                CoUtils::commit::<T, P>(batched_unshifted.as_ref(), commitment_key);
-
-            // In the provers, the size of multilinear_challenge is `virtual_log_n`, but we need to evaluate the
-            // hiding polynomial as multilinear in log_n variables
-            let masking_poly_eval_shared =
-                batched_unshifted.evaluate_mle(&multilinear_challenge[0..log_n]);
-            let (masking_poly_comm, masking_poly_eval) = T::open_point_and_field(
-                masking_poly_comm_shared,
-                masking_poly_eval_shared,
-                self.net,
-                self.state,
-            )?;
-            transcript.send_point_to_verifier::<P>(
-                "Gemini:masking_poly_comm".to_string(),
-                masking_poly_comm.into(),
-            );
-            transcript.send_fr_to_verifier::<P>(
-                "Gemini:masking_poly_eval".to_string(),
-                masking_poly_eval,
-            );
+            batched_unshifted = self
+                .memory
+                .gemini_masking_poly
+                .as_ref()
+                .expect("Gemini masking polynomial must be prepared in Oink")
+                .clone();
         }
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
@@ -187,9 +169,7 @@ impl<
         // Compute batched polynomials
         let (batched_unshifted, batched_to_be_shifted) = self.compute_batched_polys(
             transcript,
-            multilinear_challenge,
             log_n,
-            commitment_key,
             has_zk,
         )?;
 

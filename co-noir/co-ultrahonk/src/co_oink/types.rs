@@ -1,6 +1,6 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_noir_common::polynomials::polynomial::Polynomial;
+use co_noir_common::polynomials::{polynomial::Polynomial, shared_polynomial::SharedPolynomial};
 
 use co_noir_common::mpc::NoirUltraHonkProver;
 use ultrahonk::NUM_ALPHAS;
@@ -8,6 +8,7 @@ pub struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) w_4: Polynomial<T::ArithmeticShare>, // column 3
     pub(crate) z_perm: Polynomial<T::ArithmeticShare>, // column 4
     pub(crate) lookup_inverses: Polynomial<T::ArithmeticShare>, // column 5
+    pub(crate) gemini_masking_poly: Option<SharedPolynomial<T, P>>,
     pub(crate) public_input_delta: P::ScalarField,
     pub(crate) challenges: Challenges<P::ScalarField>,
 }
@@ -30,6 +31,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for ProverMemory<T, P> {
             w_4: Default::default(),
             z_perm: Default::default(),
             lookup_inverses: Default::default(),
+            gemini_masking_poly: Default::default(),
             public_input_delta: Default::default(),
             challenges: Default::default(),
         }

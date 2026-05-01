@@ -1911,11 +1911,7 @@ impl<F: PrimeField> FieldCT<F> {
         let shift = FieldCT::from(F::from(BigUint::one() << lo_bits));
         let lo_diff = lo
             .neg()
-            .add(
-                &FieldCT::from(F::from(r_lo_minus_one)),
-                builder,
-                driver,
-            )
+            .add(&FieldCT::from(F::from(r_lo_minus_one)), builder, driver)
             .add(&borrow.multiply(&shift, builder, driver)?, builder, driver);
 
         hi_diff.create_range_constraint(hi_bits, builder, driver)?;

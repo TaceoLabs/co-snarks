@@ -490,7 +490,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             "multiple_montgomery_ladder requires at least one accumulator"
         );
 
-        self.x.assert_is_not_equal(&add[0].x3_prev, builder, driver)?;
+        self.x
+            .assert_is_not_equal(&add[0].x3_prev, builder, driver)?;
 
         let mut lambda1 = if !add[0].is_element {
             let mut numerator_right = add[0].x1_prev.sub(&mut add[0].x3_prev, builder, driver)?;
@@ -1016,7 +1017,9 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        *self = self.add(other, builder, driver)?.get_standard_form(builder, driver)?;
+        *self = self
+            .add(other, builder, driver)?
+            .get_standard_form(builder, driver)?;
         Ok(())
     }
 

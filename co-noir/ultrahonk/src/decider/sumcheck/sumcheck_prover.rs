@@ -56,13 +56,24 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn add_evals_to_transcript(
         transcript: &mut Transcript<TranscriptFieldType, H>,
         evaluations: &ClaimedEvaluations<P::ScalarField>,
+        gemini_masking_evaluation: Option<P::ScalarField>,
     ) {
         tracing::trace!("Add Evals to Transcript");
 
-        transcript.send_fr_iter_to_verifier::<P, _>(
-            "Sumcheck:evaluations".to_string(),
-            evaluations.iter(),
-        );
+        if let Some(masking_eval) = gemini_masking_evaluation {
+            let mut all_evaluations = Vec::with_capacity(evaluations.iter().count() + 1);
+            all_evaluations.push(masking_eval);
+            all_evaluations.extend(evaluations.iter().copied());
+            transcript.send_fr_iter_to_verifier::<P, _>(
+                "Sumcheck:evaluations".to_string(),
+                all_evaluations.iter(),
+            );
+        } else {
+            transcript.send_fr_iter_to_verifier::<P, _>(
+                "Sumcheck:evaluations".to_string(),
+                evaluations.iter(),
+            );
+        }
     }
 
     fn extract_claimed_evaluations(
@@ -195,7 +206,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
         // evaluations of all witnesses are masked.
         let multivariate_evaluations = Self::extract_claimed_evaluations(partially_evaluated_polys);
-        Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
+        Self::add_evals_to_transcript(transcript, &multivariate_evaluations, None);
 
         SumcheckOutput {
             challenges: multivariate_challenge,
@@ -315,7 +326,17 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
         // evaluations of all witnesses are masked.
         let multivariate_evaluations = Self::extract_claimed_evaluations(partially_evaluated_polys);
-        Self::add_evals_to_transcript(transcript, &multivariate_evaluations);
+        let gemini_masking_evaluation = self
+            .memory
+            .gemini_masking_poly
+            .as_ref()
+            .expect("Gemini masking polynomial must be prepared in Oink")
+            .evaluate_mle(&multivariate_challenge[0..multivariate_d as usize]);
+        Self::add_evals_to_transcript(
+            transcript,
+            &multivariate_evaluations,
+            Some(gemini_masking_evaluation),
+        );
 
         // The evaluations of Libra uninvariates at \f$ g_0(u_0), \ldots, g_{d-1} (u_{d-1}) \f$ are added to the
         // transcript.

@@ -196,7 +196,9 @@ where
     ) -> HonkProofResult<BigGroup<C::ScalarField, WT>> {
         let elements = self.receive_n_from_prover(label, C::NUM_BASEFIELD_ELEMENTS * 2)?;
         debug_assert!(elements.len() == C::NUM_BASEFIELD_ELEMENTS * 2);
-        Ok(BigGroup::reconstruct_from_public(&elements, builder, driver)?)
+        Ok(BigGroup::reconstruct_from_public(
+            &elements, builder, driver,
+        )?)
     }
 
     pub fn send_point_to_verifier<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(

@@ -11,7 +11,7 @@ use ark_ff::Field;
 use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{
-    constants::{NUM_LIBRA_COMMITMENTS},
+    constants::NUM_LIBRA_COMMITMENTS,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::entities::WITNESS_ENTITIES_SIZE,
@@ -677,8 +677,7 @@ impl ShpleminiVerifier {
         // Compute the scalars to be multiplied against the commitments
         for idx in 0..NUM_SMALL_IPA_EVALUATIONS {
             let scaling_factor = denominators[idx].multiply(
-                &shplonk_batching_challenge_powers
-                    [2 * virtual_log_n + idx],
+                &shplonk_batching_challenge_powers[2 * virtual_log_n + idx],
                 builder,
                 driver,
             )?;

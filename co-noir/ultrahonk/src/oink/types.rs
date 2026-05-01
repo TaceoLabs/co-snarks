@@ -10,12 +10,14 @@ pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) z_perm: Polynomial<P::ScalarField>,
     /// column 5
     pub(crate) lookup_inverses: Polynomial<P::ScalarField>,
+    pub(crate) gemini_masking_poly: Option<Polynomial<P::ScalarField>>,
     pub(crate) public_input_delta: P::ScalarField,
     pub(crate) challenges: Challenges<P::ScalarField>,
 }
 
 pub(crate) struct VerifierMemory<P: CurveGroup> {
     pub(crate) public_input_delta: P::ScalarField,
+    pub(crate) gemini_masking_commitment: Option<P::Affine>,
     pub(crate) witness_commitments: WitnessEntities<P::Affine>,
     pub(crate) challenges: Challenges<P::ScalarField>,
 }
@@ -48,6 +50,7 @@ impl<P: CurveGroup> Default for ProverMemory<P> {
             w_4: Default::default(),
             z_perm: Default::default(),
             lookup_inverses: Default::default(),
+            gemini_masking_poly: Default::default(),
             public_input_delta: Default::default(),
             challenges: Default::default(),
         }
@@ -58,6 +61,7 @@ impl<P: CurveGroup> Default for VerifierMemory<P> {
     fn default() -> Self {
         Self {
             public_input_delta: Default::default(),
+            gemini_masking_commitment: Default::default(),
             witness_commitments: Default::default(),
             challenges: Default::default(),
         }

@@ -1,6 +1,6 @@
 use crate::types::big_group::BigGroup;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
-use ark_ec::{CurveGroup};
+use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField, UniformRand};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;

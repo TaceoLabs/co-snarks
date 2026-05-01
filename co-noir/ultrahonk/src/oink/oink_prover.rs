@@ -83,6 +83,27 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Ok(())
     }
 
+    fn commit_to_masking_poly(
+        &mut self,
+        proving_key: &PlainProvingKey<C>,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> HonkProofResult<()> {
+        if self.has_zk == ZeroKnowledge::No {
+            return Ok(());
+        }
+
+        let polynomial_size = proving_key.polynomials.witness.w_l().len();
+        let masking_poly = Polynomial::<C::ScalarField>::random(polynomial_size, &mut self.rng);
+        let masking_commitment = Utils::commit(masking_poly.as_ref(), &proving_key.crs)?;
+        transcript.send_point_to_verifier::<C>(
+            "Gemini:masking_poly_comm".to_string(),
+            masking_commitment.into(),
+        );
+        self.memory.gemini_masking_poly = Some(masking_poly);
+
+        Ok(())
+    }
+
     fn compute_w4(&mut self, proving_key: &PlainProvingKey<C>) {
         tracing::trace!("compute w4");
         // The memory record values are computed at the indicated indices as
@@ -568,6 +589,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Add circuit size public input size and public inputs to transcript
         self.execute_preamble_round(transcript, proving_key, verifying_key)?;
+        self.commit_to_masking_poly(proving_key, transcript)?;
         // Compute first three wire commitments
         self.execute_wire_commitments_round(transcript, proving_key)?;
         // Compute sorted list accumulator and commitment

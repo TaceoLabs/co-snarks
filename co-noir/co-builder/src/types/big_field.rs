@@ -893,8 +893,8 @@ impl<F: PrimeField> BigField<F> {
         );
 
         let value = self.get_value_fq::<P, T>(builder, driver)?;
-        let [limb_0_value, limb_1_value, limb_2_value, _] = driver
-            .other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, P>(&value)?;
+        let [limb_0_value, limb_1_value, limb_2_value, _] =
+            driver.other_acvm_type_to_acvm_type_limbs::<NUM_LIMBS, NUM_LIMB_BITS, P>(&value)?;
 
         let borrow_0_val = driver.gt(
             limb_0_value,
@@ -938,14 +938,32 @@ impl<F: PrimeField> BigField<F> {
 
         let r0 = upper_0
             .sub(&self.binary_basis_limbs[0].element, builder, driver)
-            .add(&borrow_0.to_field_ct(driver).multiply(&shift_1, builder, driver)?, builder, driver);
+            .add(
+                &borrow_0
+                    .to_field_ct(driver)
+                    .multiply(&shift_1, builder, driver)?,
+                builder,
+                driver,
+            );
         let r1 = upper_1
             .sub(&self.binary_basis_limbs[1].element, builder, driver)
-            .add(&borrow_1.to_field_ct(driver).multiply(&shift_1, builder, driver)?, builder, driver)
+            .add(
+                &borrow_1
+                    .to_field_ct(driver)
+                    .multiply(&shift_1, builder, driver)?,
+                builder,
+                driver,
+            )
             .sub(&borrow_0.to_field_ct(driver), builder, driver);
         let r2 = upper_2
             .sub(&self.binary_basis_limbs[2].element, builder, driver)
-            .add(&borrow_2.to_field_ct(driver).multiply(&shift_1, builder, driver)?, builder, driver)
+            .add(
+                &borrow_2
+                    .to_field_ct(driver)
+                    .multiply(&shift_1, builder, driver)?,
+                builder,
+                driver,
+            )
             .sub(&borrow_1.to_field_ct(driver), builder, driver);
         let r3 = upper_3
             .sub(&self.binary_basis_limbs[3].element, builder, driver)

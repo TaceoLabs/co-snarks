@@ -31,7 +31,10 @@ use co_noir_common::{
         verification_key::VerifyingKeyBarretenberg,
     },
     mpc::NoirUltraHonkProver,
-    polynomials::polynomial::{NUM_MASKED_ROWS, Polynomial},
+    polynomials::{
+        polynomial::{NUM_MASKED_ROWS, Polynomial},
+        shared_polynomial::SharedPolynomial,
+    },
     transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
 };
@@ -607,6 +610,30 @@ impl<
         Ok(())
     }
 
+    fn commit_to_masking_poly(
+        &mut self,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+        proving_key: &ProvingKey<T, C>,
+        crs: &ProverCrs<C>,
+    ) -> HonkProofResult<()> {
+        if self.has_zk == ZeroKnowledge::No {
+            return Ok(());
+        }
+
+        let polynomial_size = proving_key.polynomials.witness.w_l().len();
+        let masking_poly = SharedPolynomial::<T, C>::random(polynomial_size, self.net, self.state)?;
+        let masking_poly_commitment_shared = CoUtils::commit::<T, C>(masking_poly.as_ref(), crs);
+        let masking_poly_commitment =
+            T::open_point(masking_poly_commitment_shared, self.net, self.state)?;
+        transcript.send_point_to_verifier::<C>(
+            "Gemini:masking_poly_comm".to_string(),
+            masking_poly_commitment.into(),
+        );
+        self.memory.gemini_masking_poly = Some(masking_poly);
+
+        Ok(())
+    }
+
     // Compute sorted witness-table accumulator and commit to the resulting polynomials.
     fn commit_to_lookup_counts_and_w4(
         &mut self,
@@ -747,6 +774,7 @@ impl<
 
         // Add circuit size public input size and public inputs to transcript
         Self::send_vk_hash_and_public_inputs(transcript, proving_key, verifying_key)?;
+        self.commit_to_masking_poly(transcript, proving_key, crs)?;
         // Compute first three wire commitments
         self.commit_to_wires(transcript, proving_key, crs)?;
         // Compute sorted list accumulator and commitment

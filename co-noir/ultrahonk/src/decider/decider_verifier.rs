@@ -130,6 +130,7 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             &mut transcript,
             libra_commitments,
             sumcheck_output.claimed_libra_evaluation,
+            sumcheck_output.claimed_gemini_masking_evaluation,
             &mut consistency_checked,
             &padding_indicator_array,
         )?;

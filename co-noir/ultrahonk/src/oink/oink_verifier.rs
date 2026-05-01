@@ -6,6 +6,7 @@ use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::TranscriptFieldType,
     transcript::{Transcript, TranscriptHasher},
+    types::ZeroKnowledge,
 };
 
 pub(crate) struct OinkVerifier<
@@ -79,6 +80,16 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         Ok(())
     }
 
+    fn receive_masking_poly_commitment(
+        &mut self,
+        transcript: &mut Transcript<TranscriptFieldType, H>,
+    ) -> HonkVerifyResult<()> {
+        self.memory.gemini_masking_commitment = Some(
+            transcript.receive_point_from_prover::<C>("Gemini:masking_poly_comm".to_string())?,
+        );
+        Ok(())
+    }
+
     fn commit_to_lookup_counts_and_w4(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
@@ -140,10 +151,14 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         mut self,
         verifying_key: &VerifyingKey<P>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
+        has_zk: ZeroKnowledge,
     ) -> HonkVerifyResult<VerifierMemory<C>> {
         tracing::trace!("Oink verify");
 
         self.execute_preamble_round(verifying_key, transcript)?;
+        if has_zk == ZeroKnowledge::Yes {
+            self.receive_masking_poly_commitment(transcript)?;
+        }
         self.commit_to_wires(transcript)?;
         self.commit_to_lookup_counts_and_w4(transcript)?;
         self.commit_to_logderiv_inverses(transcript)?;
