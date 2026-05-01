@@ -1,5 +1,5 @@
 use crate::{
-     NUM_SMALL_IPA_EVALUATIONS, Utils,
+    NUM_SMALL_IPA_EVALUATIONS, Utils,
     decider::{
         decider_prover::Decider,
         decider_verifier::DeciderVerifier,
@@ -557,8 +557,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Take into account the constant proof size in Gemini
         if has_zk == ZeroKnowledge::Yes {
-            current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 ]);
+            current_nu = nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if has_zk == ZeroKnowledge::Yes {
@@ -648,8 +647,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // 2 * CONST_PROOF_SIZE_LOG_N is the number of fold claims including the dummy ones, and +2 is reserved for
         // interleaving.
         if has_zk == ZeroKnowledge::Yes {
-            current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64]);
+            current_nu = nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if let Some(libra_claims) = libra_opening_claims {

@@ -5,8 +5,8 @@ use crate::co_decider::{
     co_sumcheck::co_sumcheck_round::SumcheckRound,
     types::{ClaimedEvaluations, PartiallyEvaluatePolys},
 };
-use ark_ff::Zero;
 use ark_ff::One;
+use ark_ff::Zero;
 use co_noir_common::{
     constants::BATCHED_RELATION_PARTIAL_LENGTH_ZK, polynomials::entities::AllEntities,
 };
@@ -434,11 +434,7 @@ impl<
         let masking_eval_shared =
             masking_poly.evaluate_mle(&multivariate_challenge[0..multivariate_d as usize]);
         let masking_eval = T::open_many(&[masking_eval_shared], self.net, self.state)?[0];
-        Self::add_evals_to_transcript(
-            transcript,
-            &multivariate_evaluations,
-            Some(masking_eval),
-        );
+        Self::add_evals_to_transcript(transcript, &multivariate_evaluations, Some(masking_eval));
 
         // The evaluations of Libra uninvariates at \f$ g_0(u_0), \ldots, g_{d-1} (u_{d-1}) \f$ are added to the
         // transcript.

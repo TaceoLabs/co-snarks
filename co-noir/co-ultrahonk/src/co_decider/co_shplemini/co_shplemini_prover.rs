@@ -20,7 +20,7 @@ use co_noir_common::{
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use ultrahonk::{ NUM_SMALL_IPA_EVALUATIONS, Utils};
+use ultrahonk::{NUM_SMALL_IPA_EVALUATIONS, Utils};
 
 impl<
     T: NoirUltraHonkProver<P>,
@@ -167,11 +167,8 @@ impl<
         // To achieve fixed proof size in Ultra and Mega, the multilinear opening challenge is be padded to a fixed size.
         let virtual_log_n: usize = multilinear_challenge.len();
         // Compute batched polynomials
-        let (batched_unshifted, batched_to_be_shifted) = self.compute_batched_polys(
-            transcript,
-            log_n,
-            has_zk,
-        )?;
+        let (batched_unshifted, batched_to_be_shifted) =
+            self.compute_batched_polys(transcript, log_n, has_zk)?;
 
         // We do not have any concatenated polynomials in UltraHonk
 
@@ -627,8 +624,7 @@ impl<
 
         // Take into account the constant proof size in Gemini
         if has_zk == ZeroKnowledge::Yes {
-            current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 ]);
+            current_nu = nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if has_zk == ZeroKnowledge::Yes {
@@ -720,8 +716,7 @@ impl<
         // 2 * CONST_PROOF_SIZE_LOG_N is the number of fold claims including the dummy ones, and +2 is reserved for
         // interleaving.
         if has_zk == ZeroKnowledge::Yes {
-            current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 ]);
+            current_nu = nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if let Some(libra_claims) = libra_opening_claims {

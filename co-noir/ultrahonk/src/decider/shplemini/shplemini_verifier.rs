@@ -1,7 +1,6 @@
 use super::types::{PolyF, PolyG, PolyGShift};
 use crate::{
-    CONST_PROOF_SIZE_LOG_N,  NUM_LIBRA_COMMITMENTS,
-    NUM_SMALL_IPA_EVALUATIONS,
+    CONST_PROOF_SIZE_LOG_N, NUM_LIBRA_COMMITMENTS, NUM_SMALL_IPA_EVALUATIONS,
     decider::{
         decider_verifier::DeciderVerifier,
         types::{ClaimedEvaluations, VerifierCommitments},
@@ -598,9 +597,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // Compute the scalars to be multiplied against the commitments [libra_concatenated], [grand_sum], [grand_sum], and
         // [libra_quotient]
         for idx in 0..NUM_SMALL_IPA_EVALUATIONS {
-            let scaling_factor = denominators[idx]
-                * shplonk_batching_challenge_powers
-                    [2 * virtual_log_n + idx];
+            let scaling_factor =
+                denominators[idx] * shplonk_batching_challenge_powers[2 * virtual_log_n + idx];
             batching_scalars[idx] = -scaling_factor;
             *constant_term_accumulator += scaling_factor * libra_evaluations[idx];
         }

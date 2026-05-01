@@ -11,7 +11,8 @@ use std::{iter, vec};
 
 pub(crate) struct ProverMemory<P: CurveGroup> {
     pub(crate) polys: AllEntities<Vec<P::ScalarField>>,
-    pub(crate) gemini_masking_poly: Option<co_noir_common::polynomials::polynomial::Polynomial<P::ScalarField>>,
+    pub(crate) gemini_masking_poly:
+        Option<co_noir_common::polynomials::polynomial::Polynomial<P::ScalarField>>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
     pub(crate) alphas: [P::ScalarField; NUM_ALPHAS],
     pub(crate) gate_challenges: Vec<P::ScalarField>,

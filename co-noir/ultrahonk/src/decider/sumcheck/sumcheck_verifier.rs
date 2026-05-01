@@ -84,7 +84,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             "Sumcheck:evaluations".to_string(),
             NUM_ALL_ENTITIES + eval_offset,
         )?;
-        let claimed_gemini_masking_evaluation = (has_zk == ZeroKnowledge::Yes).then_some(transcript_evaluations[0]);
+        let claimed_gemini_masking_evaluation =
+            (has_zk == ZeroKnowledge::Yes).then_some(transcript_evaluations[0]);
         for (eval, &transcript_eval) in self
             .memory
             .claimed_evaluations
