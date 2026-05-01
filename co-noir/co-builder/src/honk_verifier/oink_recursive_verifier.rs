@@ -83,11 +83,6 @@ impl OinkRecursiveVerifier {
             transcript.receive_point_from_prover("W_R".to_owned(), builder, driver)?;
         *commitments.w_o_mut() =
             transcript.receive_point_from_prover("W_O".to_owned(), builder, driver)?;
-        println!("OinkVerifier::receive_wire_commitments commitments begin");
-        print_point_hex("W_L", commitments.w_l(), builder, driver)?;
-        print_point_hex("W_R", commitments.w_r(), builder, driver)?;
-        print_point_hex("W_O", commitments.w_o(), builder, driver)?;
-        println!("OinkVerifier::receive_wire_commitments commitments end");
 
         // Get eta challenge and derive eta, eta² and eta³ used in memory and lookup arguments.
         let eta = transcript.get_challenge("eta".to_string(), builder, driver)?;
