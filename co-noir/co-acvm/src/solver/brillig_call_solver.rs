@@ -22,36 +22,21 @@ fn get_output_size(outputs: &[BrilligOutputs]) -> usize {
         .sum()
 }
 
-enum BrilligMask<T, F>
+fn mask_brillig_result<T, F>(
+    cond: T::AcvmType,
+    result: Vec<T::AcvmType>,
+    driver: &mut T,
+) -> CoAcvmResult<Vec<T::AcvmType>>
 where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,
 {
-    #[expect(dead_code)]
-    NoMask,
-    Mask(T::AcvmType),
-}
-
-impl<T, F> BrilligMask<T, F>
-where
-    T: NoirWitnessExtensionProtocol<F>,
-    F: PrimeField,
-{
-    fn mask(self, result: Vec<T::AcvmType>, driver: &mut T) -> CoAcvmResult<Vec<T::AcvmType>> {
-        match self {
-            // we don't need any masking
-            BrilligMask::NoMask => Ok(result),
-            // we need to mask it
-            BrilligMask::Mask(cond) => {
-                let masking_zeros = driver.shared_zeros(result.len())?;
-                let mut masked_result = Vec::with_capacity(result.len());
-                for (correct, mask) in izip!(result, masking_zeros) {
-                    masked_result.push(driver.cmux(cond.clone(), correct, mask)?);
-                }
-                Ok(masked_result)
-            }
-        }
+    let masking_zeros = driver.shared_zeros(result.len())?;
+    let mut masked_result = Vec::with_capacity(result.len());
+    for (correct, mask) in izip!(result, masking_zeros) {
+        masked_result.push(driver.cmux(cond.clone(), correct, mask)?);
     }
+    Ok(masked_result)
 }
 
 impl<T, F> CoSolver<T, F>
@@ -66,7 +51,7 @@ where
         outputs: &[BrilligOutputs],
         predicate: &Expression<GenericFieldElement<F>>,
     ) -> CoAcvmResult<()> {
-        let brillig_mask = {
+        let predicate = {
             let predicate = self.evaluate_expression(predicate)?;
             // we skip if predicate is zero
             if T::is_public_zero(&predicate) {
@@ -77,7 +62,7 @@ where
                 return Ok(());
             } else {
                 // we need to cmux the result with random zeros
-                BrilligMask::Mask(predicate)
+                predicate
             }
         };
         tracing::debug!("solving brillig call: {}", id);
@@ -110,7 +95,7 @@ where
             self.value_store
                 .add_from_brillig(&mut self.driver, generated_pss)?;
             let brillig_result = self.driver.parse_brillig_result(unconstrained_witnesses)?;
-            let brillig_result = brillig_mask.mask(brillig_result, &mut self.driver)?;
+            let brillig_result = mask_brillig_result(predicate, brillig_result, &mut self.driver)?;
             self.fill_output(brillig_result, outputs);
             Ok(())
         } else {

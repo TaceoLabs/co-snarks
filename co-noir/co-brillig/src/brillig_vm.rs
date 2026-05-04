@@ -420,13 +420,13 @@ where
     fn handle_stop(&mut self, return_data: HeapVector) -> eyre::Result<CoBrilligResult<T, F>> {
         let size = self.memory.try_read_usize(return_data.size)?;
         let offset = if size > 0 {
-            self.memory.read_ref(return_data.pointer)?.unwrap_direct()
+            self.memory.read_ref(return_data.pointer)?.unwrap_direct() as usize
         } else {
             0
         };
         let persistent_shared_state = std::mem::take(&mut self.persistent_shared_state);
         Ok(CoBrilligResult::Success(BrilligSuccess {
-            unconstrained_witnesses: self.take_result(offset as usize, size),
+            unconstrained_witnesses: self.take_result(offset, size),
             generated_pss: persistent_shared_state,
         }))
     }

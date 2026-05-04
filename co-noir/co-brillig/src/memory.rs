@@ -46,7 +46,7 @@ where
     fn resolve(&self, address: MemoryAddress) -> eyre::Result<usize> {
         let address = match address {
             MemoryAddress::Direct(address) => address as usize,
-            MemoryAddress::Relative(offset) => self.get_stack_pointer()? + (offset as usize),
+            MemoryAddress::Relative(offset) => self.get_stack_pointer()? + offset as usize,
         };
         Ok(address)
     }
@@ -100,7 +100,7 @@ where
     }
 
     pub fn read_ref(&self, ptr: MemoryAddress) -> eyre::Result<MemoryAddress> {
-        Ok(MemoryAddress::direct(self.try_read_usize(ptr)? as u32))
+        Ok(MemoryAddress::direct(self.try_read_usize(ptr)?.try_into()?))
     }
 
     /// Sets the value at `address` to `value`
