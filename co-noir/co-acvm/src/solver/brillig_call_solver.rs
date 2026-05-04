@@ -27,6 +27,7 @@ where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,
 {
+    #[expect(dead_code)]
     NoMask,
     Mask(T::AcvmType),
 }
