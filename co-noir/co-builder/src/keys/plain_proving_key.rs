@@ -18,19 +18,12 @@ use co_noir_common::{
 use num_bigint::BigUint;
 use std::sync::Arc;
 
-// TODO CESAR: Use a type ProverInstance for the key, as in barretenberg
 pub fn create_prover_instance<P: CurveGroup>(
     circuit: &mut UltraCircuitBuilder<P>,
     crs: Arc<ProverCrs<P>>,
     driver: &mut PlainAcvmSolver<P::ScalarField>,
 ) -> HonkProofResult<PlainProvingKey<P>> {
     tracing::trace!("ProverInstance create");
-    println!("Creating proving key...");
-
-    // TODO CESAR: Check pairing stuff?
-
-    // ProverInstances can be constructed multiple times, hence, we check whether the circuit has been finalized
-    // TODO CESAR: Finalize circuit here?
 
     assert!(
         circuit.circuit_finalized,
@@ -152,7 +145,7 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<P: CurveGroup>(
         // NB: The order of row/column loops is arbitrary but needs to be row/column
         // to match old copy_cycle code.
         for block_row_idx in 0..block_size {
-            for wire_idx in 0..NUM_WIRES {
+            for (wire_idx, wire) in wires.iter_mut().enumerate() {
                 // an index into the variables array
                 let var_idx = block.wires[wire_idx][block_row_idx] as usize;
                 let real_var_idx = *builder
@@ -163,7 +156,7 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<P: CurveGroup>(
                 let trace_row_idx = block_row_idx + offset;
                 // Insert the real witness values from this block into the wire polys
                 // at the correct offset.
-                wires[wire_idx][trace_row_idx] = builder.get_variable(var_idx);
+                wire[trace_row_idx] = builder.get_variable(var_idx);
                 // Add the address of the witness value to its corresponding copy cycle.
                 // Note that the copy_cycles are indexed by real_variable_indices.
                 copy_cycles[real_var_idx].push(CycleNode {

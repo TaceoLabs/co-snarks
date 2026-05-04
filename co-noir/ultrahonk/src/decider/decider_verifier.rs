@@ -1,5 +1,7 @@
 use crate::{
-    NUM_LIBRA_COMMITMENTS, Utils, decider::types::VerifierMemory, ultra_verifier::HonkVerifyResult,
+    NUM_LIBRA_COMMITMENTS, Utils,
+    decider::{shplemini::shplemini_verifier::ShpleminiZkData, types::VerifierMemory},
+    ultra_verifier::HonkVerifyResult,
 };
 use co_noir_common::constants::{
     BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK,
@@ -128,9 +130,11 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut opening_claim = self.compute_batch_opening_claim(
             sumcheck_output.multivariate_challenge,
             &mut transcript,
-            libra_commitments,
-            sumcheck_output.claimed_libra_evaluation,
-            sumcheck_output.claimed_gemini_masking_evaluation,
+            ShpleminiZkData {
+                libra_commitments,
+                libra_univariate_evaluation: sumcheck_output.claimed_libra_evaluation,
+                gemini_masking_evaluation: sumcheck_output.claimed_gemini_masking_evaluation,
+            },
             &mut consistency_checked,
             &padding_indicator_array,
         )?;

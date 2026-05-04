@@ -32,7 +32,7 @@ pub(crate) fn mask_points<
     // Sample a random curve point as the offset generator (free witness).
     // The prover provides this point: the circuit only constrains it to lie on the curve.
     let native_offset_generator = P::Affine::rand(&mut thread_rng());
-    let mut offset_generator_element =
+    let offset_generator_element =
         BigGroup::from_witness(&native_offset_generator, driver, builder)?;
 
     let mut running_point = offset_generator_element;

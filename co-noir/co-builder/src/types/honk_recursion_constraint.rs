@@ -6,7 +6,6 @@ use crate::honk_verifier::ultra_recursive_verifier::UltraRecursiveVerifier;
 use crate::keys::proving_key::create_keys_barretenberg;
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{Poseidon2SpongeCT, TranscriptCT, TranscriptHasherCT};
-use crate::types::big_field::BigField;
 use crate::types::big_group::BigGroup;
 use crate::types::types::{AddQuad, PairingPoints, RecursionConstraint};
 use crate::{transcript_ct::TranscriptFieldType, types::field_ct::FieldCT};
@@ -17,8 +16,9 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::constants::{
     BATCHED_RELATION_PARTIAL_LENGTH, BATCHED_RELATION_PARTIAL_LENGTH_ZK, CONST_PROOF_SIZE_LOG_N,
     DECIDER_PROOF_LENGTH, NUM_ALL_ENTITIES, NUM_SMALL_IPA_EVALUATIONS, NUM_ZERO_ROWS,
-    OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS, PUBLIC_INPUTS_SIZE,
-    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS,
+    OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS, OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK,
+    PUBLIC_INPUTS_SIZE, ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS,
+    ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK,
 };
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::honk_curve::HonkCurve;
@@ -188,7 +188,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                 driver,
             )?
         };
-
         // Step 2.
         if self.is_write_vk_mode {
             // Set honk vk in builder
@@ -204,7 +203,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                 self.set_variable(index, T::AcvmType::from(*value));
             }
         }
-
         // Step 3.
         if !predicate.is_constant() {
             let mut transcript = Transcript::<TranscriptFieldType, Poseidon2Sponge>::new();
@@ -248,7 +246,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                 driver,
             )?;
         }
-
         let vkey = RecursiveVerificationKey::<C, T>::new(&vk_fields, self, driver)?;
         let vk_and_hash = VKAndHash {
             vk: vkey,
@@ -265,6 +262,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             relation_parameters: Default::default(),
             target_sum: FieldCT::<C::ScalarField>::default(),
             witness_commitments: Default::default(),
+            gemini_masking_commitment: None,
             alphas: array::from_fn(|_| FieldCT::<C::ScalarField>::default()),
             gate_challenges: Vec::new(),
         };
@@ -291,10 +289,9 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> eyre::Result<(Vec<C::ScalarField>, VerifyingKeyBarretenberg<C>)> {
-        let mut random_fields = Vec::with_capacity(3 + 1 + num_inner_public_inputs); // 3 as inputs for the simple circuit, rest for public inputs and one for the shared randomness for initializing the rng for the plaindriver prover
-        for _ in 0..num_inner_public_inputs + 3 + 1 {
-            let pi = driver.rand()?;
-            random_fields.push(pi);
+        let mut random_fields = Vec::with_capacity(num_inner_public_inputs + 4);
+        for _ in 0..num_inner_public_inputs + 4 {
+            random_fields.push(driver.rand()?);
         }
         let opened = driver.open_many(&random_fields)?;
         let rng_seed = opened[0];
@@ -416,8 +413,17 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         driver: &mut T,
     ) -> eyre::Result<Vec<C::ScalarField>> {
         // Construct a Honk proof as the concatenation of an Oink proof and a Decider proof
-        let mut proof = Vec::with_capacity(ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
-        proof.extend_from_slice(&self.create_mock_oink_proof(acir_public_inputs_size, driver)?);
+        let proof_capacity = if has_zk == ZeroKnowledge::Yes {
+            ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK
+        } else {
+            ULTRA_PROOF_LENGTH_WITHOUT_PUB_INPUTS
+        };
+        let mut proof = Vec::with_capacity(proof_capacity);
+        proof.extend_from_slice(&self.create_mock_oink_proof(
+            acir_public_inputs_size,
+            has_zk,
+            driver,
+        )?);
         proof.extend_from_slice(&self.create_mock_decider_proof(has_zk, driver)?);
         let shared: Vec<_> = proof.iter().map(|y| driver.get_as_shared(y)).collect();
         let proof_as_scalars: Vec<C::ScalarField> = driver.open_many(&shared)?;
@@ -428,9 +434,15 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     fn create_mock_oink_proof(
         &mut self,
         inner_public_inputs_size: usize,
+        has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> eyre::Result<Vec<T::AcvmType>> {
-        let mut proof = Vec::with_capacity(OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS);
+        let proof_capacity = if has_zk == ZeroKnowledge::Yes {
+            OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS_ZK
+        } else {
+            OINK_PROOF_LENGTH_WITHOUT_PUB_INPUTS
+        };
+        let mut proof = Vec::with_capacity(proof_capacity);
 
         // Populate the proof with as many public inputs as required from the ACIR constraints
         populate_field_elements::<C, T>(&mut proof, inner_public_inputs_size, None, driver)?;
@@ -441,6 +453,11 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         // Populate the proof with the public inputs added from barretenberg
         for public_input in builder.public_inputs.iter() {
             proof.push(builder.get_variable(*public_input as usize).into());
+        }
+
+        if has_zk == ZeroKnowledge::Yes {
+            // ZK proofs bind the Gemini masking commitment in Oink before the witness commitments.
+            populate_field_elements_for_mock_commitments::<C, T>(&mut proof, 1);
         }
 
         // Populate mock witness polynomial commitments
@@ -478,7 +495,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         };
         populate_field_elements::<C, T>(&mut proof, total_size_sumcheck_univariates, None, driver)?;
 
-        let num_all_entities = NUM_ALL_ENTITIES;
+        let num_all_entities = NUM_ALL_ENTITIES + usize::from(has_zk == ZeroKnowledge::Yes);
         populate_field_elements::<C, T>(&mut proof, num_all_entities, None, driver)?;
 
         if has_zk == ZeroKnowledge::Yes {
@@ -490,12 +507,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
 
             // Libra quotient commitment
             populate_field_elements_for_mock_commitments::<C, T>(&mut proof, 1);
-
-            // Gemini masking commitment
-            populate_field_elements_for_mock_commitments::<C, T>(&mut proof, 1);
-
-            // Gemini masking evaluation
-            populate_field_elements::<C, T>(&mut proof, 1, None, driver)?;
         }
 
         // Gemini fold commitments

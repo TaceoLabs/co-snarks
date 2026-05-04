@@ -3,7 +3,7 @@ use crate::types::types::{AddQuad, NonNativeMultiplicationFieldWitnesses};
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use ark_bn254::Fq;
 use ark_ec::CurveGroup;
-use ark_ff::{BigInteger, One, PrimeField, Zero};
+use ark_ff::{One, PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::utils::Utils;
 use core::panic;
@@ -18,14 +18,6 @@ use super::field_ct::BoolCT;
 pub(crate) const NUM_LIMBS: usize = 4;
 pub(crate) const NUM_LIMB_BITS: usize = 68;
 pub(crate) const DEFAULT_MAXIMUM_LIMB: u128 = (1 << NUM_LIMB_BITS) - 1;
-
-fn debug_hex(value: impl BigInteger) -> String {
-    let mut out = String::from("0x");
-    for byte in value.to_bytes_be() {
-        out.push_str(&format!("{byte:02x}"));
-    }
-    out
-}
 
 #[derive(Debug, Clone)]
 pub struct BigField<F: PrimeField> {
@@ -128,48 +120,6 @@ impl<F: PrimeField> BigField<F> {
         builder.set_public_input(lo_witness);
         builder.set_public_input(hi_witness);
         start_index
-    }
-
-    pub(crate) fn new_from_u256(value: BigUint) -> Self {
-        let default_maximum_limb: BigUint = BigUint::from((1u128 << Self::NUM_LIMB_BITS) - 1);
-        let limbs = [
-            Limb::new(
-                F::from(Utils::slice_u256(&value, 0, Self::NUM_LIMB_BITS as u64)).into(),
-                default_maximum_limb.clone(),
-            ),
-            Limb::new(
-                F::from(Utils::slice_u256(
-                    &value,
-                    Self::NUM_LIMB_BITS as u64,
-                    (Self::NUM_LIMB_BITS * 2) as u64,
-                ))
-                .into(),
-                default_maximum_limb.clone(),
-            ),
-            Limb::new(
-                F::from(Utils::slice_u256(
-                    &value,
-                    (Self::NUM_LIMB_BITS * 2) as u64,
-                    (Self::NUM_LIMB_BITS * 3) as u64,
-                ))
-                .into(),
-                default_maximum_limb.clone(),
-            ),
-            Limb::new(
-                F::from(Utils::slice_u256(
-                    &value,
-                    (Self::NUM_LIMB_BITS * 3) as u64,
-                    (Self::NUM_LIMB_BITS * 4) as u64,
-                ))
-                .into(),
-                default_maximum_limb.clone(),
-            ),
-        ];
-        let prime_basis_limb = F::from(value).into();
-        BigField {
-            binary_basis_limbs: limbs,
-            prime_basis_limb,
-        }
     }
 
     pub(crate) fn is_constant(&self) -> bool {
@@ -629,23 +579,6 @@ impl<F: PrimeField> BigField<F> {
         )?;
 
         Ok(result)
-    }
-
-    /**
-     * @brief Reconstruct a bigfield from limbs (generally stored in the public inputs)
-     */
-    pub(crate) fn reconstruct_from_public<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<F>,
-    >(
-        limbs: &[FieldCT<F>],
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<Self> {
-        debug_assert_eq!(limbs.len(), NUM_LIMBS);
-        Self::construct_from_limbs(
-            &limbs[0], &limbs[1], &limbs[2], &limbs[3], false, builder, driver,
-        )
     }
 
     pub(crate) fn get_value_fq<

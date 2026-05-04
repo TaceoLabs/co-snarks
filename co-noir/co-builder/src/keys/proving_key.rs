@@ -192,7 +192,7 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<
         // NB: The order of row/column loops is arbitrary but needs to be row/column
         // to match old copy_cycle code.
         for block_row_idx in 0..block_size {
-            for wire_idx in 0..NUM_WIRES {
+            for (wire_idx, wire) in wires.iter_mut().enumerate() {
                 // an index into the variables array
                 let var_idx = block.wires[wire_idx][block_row_idx] as usize;
                 let real_var_idx = *builder
@@ -204,7 +204,7 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<
                 // Insert the real witness values from this block into the wire polys
                 // at the correct offset.
                 let var = builder.get_variable(var_idx);
-                wires[wire_idx][trace_row_idx] = if U::is_shared(&var) {
+                wire[trace_row_idx] = if U::is_shared(&var) {
                     U::get_shared(&var).unwrap()
                 } else {
                     T::promote_to_trivial_share(id, U::get_public(&var).unwrap())
@@ -233,42 +233,6 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<
 
     copy_cycles
 }
-
-// fn create_keys<
-//     U: NoirWitnessExtensionProtocol<C::ScalarField, ArithmeticShare = T::ArithmeticShare>,
-//     P: Pairing<G1Affine = C::Affine, G1 = C>,
-// >(
-//     id: <T::State as MpcState>::PartyID,
-//     circuit: GenericUltraCircuitBuilder<C, U>,
-//     prover_crs: &ProverCrs<C>,
-//     verifier_crs: P::G2Affine,
-//     driver: &mut U,
-// ) -> HonkProofResult<(Self, VerifyingKey<P>)> {
-//     let pk = ProvingKey::create(id, circuit, driver)?;
-//     let circuit_size = pk.circuit_size;
-
-//     let mut commitments = PrecomputedEntities::default();
-//     for (des, src) in commitments
-//         .iter_mut()
-//         .zip(pk.polynomials.precomputed.iter())
-//     {
-//         let comm = Utils::commit(src.as_ref(), prover_crs)?;
-//         *des = C::Affine::from(comm);
-//     }
-
-//     // Create and return the VerifyingKey instance
-//     let vk = VerifyingKey {
-//         crs: verifier_crs,
-//         inner_vk: VerifyingKeyBarretenberg {
-//             log_circuit_size: Utils::get_msb64(circuit_size as u64) as u64,
-//             num_public_inputs: pk.num_public_inputs as u64,
-//             pub_inputs_offset: pk.pub_inputs_offset as u64,
-//             commitments,
-//         },
-//     };
-
-//     Ok((pk, vk))
-// }
 
 pub fn create_keys_barretenberg<
     C: CurveGroup,

@@ -17,6 +17,12 @@ use co_noir_common::{
     types::ZeroKnowledge,
 };
 
+pub(crate) struct ShpleminiZkData<P: HonkCurve<TranscriptFieldType>> {
+    pub(crate) libra_commitments: Option<Vec<P::Affine>>,
+    pub(crate) libra_univariate_evaluation: Option<P::ScalarField>,
+    pub(crate) gemini_masking_evaluation: Option<P::ScalarField>,
+}
+
 impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     DeciderVerifier<P, H>
 {
@@ -107,9 +113,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         &self,
         multivariate_challenge: Vec<P::ScalarField>,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        libra_commitments: Option<Vec<P::Affine>>,
-        libra_univariate_evaluation: Option<P::ScalarField>,
-        gemini_masking_evaluation: Option<P::ScalarField>,
+        zk_data: ShpleminiZkData<P>,
         consistency_checked: &mut bool,
         padding_indicator_array: &[P::ScalarField],
         // const std::vector<RefVector<Commitment>>& concatenation_group_commitments = {},
@@ -119,7 +123,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         let virtual_log_n = multivariate_challenge.len();
 
-        let has_zk = ZeroKnowledge::from(libra_commitments.is_some());
+        let has_zk = ZeroKnowledge::from(zk_data.libra_commitments.is_some());
 
         let mut hiding_polynomial_commitment = P::Affine::default();
         let mut batched_evaluation = P::ScalarField::zero();
@@ -128,7 +132,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 .memory
                 .gemini_masking_commitment
                 .expect("Gemini masking commitment must be received during Oink");
-            batched_evaluation = gemini_masking_evaluation
+            batched_evaluation = zk_data
+                .gemini_masking_evaluation
                 .expect("Gemini masking evaluation must be received during Sumcheck");
         }
 
@@ -306,7 +311,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 &mut opening_claim.commitments,
                 &mut opening_claim.scalars,
                 &mut constant_term_accumulator,
-                &libra_commitments
+                &zk_data
+                    .libra_commitments
                     .expect("We have ZK")
                     .as_slice()
                     .try_into()
@@ -321,7 +327,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 &libra_evaluations,
                 gemini_evaluation_challenge,
                 &multivariate_challenge,
-                libra_univariate_evaluation.expect("checked it is ZK"),
+                zk_data
+                    .libra_univariate_evaluation
+                    .expect("checked it is ZK"),
             )?;
         }
 

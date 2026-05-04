@@ -890,9 +890,9 @@ fn main() -> color_eyre::Result<ExitCode> {
                 co_noir::program_artifact_from_reader(File::open(&config.circuit)?)
                     .context("while parsing program artifact")?;
             let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
-            let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
-            let abi = serde_json::to_string(&program_artifact.abi)?;
-            let public_inputs = serde_json::to_string(
+            let _circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
+            let _abi = serde_json::to_string(&program_artifact.abi)?;
+            let _public_inputs = serde_json::to_string(
                 &program_artifact.bytecode.functions[0]
                     .public_inputs()
                     .indices(),

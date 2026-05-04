@@ -174,7 +174,7 @@ fn run_test<T: NoirWitnessExtensionProtocol<Fr>>(
         scalars,
         with_edge_cases,
         max_num_bits,
-        masking_scalar,
+        masking_scalar: _,
         expected_result,
     } = test_data;
 
@@ -187,7 +187,6 @@ fn run_test<T: NoirWitnessExtensionProtocol<Fr>>(
         &scalars,
         max_num_bits,
         with_edge_cases,
-        &masking_scalar,
         builder,
         driver,
     )

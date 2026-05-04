@@ -18,8 +18,7 @@
 // clang-format on
 
 use super::types::ProverMemory;
-use ark_ec::AffineRepr;
-use ark_ff::{BigInteger, One, PrimeField, Zero};
+use ark_ff::{One, Zero};
 use co_noir_common::{
     CoUtils,
     constants::PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
@@ -67,34 +66,6 @@ impl<
     N: Network,
 > CoOink<'a, T, C, H, N>
 {
-    fn field_to_hex<F: PrimeField>(value: &F) -> String {
-        let mut bytes = value.into_bigint().to_bytes_be();
-        let byte_len = (F::MODULUS_BIT_SIZE as usize).div_ceil(8);
-        if bytes.len() < byte_len {
-            let mut padded = vec![0u8; byte_len - bytes.len()];
-            padded.extend_from_slice(&bytes);
-            bytes = padded;
-        }
-        let hex = bytes
-            .iter()
-            .map(|byte| format!("{byte:02x}"))
-            .collect::<String>();
-        format!("0x{hex}")
-    }
-
-    fn print_point_hex(label: &str, point: &C::Affine) {
-        if point.is_zero() {
-            println!("{label}: INF");
-            return;
-        }
-        let (x, y) = C::g1_affine_to_xy(point);
-        println!(
-            "{label}: x={} y={}",
-            Self::field_to_hex(&x),
-            Self::field_to_hex(&y)
-        );
-    }
-
     pub(crate) fn new(net: &'a N, state: &'a mut T::State, has_zk: ZeroKnowledge) -> Self {
         Self {
             net,
@@ -599,9 +570,6 @@ impl<
         let w_l: C::Affine = open[0].into();
         let w_r: C::Affine = open[1].into();
         let w_o: C::Affine = open[2].into();
-        Self::print_point_hex("W_L", &w_l);
-        Self::print_point_hex("W_R", &w_r);
-        Self::print_point_hex("W_O", &w_o);
         transcript.send_point_to_verifier::<C>("W_L".to_string(), w_l);
         transcript.send_point_to_verifier::<C>("W_R".to_string(), w_r);
         transcript.send_point_to_verifier::<C>("W_O".to_string(), w_o);
@@ -685,10 +653,6 @@ impl<
         let lookup_read_tags: C::Affine = opened[1].into();
         let w_4: C::Affine = opened[2].into();
 
-        Self::print_point_hex("LOOKUP_READ_COUNTS", &lookup_read_counts);
-        Self::print_point_hex("LOOKUP_READ_TAGS", &lookup_read_tags);
-        Self::print_point_hex("W_4", &w_4);
-
         transcript
             .send_point_to_verifier::<C>("LOOKUP_READ_COUNTS".to_string(), lookup_read_counts);
         transcript.send_point_to_verifier::<C>("LOOKUP_READ_TAGS".to_string(), lookup_read_tags);
@@ -755,8 +719,6 @@ impl<
 
         let lookup_inverses: C::Affine = open[0].into();
         let z_perm: C::Affine = open[1].into();
-        Self::print_point_hex("LOOKUP_INVERSES", &lookup_inverses);
-        Self::print_point_hex("Z_PERM", &z_perm);
         transcript.send_point_to_verifier::<C>("LOOKUP_INVERSES".to_string(), lookup_inverses);
         transcript.send_point_to_verifier::<C>("Z_PERM".to_string(), z_perm);
         Ok(())
@@ -770,7 +732,6 @@ impl<
         verifying_key: &VerifyingKeyBarretenberg<C>,
     ) -> HonkProofResult<ProverMemory<T, C>> {
         tracing::trace!("Oink prove");
-        println!("Starting proof generation");
 
         // Add circuit size public input size and public inputs to transcript
         Self::send_vk_hash_and_public_inputs(transcript, proving_key, verifying_key)?;

@@ -1,5 +1,4 @@
 use acir::{
-    AcirField,
     acir_field::GenericFieldElement,
     circuit::{
         Circuit,
@@ -396,7 +395,6 @@ impl<F: PrimeField> AcirFormat<F> {
         wv
     }
 
-    #[expect(clippy::field_reassign_with_default)]
     pub fn circuit_serde_to_acir_format(circuit: Circuit<GenericFieldElement<F>>) -> Self {
         assert!(
             circuit.opcodes.len() as u32 <= u32::MAX,
@@ -471,8 +469,7 @@ impl<F: PrimeField> AcirFormat<F> {
         af
     }
 
-    /// ========= ACIR OPCODE HANDLERS ========= ///
-
+    // ========= ACIR OPCODE HANDLERS =========
     fn split_into_mul_quad_gates(
         arg: &Expression<GenericFieldElement<F>>,
         linear_terms: &mut BTreeMap<u32, F>,
@@ -735,10 +732,7 @@ impl<F: PrimeField> AcirFormat<F> {
             }
             BlackBoxFuncCall::Blake2s { inputs, outputs } => {
                 af.blake2s_constraints.push(Blake2sConstraint {
-                    inputs: inputs
-                        .into_iter()
-                        .map(|e| to_witness_or_constant(e))
-                        .collect(),
+                    inputs: inputs.into_iter().map(&to_witness_or_constant).collect(),
                     result: array::from_fn(|i| to_witness(outputs[i])),
                 });
                 af.original_opcode_indices
@@ -747,10 +741,7 @@ impl<F: PrimeField> AcirFormat<F> {
             }
             BlackBoxFuncCall::Blake3 { inputs, outputs } => {
                 af.blake3_constraints.push(Blake3Constraint {
-                    inputs: inputs
-                        .into_iter()
-                        .map(|e| to_witness_or_constant(e))
-                        .collect(),
+                    inputs: inputs.into_iter().map(&to_witness_or_constant).collect(),
                     result: array::from_fn(|i| to_witness(outputs[i])),
                 });
                 af.original_opcode_indices
@@ -786,7 +777,6 @@ impl<F: PrimeField> AcirFormat<F> {
                     predicate: Self::parse_input(predicate),
                     out_point_x: to_witness(outputs.0),
                     out_point_y: to_witness(outputs.1),
-                    out_point_is_infinity: to_witness(outputs.2),
                 });
                 af.original_opcode_indices
                     .multi_scalar_mul_constraints
@@ -809,7 +799,6 @@ impl<F: PrimeField> AcirFormat<F> {
                     predicate: Self::parse_input(predicate),
                     result_x: to_witness(outputs.0),
                     result_y: to_witness(outputs.1),
-                    result_infinite: to_witness(outputs.2),
                 });
                 af.original_opcode_indices
                     .ec_add_constraints
@@ -1094,25 +1083,6 @@ impl<F: PrimeField> AcirFormat<F> {
         }
 
         linear_terms.len() <= NUM_WIRES
-    }
-
-    fn is_rom(mem_op: &AcirMemOp<GenericFieldElement<F>>) -> bool {
-        mem_op.operation.mul_terms.is_empty()
-            && mem_op.operation.linear_combinations.is_empty()
-            && mem_op.operation.q_c.is_zero()
-    }
-
-    fn poly_to_witness(poly: &PolyTriple<F>) -> u32 {
-        if poly.q_m.is_zero()
-            && poly.q_r.is_zero()
-            && poly.q_o.is_zero()
-            && poly.q_l.is_one()
-            && poly.q_c.is_zero()
-        {
-            poly.a
-        } else {
-            0
-        }
     }
 
     fn parse_input(input: FunctionInput<GenericFieldElement<F>>) -> WitnessOrConstant<F> {

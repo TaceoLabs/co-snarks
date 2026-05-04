@@ -209,6 +209,10 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         BigGroup::from_constant_coordinates(&x, &y, i)
     }
 
+    pub(crate) fn is_constant(&self) -> bool {
+        self.x.is_constant() && self.y.is_constant() && self.is_infinity.is_constant()
+    }
+
     /**
      * @brief Generic batch multiplication that works for all elliptic curve types.
      *
@@ -265,7 +269,26 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let (mut points, mut scalars) =
             handle_points_at_infinity(points, scalars, builder, driver)?;
 
-        if with_edgecases {
+        let mut has_constant_terms = false;
+        let mut constant_accumulator = P::zero();
+        let mut non_constant_points = Vec::new();
+        let mut non_constant_scalars = Vec::new();
+        for (point, scalar) in points.into_iter().zip(scalars.into_iter()) {
+            if point.is_constant() && scalar.is_constant() {
+                let point_value = point.to_affine(builder, driver)?;
+                let scalar_value = T::get_public(&scalar.get_value(builder, driver))
+                    .expect("constant scalar should be public");
+                constant_accumulator += point_value * scalar_value;
+                has_constant_terms = true;
+            } else {
+                non_constant_points.push(point);
+                non_constant_scalars.push(scalar);
+            }
+        }
+        points = non_constant_points;
+        scalars = non_constant_scalars;
+
+        if with_edgecases && !points.is_empty() {
             // If points are linearly dependent, we randomise them using a masking scalar.
             // We do this to ensure that the x-coordinates of the points are all distinct. This is required
             // while creating the ROM lookup table with the points.
@@ -321,17 +344,28 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         );
 
         let max_num_bits_in_field = F::MODULUS_BIT_SIZE as usize;
-        let mut accumulator = BigGroup::default();
+        let mut accumulator =
+            if has_constant_terms || (big_points.is_empty() && small_points.is_empty()) {
+                Some(BigGroup::from_constant_affine::<P>(
+                    &constant_accumulator.into_affine(),
+                )?)
+            } else {
+                None
+            };
         if !big_points.is_empty() {
             // Process big scalars separately
-            let big_result = BigGroup::process_strauss_msm_rounds(
+            let mut big_result = BigGroup::process_strauss_msm_rounds(
                 &mut big_points,
                 &big_scalars,
                 max_num_bits_in_field,
                 builder,
                 driver,
             )?;
-            accumulator = big_result;
+            accumulator = Some(if let Some(mut accumulator) = accumulator {
+                accumulator.add(&mut big_result, builder, driver)?
+            } else {
+                big_result
+            });
         }
 
         if !small_points.is_empty() {
@@ -348,14 +382,16 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 builder,
                 driver,
             )?;
-            accumulator = if !big_points.is_empty() {
+            accumulator = Some(if let Some(mut accumulator) = accumulator {
                 accumulator.add(&mut small_result, builder, driver)?
             } else {
                 small_result
-            };
+            });
         }
 
-        accumulator.get_standard_form(builder, driver)
+        accumulator
+            .expect("batch_mul should initialize an accumulator")
+            .get_standard_form(builder, driver)
     }
 
     fn process_strauss_msm_rounds<P: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
@@ -494,8 +530,8 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             .assert_is_not_equal(&add[0].x3_prev, builder, driver)?;
 
         let mut lambda1 = if !add[0].is_element {
-            let mut numerator_right = add[0].x1_prev.sub(&mut add[0].x3_prev, builder, driver)?;
-            let mut denominator = self.x.clone().sub(&mut add[0].x3_prev, builder, driver)?;
+            let numerator_right = add[0].x1_prev.sub(&mut add[0].x3_prev, builder, driver)?;
+            let denominator = self.x.clone().sub(&mut add[0].x3_prev, builder, driver)?;
             BigField::msub_div(
                 &[add[0].lambda_prev.clone()],
                 &[numerator_right],
@@ -509,7 +545,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 driver,
             )?
         } else {
-            let mut numerator = self.y.clone().sub(&mut add[0].y3_prev, builder, driver)?;
+            let numerator = self.y.clone().sub(&mut add[0].y3_prev, builder, driver)?;
             let mut denominator = self.x.clone().sub(&mut add[0].x3_prev, builder, driver)?;
             BigField::div_without_denominator_check(
                 &mut [numerator],
@@ -591,7 +627,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
                 });
             }
 
-            let mut denominator = if negate_add_y {
+            let denominator = if negate_add_y {
                 acc.x3_prev.sub(&mut previous_x, builder, driver)?
             } else {
                 previous_x.sub(&mut acc.x3_prev, builder, driver)?
@@ -618,7 +654,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
 
             previous_x.assert_is_not_equal(&x_3, builder, driver)?;
 
-            let mut l2_denominator = if previous_y.is_negative {
+            let l2_denominator = if previous_y.is_negative {
                 previous_x.sub(&mut x_3, builder, driver)?
             } else {
                 x_3.sub(&mut previous_x, builder, driver)?
@@ -676,30 +712,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         )?;
 
         Ok(BigGroup::new(x_out, y_out))
-    }
-
-    pub(crate) fn precomputed_native_table_offset_generator<
-        P: CurveGroup<ScalarField = F, BaseField: PrimeField>,
-    >() -> eyre::Result<P::Affine> {
-        let offset_generator = if TypeId::of::<P::Affine>() == TypeId::of::<G1Affine>() {
-            let offset_generator_bn254 = G1Affine::new(
-                field_from_hex_string(
-                    "0x240d420bc60418af2206bdf32238eee77a8c46772f2679881a1858aab7b8927f",
-                )
-                .expect("Invalid hex string for offset generator"),
-                field_from_hex_string(
-                    "0x04ffcf276f8bc77315c2674207a3f55861b09acebd1ea9623883613f538e3822",
-                )
-                .expect("Invalid hex string for offset generator"),
-            );
-
-            // TACEO TODO: This will only work for BN254, hence the unsafe cast to P::Affine
-            *unsafe { std::mem::transmute::<&G1Affine, &P::Affine>(&offset_generator_bn254) }
-        } else {
-            eyre::bail!("Precomputed offset generators not available for this curve");
-        };
-
-        Ok(offset_generator)
     }
 
     fn precomputed_offset_generators_native<

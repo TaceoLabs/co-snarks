@@ -63,17 +63,6 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn check_point_at_infinity<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        inp: &[Self],
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<BoolCT<P::ScalarField, T>> {
-        Self::accumulate(inp, builder, driver)?.is_zero(builder, driver)
-    }
-
     pub(crate) fn get_witness_index<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -1016,92 +1005,6 @@ impl<F: PrimeField> FieldCT<F> {
         });
 
         Ok(result)
-    }
-
-    /**
-     * @brief Splits the field element into (lo, hi), where:
-     * - lo contains bits [0, lsb_index)
-     * - hi contains bits [lsb_index, num_bits)
-     */
-    pub(crate) fn split_at<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        &self,
-        lsb_index: u8,
-        num_bits: Option<u8>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<[Self; 2]> {
-        const GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH: u8 = 252;
-        let num_bits = num_bits.unwrap_or(GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
-
-        assert!(lsb_index < num_bits);
-        assert!(num_bits <= GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
-
-        assert!(lsb_index < num_bits);
-        assert!(num_bits <= GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
-
-        let value = self.get_value(builder, driver);
-
-        // Handle edge case when lsb_index == 0
-        if lsb_index == 0 {
-            if self.is_constant() {
-                let hi_val = T::get_public(&value).expect("Constants are public");
-                return Ok([FieldCT::default(), FieldCT::from(hi_val)]);
-            } else {
-                self.create_range_constraint(num_bits as usize, builder, driver)?;
-                return Ok([FieldCT::default(), self.clone()]);
-            }
-        }
-
-        let (hi, lo) = if T::is_shared(&value) {
-            let value = T::get_shared(&value).expect("Already checked it is shared");
-            // TACEO TODO: We are returning one more value than needed here
-            let [lo, hi] = driver.slice(value, lsb_index, 0, num_bits as usize)?;
-            (T::AcvmType::from(hi), T::AcvmType::from(lo))
-        } else {
-            let value: BigUint = T::get_public(&value)
-                .expect("Already checked it is public")
-                .into();
-
-            let lo_mask = (BigUint::one() << lsb_index) - BigUint::one();
-            let lo = &value & lo_mask;
-            let hi = &value >> lsb_index;
-
-            let hi_ = T::AcvmType::from(F::from(hi));
-            let lo_ = T::AcvmType::from(F::from(lo));
-            (hi_, lo_)
-        };
-
-        if self.is_constant() {
-            // If `*this` is constant, we can return the split values directly
-            let lo_val = T::get_public(&lo).expect("Constants are public");
-            let hi_val = T::get_public(&hi).expect("Constants are public");
-
-            let reconstructed = lo_val + (hi_val * F::from(BigUint::one() << lsb_index));
-            let original = T::get_public(&value).expect("Constants are public");
-            assert_eq!(reconstructed, original);
-
-            return Ok([FieldCT::from(lo_val), FieldCT::from(hi_val)]);
-        }
-
-        let lo_wit = Self::from_witness(lo, builder);
-        let hi_wit = Self::from_witness(hi, builder);
-
-        // Ensure that `lo_wit` is in the range [0, 2^lsb_index - 1]
-        lo_wit.create_range_constraint(lsb_index as usize, builder, driver)?;
-
-        // Ensure that `hi_wit` is in the range [0, 2^(num_bits - lsb_index) - 1]
-        hi_wit.create_range_constraint(num_bits as usize - lsb_index as usize, builder, driver)?;
-
-        // Check that *this = lo_wit + hi_wit * 2^{lsb_index}
-        let shift_factor = FieldCT::from(F::from(BigUint::one() << lsb_index));
-        let hi_shifted = hi_wit.multiply(&shift_factor, builder, driver)?;
-        let reconstructed = lo_wit.add(&hi_shifted, builder, driver);
-        self.assert_equal(&reconstructed, builder, driver);
-
-        Ok([lo_wit, hi_wit])
     }
 
     pub(crate) fn create_range_constraint<
@@ -2137,13 +2040,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> From<bool> for BoolCT<F,
 }
 
 impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
-    pub(crate) fn get_witness_index<P: CurveGroup<ScalarField = F>>(
-        &self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> u32 {
-        self.normalize(builder, driver).witness_index
-    }
     /**
      * @brief Create a `bool_t` from a witness index that is **known** to contain a constrained bool value.
      * @warning The witness value **is not** constrained to be boolean. We simply perform an out-of-circuit sanity check.
@@ -2688,16 +2584,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
         self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?;
 
         Ok(())
-    }
-
-    pub(crate) fn get_standard_form(
-        &self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<Self> {
-        let mut result = self.clone();
-        result.standardize(builder, driver)?;
-        Ok(result)
     }
 
     pub(crate) fn is_point_at_infinity(&self) -> &BoolCT<P::ScalarField, T> {

@@ -55,15 +55,7 @@ impl UltraRecursiveVerifier {
 
         // No IPA accumulator on the UltraRecursiveFlavor
 
-        OinkRecursiveVerifier::verify(&mut key, &mut transcript, builder, driver)?;
-
-        // Get the gate challenges for sumcheck computation
-        key.gate_challenges = transcript.get_powers_of_challenge(
-            "Sumcheck:gate_challenge".to_string(),
-            CONST_PROOF_SIZE_LOG_N,
-            builder,
-            driver,
-        )?;
+        OinkRecursiveVerifier::verify(&mut key, &mut transcript, builder, has_zk, driver)?;
 
         // Execute Sumcheck Verifier and extract multivariate opening point u = (u_0, ..., u_{d-1}) and purported
         // multivariate evaluations at u
@@ -72,6 +64,13 @@ impl UltraRecursiveVerifier {
             builder,
             driver,
             has_zk,
+        )?;
+
+        key.gate_challenges = transcript.get_powers_of_challenge(
+            "Sumcheck:gate_challenge".to_string(),
+            CONST_PROOF_SIZE_LOG_N,
+            builder,
+            driver,
         )?;
 
         // Receive commitments to Libra masking polynomials
@@ -132,24 +131,24 @@ impl UltraRecursiveVerifier {
 
         // Execute Shplemini to produce a batch opening claim subsequently verified by a univariate PCS
         let mut consistency_checked = true;
-        let unshifted_commitments = [
-            key.vk_and_hash.vk.precomputed_commitments.elements.to_vec(),
-            key.witness_commitments.elements.to_vec(),
-        ]
-        .concat();
-        let unshifted_scalars = [
+        let mut unshifted_commitments = Vec::with_capacity(
+            key.vk_and_hash.vk.precomputed_commitments.elements.len()
+                + key.witness_commitments.elements.len(),
+        );
+        let mut unshifted_scalars = Vec::with_capacity(
             sumcheck_output
                 .claimed_evaluations
                 .precomputed
                 .elements
-                .to_vec(),
-            sumcheck_output
-                .claimed_evaluations
-                .witness
-                .elements
-                .to_vec(),
-        ]
-        .concat();
+                .len()
+                + sumcheck_output.claimed_evaluations.witness.elements.len(),
+        );
+        unshifted_commitments
+            .extend_from_slice(&key.vk_and_hash.vk.precomputed_commitments.elements);
+        unshifted_commitments.extend_from_slice(&key.witness_commitments.elements);
+        unshifted_scalars
+            .extend_from_slice(&sumcheck_output.claimed_evaluations.precomputed.elements);
+        unshifted_scalars.extend_from_slice(&sumcheck_output.claimed_evaluations.witness.elements);
 
         let to_be_shifted_commitments = key.witness_commitments.to_be_shifted().to_vec();
         let shifted_scalars = sumcheck_output
@@ -185,6 +184,8 @@ impl UltraRecursiveVerifier {
             &mut consistency_checked,
             libra_commitments,
             sumcheck_output.claimed_libra_evaluation.as_ref(),
+            key.gemini_masking_commitment.as_ref(),
+            sumcheck_output.claimed_gemini_masking_evaluation.as_ref(),
             builder,
             driver,
         )?;

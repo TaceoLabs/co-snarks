@@ -33,7 +33,7 @@ use crate::{
 use ark_ec::pairing::Pairing;
 use ark_ec::{CurveGroup, PrimeGroup};
 use ark_ff::AdditiveGroup;
-use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
+use ark_ff::{Field, One, PrimeField, Zero};
 use co_acvm::Rep3AcvmSolver;
 use co_acvm::ShamirAcvmSolver;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
@@ -49,11 +49,7 @@ use co_noir_common::utils::Utils;
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
-use std::{
-    array,
-    collections::{BTreeMap, HashMap},
-    sync::Arc,
-};
+use std::{array, collections::BTreeMap, sync::Arc};
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
 
@@ -214,13 +210,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     pub(crate) const REAL_VARIABLE: u32 = u32::MAX - 1;
     pub(crate) const FIRST_VARIABLE_IN_CLASS: u32 = u32::MAX - 2;
     pub(crate) const UNINITIALIZED_MEMORY_RECORD: u32 = u32::MAX;
-    pub(crate) const NUMBER_OF_GATES_PER_RAM_ACCESS: usize = 2;
-    pub(crate) const NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY: usize = 1;
     pub(crate) const NUM_RESERVED_GATES: usize = 4;
     pub(crate) const DEFAULT_PLOOKUP_RANGE_BITNUM: usize = 14;
     pub(crate) const DEFAULT_PLOOKUP_RANGE_STEP_SIZE: usize = 3;
     // Each queued partial non-native multiplication materializes into 4 NNF gates at finalization.
-    pub(crate) const GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC: usize = 4;
     pub(crate) const DEFAULT_NON_NATIVE_FIELD_LIMB_BITS: usize = 68;
 
     pub(crate) fn assert_if_has_witness(&self, input: bool) {
@@ -311,17 +304,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.num_gates += 1;
     }
 
-    // TODO CESAR: Move to arithmetic_constraints file
     pub(crate) fn create_quad_constraint(&mut self, mul_quad: &mut MulQuad<P::ScalarField>) {
         // Replace IS_CONSTANT indices with zero indices
         self.set_zero_idx(mul_quad);
-        // Check if the gate is valid
-        self.check_mul_add_gate(mul_quad, P::ScalarField::zero().into());
         // Create gate
         self.create_big_mul_add_gate(mul_quad, false);
     }
 
-    // TODO CESAR: Move to arithmetic_constraints file
     pub(crate) fn create_big_quad_constraint(
         &mut self,
         driver: &mut T,
@@ -356,8 +345,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             driver.negate_inplace(&mut next_w4_wire_value);
 
             let next_w4_wire_idx = self.add_variable(next_w4_wire_value.to_owned());
-            // Check if the gate is valid
-            self.check_mul_add_gate(&big_constraint[j], next_w4_wire_value);
             // Set the 4-th wire of the next gate
             big_constraint[j + 1].d = next_w4_wire_idx;
             big_constraint[j + 1].d_scaling = -P::ScalarField::one();
@@ -368,18 +355,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             self.set_zero_idx(last);
             // Create final gate
             self.create_big_mul_add_gate(last, false);
-            // Check if the gate is valid
-            self.check_mul_add_gate(last, P::ScalarField::ZERO.into());
         }
 
         Ok(())
     }
 
-    // TODO CESAR: Move to arithmetic_constraints file
     fn set_zero_idx(&self, mul_quad: &mut MulQuad<P::ScalarField>) {
         let replace_and_check_zero_scaling =
             |builder: &Self, index: &mut u32, scaling: &P::ScalarField| {
-                // TODO CESAR: Replace all of these by a global constant
                 if *index == u32::MAX {
                     *index = builder.zero_idx;
                     assert_eq!(
@@ -398,15 +381,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         replace_and_check_zero_scaling(self, &mut mul_quad.b, &mul_quad.b_scaling);
         replace_and_check_zero_scaling(self, &mut mul_quad.c, &mul_quad.c_scaling);
         replace_and_check_zero_scaling(self, &mut mul_quad.d, &mul_quad.d_scaling);
-    }
-
-    // TODO CESAR: Implement this function, or not?
-    // TODO CESAR: Move to arithmetic_constraints file
-    fn check_mul_add_gate(&self, _mul_quad: &MulQuad<P::ScalarField>, _next_wire_w4: T::AcvmType) {
-        tracing::warn!(
-            "check_mul_add_gate is currently a placeholder that always returns true. Implement the actual checks or remove this function if not needed."
-        );
-        return;
     }
 
     pub(crate) fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
@@ -949,76 +923,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         }
     }
 
-    // decomposes the shared values in batches, separated into the corresponding number of bits the values have
-    #[expect(clippy::type_complexity)]
-    fn prepare_for_range_decompose(
-        &mut self,
-        driver: &mut T,
-        constraint_system: &AcirFormat<P::ScalarField>,
-    ) -> eyre::Result<(
-        HashMap<u32, usize>,
-        Vec<Vec<Vec<T::ArithmeticShare>>>,
-        Vec<(bool, usize)>,
-    )> {
-        let mut to_decompose: Vec<Vec<T::ArithmeticShare>> = vec![];
-        let mut decompose_indices: Vec<(bool, usize)> = vec![];
-        let mut bits_locations: HashMap<u32, usize> = HashMap::new();
-
-        for constraint in constraint_system.range_constraints.iter() {
-            let val = &self.get_variable(constraint.witness as usize);
-
-            let num_bits = constraint.num_bits;
-            if num_bits > Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 && T::is_shared(val) {
-                let share_val = T::get_shared(val).expect("Already checked it is shared");
-                if let Some(&idx) = bits_locations.get(&num_bits) {
-                    to_decompose[idx].push(share_val);
-                    decompose_indices.push((true, to_decompose[idx].len() - 1));
-                } else {
-                    let new_idx = to_decompose.len();
-                    to_decompose.push(vec![share_val]);
-                    decompose_indices.push((true, 0));
-                    bits_locations.insert(num_bits, new_idx);
-                }
-            } else {
-                decompose_indices.push((false, 0));
-            }
-        }
-
-        let mut decomposed = Vec::with_capacity(to_decompose.len());
-
-        for (i, inp) in to_decompose.into_iter().enumerate() {
-            let num_bits = bits_locations
-                .iter()
-                .find_map(|(&key, &value)| if value == i { Some(key) } else { None })
-                .expect("Index not found in bitsloc");
-
-            decomposed.push(T::decompose_arithmetic_many(
-                driver,
-                &inp,
-                num_bits as usize,
-                Self::DEFAULT_PLOOKUP_RANGE_BITNUM,
-            )?);
-        }
-        Ok((bits_locations, decomposed, decompose_indices))
-    }
-
-    fn process_avm_recursion_constraints(
-        &mut self,
-        constraint_system: &AcirFormat<P::ScalarField>,
-    ) {
-        for _constraint in constraint_system.avm_recursion_constraints.iter() {
-            todo!("avm recursion");
-        }
-    }
-
-    fn process_civc_recursion_constraints(
-        &mut self,
-        constraint_system: &AcirFormat<P::ScalarField>,
-    ) {
-        let _ = constraint_system;
-        todo!("civc recursion");
-    }
-
     pub(crate) fn get_num_gates(&self) -> usize {
         self.num_gates
     }
@@ -1038,102 +942,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             lookups_size += table.lookup_gates.len();
         }
         lookups_size
-    }
-
-    fn get_num_gates_split_into_components(
-        &self,
-        count: &mut usize,
-        rangecount: &mut usize,
-        romcount: &mut usize,
-        ramcount: &mut usize,
-        nnfcount: &mut usize,
-    ) {
-        *count = self.num_gates;
-
-        // each ROM gate adds +1 extra gate due to the rom reads being copied to a sorted list set
-        for rom_array in self.rom_arrays.iter() {
-            for state in rom_array.state.iter() {
-                if state[0] == Self::UNINITIALIZED_MEMORY_RECORD {
-                    *romcount += 2;
-                }
-            }
-            *romcount += rom_array.records.len();
-            *romcount += 1; // we add an addition gate after procesing a rom array
-        }
-
-        // each RAM gate adds +2 extra gates due to the ram reads being copied to a sorted list set,
-        // as well as an extra gate to validate timestamps
-        let mut ram_timestamps = Vec::with_capacity(self.ram_arrays.len());
-        let mut ram_range_sizes = Vec::with_capacity(self.ram_arrays.len());
-        let mut ram_range_exists = Vec::with_capacity(self.ram_arrays.len());
-        for ram_array in self.ram_arrays.iter() {
-            // If the LUT is not public, then it is definetly not uninitialized, since it gets initialized with every read/write
-            if T::is_public_lut(&ram_array.state) {
-                let lut_pub =
-                    T::get_public_lut(&ram_array.state).expect("Already checked it is public");
-                for &value in lut_pub.iter() {
-                    if value == P::ScalarField::from(Self::UNINITIALIZED_MEMORY_RECORD) {
-                        *ramcount += Self::NUMBER_OF_GATES_PER_RAM_ACCESS;
-                    }
-                }
-            }
-            *ramcount += ram_array.records.len() * Self::NUMBER_OF_GATES_PER_RAM_ACCESS;
-            *ramcount += Self::NUMBER_OF_ARITHMETIC_GATES_PER_RAM_ARRAY; // we add an addition gate after procesing a ram array
-
-            // there will be 'max_timestamp' number of range checks, need to calculate.
-            let max_timestamp = ram_array.access_count - 1;
-
-            // if a range check of length `max_timestamp` already exists, we are double counting.
-            // We record `ram_timestamps` to detect and correct for this error when we process range lists.
-            ram_timestamps.push(max_timestamp);
-            let mut padding = (NUM_WIRES - (max_timestamp % NUM_WIRES)) % NUM_WIRES;
-            if max_timestamp == NUM_WIRES {
-                padding += NUM_WIRES;
-            }
-            let ram_range_check_list_size = max_timestamp + padding;
-
-            let mut ram_range_check_gate_count = ram_range_check_list_size / NUM_WIRES;
-            ram_range_check_gate_count += 1; // we need to add 1 extra addition gates for every distinct range list
-
-            ram_range_sizes.push(ram_range_check_gate_count);
-            ram_range_exists.push(false);
-        }
-        for list in self.range_lists.iter() {
-            let mut list_size = list.1.variable_indices.len();
-            let mut padding = (NUM_WIRES - (list_size % NUM_WIRES)) % NUM_WIRES;
-            if list_size == NUM_WIRES {
-                padding += NUM_WIRES;
-            }
-            list_size += padding;
-
-            for (time_stamp, ram_range_exist) in ram_timestamps
-                .iter()
-                .cloned()
-                .zip(ram_range_exists.iter_mut())
-            {
-                if list.1.target_range as usize == time_stamp {
-                    *ram_range_exist = true;
-                }
-            }
-
-            *rangecount += list_size / NUM_WIRES;
-            *rangecount += 1; // we need to add 1 extra addition gates for every distinct range list
-        }
-        // update rangecount to include the ram range checks the composer will eventually be creating
-        for (ram_range_sizes, ram_range_exist) in ram_range_sizes.into_iter().zip(ram_range_exists)
-        {
-            if !ram_range_exist {
-                *rangecount += ram_range_sizes;
-            }
-        }
-
-        let mut nnf_copy = self.cached_partial_non_native_field_multiplications.clone();
-        // update nnfcount
-        nnf_copy.sort();
-
-        nnf_copy.dedup();
-        let num_nnf_ops = nnf_copy.len();
-        *nnfcount = num_nnf_ops * Self::GATES_PER_NON_NATIVE_FIELD_MULTIPLICATION_ARITHMETIC;
     }
 
     pub(crate) fn set_public_input(&mut self, witness_index: u32) {
@@ -1988,7 +1796,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         std::cmp::max(minimum_circuit_size, num_filled_gates) + Self::NUM_RESERVED_GATES
     }
 
-    // TODO CESAR: Move to poseidon2 constraint file
     fn create_poseidon2_permutations_constraints(
         &mut self,
         constraint: &Poseidon2Constraint<P::ScalarField>,
@@ -4267,13 +4074,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         metadata: &ProgramMetadata,
     ) -> eyre::Result<()> {
         tracing::trace!("Builder build constraints");
-        // println!("constraint system: {:#?}", constraint_system);
 
         // No gate_counter
 
         // Add standard width-4 Ultra arithmetic gates
         for constraint in constraint_system.quad_constraints.iter() {
-            // TODO CESAR: This mut and clone are weird
             self.create_quad_constraint(&mut constraint.clone());
         }
 
@@ -4281,7 +4086,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // w4_shift to use the least possible number of intermediate witnesses. See the documentation of
         // split_into_mul_quad_gates for more information.
         for big_constraint in constraint_system.big_quad_constraints.iter() {
-            // TODO CESAR: This mut and clone are weird (Remark FF: I think we can pass it by reference and make it mutable inside the function?)
             self.create_big_quad_constraint(driver, &mut big_constraint.clone())?;
         }
 
@@ -4290,8 +4094,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.create_logic_gate(driver, constraint)?;
         }
 
-        // Add range constraint
-        // TODO CESAR: Refactor this, create_dyadic_range_constraint
+        // Add range constraints.
         // TODO Reinstate prepare_for_range_decompose in order to batch the decompositions
         for constraint in constraint_system.range_constraints.iter() {
             self.create_dyadic_range_constraint(driver, constraint.witness, constraint.num_bits)?;
@@ -4343,12 +4146,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.create_block_constraints(constraint, driver)?;
         }
 
-        // RecursionConstraints
-
-        // TODO CESAR: All this part should be done like in cpp/src/barretenberg/dsl/acir_format/acir_format.cpp, using HonkRecursionConstraintsOutput even if
-        // in our case only honk constraints will be processed and the rest will be dispatched to their respective functions like in cpp/src/barretenberg/dsl/acir_format/recursion_constraint.cpp
-        // (create_honk_recursion_constraints, create_chonk_recursion_constraints, create_avm2_recursion_constraints_goblin), but only create_honk_recursion_constraints will be binded, also this stuff should happen in its own recursion_constraint file
-
         let has_honk_recursion_constraints =
             !constraint_system.honk_recursion_constraints.is_empty();
         let has_avm_recursion_constraints = !constraint_system.avm_recursion_constraints.is_empty();
@@ -4356,7 +4153,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let has_chonk_recursion_constraints =
             !constraint_system.chonk_recursion_constraints.is_empty();
 
-        self.process_avm_recursion_constraints(constraint_system);
         let is_recursive_circuit = metadata.honk_recursion != HonkRecursion::NotHonk;
         let has_pairing_points = has_honk_recursion_constraints || has_avm_recursion_constraints;
 
@@ -4371,15 +4167,17 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             honk_output =
                 self.process_honk_recursion_constraints(constraint_system, crs, driver)?;
         }
+        if has_avm_recursion_constraints {
+            // AVM recursion constraints currently not supported
+        }
         if is_hn_recursion_constraints {
-            self.process_hn_recursion_constraints_placeholder();
+            // HyperNova recursion constraints currently not supported
         }
         if has_chonk_recursion_constraints {
-            self.process_chonk_recursion_constraints_placeholder();
+            // CHONK recursion constraints currently not supported
         }
 
-        // Process the result of adding recursion constraints and propagate the public inputs as needed
-        // TODO CESAR: DO this like in barretenberg with output.finalize() even if most stuff won't be needed we wanna match the structure, that means probably only DefaultIO will be needed
+        // Process the result of adding recursion constraints and propagate the public inputs as needed.
         if has_pairing_points {
             honk_output.set_public(self, driver);
         } else {
@@ -4387,14 +4185,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         Ok(())
-    }
-
-    fn process_hn_recursion_constraints_placeholder(&self) {
-        tracing::trace!("Processing HN recursion constraints placeholder");
-    }
-
-    fn process_chonk_recursion_constraints_placeholder(&self) {
-        tracing::trace!("Processing CHONK recursion constraints placeholder");
     }
 
     fn process_honk_recursion_constraints(
@@ -4456,8 +4246,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             } else {
                 self.add_variable(read_values[ColumnIdx::C1][i].clone())
             };
-            let second_idx = if is_first_lookup && key_b_index.is_some() {
-                key_b_index.unwrap()
+            let second_idx = if let (true, Some(key_b_index)) = (is_first_lookup, key_b_index) {
+                key_b_index
             } else {
                 self.add_variable(read_values[ColumnIdx::C2][i].clone())
             };
@@ -4515,7 +4305,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         read_data
     }
 
-    // TODO CESAR: Refactor this
     fn create_aes128_constraints(
         &mut self,
         driver: &mut T,
@@ -4678,10 +4467,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(())
     }
 
-    // TODO CESAR: Refactor this to match barretenberg's implementation, also add all the missing comments
-    // TODO CESAR: Logic has changed completely in cpp/src/barretenberg/dsl/acir_format/ec_operations.cpp, revisit and adapt
-    // TODO CESAR: Move to ecc_operations file
-    // NOTE FF: Think it is fine like this actually?
     fn create_ec_add_constraint(
         &mut self,
         constraint: &EcAdd<P::ScalarField>,
@@ -4841,7 +4626,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         Ok(())
     }
 
-    // TODO CESAR: Move to logic constraint file
     fn create_logic_gate(
         &mut self,
         driver: &mut T,

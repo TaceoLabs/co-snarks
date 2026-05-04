@@ -3,16 +3,12 @@ use super::field_ct::{CycleGroupCT, CycleScalarCT, FieldCT};
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT};
 use crate::types::field_ct::BoolCT;
-use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE};
 use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::keys::plain_proving_key::PlainProvingKey;
-use co_noir_common::keys::types::ActiveRegionData;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
-use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
 use std::array;
 use std::cmp::Ordering;
@@ -395,7 +391,6 @@ pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) predicate: WitnessOrConstant<F>,
     pub(crate) out_point_x: u32,
     pub(crate) out_point_y: u32,
-    pub(crate) out_point_is_infinity: u32,
 }
 
 #[derive(Debug)]
@@ -412,7 +407,6 @@ pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) predicate: WitnessOrConstant<F>,
     pub(crate) result_x: u32,
     pub(crate) result_y: u32,
-    pub(crate) result_infinite: u32,
 }
 
 #[derive(Debug)]
@@ -437,38 +431,6 @@ pub(crate) struct AES128Constraint<F: PrimeField> {
     pub(crate) iv: Vec<WitnessOrConstant<F>>,
     pub(crate) key: Vec<WitnessOrConstant<F>>,
     pub(crate) outputs: Vec<u32>,
-}
-
-impl<F: PrimeField> LogicConstraint<F> {
-    pub(crate) fn and_gate(
-        a: WitnessOrConstant<F>,
-        b: WitnessOrConstant<F>,
-        result: u32,
-        num_bits: u32,
-    ) -> Self {
-        Self {
-            a,
-            b,
-            result,
-            num_bits,
-            is_xor_gate: false,
-        }
-    }
-
-    pub(crate) fn xor_gate(
-        a: WitnessOrConstant<F>,
-        b: WitnessOrConstant<F>,
-        result: u32,
-        num_bits: u32,
-    ) -> Self {
-        Self {
-            a,
-            b,
-            result,
-            num_bits,
-            is_xor_gate: true,
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -770,105 +732,6 @@ pub struct CycleNode {
 }
 pub type CyclicPermutation = Vec<CycleNode>;
 
-pub(crate) struct TraceData<'a, P: CurveGroup> {
-    pub(crate) wires: &'a mut [Polynomial<P::ScalarField>; NUM_WIRES],
-    pub(crate) selectors: &'a mut [Polynomial<P::ScalarField>; NUM_SELECTORS],
-    pub(crate) copy_cycles: Vec<CyclicPermutation>,
-    pub(crate) ram_rom_offset: u32,
-    pub(crate) pub_inputs_offset: u32,
-}
-
-impl<'a, P: CurveGroup> TraceData<'a, P> {
-    pub(crate) fn new(
-        builder: &UltraCircuitBuilder<P>,
-        proving_key: &'a mut PlainProvingKey<P>,
-    ) -> Self {
-        let copy_cycles = vec![vec![]; builder.variables.len()];
-
-        Self {
-            wires: proving_key
-                .polynomials
-                .witness
-                .get_wires_mut()
-                .try_into()
-                .unwrap(),
-
-            selectors: proving_key
-                .polynomials
-                .precomputed
-                .get_selectors_mut()
-                .try_into()
-                .unwrap(),
-            copy_cycles,
-            ram_rom_offset: 0,
-            pub_inputs_offset: 0,
-        }
-    }
-
-    pub(crate) fn construct_trace_data(
-        &mut self,
-        builder: &mut UltraCircuitBuilder<P>,
-        _is_structured: bool,
-        active_region_data: &mut ActiveRegionData,
-    ) {
-        tracing::trace!("Construct trace data");
-
-        let mut offset = 1; // Offset at which to place each block in the trace polynomials
-        // For each block in the trace, populate wire polys, copy cycles and selector polys
-
-        for block in builder.blocks.get() {
-            let block_size = block.len();
-
-            // Save ranges over which the blocks are "active" for use in structured commitments
-            // Mega and Ultra
-            if block_size > 0 {
-                tracing::trace!("Construct active indices");
-                active_region_data.add_range(offset, offset + block_size);
-            }
-            // Update wire polynomials and copy cycles
-            // NB: The order of row/column loops is arbitrary but needs to be row/column to match old copy_cycle code
-
-            for block_row_idx in 0..block_size {
-                for wire_idx in 0..NUM_WIRES {
-                    let var_idx = block.wires[wire_idx][block_row_idx] as usize; // an index into the variables array
-                    let real_var_idx = builder.real_variable_index[var_idx] as usize;
-                    let trace_row_idx = block_row_idx + offset;
-                    // Insert the real witness values from this block into the wire polys at the correct offset
-                    self.wires[wire_idx][trace_row_idx] = builder.get_variable(var_idx);
-                    // Add the address of the witness value to its corresponding copy cycle
-                    self.copy_cycles[real_var_idx].push(CycleNode {
-                        wire_index: wire_idx as u32,
-                        gate_index: trace_row_idx as u32,
-                    });
-                }
-            }
-
-            // Insert the selector values for this block into the selector polynomials at the correct offset
-            // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/398): implicit arithmetization/flavor consistency
-            for (selector_poly, selector) in self.selectors.iter_mut().zip(block.selectors.iter()) {
-                debug_assert_eq!(selector.len(), block_size);
-
-                for (src, des) in selector.iter().zip(selector_poly.iter_mut().skip(offset)) {
-                    *des = *src;
-                }
-            }
-
-            // Store the offset of the block containing RAM/ROM read/write gates for use in updating memory records
-            if block.has_ram_rom {
-                self.ram_rom_offset = offset as u32;
-            }
-            // Store offset of public inputs block for use in the pub(crate)input mechanism of the permutation argument
-            if block.is_pub_inputs {
-                self.pub_inputs_offset = offset as u32;
-            }
-
-            // If the trace is structured, we populate the data from the next block at a fixed block size offset
-            // otherwise, the next block starts immediately following the previous one
-            offset += block.len();
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PermutationSubgroupElement {
     pub(crate) row_index: u32,
@@ -1021,7 +884,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         let mut hi_as_field = scalar_hi.to_field_ct();
 
         assert!(
-            !(scalar_lo.is_constant && !scalar_hi.is_constant),
+            !scalar_lo.is_constant || scalar_hi.is_constant,
             "to_grumpkin_scalar: scalar_lo is constant while scalar_hi is not."
         );
 

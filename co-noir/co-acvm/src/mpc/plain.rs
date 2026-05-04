@@ -1095,7 +1095,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         let diff = if lhs_as_biguint >= rhs_as_biguint {
             &lhs_as_biguint - &rhs_as_biguint
         } else {
-            &lhs_as_biguint + &modulus - &rhs_as_biguint
+            let missing = &rhs_as_biguint - &lhs_as_biguint;
+            let num_moduli = (&missing + &modulus - BigUint::from(1u8)) / &modulus;
+            &lhs_as_biguint + (&modulus * num_moduli) - &rhs_as_biguint
         };
 
         Ok(Utils::biguint_to_field_limbs::<_, 4, 68>(&diff))
