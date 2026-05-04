@@ -4310,6 +4310,22 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.blocks.lookup.q_c().push(step3);
             self.blocks.lookup.q_1().push(P::ScalarField::zero()); // unused
             self.blocks.lookup.q_4().push(P::ScalarField::zero()); // unused
+            self.blocks.lookup.q_arith().push(P::ScalarField::zero());
+            self.blocks
+                .lookup
+                .q_delta_range()
+                .push(P::ScalarField::zero());
+            self.blocks.lookup.q_elliptic().push(P::ScalarField::zero());
+            self.blocks.lookup.q_memory().push(P::ScalarField::zero());
+            self.blocks.lookup.q_nnf().push(P::ScalarField::zero());
+            self.blocks
+                .lookup
+                .q_poseidon2_external()
+                .push(P::ScalarField::zero());
+            self.blocks
+                .lookup
+                .q_poseidon2_internal()
+                .push(P::ScalarField::zero());
 
             self.check_selector_length_consistency();
             self.num_gates += 1;
