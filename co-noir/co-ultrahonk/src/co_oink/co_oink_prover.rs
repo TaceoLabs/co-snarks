@@ -315,7 +315,7 @@ impl<
         // at the end of the loop, add and subtract β to each term respectively to
         // set the expected value for the start of iteration i+1.
         // Note: The public inputs may be offset from the 0th index of the wires, for example due to the inclusion of an
-        // initial zero row or Goblin-stlye ECC op gates. Accordingly, the indices i in the above formulas are given by i =
+        // initial zero row or Goblin-style ECC op gates. Accordingly, the indices i in the above formulas are given by i =
         // [0, m-1] + offset, i.e. i = offset, 1 + offset, …, m - 1 + offset.
 
         let mut num = C::ScalarField::one();
@@ -681,7 +681,7 @@ impl<
         // Compute the inverses used in log-derivative lookup relations
         self.compute_logderivative_inverses(proving_key)?;
 
-        // We moved the commiting and opening of the lookup inverses to be at the same time as z_perm
+        // We moved the committing and opening of the lookup inverses to be at the same time as z_perm
 
         // Round is done since ultra_honk is no goblin flavor
         Ok(())

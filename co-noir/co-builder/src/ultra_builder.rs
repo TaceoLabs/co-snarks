@@ -1432,7 +1432,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         let lut = &self.ram_arrays[ram_id].state;
 
-        // We get the minimum and maximum of the write recors to reduce the size of LUTs required to read the variable
+        // We get the minimum and maximum of the write records to reduce the size of LUTs required to read the variable
         let min_witness = self.ram_arrays[ram_id]
             .records
             .iter()
@@ -1777,7 +1777,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         block.q_poseidon2_internal().push(P::ScalarField::zero());
 
         // TACEO TODO these are uncommented due to mutability issues
-        // Taken care of by the caller uisng the create_unconstrained_gate! macro
+        // Taken care of by the caller using the create_unconstrained_gate! macro
         // self.check_selector_length_consistency();
         // self.num_gates += 1;
     }
@@ -2291,7 +2291,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // Make sure that every cell has been initialized
         // AZTEC TODO: throw some kind of error here? Circuit should initialize all RAM elements to prevent errors.
         // e.g. if a RAM record is uninitialized but the index of that record is a function of public/private inputs,
-        // different public iputs will produce different circuit constraints.
+        // different public inputs will produce different circuit constraints.
 
         // We need to initialize the RAM if it is uninitialized. Since RAM gets initialized on every read/write, it can only be uninitialized if it is public
         if T::is_public_lut(&self.ram_arrays[ram_id].state) {
@@ -2438,7 +2438,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             Utils::get_msb64((list.target_range + 1).next_power_of_two()) as usize,
         )?;
 
-        // list must be padded to a multipe of 4 and larger than 4 (gate_width)
+        // list must be padded to a multiple of 4 and larger than 4 (gate_width)
         const GATE_WIDTH: usize = NUM_WIRES;
         let mut padding = (GATE_WIDTH - (list.variable_indices.len() % GATE_WIDTH)) % GATE_WIDTH;
         let mut indices = Vec::with_capacity(padding + sorted_list.len());
@@ -2664,7 +2664,19 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         //     self.failure(msg);
         // }
         let sublimb_mask: u64 = (1u64 << target_range_bitnum) - 1;
-
+        // /**
+        //  * AZTEC TODO: Support this commented-out code!
+        //  * At the moment, `decompose_into_default_range` generates a minimum of 1 arithmetic gate.
+        //  * This is not strictly required iff num_bits <= target_range_bitnum.
+        //  * However, this produces an edge-case where a variable is range-constrained but NOT present in an arithmetic gate.
+        //  * This in turn produces an unsatisfiable circuit (see `create_new_range_constraint`). We would need to check for
+        //  * and accommodate/reject this edge case to support not adding addition gates here if not required
+        //  * if (num_bits <= target_range_bitnum) {
+        //  *     const uint64_t expected_range = (1ULL << num_bits) - 1ULL;
+        //  *     create_new_range_constraint(variable_index, expected_range);
+        //  *     return { variable_index };
+        //  * }
+        //  **/
         let has_remainder_bits = !num_bits.is_multiple_of(target_range_bitnum);
         let num_limbs = num_bits / target_range_bitnum + if has_remainder_bits { 1 } else { 0 };
         let last_limb_size = num_bits - (num_bits / target_range_bitnum * target_range_bitnum);
@@ -3451,7 +3463,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // | x.p | x.1 | y.1 | z.0 | (a.1  + b.1 - c.1 = 0)
         // | x.2 | y.2 | z.2 | z.1 | (a.2  + b.2 - c.2 = 0)
         // | x.3 | y.3 | z.3 | --- | (a.3  + b.3 - c.3 = 0)
-        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/896): descrepency between above comment and the actual
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/896): discrepancy between above comment and the actual
         // implementation below.
         let block = &mut self.blocks.arithmetic;
         block.populate_wires(y_p, x_0, y_0, x_p);
@@ -3870,7 +3882,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
      * @param varnum number of known witness
      *
      * @note The size of witness_values may be less than varnum. The former is the set of actual witness values known at
-     * the time of acir generation. The latter may be larger and essentially acounts for placeholders for witnesses that
+     * the time of acir generation. The latter may be larger and essentially accounts for placeholders for witnesses that
      * we know will exist but whose values are not known during acir generation. Both are in general less than the total
      * number of variables/witnesses that might be present for a circuit generated from acir, since many gates will
      * depend on the details of the bberg implementation (or more generally on the backend used to process acir).

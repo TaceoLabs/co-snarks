@@ -96,7 +96,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     }
 
     /**
-     * @brief Produce a univariate opening claim for the sumcheck multivariate evalutions and a batched univariate claim
+     * @brief Produce a univariate opening claim for the sumcheck multivariate evaluations and a batched univariate claim
      * for the transcript polynomials (for the Translator consistency check). Reduce the two opening claims to a single one
      * via Shplonk and produce an opening proof with the univariate PCS of choice (IPA when operating on Grumpkin).
      *

@@ -230,8 +230,8 @@ where
     // negate
     let mut x = !x;
 
-    // do ands in a tree
-    // TODO: Make and tree more communication efficient, ATM we send the full element for each level, even though they halve in size
+    // do AND operations in a tree
+    // TODO: Make AND tree more communication efficient, ATM we send the full element for each level, even though they halve in size
     let mut len = T::K;
     debug_assert!(len.is_power_of_two());
     while len > 1 {

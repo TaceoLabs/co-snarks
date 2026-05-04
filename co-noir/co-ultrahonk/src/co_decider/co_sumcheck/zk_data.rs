@@ -299,7 +299,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> SharedZKSumch
             );
             let libra_evaluation =
                 T::mul_with_public(self.libra_scaling_factor.inverse().expect("non-zero"), eval);
-            // place the evalution into the vector of Libra evaluations
+            // place the evaluation into the vector of Libra evaluations
             self.libra_evaluations.push(libra_evaluation);
         }
     }

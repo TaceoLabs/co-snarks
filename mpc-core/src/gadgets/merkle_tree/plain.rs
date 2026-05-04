@@ -222,7 +222,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// Verify a Merkle path with a given root, leaf, and witness using Poseidon2 in sponge mode.
-    pub fn verifiy_merkle_path_sponge(
+    pub fn verify_merkle_path_sponge(
         &self,
         root: F,
         mut leaf: F,
@@ -256,7 +256,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// Verify a Merkle path with a given root, leaf, and witness using Poseidon2 in compression mode.
-    pub fn verifiy_merkle_path_compression(
+    pub fn verify_merkle_path_compression(
         &self,
         root: F,
         mut leaf: F,
@@ -386,7 +386,7 @@ mod test {
 
         let (root, witness) = poseidon2.merkle_tree_compression_with_witness::<ARITY>(input, index);
         assert_eq!(root, expected);
-        let verified = poseidon2.verifiy_merkle_path_compression(root, leaf, witness);
+        let verified = poseidon2.verify_merkle_path_compression(root, leaf, witness);
         assert!(verified);
     }
 
@@ -408,7 +408,7 @@ mod test {
 
         let (root, witness) = poseidon2.merkle_tree_sponge_with_witness::<ARITY>(input, index);
         assert_eq!(root, expected);
-        let verified = poseidon2.verifiy_merkle_path_sponge(root, leaf, witness);
+        let verified = poseidon2.verify_merkle_path_sponge(root, leaf, witness);
         assert!(verified);
     }
 

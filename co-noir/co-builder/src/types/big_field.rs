@@ -241,7 +241,7 @@ impl<F: PrimeField> BigField<F> {
             true,
         );
 
-        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy necessary for preceeding big add
+        // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/879): dummy necessary for preceding big add
         // gate
 
         GenericUltraCircuitBuilder::<P, T>::create_unconstrained_gate(
@@ -276,7 +276,7 @@ impl<F: PrimeField> BigField<F> {
             },
         );
 
-        // if maximum_bitlength is set, this supercedes can_overflow
+        // if maximum_bitlength is set, this supersedes can_overflow
         if maximum_bitlength > 0 {
             num_last_limb_bits = maximum_bitlength - (NUM_LIMB_BITS * 3);
             let max_limb_value = (BigUint::one() << num_last_limb_bits) - BigUint::one();
@@ -2172,7 +2172,7 @@ impl<F: PrimeField> BigField<F> {
         // | a2 | b2 | r3 | hi_0 |
         // | a1 | b1 | r2 | hi_1 |
         //
-        // Example constaint: lo_0 = (a1 * b0 + a0 * b1) * 2^b   + (a0 * b0)   - r0
+        // Example constraint: lo_0 = (a1 * b0 + a0 * b1) * 2^b   + (a0 * b0)   - r0
         //                 ==>  w4 = (w1 * w'2 + w'1 * w2) * 2^b + (w'1 * w'2) - w3
         //
         // If a, b both are witnesses, this special gate performs 3 field multiplications per gate.
@@ -2617,7 +2617,7 @@ impl<F: PrimeField> BigField<F> {
     // i.e. we evaluate:
     // result * divisor + (\sum{mul_left[i] * mul_right[i]) + ...to_add) = 0
     //
-    // It is critical that ALL the terms on the LHS are positive to eliminate the possiblity of underflows
+    // It is critical that ALL the terms on the LHS are positive to eliminate the possibility of underflows
     // when calling `evaluate_multiple_multiply_add`
     //
     // only requires one quotient and remainder + overflow limbs
@@ -3175,7 +3175,7 @@ impl<F: PrimeField> BigField<F> {
         // | a2 | b2 | r3 | hi_0 |
         // | a1 | b1 | r2 | hi_1 |
         //
-        // Example constaint: lo_0 = (a1 * b0 + a0 * b1) * 2^b   + (a0 * b0)   - r0
+        // Example constraint: lo_0 = (a1 * b0 + a0 * b1) * 2^b   + (a0 * b0)   - r0
         //                 ==>  w4 = (w1 * w'2 + w'1 * w2) * 2^b + (w'1 * w'2) - w3
         //
         // If a, b both are witnesses, this special gate performs 3 field multiplications per gate.

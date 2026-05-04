@@ -216,7 +216,7 @@ impl<F: PrimeField> Polynomial<F> {
             let root_inverse = (-*root).inverse().expect("Root is not zero here");
             // set b₋₁ = 0
             let mut temp = F::zero();
-            // We start multiplying lower coefficient by the inverse and subtracting those from highter coefficients
+            // We start multiplying lower coefficient by the inverse and subtracting those from higher coefficients
             // Since (x - r) should divide the polynomial cleanly, we can guide division with lower coefficients
             for coeff in self.coefficients.iter_mut() {
                 // at the start of the loop, temp = bᵢ₋₁
@@ -285,7 +285,7 @@ impl<F: PrimeField> Polynomial<F> {
         let mut n_l = 1 << (dim - 1);
         let mut tmp = vec![F::zero(); n_l];
 
-        // Note below: i * 2 + 1 + offset might equal virtual_size. This used to subtlely be handled by extra capacity
+        // Note below: i * 2 + 1 + offset might equal virtual_size. This used to subtly be handled by extra capacity
         // padding (and there used to be no assert time checks, which this constant helps with).
         for (i, val) in tmp.iter_mut().enumerate().take(n_l) {
             *val = self.coefficients[i * 2]

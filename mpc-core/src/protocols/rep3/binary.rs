@@ -300,8 +300,8 @@ pub fn is_zero<F: PrimeField, N: Network>(
     // negate
     let mut x = x ^ &mask;
 
-    // do ands in a tree
-    // TODO: Make and tree more communication efficient, ATM we send the full element for each level, even though they halve in size
+    // do AND operations in a tree
+    // TODO: Make AND tree more communication efficient, ATM we send the full element for each level, even though they halve in size
     let mut len = bit_len;
     while len > 1 {
         if len % 2 == 1 {
@@ -336,8 +336,8 @@ pub fn is_zero_many<F: PrimeField, N: Network>(
     }
     let mut y = x.clone();
 
-    // do ands in a tree
-    // TODO: Make and tree more communication efficient, ATM we send the full element for each level, even though they halve in size
+    // do AND operations in a tree
+    // TODO: Make AND tree more communication efficient, ATM we send the full element for each level, even though they halve in size
     let mut len = bit_len;
     while len > 1 {
         if len % 2 == 1 {

@@ -94,7 +94,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         (res, input_square, input_quad)
     }
 
-    /// Computes the Poseidon2 permuation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
+    /// Computes the Poseidon2 permutation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation.
     pub fn rep3_permutation_in_place_with_precomputation_intermediate<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>; T],
@@ -283,7 +283,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(trace)
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol. Returns a value needed for the trace when T > 4.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol. Returns a value needed for the trace when T > 4.
     #[expect(clippy::type_complexity)]
     pub fn rep3_external_round_precomp_intermediate<N: Network>(
         &self,
@@ -310,7 +310,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((squares, quads, sbox_0, matmul_external))
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     #[expect(clippy::type_complexity)]
     pub fn rep3_external_round_precomp_matmul_intermediate<N: Network>(
         &self,
@@ -331,7 +331,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((squares, quads, res))
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     #[expect(clippy::type_complexity)]
     pub fn rep3_external_round_precomp_intermediate_packed<N: Network, const BATCH_SIZE: usize>(
         &self,
@@ -369,7 +369,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((squares, quads, sboxes_0, matmul_external))
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     #[expect(clippy::type_complexity)]
     pub fn rep3_external_round_precomp_matmul_intermediate_packed<
         N: Network,
@@ -404,7 +404,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         ))
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     #[expect(clippy::type_complexity)]
     pub fn rep3_external_round_precomp_intermediate_vec<N: Network>(
         &self,
@@ -442,7 +442,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((squares, quads, sboxes_0, matmul_external))
     }
 
-    /// One external round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     #[expect(clippy::type_complexity)]
     pub fn rep3_external_round_precomp_matmul_intermediate_vec<N: Network>(
         &self,
@@ -596,7 +596,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((squares, quads))
     }
 
-    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     #[expect(clippy::type_complexity)]
     pub fn rep3_internal_round_precomp_intermediate<N: Network>(
         &self,
@@ -626,7 +626,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((sum, squares, quads))
     }
 
-    /// One internal round of the Poseidon2 permuation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
     #[expect(clippy::type_complexity)]
     pub fn rep3_internal_round_precomp_intermediate_packed<N: Network>(
         &self,

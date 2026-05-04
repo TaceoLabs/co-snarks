@@ -48,7 +48,7 @@ impl<F: PrimeField> BlakeUtils<F> {
      * This is the round function used in Blake2s and Blake3s for UltraPlonk.
      * Inputs: - 16-word state
      *         - 16-word msg
-     *         - round numbe
+     *         - round number
      *         - which_blake to choose Blake2 or Blake3 (false -> Blake2)
      */
     pub(crate) fn round_fn_lookup<

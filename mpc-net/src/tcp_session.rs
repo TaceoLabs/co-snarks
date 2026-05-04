@@ -14,7 +14,7 @@ use tokio::{net::TcpStream, sync::oneshot};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tokio_util::sync::{CancellationToken, DropGuard};
 
-use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENTH, Network};
+use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network};
 
 /// The default time to idle for incoming connections that were not picked up because, e.g. `init_session` for that session id was never called.
 pub const DEFAULT_TIME_TO_IDLE: Duration = Duration::from_secs(30);
@@ -116,7 +116,7 @@ impl TcpNetworkHandlerBuilder {
             bind_addr,
             parties,
             time_to_idle: DEFAULT_TIME_TO_IDLE,
-            max_frame_length: DEFAULT_MAX_FRAME_LENTH,
+            max_frame_length: DEFAULT_MAX_FRAME_LENGTH,
         }
     }
 
@@ -130,7 +130,7 @@ impl TcpNetworkHandlerBuilder {
 
     /// Set the maximum length of a frame that can be sent or received. This is used to prevent DoS attacks by sending very large frames.
     ///
-    /// Defaults to `DEFAULT_MAX_FRAME_LENTH` (64MB)
+    /// Defaults to `DEFAULT_MAX_FRAME_LENGTH` (64MB)
     pub fn max_frame_length(mut self, max_frame_length: usize) -> Self {
         self.max_frame_length = max_frame_length;
         self

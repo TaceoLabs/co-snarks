@@ -122,7 +122,7 @@ impl BristolFashionCircuit {
                         .or_default()
                         .push(gate);
                 }
-                // EqWires are a bit strange, they should just be removed from the circuit alltogether in the future
+                // EqWires are a bit strange, they should just be removed from the circuit altogether in the future
                 // Atm we add a linear level for them
                 BristolFashionGate::EqWire { inwire, outwire } => {
                     let (and_depth, total_depth) = gate_level
@@ -588,7 +588,7 @@ pub trait BristolFashionEvaluator {
     // TODO: once GATs are stable, see if we can maybe specify the error type here better
 
     /// Produce a `WireValue` equal to a zero/false bit if `input == false`,
-    /// otherwise procude a `WireValue` equal to a one/true bit.
+    /// otherwise produce a `WireValue` equal to a one/true bit.
     fn constant(&mut self, input: bool) -> Result<Self::WireValue, CircuitExecutionError>;
     /// Produce a `WireValue` equal to the inverse of the input `WireValue`
     ///

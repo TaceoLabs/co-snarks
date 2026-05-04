@@ -381,7 +381,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
      * @brief Create a mock MegaHonk VK that has the correct structure
      *
      * @param dyadic_size Dyadic size of the circuit for which we generate a vk
-     * @param pub_inputs_offest Indicating whether the circuit has a first zero row
+     * @param pub_inputs_offset Indicating whether the circuit has a first zero row
      * @param inner_public_inputs_size Number of public inputs coming from the ACIR constraints
      */
     fn create_mock_honk_vk(

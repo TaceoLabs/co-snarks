@@ -95,7 +95,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         entity.precomputed.q_delta_range().is_zero()
     }
 
-    fn add_entites(
+    fn add_entities(
         entity: &super::ProverUnivariates<T, P>,
         batch: &mut super::ProverUnivariatesBatch<T, P>,
     ) {

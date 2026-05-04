@@ -64,7 +64,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         entity.precomputed.q_nnf().is_zero()
     }
 
-    fn add_entites(
+    fn add_entities(
         entity: &super::ProverUnivariates<T, P>,
         batch: &mut ProverUnivariatesBatch<T, P>,
     ) {
@@ -102,7 +102,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * | Bigfield Product 3           | 1     | 1   | 0   | 0   | 1   |
      *
      * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
-     * @param in an std::array containing the Totaly extended Univariate edges.
+     * @param in an std::array containing the Totally extended Univariate edges.
      * @param parameters contains beta, gamma, and public_input_delta, ....
      * @param scaling_factor optional term to scale the evaluation before adding to evals.
      */

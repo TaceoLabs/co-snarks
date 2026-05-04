@@ -474,7 +474,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
             let a_rhs = &coefficients_t[i];
             let a = T::sub(*a_lhs, *a_rhs);
             coefficients_t[i] = a;
-            // Snarkjs is checking whether the poly was divisble by Zh, but we cannot do this here
+            // Snarkjs is checking whether the poly was divisible by Zh, but we cannot do this here
         });
 
         let coefficients_tz = T::ifft(&tz_vec, &domains.extended_domain);

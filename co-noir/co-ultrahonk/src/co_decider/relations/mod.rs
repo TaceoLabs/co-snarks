@@ -74,14 +74,14 @@ pub(crate) trait Relation<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFiel
         if !Self::can_skip(entity) {
             let scaling_factors = vec![scaling_factor; MAX_PARTIAL_RELATION_LENGTH];
             data.can_skip = false;
-            Self::add_entites(entity, &mut data.all_entities);
+            Self::add_entities(entity, &mut data.all_entities);
             data.scaling_factors.extend(scaling_factors);
         }
     }
 
     fn can_skip(entity: &ProverUnivariates<T, P>) -> bool;
 
-    fn add_entites(entity: &ProverUnivariates<T, P>, batch: &mut ProverUnivariatesBatch<T, P>);
+    fn add_entities(entity: &ProverUnivariates<T, P>, batch: &mut ProverUnivariatesBatch<T, P>);
 
     fn accumulate<N: Network>(
         net: &N,

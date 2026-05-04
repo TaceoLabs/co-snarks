@@ -12,7 +12,7 @@ use co_noir_common::types::ZeroKnowledge;
 /**
  * @brief For a small integer N = `virtual_log_n` and a given witness x = `log_n`, compute in-circuit an
  * `indicator_padding_array` of size \f$ N \f$, such that
- * \f{align}{ \text{indicator_padding_array}[i] = \text{"} i < x \text{"}. \f}. To achieve the strict ineqaulity, we
+ * \f{align}{ \text{indicator_padding_array}[i] = \text{"} i < x \text{"}. \f}. To achieve the strict inequality, we
  * evaluate all Lagranges at (x-1) and compute step functions. More concretely
  *
  * 1) Constrain x to be in the range \f$ [1, \ldots, N] \f$ by asserting

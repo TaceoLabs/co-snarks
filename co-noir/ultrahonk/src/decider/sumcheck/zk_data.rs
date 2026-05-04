@@ -266,7 +266,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
             // compute the evaluation of the last Libra univariate at the challenge u_{d-1}
             let libra_evaluation = self.libra_univariates[round_idx].eval_poly(round_challenge)
                 / self.libra_scaling_factor;
-            // place the evalution into the vector of Libra evaluations
+            // place the evaluation into the vector of Libra evaluations
             self.libra_evaluations.push(libra_evaluation);
         }
     }

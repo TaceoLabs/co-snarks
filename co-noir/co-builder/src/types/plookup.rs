@@ -1824,7 +1824,7 @@ impl<F: PrimeField> Plookup<F> {
         //  * | 1 | a1                                | b1                               | s1                                |
         //  * +---+-----------------------------------+----------------------------------+-----------------------------------+
         //  *
-        //  * Note that we compute the accumulating sums of the slices so as to avoid using additonal gates for the purpose of
+        //  * Note that we compute the accumulating sums of the slices so as to avoid using additional gates for the purpose of
         //  * reconstructing the original inputs/outputs. I.e. the output value at the 0th index in the above table is the
         //  * actual value we were interested in computing in the first place. Importantly, the structure of the remaining rows
         //  * is such that row_i - r*row_{i+1} produces an entry {a_j, b_j, s_j} that exactly corresponds to an entry in a
@@ -2108,7 +2108,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasi
         table_index: usize,
     ) -> PlookupBasicTable<P, T> {
         // We do the assertion, since this function is templated, but the general API for these functions contains the id,
-        // too. This helps us ensure that the correct instantion is used for a particular BasicTableId
+        // too. This helps us ensure that the correct instantiation is used for a particular BasicTableId
         let expected_id = match id {
             BasicTableId::HonkDummyBasic1 => BasicTableId::HONK_DUMMY_BASIC1_BB_ID,
             BasicTableId::HonkDummyBasic2 => BasicTableId::HONK_DUMMY_BASIC2_BB_ID,

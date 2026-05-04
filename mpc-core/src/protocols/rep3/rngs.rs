@@ -263,7 +263,7 @@ pub struct Rep3RandBitComp {
 }
 
 impl Rep3RandBitComp {
-    /// Contruct a new [`Rep3RandBitComp`] w rngs
+    /// Construct a new [`Rep3RandBitComp`] w rngs
     pub fn new_2keys(rng1: [u8; crate::SEED_SIZE], rng2: [u8; crate::SEED_SIZE]) -> Self {
         Self {
             rng1: RngType::from_seed(rng1),
@@ -272,7 +272,7 @@ impl Rep3RandBitComp {
         }
     }
 
-    /// Contruct a new [`Rep3RandBitComp`] with 3 rngs
+    /// Construct a new [`Rep3RandBitComp`] with 3 rngs
     pub fn new_3keys(
         rng1: [u8; crate::SEED_SIZE],
         rng2: [u8; crate::SEED_SIZE],

@@ -263,7 +263,7 @@ impl SumcheckRound {
 
         // we have the round size and then reduce it by power of two steps
         // what can we mt here?
-        // Accumulate the contribution from each sub-relation accross each edge of the hyper-cube
+        // Accumulate the contribution from each sub-relation across each edge of the hyper-cube
         // Construct extended edge containers
 
         //

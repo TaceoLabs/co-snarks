@@ -172,7 +172,7 @@ impl<F: PrimeField> Blake3Hasher<F> {
          * create unexpected overflow in the state matrix. At the end of the `compress_pre()` function, there might be
          * overflows in the elements of the first and third rows of the state matrix. But this wouldn't be a problem because
          * in the below loop, while reading from the lookup table, we ensure that the overflow is ignored and the result is
-         * contrained to 32 bits.
+         * constrained to 32 bits.
          */
         for i in 0..(BLAKE3_STATE_SIZE >> 1) {
             let lookup = Plookup::get_lookup_accumulators_ct(

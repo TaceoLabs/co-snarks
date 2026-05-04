@@ -74,7 +74,7 @@ pub(crate) fn mask_points<
 
 /**
  * @brief Replace all pairs (∞, scalar) by the pair (one, 0) where one is a fixed generator of the curve
- * @details This is a step in enabling our our multiscalar multiplication algorithms to hande points at infinity.
+ * @details This is a step in enabling our multiscalar multiplication algorithms to handle points at infinity.
  */
 // TACEO TODO: Batch FieldCT ops
 #[allow(clippy::type_complexity)]

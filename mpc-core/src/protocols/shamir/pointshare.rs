@@ -202,7 +202,7 @@ pub fn open_point_and_field_many<C: CurveGroup, N: Network>(
     Ok((res_points, res_fields))
 }
 
-/// Perfoms MSM between curve points and field shares.
+/// Performs MSM between curve points and field shares.
 pub fn msm_public_points<C: CurveGroup>(
     points: &[C::Affine],
     scalars: &[FieldShare<C::ScalarField>],

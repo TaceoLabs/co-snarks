@@ -337,7 +337,7 @@ impl ShpleminiVerifier {
      * This method uses `padding_indicator_array`, whose i-th entry is FF{1} if i < log_n and 0 otherwise.
      * We use these entries to either assign `eval_pos_prev` the value `eval_pos` computed in the current iteration of
      * the loop, or to propagate the batched evaluation of the multilinear polynomials to the next iteration. This
-     * ensures the correctnes of the computation of the required positive evaluations.
+     * ensures the correctness of the computation of the required positive evaluations.
      *
      * To ensure that dummy evaluations cannot be used to tamper with the final batch_mul result, we multiply dummy
      * positive evaluations by the entries of `padding_indicator_array`.
@@ -450,7 +450,7 @@ impl ShpleminiVerifier {
      *    \frac{\nu^{2 \cdot d} } {z - r^{2^{d-1}}} + \frac{\nu^{2 \cdot d + 1}}{z + r^{2^{d-1}}}
      *    \f}
      *    and multiplies them against the entries of `padding_indicator_array`. The commitments \f$ [A_1]_1, \ldots,
-     *    [A_{d-1}]_1 \f$ are multiplied by these scalars in the final `batch_mul` perfomed by KZG or IPA. Since
+     *    [A_{d-1}]_1 \f$ are multiplied by these scalars in the final `batch_mul` performed by KZG or IPA. Since
      *    `padding_indicator_array[i]` = 1 for i < log_n, and 0 otherwise, it ensures that the contributions from "dummy"
      *    rounds do not affect the final `batch mul`.
      *
