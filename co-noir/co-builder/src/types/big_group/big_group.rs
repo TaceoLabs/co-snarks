@@ -273,7 +273,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let mut constant_accumulator = P::zero();
         let mut non_constant_points = Vec::new();
         let mut non_constant_scalars = Vec::new();
-        for (point, scalar) in points.into_iter().zip(scalars.into_iter()) {
+        for (point, scalar) in points.into_iter().zip(scalars) {
             if point.is_constant() && scalar.is_constant() {
                 let point_value = point.to_affine(builder, driver)?;
                 let scalar_value = T::get_public(&scalar.get_value(builder, driver))
