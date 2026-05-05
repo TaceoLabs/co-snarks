@@ -12,30 +12,28 @@ pub struct Poseidon2Params<F: PrimeField, const T: usize, const D: u64> {
     /// The diagonal of t x t matrix of the internal permutation. Each element is taken minus 1 for more efficient implementations.
     pub mat_internal_diag_m_1: &'static [F; T],
     /// The round constants of the external rounds.
-    pub round_constants_external: &'static Vec<[F; T]>,
+    pub round_constants_external: &'static [[F; T]],
     /// The round constants of the internal rounds.
-    pub round_constants_internal: &'static Vec<F>,
+    pub round_constants_internal: &'static [F],
 }
 
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2Params<F, T, D> {
-    pub(crate) fn new(
+    pub(crate) const fn new(
         rounds_f: usize,
         rounds_p: usize,
         mat_internal_diag_m_1: &'static [F; T],
-        round_constants_external: &'static Vec<[F; T]>,
-        round_constants_internal: &'static Vec<F>,
+        round_constants_external: &'static [[F; T]],
+        round_constants_internal: &'static [F],
     ) -> Self {
-        assert!(T == 2 || T == 3 || ((T <= 24) && (T.is_multiple_of(4))));
+        assert!(T == 2 || T == 3 || ((T <= 24) && (T % 4 == 0)));
         assert!(D % 2 == 1);
-        assert_eq!(rounds_f % 2, 0);
-        assert_eq!(round_constants_external.len(), rounds_f);
-        assert_eq!(round_constants_internal.len(), rounds_p);
-        let rounds_f_beginning = rounds_f / 2;
-        let rounds_f_end = rounds_f / 2;
+        assert!(rounds_f % 2 == 0);
+        assert!(round_constants_external.len() == rounds_f);
+        assert!(round_constants_internal.len() == rounds_p);
 
         Self {
-            rounds_f_beginning,
-            rounds_f_end,
+            rounds_f_beginning: rounds_f / 2,
+            rounds_f_end: rounds_f / 2,
             rounds_p,
             mat_internal_diag_m_1,
             round_constants_external,

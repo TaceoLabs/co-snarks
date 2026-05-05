@@ -50,3 +50,7 @@ criterion.workspace = true
 [[bench]]
 name = "local_mul_vec"
 harness = false
+
+[[bench]]
+name = "poseidon2"
+harness = false
