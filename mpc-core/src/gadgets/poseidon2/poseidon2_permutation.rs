@@ -161,14 +161,16 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
     }
 
-    /// The round constant addition in the external rounds of the Poseidon2 permutation.
-    pub fn add_rc_external(&self, input: &mut [F; T], rc_offset: usize) {
-        for (s, rc) in input
-            .iter_mut()
-            .zip(self.params.round_constants_external[rc_offset].iter())
-        {
+    #[inline]
+    fn add_rc_external_with(input: &mut [F; T], rc_e: &[F; T]) {
+        for (s, rc) in input.iter_mut().zip(rc_e.iter()) {
             *s += rc;
         }
+    }
+
+    /// The round constant addition in the external rounds of the Poseidon2 permutation.
+    pub fn add_rc_external(&self, input: &mut [F; T], rc_offset: usize) {
+        Self::add_rc_external_with(input, &self.params.round_constants_external[rc_offset]);
     }
 
     /// The round constant addition in the internal rounds of the Poseidon2 permutation.
@@ -176,18 +178,28 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         input[0] += &self.params.round_constants_internal[rc_offset];
     }
 
-    /// One external round of the Poseidon2 permutation.
-    pub fn external_round(&self, state: &mut [F; T], r: usize) {
-        self.add_rc_external(state, r);
+    #[inline]
+    fn external_round_with(&self, state: &mut [F; T], rc_e: &[F; T]) {
+        Self::add_rc_external_with(state, rc_e);
         Self::sbox(state);
         Self::matmul_external(state);
     }
 
-    /// One internal round of the Poseidon2 permutation.
-    pub fn internal_round(&self, state: &mut [F; T], r: usize) {
-        self.add_rc_internal(state, r);
+    #[inline]
+    fn internal_round_with(&self, state: &mut [F; T], rc_i: &F) {
+        state[0] += rc_i;
         Self::single_sbox(&mut state[0]);
         self.matmul_internal(state);
+    }
+
+    /// One external round of the Poseidon2 permutation.
+    pub fn external_round(&self, state: &mut [F; T], r: usize) {
+        self.external_round_with(state, &self.params.round_constants_external[r]);
+    }
+
+    /// One internal round of the Poseidon2 permutation.
+    pub fn internal_round(&self, state: &mut [F; T], r: usize) {
+        self.internal_round_with(state, &self.params.round_constants_internal[r]);
     }
 
     /// Performs the Poseidon2 Permutation on the given state.
@@ -195,21 +207,21 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         // Linear layer at beginning
         Self::matmul_external(state);
 
+        let mut rc_external = self.params.round_constants_external.iter();
+
         // First set of external rounds
-        for r in 0..self.params.rounds_f_beginning {
-            self.external_round(state, r);
+        for rc_e in rc_external.by_ref().take(self.params.rounds_f_beginning) {
+            self.external_round_with(state, rc_e);
         }
 
         // Internal rounds
-        for r in 0..self.params.rounds_p {
-            self.internal_round(state, r);
+        for rc_i in self.params.round_constants_internal {
+            self.internal_round_with(state, rc_i);
         }
 
         // Remaining external rounds
-        for r in self.params.rounds_f_beginning
-            ..self.params.rounds_f_beginning + self.params.rounds_f_end
-        {
-            self.external_round(state, r);
+        for rc_e in rc_external {
+            self.external_round_with(state, rc_e);
         }
     }
 

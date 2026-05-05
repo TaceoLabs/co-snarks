@@ -117,7 +117,7 @@ const INTERNAL_RC: [Scalar; ROUNDS_P] = [
 ];
 
 /// The Poseidon2 parameters for the BN254 curve with a internal state of size t=3.
-pub static POSEIDON2_BN254_T3_PARAMS: Poseidon2Params<Scalar, T, D> = Poseidon2Params::new(
+pub const POSEIDON2_BN254_T3_PARAMS: Poseidon2Params<Scalar, T, D> = Poseidon2Params::new(
     ROUNDS_F,
     ROUNDS_P,
     &MAT_DIAG_M_1,
