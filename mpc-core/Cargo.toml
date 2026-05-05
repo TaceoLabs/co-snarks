@@ -45,6 +45,8 @@ hex = "0.4.3"
 ark-std = { workspace = true }
 paste.workspace = true
 criterion.workspace = true
+mpc-net = { version = "0.5.0", path = "../mpc-net", default-features = false, features = ["local"] }
+itertools.workspace = true
 
 
 [[bench]]
@@ -53,4 +55,8 @@ harness = false
 
 [[bench]]
 name = "poseidon2"
+harness = false
+
+[[bench]]
+name = "poseidon2_mpc"
 harness = false
