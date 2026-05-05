@@ -2,26 +2,39 @@
 //!
 //! This module contains the networking functionality for the Rep3 MPC protocol.
 
-use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use ark_serialize::{CanonicalDeserialize, CanonicalSerialize, Compress};
 use mpc_net::Network;
 
 use super::id::PartyID;
 
+/// Size in bytes of the `Vec<F>` length prefix in `ark_serialize`'s uncompressed encoding (a `u64`).
+const LEN_PREFIX_BYTES: usize = 8;
+
 /// A extension trait that REP3 specific methods to [`Network`].
 pub trait Rep3NetworkExt: Network {
     /// Sends `data` to the next party and receives from the previous party.
+    ///
+    /// Specialized for a single element: maintains the same `Vec<F>(1)` wire format as
+    /// `reshare_many(&[data])` (so peers using `recv_many` / `recv_prev` are unaffected), but
+    /// skips the recv-side `Vec<F>` allocation by reading past the 8-byte length prefix and
+    /// deserializing directly into `F`.
     #[inline(always)]
     fn reshare<F: CanonicalSerialize + CanonicalDeserialize + Send>(
         &self,
         data: F,
     ) -> eyre::Result<F> {
-        let mut res = self.reshare_many(&[data])?;
-        if res.len() != 1 {
-            eyre::bail!("Expected 1 element, got more",)
-        } else {
-            //we checked that there is really one element
-            Ok(res.pop().unwrap())
+        let id = PartyID::try_from(self.id())?;
+        let elem_size = data.serialized_size(Compress::No);
+        let mut ser_data = Vec::with_capacity(LEN_PREFIX_BYTES + elem_size);
+        1u64.serialize_uncompressed(&mut ser_data)?;
+        data.serialize_uncompressed(&mut ser_data)?;
+        self.send(id.next().into(), &ser_data)?;
+        let recv = self.recv(id.prev().into())?;
+        if recv.len() < LEN_PREFIX_BYTES {
+            eyre::bail!("reshare: recv payload too short");
         }
+        let res = F::deserialize_uncompressed_unchecked(&recv[LEN_PREFIX_BYTES..])?;
+        Ok(res)
     }
 
     /// Perform multiple reshares with one networking round
@@ -34,21 +47,46 @@ pub trait Rep3NetworkExt: Network {
         self.send_and_recv_many(id.next(), data, id.prev())
     }
 
-    /// Broadcast data to the other two parties and receive data from them
+    /// Broadcast data to the other two parties and receive data from them.
+    ///
+    /// Specialized for a single element. Maintains the same `Vec<F>(1)` wire format as
+    /// `broadcast_many(&[data])` (so peers using `recv_many` / `recv_prev` / `recv_next` are
+    /// unaffected). Compared to the default path this:
+    ///   * avoids the per-call thread spawn from `mpc_net::join` — both sends are issued before
+    ///     either recv, which is safe because small payloads always fit in any reasonable
+    ///     send buffer;
+    ///   * avoids two `Vec<F>` allocations on the recv side by reading past the 8-byte length
+    ///     prefix and deserializing directly into `F`.
+    /// On hot paths like the Poseidon2 additive precomp sbox (one broadcast per internal round)
+    /// the thread spawn was the dominant cost.
     #[inline(always)]
     fn broadcast<F: CanonicalSerialize + CanonicalDeserialize + Send>(
         &self,
         data: F,
     ) -> eyre::Result<(F, F)> {
-        let (mut prev, mut next) = self.broadcast_many(&[data])?;
-        if prev.len() != 1 || next.len() != 1 {
-            eyre::bail!("Expected 1 element, got more",)
-        } else {
-            //we checked that there is really one element
-            let prev = prev.pop().unwrap();
-            let next = next.pop().unwrap();
-            Ok((prev, next))
+        let id = PartyID::try_from(self.id())?;
+        let next_id = id.next();
+        let prev_id = id.prev();
+
+        let elem_size = data.serialized_size(Compress::No);
+        let mut ser = Vec::with_capacity(LEN_PREFIX_BYTES + elem_size);
+        1u64.serialize_uncompressed(&mut ser)?;
+        data.serialize_uncompressed(&mut ser)?;
+
+        // Issue both sends before either recv. The bounded crossbeam channels (and OS socket
+        // buffers for real networks) hold these small payloads without blocking before the peers
+        // post their recvs.
+        self.send(next_id.into(), &ser)?;
+        self.send(prev_id.into(), &ser)?;
+
+        let prev_raw = self.recv(prev_id.into())?;
+        let next_raw = self.recv(next_id.into())?;
+        if prev_raw.len() < LEN_PREFIX_BYTES || next_raw.len() < LEN_PREFIX_BYTES {
+            eyre::bail!("broadcast: recv payload too short");
         }
+        let prev = F::deserialize_uncompressed_unchecked(&prev_raw[LEN_PREFIX_BYTES..])?;
+        let next = F::deserialize_uncompressed_unchecked(&next_raw[LEN_PREFIX_BYTES..])?;
+        Ok((prev, next))
     }
 
     /// Broadcast data to the other two parties and receive data from them
