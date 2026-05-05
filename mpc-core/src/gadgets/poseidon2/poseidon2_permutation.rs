@@ -26,10 +26,14 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         (self.params.rounds_f_beginning + self.params.rounds_f_end) * T + self.params.rounds_p
     }
 
+    #[inline]
     fn sbox(input: &mut [F; T]) {
-        input.iter_mut().for_each(Self::single_sbox);
+        for s in input.iter_mut() {
+            Self::single_sbox(s);
+        }
     }
 
+    #[inline]
     fn single_sbox(input: &mut F) {
         match D {
             3 => {
@@ -64,6 +68,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
      *
      * Algorithm is taken directly from the Poseidon2 paper.
      */
+    #[inline]
     pub(crate) fn matmul_m4(input: &mut [F; 4]) {
         let t_0 = input[0] + input[1]; // A + B
         let t_1 = input[2] + input[3]; // C + D
@@ -80,6 +85,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// The matrix multiplication in the external rounds of the Poseidon2 permutation.
+    #[inline]
     pub fn matmul_external(input: &mut [F; T]) {
         match T {
             2 => {
@@ -123,6 +129,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// The matrix multiplication in the internal rounds of the Poseidon2 permutation.
+    #[inline]
     pub fn matmul_internal(&self, input: &mut [F; T]) {
         match T {
             2 => {
