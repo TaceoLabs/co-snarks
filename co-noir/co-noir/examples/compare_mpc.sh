@@ -7,7 +7,7 @@ BARRETENBERG_VERSION=5.0.0-nightly.20260324 ##specify the desired barretenberg v
 
 exit_code=0
 
-REMOVE_OUTPUT=0
+REMOVE_OUTPUT=1
 TEST_SLOWER_CIRCUITS=0 ## this is a flag to also run the slower test cases
 PIPE=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];

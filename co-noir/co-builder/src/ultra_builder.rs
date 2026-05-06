@@ -4180,13 +4180,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 self.process_honk_recursion_constraints(constraint_system, crs, driver)?;
         }
         if has_avm_recursion_constraints {
-            // AVM recursion constraints currently not supported
+            panic!("AVM recursion constraints are currently not supported.");
         }
         if is_hn_recursion_constraints {
-            // HyperNova recursion constraints currently not supported
+            panic!("HyperNova recursion constraints are currently not supported.");
         }
         if has_chonk_recursion_constraints {
-            // CHONK recursion constraints currently not supported
+            panic!("CHONK recursion constraints are currently not supported.");
         }
 
         // Process the result of adding recursion constraints and propagate the public inputs as needed.

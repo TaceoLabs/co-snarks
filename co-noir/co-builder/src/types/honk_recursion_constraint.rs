@@ -112,11 +112,9 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
     ) -> eyre::Result<PairingPoints<C, T>> {
         let is_honk = input.proof_type == ProofType::Honk as u32;
         let is_honk_zk = input.proof_type == ProofType::HonkZk as u32;
-        let is_rollup_honk = input.proof_type == ProofType::RollupHonk as u32;
-        let is_root_rollup_honk = input.proof_type == ProofType::RootRollupHonk as u32;
         assert!(
-            is_honk || is_honk_zk || is_rollup_honk || is_root_rollup_honk,
-            "create_honk_recursion_constraints: Only HONK, HONK_ZK, ROLLUP_HONK, ROOT_ROLLUP_HONK proof types are supported."
+            is_honk || is_honk_zk,
+            "create_honk_recursion_constraints: Only HONK, HONK_ZK proof types are supported."
         );
 
         let has_zk = if input.proof_type == ProofType::Honk as u32 {
@@ -289,7 +287,8 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> eyre::Result<(Vec<C::ScalarField>, VerifyingKeyBarretenberg<C>)> {
-        let mut random_fields = Vec::with_capacity(num_inner_public_inputs + 4);
+        // 3 as inputs for the simple circuit, rest for public inputs and one for the shared randomness for initializing the rng for the plaindriver prover
+        let mut random_fields = Vec::with_capacity(num_inner_public_inputs + 3 + 1);
         for _ in 0..num_inner_public_inputs + 4 {
             random_fields.push(driver.rand()?);
         }

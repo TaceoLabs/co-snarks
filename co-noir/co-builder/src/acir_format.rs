@@ -847,14 +847,16 @@ impl<F: PrimeField> AcirFormat<F> {
                             .honk_recursion_constraints
                             .push(opcode_index);
                     }
-                    ProofType::Oink | ProofType::Hn | ProofType::HnTail | ProofType::HnFinal => {
-                        af.hn_recursion_constraints.push(c);
-                    }
-                    ProofType::Avm => {
-                        af.avm_recursion_constraints.push(c);
-                    }
-                    ProofType::Chonk => {
-                        af.chonk_recursion_constraints.push(c);
+                    ProofType::Oink
+                    | ProofType::Hn
+                    | ProofType::HnTail
+                    | ProofType::HnFinal
+                    | ProofType::Avm
+                    | ProofType::Chonk => {
+                        panic!(
+                            "acir_format::add_blackbox_func_call_to_acir_format: Unsupported proof type in RecursiveAggregation: {:?}",
+                            ProofType::from(c.proof_type)
+                        );
                     }
                 }
             }
