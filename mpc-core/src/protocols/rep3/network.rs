@@ -57,6 +57,7 @@ pub trait Rep3NetworkExt: Network {
     ///     send buffer;
     ///   * avoids two `Vec<F>` allocations on the recv side by reading past the 8-byte length
     ///     prefix and deserializing directly into `F`.
+    ///
     /// On hot paths like the Poseidon2 additive precomp sbox (one broadcast per internal round)
     /// the thread spawn was the dominant cost.
     #[inline(always)]

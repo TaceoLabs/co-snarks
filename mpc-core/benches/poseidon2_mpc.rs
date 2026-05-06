@@ -5,8 +5,8 @@
 //! since that is what determines the protocol's actual completion time.
 //!
 //! Variants benchmarked:
-//!   * REP3:   `rep3_permutation`, `rep3_permutation_with_precomputation`,
-//!             `rep3_permutation_additive_with_precomputation`
+//!   * REP3: `rep3_permutation`, `rep3_permutation_with_precomputation`,
+//!     `rep3_permutation_additive_with_precomputation`
 //!   * Shamir: `shamir_permutation`, `shamir_permutation_with_precomputation`
 //!
 //! Network/state setup is hoisted out of the timed region. For the precompute-based variants the
@@ -168,7 +168,9 @@ where
 
 // ---- Shamir -----------------------------------------------------------------
 
-fn shamir_input_shares<const T: usize>(rng: &mut ChaCha20Rng) -> Vec<Vec<ShamirPrimeFieldShare<Fr>>> {
+fn shamir_input_shares<const T: usize>(
+    rng: &mut ChaCha20Rng,
+) -> Vec<Vec<ShamirPrimeFieldShare<Fr>>> {
     let input: [Fr; T] = array::from_fn(|_| Fr::rand(rng));
     shamir::share_field_elements(&input, SHAMIR_THRESHOLD, NUM_PARTIES, rng)
 }
@@ -245,9 +247,8 @@ where
                         )
                         .unwrap()
                         .into();
-                        let mut precomp = poseidon
-                            .precompute_shamir(batch, &net, &mut state)
-                            .unwrap();
+                        let mut precomp =
+                            poseidon.precompute_shamir(batch, &net, &mut state).unwrap();
 
                         let t0 = Instant::now();
                         for _ in 0..batch {
