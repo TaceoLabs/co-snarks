@@ -150,12 +150,26 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // First set of external rounds
         for r in 0..self.params.rounds_f_beginning {
-            let (squares_, quads_, res) = if r == self.params.rounds_f_beginning - 1 && T == 16 {
-                self.rep3_external_round_precomp_matmul_intermediate(state, r, precomp, net)?
+            let res = if r == self.params.rounds_f_beginning - 1 && T == 16 {
+                self.rep3_external_round_precomp_matmul_intermediate(
+                    state,
+                    r,
+                    precomp,
+                    net,
+                    &mut squares_1,
+                    &mut quads_1,
+                )?
             } else {
-                let (squares_, quads_, res, _) =
-                    self.rep3_external_round_precomp_intermediate(state, r, precomp, net)?;
-                (squares_, quads_, res)
+                let (sbox_0, _) = self.rep3_external_round_precomp_intermediate(
+                    state,
+                    r,
+                    precomp,
+                    net,
+                    &mut squares_1,
+                    &mut quads_1,
+                    false,
+                )?;
+                sbox_0
             };
 
             if r != self.params.rounds_f_beginning - 1 || (T != 4 && T != 16) {
@@ -167,8 +181,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
                 squares_1.push(res);
                 quads_1.push(Rep3PrimeFieldShare::<F>::default());
             }
-            squares_1.extend(squares_);
-            quads_1.extend(quads_);
         }
 
         // Internal rounds
@@ -198,15 +210,23 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (squares_, quads_, sbox_0, matmul_external) =
-                self.rep3_external_round_precomp_intermediate(state, r, precomp, net)?;
-            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
-                squares_3.push(sbox_0);
-                quads_3.push(Rep3PrimeFieldShare::<F>::default());
-            }
-            squares_3.extend(squares_);
-            quads_3.extend(quads_);
-            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+            let is_last = r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1;
+            let (sbox_0, matmul_external) = self.rep3_external_round_precomp_intermediate(
+                state,
+                r,
+                precomp,
+                net,
+                &mut squares_3,
+                &mut quads_3,
+                is_last,
+            )?;
+            if is_last {
+                // The last-round sbox_0 must appear BEFORE the freshly pushed T squares/quads to
+                // preserve the original trace ordering. Insert at offset (len - T).
+                let inserted = T;
+                let insert_at = squares_3.len() - inserted;
+                squares_3.insert(insert_at, sbox_0);
+                quads_3.insert(insert_at, Rep3PrimeFieldShare::<F>::default());
                 last_matmul_external = matmul_external;
                 break;
             }
@@ -283,52 +303,53 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(trace)
     }
 
-    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol. Returns a value needed for the trace when T > 4.
-    #[expect(clippy::type_complexity)]
+    /// One external round of the Poseidon2 permutation with intermediate-trace bookkeeping
+    /// (Rep3 MPC, single permutation).
+    ///
+    /// Pushes per-element square / quad shares directly into the caller-supplied accumulators
+    /// (no per-round `Vec<F>` allocation). When `collect_matmul` is `true` and `T == 16`, also
+    /// returns the matmul-external intermediate state as a `Vec<F>` (used for the trace at the
+    /// last round of the second half); otherwise uses the cheaper plain `matmul_external_rep3`.
+    #[expect(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn rep3_external_round_precomp_intermediate<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>; T],
         r: usize,
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
-    ) -> eyre::Result<(
-        Vec<Rep3PrimeFieldShare<F>>,
-        Vec<Rep3PrimeFieldShare<F>>,
-        Rep3PrimeFieldShare<F>,
-        Option<Vec<Rep3PrimeFieldShare<F>>>,
-    )> {
+        squares: &mut Vec<Rep3PrimeFieldShare<F>>,
+        quads: &mut Vec<Rep3PrimeFieldShare<F>>,
+        collect_matmul: bool,
+    ) -> eyre::Result<(Rep3PrimeFieldShare<F>, Option<Vec<Rep3PrimeFieldShare<F>>>)> {
         let id = PartyID::try_from(net.id())?;
         self.add_rc_external_rep3(state, r, id);
-        let (squares, quads) = Self::sbox_rep3_precomp_intermediate(state, precomp, net)?;
+        Self::sbox_rep3_precomp_intermediate_into(state, precomp, net, squares, quads)?;
         let sbox_0 = state[0];
-        let matmul_external = if T == 16 {
+        let matmul_external = if T == 16 && collect_matmul {
             Some(Self::matmul_external_rep3_intermediate_t16(state))
         } else {
             Self::matmul_external_rep3(state);
             None
         };
-        Ok((squares, quads, sbox_0, matmul_external))
+        Ok((sbox_0, matmul_external))
     }
 
-    /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
-    #[expect(clippy::type_complexity)]
+    /// Last round of the first half for `T = 16`: returns the scalar matmul-external
+    /// intermediate (`input[0]` before the second-matrix application).
     pub fn rep3_external_round_precomp_matmul_intermediate<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>; T],
         r: usize,
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
-    ) -> eyre::Result<(
-        Vec<Rep3PrimeFieldShare<F>>,
-        Vec<Rep3PrimeFieldShare<F>>,
-        Rep3PrimeFieldShare<F>,
-    )> {
+        squares: &mut Vec<Rep3PrimeFieldShare<F>>,
+        quads: &mut Vec<Rep3PrimeFieldShare<F>>,
+    ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
         assert!(T == 8 || T == 12 || T == 16 || T == 20 || T == 24);
         let id = PartyID::try_from(net.id())?;
         self.add_rc_external_rep3(state, r, id);
-        let (squares, quads) = Self::sbox_rep3_precomp_intermediate(state, precomp, net)?;
-        let res = Self::matmul_external_rep3_intermediate(state);
-        Ok((squares, quads, res))
+        Self::sbox_rep3_precomp_intermediate_into(state, precomp, net, squares, quads)?;
+        Ok(Self::matmul_external_rep3_intermediate(state))
     }
 
     /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
@@ -470,12 +491,15 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((squares, quads, matmul_results))
     }
 
-    #[expect(clippy::type_complexity)]
-    fn sbox_rep3_precomp_intermediate<N: Network>(
+    /// Sbox with intermediate-trace bookkeeping that pushes the per-element square / quad shares
+    /// directly into caller-supplied accumulators instead of returning short-lived `Vec`s.
+    fn sbox_rep3_precomp_intermediate_into<N: Network>(
         input: &mut [Rep3PrimeFieldShare<F>],
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
-    ) -> eyre::Result<(Vec<Rep3PrimeFieldShare<F>>, Vec<Rep3PrimeFieldShare<F>>)> {
+        squares: &mut Vec<Rep3PrimeFieldShare<F>>,
+        quads: &mut Vec<Rep3PrimeFieldShare<F>>,
+    ) -> eyre::Result<()> {
         assert_eq!(D, 5);
         for (i, inp) in input.iter_mut().enumerate() {
             *inp -= precomp.r[precomp.offset + i];
@@ -485,8 +509,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let y = arithmetic::open_vec(input, net)?;
         let id = PartyID::try_from(net.id())?;
 
-        let mut squares = Vec::with_capacity(input.len());
-        let mut quads = Vec::with_capacity(input.len());
         let mut squ;
         let mut quad;
         for (i, (inp, y)) in input.iter_mut().zip(y).enumerate() {
@@ -498,7 +520,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         precomp.offset += input.len();
 
-        Ok((squares, quads))
+        Ok(())
     }
 
     #[expect(clippy::type_complexity)]
@@ -821,32 +843,48 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         }
     }
 
+    /// One external round with intermediate-trace bookkeeping.
+    ///
+    /// Pushes the per-element squares / quads from the sbox directly into the caller-provided
+    /// accumulator buffers (instead of returning short-lived `Vec<F>`s that would be `extend()`-ed
+    /// into them).
+    ///
+    /// `collect_matmul`: only meaningful for `T == 16`. When `true`, returns the matmul-external
+    /// intermediate state as a `Vec<F>` (used for the trace at specific rounds). When `false`,
+    /// uses the plain `matmul_external` and returns `None`, avoiding an unnecessary
+    /// `Vec<F>` allocation that the caller would discard anyway.
     fn external_round_intermediate(
         &self,
         state: &mut [F; T],
         r: usize,
-    ) -> (Vec<F>, Vec<F>, F, Option<Vec<F>>) {
+        squares: &mut Vec<F>,
+        quads: &mut Vec<F>,
+        collect_matmul: bool,
+    ) -> (F, Option<Vec<F>>) {
         self.add_rc_external(state, r);
-        let (squares, quads) = Self::sbox_plain_intermediate(state);
+        Self::sbox_plain_intermediate_into(state, squares, quads);
         let sbox_0 = state[0];
-        let matmul_external = if T == 16 {
+        let matmul_external = if T == 16 && collect_matmul {
             Some(Self::matmul_external_intermediate_t16(state))
         } else {
             Self::matmul_external(state);
             None
         };
-        (squares, quads, sbox_0, matmul_external)
+        (sbox_0, matmul_external)
     }
 
+    /// One external round whose `matmul_external` step returns the scalar intermediate `input[0]`
+    /// before the second-matrix application (used at the last round of the first half for `T=16`).
     fn external_round_matmul_intermediate(
         &self,
         state: &mut [F; T],
         r: usize,
-    ) -> (Vec<F>, Vec<F>, F) {
+        squares: &mut Vec<F>,
+        quads: &mut Vec<F>,
+    ) -> F {
         self.add_rc_external(state, r);
-        let (squares, quads) = Self::sbox_plain_intermediate(state);
-        let result = Self::matmul_external_intermediate(state);
-        (squares, quads, result)
+        Self::sbox_plain_intermediate_into(state, squares, quads);
+        Self::matmul_external_intermediate(state)
     }
 
     /// The matrix multiplication in the external rounds of the Poseidon2 permutation, returning a value needed for the trace when T > 4.
@@ -880,16 +918,16 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         }
     }
 
-    fn sbox_plain_intermediate(state: &mut [F; T]) -> (Vec<F>, Vec<F>) {
-        let mut squares = Vec::with_capacity(T);
-        let mut quads = Vec::with_capacity(T);
+    /// Push the per-element squares and quads from the external-round sbox directly into the
+    /// caller-supplied accumulators. Avoids the per-round `Vec<F>(T)` allocations that the old
+    /// `sbox_plain_intermediate` returned only to have them `extend()`-ed and dropped.
+    #[inline]
+    fn sbox_plain_intermediate_into(state: &mut [F; T], squares: &mut Vec<F>, quads: &mut Vec<F>) {
         for s in state.iter_mut() {
             let (input2, input4) = Self::single_sbox_plain_intermediate(s);
-
             squares.push(input2);
             quads.push(input4);
         }
-        (squares, quads)
     }
 
     fn plain_internal_round_intermediate(&self, state: &mut [F; T], r: usize) -> (Option<F>, F, F) {
@@ -981,11 +1019,21 @@ impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F
 
         // First set of external rounds
         for r in 0..self.params.rounds_f_beginning {
-            let (squares_, quads_, res) = if r == self.params.rounds_f_beginning - 1 && T == 16 {
-                self.external_round_matmul_intermediate(&mut state, r)
+            let res = if r == self.params.rounds_f_beginning - 1 && T == 16 {
+                // Last first-half round for T=16 needs the scalar matmul-intermediate (input[0]
+                // before the second-matrix application).
+                self.external_round_matmul_intermediate(&mut state, r, &mut squares_1, &mut quads_1)
             } else {
-                let (squares_, quads_, res, _) = self.external_round_intermediate(&mut state, r);
-                (squares_, quads_, res)
+                // For all other rounds the matmul-external Vec was previously discarded by the
+                // caller, so request the cheaper `matmul_external` path with `collect_matmul=false`.
+                let (sbox_0, _) = self.external_round_intermediate(
+                    &mut state,
+                    r,
+                    &mut squares_1,
+                    &mut quads_1,
+                    false,
+                );
+                sbox_0
             };
 
             if r != self.params.rounds_f_beginning - 1 || (T != 4 && T != 16) {
@@ -997,8 +1045,6 @@ impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F
                 squares_1.push(res);
                 quads_1.push(F::default());
             }
-            squares_1.extend(squares_);
-            quads_1.extend(quads_);
         }
 
         // Internal rounds
@@ -1027,16 +1073,27 @@ impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (squares_, quads_, sbox_0, matmul_external) =
-                self.external_round_intermediate(&mut state, r);
+            // Only the very last round needs the matmul-external `Vec<F>` for the trace; for the
+            // others we request `collect_matmul=false` so the cheaper plain `matmul_external`
+            // runs and no `Vec<F>` is allocated.
+            let is_last = r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1;
+            let (sbox_0, matmul_external) = self.external_round_intermediate(
+                &mut state,
+                r,
+                &mut squares_3,
+                &mut quads_3,
+                is_last,
+            );
 
-            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
-                squares_3.push(sbox_0);
-                quads_3.push(F::zero());
-            }
-            squares_3.extend(squares_);
-            quads_3.extend(quads_);
-            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+            if is_last {
+                // The last-round sbox_0 was pushed AFTER the squares_/quads_ in the old layout;
+                // we must place sbox_0 BEFORE the freshly pushed T elements to preserve trace
+                // ordering. The push from `external_round_intermediate` already added T entries
+                // — undo+reinsert by inserting at the right offset.
+                let inserted = T;
+                let insert_at = squares_3.len() - inserted;
+                squares_3.insert(insert_at, sbox_0);
+                quads_3.insert(insert_at, F::zero());
                 last_matmul_external = matmul_external;
                 break;
             }
