@@ -64,3 +64,7 @@ harness = false
 [[bench]]
 name = "poseidon2_mpc_tcp"
 harness = false
+
+[[bench]]
+name = "poseidon2_circom_accelerator"
+harness = false
