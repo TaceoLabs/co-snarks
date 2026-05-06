@@ -1223,15 +1223,10 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
     )> {
         assert!(T == 2 || T == 3 || T == 4 || T == 16);
         assert!(T2 == T * BATCH_SIZE);
+        let offset = precomp.offset;
         let mut state = state;
-        // Precompute the maximum number of elements needed for each vector
         let num_states = match T {
-            2 => {
-                T * (self.params.rounds_f_beginning - 1)
-                    + T * self.params.rounds_f_end
-                    + self.params.rounds_p
-            }
-            3 => {
+            2 | 3 => {
                 T * (self.params.rounds_f_beginning - 1)
                     + T * self.params.rounds_f_end
                     + self.params.rounds_p
@@ -1244,19 +1239,21 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         };
         let mut final_mul: [[Option<Rep3PrimeFieldShare<F>>; 2]; BATCH_SIZE] =
             array::from_fn(|_| [None, None]);
-        let mut squares_1: [_; BATCH_SIZE] =
-            array::from_fn(|_| Vec::with_capacity(T * self.params.rounds_f_beginning));
-        let mut quads_1: [_; BATCH_SIZE] =
-            array::from_fn(|_| Vec::with_capacity(T * self.params.rounds_f_beginning));
+        let mut squares_1: [_; BATCH_SIZE] = array::from_fn(|_| {
+            Vec::with_capacity(T * self.params.rounds_f_beginning + usize::from(T == 16))
+        });
+        let mut quads_1: [_; BATCH_SIZE] = array::from_fn(|_| {
+            Vec::with_capacity(T * self.params.rounds_f_beginning + usize::from(T == 16))
+        });
         let mut squares_2: [_; BATCH_SIZE] =
             array::from_fn(|_| Vec::with_capacity(self.params.rounds_p));
         let mut quads_2: [_; BATCH_SIZE] =
             array::from_fn(|_| Vec::with_capacity(self.params.rounds_p));
         let mut squares_3: [_; BATCH_SIZE] =
-            array::from_fn(|_| Vec::with_capacity(T * self.params.rounds_f_end));
+            array::from_fn(|_| Vec::with_capacity(T * self.params.rounds_f_end + 1));
         let mut quads_3: [_; BATCH_SIZE] =
-            array::from_fn(|_| Vec::with_capacity(T * self.params.rounds_f_end));
-        let mut states: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(num_states));
+            array::from_fn(|_| Vec::with_capacity(T * self.params.rounds_f_end + 1));
+        let mut states: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(num_states + 1));
 
         let mut traces: [_; BATCH_SIZE] = array::from_fn(|_| {
             if T == 2 {
@@ -1313,13 +1310,6 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                     states_.push(state_[0]);
                     states_.push(state_[3]);
                 }
-            } else if r == self.params.rounds_f_beginning - 1 && T == 16 {
-                for (squares_1_, res_, quads_1_) in
-                    izip!(squares_1.iter_mut(), res.iter(), quads_1.iter_mut(),)
-                {
-                    squares_1_.push(*res_);
-                    quads_1_.push(Rep3PrimeFieldShare::<F>::default());
-                }
             }
             for (squares_1_, squares__, quads_1_, quads__) in izip!(
                 squares_1.iter_mut(),
@@ -1329,6 +1319,14 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
             ) {
                 squares_1_.extend(squares__);
                 quads_1_.extend(quads__);
+            }
+            if r == self.params.rounds_f_beginning - 1 && T == 16 {
+                for (squares_1_, res_, quads_1_) in
+                    izip!(squares_1.iter_mut(), res.iter(), quads_1.iter_mut(),)
+                {
+                    squares_1_.push(*res_);
+                    quads_1_.push(Rep3PrimeFieldShare::<F>::default());
+                }
             }
         }
 
@@ -1501,6 +1499,8 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
             }
         }
 
+        debug_assert_eq!(precomp.offset - offset, self.num_sbox() * BATCH_SIZE);
+
         Ok((state, traces))
     }
 
@@ -1516,16 +1516,12 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         assert!(T == 2 || T == 3 || T == 4 || T == 16);
         assert!(state.len().is_multiple_of(T));
         let t2 = state.len() / T;
+        let offset = precomp.offset;
 
         let mut state = state;
         // Precompute the maximum number of elements needed for each vector
         let num_states = match T {
-            2 => {
-                T * (self.params.rounds_f_beginning - 1)
-                    + T * self.params.rounds_f_end
-                    + self.params.rounds_p
-            }
-            3 => {
+            2 | 3 => {
                 T * (self.params.rounds_f_beginning - 1)
                     + T * self.params.rounds_f_end
                     + self.params.rounds_p
@@ -1537,13 +1533,15 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
             _ => 0,
         };
         let mut final_mul = vec![[None, None]; t2];
-        let mut squares_1 = vec![Vec::with_capacity(T * self.params.rounds_f_beginning); t2];
-        let mut quads_1 = vec![Vec::with_capacity(T * self.params.rounds_f_beginning); t2];
+        let mut squares_1 =
+            vec![Vec::with_capacity(T * self.params.rounds_f_beginning + usize::from(T == 16)); t2];
+        let mut quads_1 =
+            vec![Vec::with_capacity(T * self.params.rounds_f_beginning + usize::from(T == 16)); t2];
         let mut squares_2 = vec![Vec::with_capacity(self.params.rounds_p); t2];
         let mut quads_2 = vec![Vec::with_capacity(self.params.rounds_p); t2];
-        let mut squares_3 = vec![Vec::with_capacity(T * self.params.rounds_f_end); t2];
-        let mut quads_3 = vec![Vec::with_capacity(T * self.params.rounds_f_end); t2];
-        let mut states = vec![Vec::with_capacity(num_states); t2];
+        let mut squares_3 = vec![Vec::with_capacity(T * self.params.rounds_f_end + 1); t2];
+        let mut quads_3 = vec![Vec::with_capacity(T * self.params.rounds_f_end + 1); t2];
+        let mut states = vec![Vec::with_capacity(num_states + 1); t2];
 
         let mut traces = if T == 2 {
             vec![vec![Rep3PrimeFieldShare::<F>::default(); WITNESS_INDICES_SIZE_T2]; t2]
@@ -1600,13 +1598,6 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                     states_.push(state_[0]);
                     states_.push(state_[3]);
                 }
-            } else if r == self.params.rounds_f_beginning - 1 && T == 16 {
-                for (squares_1_, res_, quads_1_) in
-                    izip!(squares_1.iter_mut(), res.iter(), quads_1.iter_mut(),)
-                {
-                    squares_1_.push(*res_);
-                    quads_1_.push(Rep3PrimeFieldShare::<F>::default());
-                }
             }
             for (squares_1_, squares__, quads_1_, quads__) in izip!(
                 squares_1.iter_mut(),
@@ -1616,6 +1607,14 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
             ) {
                 squares_1_.extend(squares__);
                 quads_1_.extend(quads__);
+            }
+            if r == self.params.rounds_f_beginning - 1 && T == 16 {
+                for (squares_1_, res_, quads_1_) in
+                    izip!(squares_1.iter_mut(), res.iter(), quads_1.iter_mut(),)
+                {
+                    squares_1_.push(*res_);
+                    quads_1_.push(Rep3PrimeFieldShare::<F>::default());
+                }
             }
         }
 
@@ -1784,6 +1783,177 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
             }
         }
 
+        debug_assert_eq!(precomp.offset - offset, self.num_sbox() * t2);
+
         Ok((state, traces))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocols::rep3::{self, Rep3State, conversion::A2BType};
+    use ark_bn254::Fr;
+    use ark_ff::UniformRand;
+    use mpc_net::local::LocalNetwork;
+    use rand::SeedableRng;
+    use rand_chacha::ChaCha20Rng;
+    use std::{array, sync::mpsc};
+
+    fn assert_rep3_packed_matches_plain<const T: usize, const T2: usize, const BATCH_SIZE: usize>()
+    where
+        Poseidon2<Fr, T, 5>: Default
+            + CircomTracePlainHasher<Fr, T>
+            + CircomTraceBatchedHasher<
+                Fr,
+                T,
+                Precomputation = Poseidon2Precomputations<Rep3PrimeFieldShare<Fr>>,
+            >,
+    {
+        assert_eq!(T2, T * BATCH_SIZE);
+        let mut rng = ChaCha20Rng::from_seed([42u8; 32]);
+        let input: [Fr; T2] = array::from_fn(|_| Fr::rand(&mut rng));
+        let input_shares = rep3::share_field_elements(&input, &mut rng);
+        let nets = LocalNetwork::new_3_parties();
+        let (tx, rx) = mpsc::channel();
+
+        for (net, share) in izip!(nets.into_iter(), input_shares.into_iter()) {
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let poseidon = Poseidon2::<Fr, T, 5>::default();
+                let mut precomp = poseidon
+                    .precompute_rep3(BATCH_SIZE, &net, &mut state)
+                    .unwrap();
+                let share_arr: [Rep3PrimeFieldShare<Fr>; T2] = share.try_into().expect("len = T2");
+                let (out, trace) = poseidon
+                    .rep3_permutation_in_place_with_precomputation_intermediate_packed::<
+                        _,
+                        T2,
+                        BATCH_SIZE,
+                    >(share_arr, &mut precomp, &net)
+                    .unwrap();
+                tx.send((net.id(), out.to_vec(), trace.to_vec())).unwrap();
+            });
+        }
+        drop(tx);
+
+        let mut party_outs: [Option<Vec<Rep3PrimeFieldShare<Fr>>>; 3] = array::from_fn(|_| None);
+        let mut party_traces: [Option<Vec<Vec<Rep3PrimeFieldShare<Fr>>>>; 3] =
+            array::from_fn(|_| None);
+        for _ in 0..3 {
+            let (id, out, trace) = rx.recv().unwrap();
+            party_outs[id] = Some(out);
+            party_traces[id] = Some(trace);
+        }
+
+        let [out0, out1, out2] = party_outs.map(Option::unwrap);
+        let combined_out = rep3::combine_field_elements(&out0, &out1, &out2);
+        let [trace0, trace1, trace2] = party_traces.map(Option::unwrap);
+
+        let poseidon = Poseidon2::<Fr, T, 5>::default();
+        for batch_idx in 0..BATCH_SIZE {
+            let plain_input = array::from_fn(|j| input[batch_idx * T + j]);
+            let (plain_out, plain_trace) = poseidon
+                .plain_permutation_intermediate(plain_input)
+                .unwrap();
+
+            assert_eq!(
+                &combined_out[batch_idx * T..(batch_idx + 1) * T],
+                plain_out.as_slice()
+            );
+
+            let combined_trace = rep3::combine_field_elements(
+                &trace0[batch_idx],
+                &trace1[batch_idx],
+                &trace2[batch_idx],
+            );
+            assert_eq!(combined_trace, plain_trace);
+        }
+    }
+
+    fn assert_rep3_vec_matches_plain<const T: usize, const T2: usize>()
+    where
+        Poseidon2<Fr, T, 5>: Default
+            + CircomTracePlainHasher<Fr, T>
+            + CircomTraceBatchedHasher<
+                Fr,
+                T,
+                Precomputation = Poseidon2Precomputations<Rep3PrimeFieldShare<Fr>>,
+            >,
+    {
+        assert!(T2.is_multiple_of(T));
+        let batch_size = T2 / T;
+        let mut rng = ChaCha20Rng::from_seed([43u8; 32]);
+        let input: [Fr; T2] = array::from_fn(|_| Fr::rand(&mut rng));
+        let input_shares = rep3::share_field_elements(&input, &mut rng);
+        let nets = LocalNetwork::new_3_parties();
+        let (tx, rx) = mpsc::channel();
+
+        for (net, share) in izip!(nets.into_iter(), input_shares.into_iter()) {
+            let tx = tx.clone();
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let poseidon = Poseidon2::<Fr, T, 5>::default();
+                let mut precomp = poseidon
+                    .precompute_rep3(batch_size, &net, &mut state)
+                    .unwrap();
+                let (out, trace) = poseidon
+                    .rep3_permutation_in_place_with_precomputation_intermediate_vec(
+                        share,
+                        &mut precomp,
+                        &net,
+                    )
+                    .unwrap();
+                tx.send((net.id(), out, trace)).unwrap();
+            });
+        }
+        drop(tx);
+
+        let mut party_outs: [Option<Vec<Rep3PrimeFieldShare<Fr>>>; 3] = array::from_fn(|_| None);
+        let mut party_traces: [Option<Vec<Vec<Rep3PrimeFieldShare<Fr>>>>; 3] =
+            array::from_fn(|_| None);
+        for _ in 0..3 {
+            let (id, out, trace) = rx.recv().unwrap();
+            party_outs[id] = Some(out);
+            party_traces[id] = Some(trace);
+        }
+
+        let [out0, out1, out2] = party_outs.map(Option::unwrap);
+        let combined_out = rep3::combine_field_elements(&out0, &out1, &out2);
+        let [trace0, trace1, trace2] = party_traces.map(Option::unwrap);
+
+        let poseidon = Poseidon2::<Fr, T, 5>::default();
+        for batch_idx in 0..batch_size {
+            let plain_input = array::from_fn(|j| input[batch_idx * T + j]);
+            let (plain_out, plain_trace) = poseidon
+                .plain_permutation_intermediate(plain_input)
+                .unwrap();
+
+            assert_eq!(
+                &combined_out[batch_idx * T..(batch_idx + 1) * T],
+                plain_out.as_slice()
+            );
+
+            let combined_trace = rep3::combine_field_elements(
+                &trace0[batch_idx],
+                &trace1[batch_idx],
+                &trace2[batch_idx],
+            );
+            assert_eq!(combined_trace, plain_trace);
+        }
+    }
+
+    #[test]
+    fn rep3_batched_intermediate_matches_plain_trace() {
+        assert_rep3_packed_matches_plain::<2, 4, 2>();
+        assert_rep3_packed_matches_plain::<3, 6, 2>();
+        assert_rep3_packed_matches_plain::<4, 8, 2>();
+        assert_rep3_packed_matches_plain::<16, 32, 2>();
+
+        assert_rep3_vec_matches_plain::<2, 4>();
+        assert_rep3_vec_matches_plain::<3, 6>();
+        assert_rep3_vec_matches_plain::<4, 8>();
+        assert_rep3_vec_matches_plain::<16, 32>();
     }
 }
