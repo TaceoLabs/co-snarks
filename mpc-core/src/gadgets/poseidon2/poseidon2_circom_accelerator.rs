@@ -360,6 +360,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         r: usize,
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
+        collect_matmul: bool,
     ) -> eyre::Result<(
         [Vec<Rep3PrimeFieldShare<F>>; BATCH_SIZE],
         [Vec<Rep3PrimeFieldShare<F>>; BATCH_SIZE],
@@ -373,7 +374,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_packed(state, precomp, net)?;
         let sboxes_0: [_; BATCH_SIZE] = array::from_fn(|i| state[i * T]);
-        let matmul_external = if T == 16 {
+        let matmul_external = if T == 16 && collect_matmul {
             let mut res = Vec::with_capacity(state.len() / T);
             for state_chunk in state.chunks_exact_mut(T) {
                 res.push(Self::matmul_external_rep3_intermediate_t16(
@@ -433,6 +434,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         r: usize,
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
+        collect_matmul: bool,
     ) -> eyre::Result<(
         Vec<Vec<Rep3PrimeFieldShare<F>>>,
         Vec<Vec<Rep3PrimeFieldShare<F>>>,
@@ -446,7 +448,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_vec(state, precomp, net)?;
         let sboxes_0 = state.iter().step_by(T).cloned().collect::<Vec<_>>();
-        let matmul_external = if T == 16 {
+        let matmul_external = if T == 16 && collect_matmul {
             let mut res = Vec::with_capacity(state.len() / T);
             for state_chunk in state.chunks_exact_mut(T) {
                 res.push(Self::matmul_external_rep3_intermediate_t16(
@@ -541,8 +543,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let y = arithmetic::open_vec(input, net)?;
         let id = PartyID::try_from(net.id())?;
 
-        let mut squares: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(input.len()));
-        let mut quads: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(input.len()));
+        let mut squares: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(T));
+        let mut quads: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(T));
         let mut squ;
         let mut quad;
         let mut count = 0;
@@ -589,8 +591,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let y = arithmetic::open_vec(input, net)?;
         let id = PartyID::try_from(net.id())?;
 
-        let mut squares = vec![Vec::with_capacity(input.len()); t2];
-        let mut quads = vec![Vec::with_capacity(input.len()); t2];
+        let mut squares = vec![Vec::with_capacity(T); t2];
+        let mut quads = vec![Vec::with_capacity(T); t2];
         let mut squ;
         let mut quad;
         let mut count = 0;
@@ -745,7 +747,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
     ) -> eyre::Result<(Vec<Rep3PrimeFieldShare<F>>, Vec<Rep3PrimeFieldShare<F>>)> {
-        let num_parallel = input.len() / T;
         assert_eq!(D, 5);
 
         for (i, inp) in input.iter_mut().enumerate() {
@@ -756,8 +757,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // Open
         let y = arithmetic::open_vec(input, net)?;
-        let mut squares = Vec::with_capacity(num_parallel);
-        let mut quads = Vec::with_capacity(num_parallel);
+        let mut squares = Vec::with_capacity(input.len());
+        let mut quads = Vec::with_capacity(input.len());
         let mut squ;
         let mut quad;
         for (i, (inp, y)) in izip!(input.iter_mut(), y.iter()).enumerate() {
@@ -1291,18 +1292,18 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
 
         // First set of external rounds
         for r in 0..self.params.rounds_f_beginning {
-            let (squares_, quads_, res): ([_; BATCH_SIZE], [_; BATCH_SIZE], [_; BATCH_SIZE]) = if r
-                == self.params.rounds_f_beginning - 1
-                && T == 16
-            {
-                self.rep3_external_round_precomp_matmul_intermediate_packed(
-                    &mut state, r, precomp, net,
-                )?
-            } else {
-                let (squares_, quads_, res, _) = self
-                    .rep3_external_round_precomp_intermediate_packed(&mut state, r, precomp, net)?;
-                (squares_, quads_, res)
-            };
+            let (squares_, quads_, res): ([_; BATCH_SIZE], [_; BATCH_SIZE], [_; BATCH_SIZE]) =
+                if r == self.params.rounds_f_beginning - 1 && T == 16 {
+                    self.rep3_external_round_precomp_matmul_intermediate_packed(
+                        &mut state, r, precomp, net,
+                    )?
+                } else {
+                    let (squares_, quads_, res, _) = self
+                        .rep3_external_round_precomp_intermediate_packed(
+                            &mut state, r, precomp, net, false,
+                        )?;
+                    (squares_, quads_, res)
+                };
             if r != self.params.rounds_f_beginning - 1 || (T != 4 && T != 16) {
                 for (states_, state_) in states.iter_mut().zip(state.chunks(T)) {
                     states_.extend_from_slice(state_);
@@ -1395,14 +1396,16 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
+            let is_last = r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1;
             let (squares_, quads_, sboxes_0, matmul_external): (
                 [_; BATCH_SIZE],
                 [_; BATCH_SIZE],
                 [_; BATCH_SIZE],
                 Option<[Vec<_>; BATCH_SIZE]>,
-            ) =
-                self.rep3_external_round_precomp_intermediate_packed(&mut state, r, precomp, net)?;
-            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+            ) = self.rep3_external_round_precomp_intermediate_packed(
+                &mut state, r, precomp, net, is_last,
+            )?;
+            if is_last {
                 for (squares_3_, sbox_0) in squares_3.iter_mut().zip(sboxes_0.iter()) {
                     squares_3_.push(*sbox_0);
                 }
@@ -1419,7 +1422,7 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                 squares_3_.extend(squares__);
                 quads_3_.extend(quads__);
             }
-            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+            if is_last {
                 last_matmul_external = matmul_external;
                 break;
             }
@@ -1511,7 +1514,8 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         Vec<Vec<Rep3PrimeFieldShare<F>>>,
     )> {
         assert!(T == 2 || T == 3 || T == 4 || T == 16);
-        let t2 = state.len();
+        assert!(state.len().is_multiple_of(T));
+        let t2 = state.len() / T;
 
         let mut state = state;
         // Precompute the maximum number of elements needed for each vector
@@ -1581,8 +1585,10 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                     &mut state, r, precomp, net,
                 )?
             } else {
-                let (squares_, quads_, res, _) =
-                    self.rep3_external_round_precomp_intermediate_vec(&mut state, r, precomp, net)?;
+                let (squares_, quads_, res, _) = self
+                    .rep3_external_round_precomp_intermediate_vec(
+                        &mut state, r, precomp, net, false,
+                    )?;
                 (squares_, quads_, res)
             };
             if r != self.params.rounds_f_beginning - 1 || (T != 4 && T != 16) {
@@ -1677,9 +1683,12 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (squares_, quads_, sboxes_0, matmul_external) =
-                self.rep3_external_round_precomp_intermediate_vec(&mut state, r, precomp, net)?;
-            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+            let is_last = r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1;
+            let (squares_, quads_, sboxes_0, matmul_external) = self
+                .rep3_external_round_precomp_intermediate_vec(
+                    &mut state, r, precomp, net, is_last,
+                )?;
+            if is_last {
                 for (squares_3_, sbox_0) in squares_3.iter_mut().zip(sboxes_0.iter()) {
                     squares_3_.push(*sbox_0);
                 }
@@ -1696,7 +1705,7 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                 squares_3_.extend(squares__);
                 quads_3_.extend(quads__);
             }
-            if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
+            if is_last {
                 last_matmul_external = matmul_external;
                 break;
             }

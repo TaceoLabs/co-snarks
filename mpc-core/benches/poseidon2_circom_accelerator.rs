@@ -24,7 +24,7 @@ use ark_ff::UniformRand;
 use criterion::*;
 use itertools::izip;
 use mpc_core::{
-    gadgets::poseidon2::{CircomTracePlainHasher, Poseidon2},
+    gadgets::poseidon2::{CircomTraceBatchedHasher, CircomTracePlainHasher, Poseidon2},
     protocols::rep3::{self, Rep3PrimeFieldShare, Rep3State, conversion::A2BType},
 };
 use mpc_net::local::LocalNetwork;
@@ -34,6 +34,8 @@ use rand_chacha::ChaCha20Rng;
 const NUM_PARTIES: usize = 3;
 /// Cap on perms per precompute batch to keep memory bounded for large `iters` from criterion.
 const PRECOMP_BATCH_CAP: usize = 64;
+/// Number of Poseidon2 permutations per packed accelerator call.
+const PACKED_BATCH_SIZE: usize = 8;
 
 // ---- Plain (single-party) ---------------------------------------------------
 
@@ -81,6 +83,13 @@ where
 
 fn rep3_input_shares<const T: usize>(rng: &mut ChaCha20Rng) -> [Vec<Rep3PrimeFieldShare<Fr>>; 3] {
     let input: [Fr; T] = array::from_fn(|_| Fr::rand(rng));
+    rep3::share_field_elements(&input, rng)
+}
+
+fn rep3_packed_input_shares<const T2: usize>(
+    rng: &mut ChaCha20Rng,
+) -> [Vec<Rep3PrimeFieldShare<Fr>>; 3] {
+    let input: [Fr; T2] = array::from_fn(|_| Fr::rand(rng));
     rep3::share_field_elements(&input, rng)
 }
 
@@ -158,6 +167,71 @@ where
     group.finish();
 }
 
+fn bench_rep3_intermediate_packed<const T: usize, const T2: usize>(c: &mut Criterion, label: &str)
+where
+    Poseidon2<Fr, T, 5>: Default
+        + CircomTraceBatchedHasher<
+            Fr,
+            T,
+            Precomputation = mpc_core::gadgets::poseidon2::Poseidon2Precomputations<
+                Rep3PrimeFieldShare<Fr>,
+            >,
+        >,
+{
+    assert_eq!(T2, T * PACKED_BATCH_SIZE);
+    let mut rng = ChaCha20Rng::from_seed([0u8; 32]);
+    let input_shares = rep3_packed_input_shares::<T2>(&mut rng);
+
+    let mut group = c.benchmark_group(label);
+    group.throughput(Throughput::Elements(PACKED_BATCH_SIZE as u64));
+
+    group.bench_function(
+        BenchmarkId::new(
+            "rep3_permutation_with_precomputation_intermediate_packed",
+            PACKED_BATCH_SIZE,
+        ),
+        |b| {
+            b.iter_custom(|iters| {
+                let nets = LocalNetwork::new_3_parties();
+                let (done_tx, done_rx) = mpsc::channel::<Duration>();
+
+                for (net, share) in izip!(nets.into_iter(), input_shares.clone().into_iter()) {
+                    let done_tx = done_tx.clone();
+                    std::thread::spawn(move || {
+                        let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                        let poseidon = Poseidon2::<Fr, T, 5>::default();
+                        let share_arr: [Rep3PrimeFieldShare<Fr>; T2] =
+                            share.try_into().expect("len = T2");
+
+                        let elapsed = run_in_precomp_batches(iters, |batch| {
+                            let mut precomp = poseidon
+                                .precompute_rep3(batch * PACKED_BATCH_SIZE, &net, &mut state)
+                                .unwrap();
+                            let t0 = Instant::now();
+                            for _ in 0..batch {
+                                let (s, trace) = poseidon
+                                    .rep3_permutation_in_place_with_precomputation_intermediate_packed::<
+                                        _,
+                                        T2,
+                                        PACKED_BATCH_SIZE,
+                                    >(share_arr, &mut precomp, &net)
+                                    .unwrap();
+                                black_box((s, trace));
+                            }
+                            t0.elapsed()
+                        });
+                        done_tx.send(elapsed).unwrap();
+                    });
+                }
+
+                collect_max_elapsed(&done_rx)
+            });
+        },
+    );
+
+    group.finish();
+}
+
 // ---- entry point -----------------------------------------------------------
 
 fn poseidon2_circom_accelerator_bench(c: &mut Criterion) {
@@ -170,6 +244,11 @@ fn poseidon2_circom_accelerator_bench(c: &mut Criterion) {
     bench_rep3_intermediate::<3>(c, "rep3_circom_accelerator_t3");
     bench_rep3_intermediate::<4>(c, "rep3_circom_accelerator_t4");
     bench_rep3_intermediate::<16>(c, "rep3_circom_accelerator_t16");
+
+    bench_rep3_intermediate_packed::<2, 16>(c, "rep3_circom_accelerator_packed_t2");
+    bench_rep3_intermediate_packed::<3, 24>(c, "rep3_circom_accelerator_packed_t3");
+    bench_rep3_intermediate_packed::<4, 32>(c, "rep3_circom_accelerator_packed_t4");
+    bench_rep3_intermediate_packed::<16, 128>(c, "rep3_circom_accelerator_packed_t16");
 }
 
 criterion_group! {
