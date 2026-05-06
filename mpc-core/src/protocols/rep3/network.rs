@@ -89,7 +89,13 @@ pub trait Rep3NetworkExt: Network {
         Ok((prev, next))
     }
 
-    /// Broadcast data to the other two parties and receive data from them
+    /// Broadcast data to the other two parties and receive data from them.
+    ///
+    /// Sequential implementation: serialize once, send to both peers, then recv from both. Avoids
+    /// the per-call `mpc_net::join` thread spawn in favor of relying on send buffers (bounded
+    /// channels for `LocalNetwork`, OS socket buffers for TCP/QUIC) to hold messages until peers
+    /// are ready to recv. For payloads small enough to fit in those buffers — which is the case
+    /// for every poseidon2-sized state and most other MPC inner loops — this is strictly cheaper.
     #[inline(always)]
     fn broadcast_many<F: CanonicalSerialize + CanonicalDeserialize + Send>(
         &self,
@@ -98,11 +104,19 @@ pub trait Rep3NetworkExt: Network {
         let id = PartyID::try_from(self.id())?;
         let next_id = id.next();
         let prev_id = id.prev();
-        let (prev_res, next_res) = mpc_net::join(
-            || self.send_and_recv_many(prev_id, data, prev_id),
-            || self.send_and_recv_many(next_id, data, next_id),
-        );
-        Ok((prev_res?, next_res?))
+
+        let size = data.serialized_size(Compress::No);
+        let mut ser = Vec::with_capacity(size);
+        data.serialize_uncompressed(&mut ser)?;
+
+        self.send(next_id.into(), &ser)?;
+        self.send(prev_id.into(), &ser)?;
+
+        let prev_raw = self.recv(prev_id.into())?;
+        let next_raw = self.recv(next_id.into())?;
+        let prev_res = Vec::<F>::deserialize_uncompressed_unchecked(&prev_raw[..])?;
+        let next_res = Vec::<F>::deserialize_uncompressed_unchecked(&next_raw[..])?;
+        Ok((prev_res, next_res))
     }
 
     /// Sends data to the target party.

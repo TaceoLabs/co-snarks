@@ -320,7 +320,7 @@ fn poseidon2_mpc_bench(c: &mut Criterion) {
 
 criterion_group! {
     name = benches;
-    config = Criterion::default().sample_size(20);
+    config = Criterion::default().sample_size(50);
     targets = poseidon2_mpc_bench
 }
 criterion_main!(benches);
