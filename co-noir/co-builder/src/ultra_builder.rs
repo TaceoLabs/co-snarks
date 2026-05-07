@@ -342,10 +342,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         for (j, term1) in products.into_iter().enumerate() {
             // Replace IS_CONSTANT indices with zero indices
-            let (c_scaling, d_scaling) = (
-                big_constraint[j].c_scaling.clone(),
-                big_constraint[j].d_scaling.clone(),
-            );
+            let (c_scaling, d_scaling) = (big_constraint[j].c_scaling, big_constraint[j].d_scaling);
             self.replace_and_check_zero_scaling(&mut big_constraint[j].c, &c_scaling);
             self.replace_and_check_zero_scaling(&mut big_constraint[j].d, &d_scaling);
 
