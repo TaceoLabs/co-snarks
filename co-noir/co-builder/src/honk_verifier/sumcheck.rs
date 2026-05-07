@@ -22,6 +22,7 @@ pub struct SumcheckOutput<C: HonkCurve<TranscriptFieldType>> {
     pub(crate) challenges: Vec<FieldCT<C::ScalarField>>,
     pub(crate) claimed_evaluations: AllEntities<FieldCT<C::ScalarField>, FieldCT<C::ScalarField>>,
     pub(crate) claimed_libra_evaluation: Option<FieldCT<C::ScalarField>>,
+    pub(crate) claimed_gemini_masking_evaluation: Option<FieldCT<C::ScalarField>>,
 }
 
 pub struct SumcheckVerifier;
@@ -45,11 +46,12 @@ impl SumcheckVerifier {
         driver: &mut T,
     ) -> HonkProofResult<SumcheckOutput<C>> {
         let one = FieldCT::from(C::ScalarField::ONE);
+        let is_zk = has_zk == ZeroKnowledge::Yes;
 
         let mut gate_separators =
             GateSeparatorPolynomial::new_without_products(gate_challenges.to_vec());
 
-        let libra_challenge = if has_zk == ZeroKnowledge::Yes {
+        let libra_challenge = if is_zk {
             // If running zero-knowledge sumcheck the target total sum is corrected by the claimed sum of libra masking
             // multivariate over the hypercube
             let libra_total_sum = transcript.receive_fr_from_prover("Libra:Sum".to_owned())?;
@@ -107,10 +109,15 @@ impl SumcheckVerifier {
         }
         // Extract claimed evaluations of Libra univariates and compute their sum multiplied by the Libra challenge
         // Final round
-        let transcript_evaluations = transcript
-            .receive_n_from_prover("Sumcheck:evaluations".to_owned(), NUM_ALL_ENTITIES)?;
+        let eval_offset = usize::from(is_zk);
+        let transcript_evaluations = transcript.receive_n_from_prover(
+            "Sumcheck:evaluations".to_owned(),
+            NUM_ALL_ENTITIES + eval_offset,
+        )?;
+        let claimed_gemini_masking_evaluation = is_zk.then(|| transcript_evaluations[0].clone());
 
-        let (precomputed, witness) = transcript_evaluations.split_at(PRECOMPUTED_ENTITIES_SIZE);
+        let (precomputed, witness) =
+            transcript_evaluations[eval_offset..].split_at(PRECOMPUTED_ENTITIES_SIZE);
         let claimed_evaluations =
             AllEntities::from_elements(witness.to_vec(), precomputed.to_vec());
 
@@ -128,7 +135,7 @@ impl SumcheckVerifier {
 
         // For ZK Flavors: compute the evaluation of the Row Disabling Polynomial at the sumcheck challenge and of the
         // libra univariate used to hide the contribution from the actual Honk relation
-        let libra_evaluation = if has_zk == ZeroKnowledge::Yes {
+        let libra_evaluation = if is_zk {
             // Compute the evaluations of the polynomial (1 - \sum L_i) where the sum is for i corresponding to the
             // rows where all sumcheck relations are disabled
             full_honk_purported_value = full_honk_purported_value.multiply(
@@ -161,6 +168,7 @@ impl SumcheckVerifier {
             challenges: multivariate_challenge,
             claimed_evaluations,
             claimed_libra_evaluation: libra_evaluation,
+            claimed_gemini_masking_evaluation,
         })
     }
 

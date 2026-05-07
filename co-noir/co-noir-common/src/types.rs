@@ -20,6 +20,8 @@ pub struct RelationParameters<F: Default> {
     pub eta_2: F,
     pub eta_3: F,
     pub beta: F,
+    pub beta_sqr: F,
+    pub beta_cube: F,
     pub gamma: F,
     pub public_input_delta: F,
 }

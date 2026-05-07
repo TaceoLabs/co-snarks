@@ -3,11 +3,10 @@ use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
-use co_builder::keys::proving_key::ProvingKeyTrait;
+use co_builder::keys::proving_key::{self};
 use co_builder::prelude::{HonkRecursion, UltraCircuitBuilder};
 use co_noir::Bn254G1;
 use co_noir_common::crs::ProverCrs;
-use co_noir_common::keys::proving_key::ProvingKey;
 use co_noir_common::keys::verification_key::VerifyingKey;
 use co_noir_common::{crs::parse::CrsParser, types::ZeroKnowledge};
 use co_noir_common::{mpc::plain::PlainUltraHonkDriver, transcript::Poseidon2Sponge};
@@ -229,7 +228,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let (prover_crs, verifier_crs) = crs.split();
     // Create the proving key and the barretenberg-compatible verifying key
     let (proving_key, vk_barretenberg) =
-        ProvingKey::create_keys_barretenberg(0, builder, &prover_crs, &mut driver)
+        proving_key::create_keys_barretenberg(0, builder, &prover_crs, &mut driver)
             .context("While creating keys")?;
 
     // Write the vk to a file

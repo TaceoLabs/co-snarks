@@ -6,12 +6,11 @@ use crate::{
     transcript_ct::{TranscriptCT, TranscriptHasherCT},
     types::{big_group::BigGroup, field_ct::FieldCT},
 };
-use ark_ff::AdditiveGroup;
-use ark_ff::Field;
 use ark_ff::Zero;
+use ark_ff::{AdditiveGroup, Field};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{
-    constants::{NUM_INTERLEAVING_CLAIMS, NUM_LIBRA_COMMITMENTS},
+    constants::NUM_LIBRA_COMMITMENTS,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
     polynomials::entities::WITNESS_ENTITIES_SIZE,
@@ -47,22 +46,22 @@ impl ShpleminiVerifier {
         consistency_checked: &mut bool,
         libra_commitments: Option<&[BigGroup<C::ScalarField, T>; NUM_LIBRA_COMMITMENTS]>,
         libra_univariate_evaluation: Option<&FieldCT<C::ScalarField>>,
+        gemini_masking_commitment: Option<&BigGroup<C::ScalarField, T>>,
+        gemini_masking_evaluation: Option<&FieldCT<C::ScalarField>>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<BatchOpeningClaim<C, T>> {
         let has_zk = ZeroKnowledge::from(libra_commitments.is_some());
         let virtual_log_n = multivariate_challenge.len();
         let mut batched_evaluation = FieldCT::from(C::ScalarField::ZERO);
-
         let mut hiding_polynomial_commitment = BigGroup::default();
         if has_zk == ZeroKnowledge::Yes {
-            hiding_polynomial_commitment = transcript.receive_point_from_prover(
-                "Gemini:masking_poly_comm".to_string(),
-                builder,
-                driver,
-            )?;
-            batched_evaluation =
-                transcript.receive_fr_from_prover("Gemini:masking_poly_eval".to_owned())?;
+            hiding_polynomial_commitment = gemini_masking_commitment
+                .expect("Gemini masking commitment must be received during Oink")
+                .clone();
+            batched_evaluation = gemini_masking_evaluation
+                .expect("Gemini masking evaluation must be received during Sumcheck")
+                .clone();
         }
 
         // Get the challenge ρ to batch commitments to multilinear polynomials and their shifts
@@ -165,17 +164,14 @@ impl ShpleminiVerifier {
             driver,
         )?;
 
-        if has_zk == ZeroKnowledge::Yes {
-            commitments.push(hiding_polynomial_commitment);
-            scalars.push(claim_batcher.get_unshifted_batch_scalar().neg()); // corresponds to ρ⁰
-        }
-
         // Place the commitments to prover polynomials in the commitments vector. Compute the evaluation of the
         // batched multilinear polynomial. Populate the vector of scalars for the final batch mul
 
         let mut gemini_batching_challenge_power = FieldCT::from(C::ScalarField::ONE);
         if has_zk == ZeroKnowledge::Yes {
-            // ρ⁰ is used to batch the hiding polynomial which has already been added to the commitments vector
+            commitments.push(hiding_polynomial_commitment);
+            scalars.push(claim_batcher.get_unshifted_batch_scalar().neg());
+            // ρ⁰ is used to batch the hiding polynomial which has already been added to the commitments vector.
             gemini_batching_challenge_power = gemini_batching_challenge_power.multiply(
                 &gemini_batching_challenge,
                 builder,
@@ -275,7 +271,6 @@ impl ShpleminiVerifier {
         // Finalize the batch opening claim
         commitments.push(g1_identity.clone());
         scalars.push(constant_term_accumulator);
-
         HonkProofResult::Ok(BatchOpeningClaim {
             commitments,
             scalars,
@@ -370,9 +365,6 @@ impl ShpleminiVerifier {
         let evals = fold_neg_evals.to_vec();
         let mut eval_pos_prev = batched_evaluation.clone();
         let one = FieldCT::from(C::ScalarField::ONE);
-
-        let mut zero = FieldCT::from(C::ScalarField::ZERO);
-        zero.convert_constant_to_fixed_witness(builder, driver);
 
         let mut fold_pos_evaluations = Vec::with_capacity(virtual_log_n);
 
@@ -681,8 +673,7 @@ impl ShpleminiVerifier {
         // Compute the scalars to be multiplied against the commitments
         for idx in 0..NUM_SMALL_IPA_EVALUATIONS {
             let scaling_factor = denominators[idx].multiply(
-                &shplonk_batching_challenge_powers
-                    [2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize + idx],
+                &shplonk_batching_challenge_powers[2 * virtual_log_n + idx],
                 builder,
                 driver,
             )?;
@@ -940,8 +931,8 @@ impl ShpleminiVerifier {
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<Vec<FieldCT<C::ScalarField>>> {
-        // Minimum size of denominators
-        let mut num_powers = 2 * virtual_log_n + NUM_INTERLEAVING_CLAIMS as usize;
+        // Minimum number of powers: 2 * virtual_log_n for the Gemini fold claims.
+        let mut num_powers = 2 * virtual_log_n;
 
         if has_zk {
             num_powers += NUM_SMALL_IPA_EVALUATIONS;

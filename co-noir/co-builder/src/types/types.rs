@@ -1,25 +1,21 @@
 use super::big_group::BigGroup;
-use super::field_ct::{CycleGroupCT, FieldCT};
+use super::field_ct::{CycleGroupCT, CycleScalarCT, FieldCT};
 use crate::prelude::GenericUltraCircuitBuilder;
 use crate::transcript_ct::{TranscriptCT, TranscriptFieldType, TranscriptHasherCT};
 use crate::types::field_ct::BoolCT;
-use crate::ultra_builder::UltraCircuitBuilder;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE};
 use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::keys::plain_proving_key::PlainProvingKey;
-use co_noir_common::keys::types::ActiveRegionData;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
-use co_noir_common::polynomials::polynomial::Polynomial;
 use num_bigint::BigUint;
 use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
-#[derive(Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct PolyTriple<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
@@ -55,7 +51,7 @@ pub(crate) struct AddQuad<F: PrimeField> {
     pub(crate) const_scaling: F,
 }
 
-#[derive(Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub(crate) struct MulQuad<F: PrimeField> {
     pub(crate) a: u32,
     pub(crate) b: u32,
@@ -68,6 +64,9 @@ pub(crate) struct MulQuad<F: PrimeField> {
     pub(crate) d_scaling: F,
     pub(crate) const_scaling: F,
 }
+
+pub(crate) type QuadConstraint<F> = MulQuad<F>;
+pub(crate) type BigQuadConstraint<F> = Vec<QuadConstraint<F>>;
 
 #[derive(Default, PartialEq, Eq)]
 pub(crate) struct Poseidon2ExternalGate {
@@ -88,14 +87,14 @@ pub(crate) struct Poseidon2InternalGate {
 }
 
 #[derive(Default, PartialEq, Eq)]
-pub(crate) struct EccAddGate<F: PrimeField> {
+pub(crate) struct EccAddGate {
     pub(crate) x1: u32,
     pub(crate) y1: u32,
     pub(crate) x2: u32,
     pub(crate) y2: u32,
     pub(crate) x3: u32,
     pub(crate) y3: u32,
-    pub(crate) sign_coefficient: F,
+    pub(crate) is_addition: bool, // else, subtraction
 }
 
 #[derive(Default, PartialEq, Eq)]
@@ -106,10 +105,11 @@ pub(crate) struct EccDblGate {
     pub(crate) y3: u32,
 }
 
+#[derive(Debug)]
 pub(crate) struct MemOp<F: PrimeField> {
     pub(crate) access_type: u8,
-    pub(crate) index: PolyTriple<F>,
-    pub(crate) value: PolyTriple<F>,
+    pub(crate) index: WitnessOrConstant<F>,
+    pub(crate) value: WitnessOrConstant<F>,
 }
 
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -122,7 +122,7 @@ pub(crate) enum BlockType {
     ReturnData = 3,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) struct BlockConstraint<F: PrimeField> {
     pub(crate) init: Vec<PolyTriple<F>>,
     pub(crate) trace: Vec<MemOp<F>>,
@@ -130,35 +130,26 @@ pub(crate) struct BlockConstraint<F: PrimeField> {
     pub(crate) calldata: u32,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) struct AcirFormatOriginalOpcodeIndices {
     pub(crate) logic_constraints: Vec<usize>,
     pub(crate) range_constraints: Vec<usize>,
     pub(crate) aes128_constraints: Vec<usize>,
-    // pub(crate) sha256_constraints: Vec<usize>,
     pub(crate) sha256_compression: Vec<usize>,
-    // pub(crate) schnorr_constraints: Vec<usize>,
-    // pub(crate) ecdsa_k1_constraints: Vec<usize>,
-    // pub(crate) ecdsa_r1_constraints: Vec<usize>,
+    // std::vector<size_t> ecdsa_k1_constraints;
+    // std::vector<size_t> ecdsa_r1_constraints;
     pub(crate) blake2s_constraints: Vec<usize>,
     pub(crate) blake3_constraints: Vec<usize>,
-    // pub(crate) keccak_constraints: Vec<usize>,
-    // pub(crate) keccak_permutations: Vec<usize>,
-    // pub(crate) pedersen_constraints: Vec<usize>,
-    // pub(crate) pedersen_hash_constraints: Vec<usize>,
+    // std::vector<size_t> keccak_permutations;
     pub(crate) poseidon2_constraints: Vec<usize>,
     pub(crate) multi_scalar_mul_constraints: Vec<usize>,
     pub(crate) ec_add_constraints: Vec<usize>,
-    // pub(crate) recursion_constraints: Vec<usize>,
     pub(crate) honk_recursion_constraints: Vec<usize>,
-    // pub(crate) avm_recursion_constraints: Vec<usize>,
-    // pub(crate) ivc_recursion_constraints: Vec<usize>,
-    // pub(crate) bigint_from_le_bytes_constraints: Vec<usize>,
-    // pub(crate) bigint_to_le_bytes_constraints: Vec<usize>,
-    // pub(crate) bigint_operations: Vec<usize>,
-    pub(crate) assert_equalities: Vec<usize>,
-    pub(crate) poly_triple_constraints: Vec<usize>,
+    // std::vector<size_t> avm_recursion_constraints;
+    // std::vector<size_t> hn_recursion_constraints;
+    // std::vector<size_t> chonk_recursion_constraints;
     pub(crate) quad_constraints: Vec<usize>,
+    pub(crate) big_quad_constraints: Vec<usize>,
     // Multiple opcode indices per block:
     pub(crate) block_constraints: Vec<Vec<usize>>,
 }
@@ -214,10 +205,9 @@ pub type UltraTraceBlock<F> = ExecutionTraceBlock<F, NUM_WIRES, NUM_SELECTORS>;
 pub struct ExecutionTraceBlock<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> {
     pub wires: [Vec<u32>; NUM_WIRES], // vectors of indices into a witness variables array
     pub selectors: [Vec<F>; NUM_SELECTORS],
-    pub has_ram_rom: bool,      // does the block contain RAM/ROM gates
-    pub is_pub_inputs: bool,    // is this the public inputs block
-    pub trace_offset: u32,      // where this block starts in the trace
-    pub(crate) fixed_size: u32, // Fixed size for use in structured trace
+    pub has_ram_rom: bool,   // does the block contain RAM/ROM gates
+    pub is_pub_inputs: bool, // is this the public inputs block
+    pub trace_offset: u32,   // where this block starts in the trace
 }
 
 impl<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> Default
@@ -230,7 +220,6 @@ impl<F: PrimeField, const NUM_WIRES: usize, const NUM_SELECTORS: usize> Default
             has_ram_rom: false,
             is_pub_inputs: false,
             trace_offset: 0,
-            fixed_size: 0,
         }
     }
 }
@@ -255,16 +244,11 @@ impl<F: PrimeField> Default for UltraTraceBlocks<UltraTraceBlock<F>> {
 }
 
 impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
-    pub fn compute_offsets(&mut self, is_structured: bool) {
-        assert!(
-            !is_structured,
-            "Trace is structuring not implemented for UltraHonk",
-        );
-
+    pub fn compute_offsets(&mut self) {
         let mut offset = 1; // start at 1 because the 0th row is unused for selectors for Honk
         for block in self.get_mut() {
             block.trace_offset = offset;
-            offset += block.get_fixed_size(is_structured);
+            offset += block.len() as u32;
         }
     }
 
@@ -376,14 +360,6 @@ impl<F: PrimeField> UltraTraceBlock<F> {
         self.w_4().push(idx4);
     }
 
-    pub fn get_fixed_size(&self, is_structured: bool) -> u32 {
-        if is_structured {
-            self.fixed_size
-        } else {
-            self.len() as u32
-        }
-    }
-
     pub fn len(&self) -> usize {
         self.wires[Self::W_L].len()
     }
@@ -393,16 +369,19 @@ impl<F: PrimeField> UltraTraceBlock<F> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct RangeConstraint {
     pub(crate) witness: u32,
     pub(crate) num_bits: u32,
 }
 
+#[derive(Debug)]
 pub(crate) struct Poseidon2Constraint<F: PrimeField> {
     pub(crate) state: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
 }
 
+#[derive(Debug)]
 pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) points: Vec<WitnessOrConstant<F>>,
     pub(crate) scalars: Vec<WitnessOrConstant<F>>,
@@ -412,9 +391,9 @@ pub(crate) struct MultiScalarMul<F: PrimeField> {
     pub(crate) predicate: WitnessOrConstant<F>,
     pub(crate) out_point_x: u32,
     pub(crate) out_point_y: u32,
-    pub(crate) out_point_is_infinity: u32,
 }
 
+#[derive(Debug)]
 pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) input1_x: WitnessOrConstant<F>,
     pub(crate) input1_y: WitnessOrConstant<F>,
@@ -428,15 +407,16 @@ pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) predicate: WitnessOrConstant<F>,
     pub(crate) result_x: u32,
     pub(crate) result_y: u32,
-    pub(crate) result_infinite: u32,
 }
 
+#[derive(Debug)]
 pub(crate) struct Sha256Compression<F: PrimeField> {
     pub(crate) inputs: Vec<WitnessOrConstant<F>>,
     pub(crate) hash_values: Vec<WitnessOrConstant<F>>,
     pub(crate) result: Vec<u32>,
 }
 
+#[derive(Debug)]
 pub(crate) struct LogicConstraint<F: PrimeField> {
     pub(crate) a: WitnessOrConstant<F>,
     pub(crate) b: WitnessOrConstant<F>,
@@ -445,6 +425,7 @@ pub(crate) struct LogicConstraint<F: PrimeField> {
     pub(crate) is_xor_gate: bool,
 }
 
+#[derive(Debug)]
 pub(crate) struct AES128Constraint<F: PrimeField> {
     pub(crate) inputs: Vec<WitnessOrConstant<F>>,
     pub(crate) iv: Vec<WitnessOrConstant<F>>,
@@ -452,38 +433,7 @@ pub(crate) struct AES128Constraint<F: PrimeField> {
     pub(crate) outputs: Vec<u32>,
 }
 
-impl<F: PrimeField> LogicConstraint<F> {
-    pub(crate) fn and_gate(
-        a: WitnessOrConstant<F>,
-        b: WitnessOrConstant<F>,
-        result: u32,
-        num_bits: u32,
-    ) -> Self {
-        Self {
-            a,
-            b,
-            result,
-            num_bits,
-            is_xor_gate: false,
-        }
-    }
-
-    pub(crate) fn xor_gate(
-        a: WitnessOrConstant<F>,
-        b: WitnessOrConstant<F>,
-        result: u32,
-        num_bits: u32,
-    ) -> Self {
-        Self {
-            a,
-            b,
-            result,
-            num_bits,
-            is_xor_gate: true,
-        }
-    }
-}
-
+#[derive(Debug)]
 pub(crate) struct RecursionConstraint<F: PrimeField> {
     // An aggregation state is represented by two G1 affine elements. Each G1 point has
     // two field element coordinates (x, y). Thus, four field elements
@@ -500,23 +450,15 @@ impl<F: PrimeField> RecursionConstraint<F> {
     const NUM_AGGREGATION_ELEMENTS: usize = 4;
 }
 
-pub(crate) struct Blake2sInput<F: PrimeField> {
-    pub(crate) blackbox_input: WitnessOrConstant<F>,
-    pub(crate) num_bits: u32,
-}
-
+#[derive(Debug)]
 pub(crate) struct Blake2sConstraint<F: PrimeField> {
-    pub(crate) inputs: Vec<Blake2sInput<F>>,
+    pub(crate) inputs: Vec<WitnessOrConstant<F>>,
     pub(crate) result: [u32; 32],
 }
 
-pub(crate) struct Blake3Input<F: PrimeField> {
-    pub(crate) blackbox_input: WitnessOrConstant<F>,
-    pub(crate) num_bits: u32,
-}
-
+#[derive(Debug)]
 pub(crate) struct Blake3Constraint<F: PrimeField> {
-    pub(crate) inputs: Vec<Blake3Input<F>>,
+    pub(crate) inputs: Vec<WitnessOrConstant<F>>,
     pub(crate) result: [u32; 32],
 }
 
@@ -555,27 +497,33 @@ impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoin
         public_inputs: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> eyre::Result<Self> {
+    ) -> eyre::Result<Self>
+    where
+        C::BaseField: PrimeField,
+    {
         // Assumes that the app-io public inputs are at the end of the public_inputs vector
         let index = public_inputs.len() - PAIRING_POINT_ACCUMULATOR_SIZE as usize;
         let (p0_limbs, p1_limbs) =
             public_inputs[index..].split_at(PAIRING_POINT_ACCUMULATOR_SIZE as usize / 2);
 
-        Ok(Self {
+        let result = Self {
             p0: BigGroup::reconstruct_from_public(p0_limbs, builder, driver)?,
             p1: BigGroup::reconstruct_from_public(p1_limbs, builder, driver)?,
             has_data: true,
-        })
+        };
+        Ok(result)
     }
 
     pub fn set_public(
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> usize {
+    ) -> usize
+    where
+        C::BaseField: PrimeField,
+    {
         let start_idx = self.p0.set_public(driver, builder);
         self.p1.set_public(driver, builder);
-
         start_idx
     }
 }
@@ -636,7 +584,6 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         )?;
         let recursion_separator =
             transcript.get_challenge("recursion_separator".to_string(), builder, driver)?;
-
         // Save gates using short scalars. We don't apply `bn254_endo_batch_mul` to the vector {1,
         // recursion_separator} directly to avoid edge cases.
         let mut point_to_aggregate =
@@ -785,105 +732,6 @@ pub struct CycleNode {
 }
 pub type CyclicPermutation = Vec<CycleNode>;
 
-pub(crate) struct TraceData<'a, P: CurveGroup> {
-    pub(crate) wires: &'a mut [Polynomial<P::ScalarField>; NUM_WIRES],
-    pub(crate) selectors: &'a mut [Polynomial<P::ScalarField>; NUM_SELECTORS],
-    pub(crate) copy_cycles: Vec<CyclicPermutation>,
-    pub(crate) ram_rom_offset: u32,
-    pub(crate) pub_inputs_offset: u32,
-}
-
-impl<'a, P: CurveGroup> TraceData<'a, P> {
-    pub(crate) fn new(
-        builder: &UltraCircuitBuilder<P>,
-        proving_key: &'a mut PlainProvingKey<P>,
-    ) -> Self {
-        let copy_cycles = vec![vec![]; builder.variables.len()];
-
-        Self {
-            wires: proving_key
-                .polynomials
-                .witness
-                .get_wires_mut()
-                .try_into()
-                .unwrap(),
-
-            selectors: proving_key
-                .polynomials
-                .precomputed
-                .get_selectors_mut()
-                .try_into()
-                .unwrap(),
-            copy_cycles,
-            ram_rom_offset: 0,
-            pub_inputs_offset: 0,
-        }
-    }
-
-    pub(crate) fn construct_trace_data(
-        &mut self,
-        builder: &mut UltraCircuitBuilder<P>,
-        is_structured: bool,
-        active_region_data: &mut ActiveRegionData,
-    ) {
-        tracing::trace!("Construct trace data");
-
-        let mut offset = 1; // Offset at which to place each block in the trace polynomials
-        // For each block in the trace, populate wire polys, copy cycles and selector polys
-
-        for block in builder.blocks.get() {
-            let block_size = block.len();
-
-            // Save ranges over which the blocks are "active" for use in structured commitments
-            // Mega and Ultra
-            if block_size > 0 {
-                tracing::trace!("Construct active indices");
-                active_region_data.add_range(offset, offset + block_size);
-            }
-            // Update wire polynomials and copy cycles
-            // NB: The order of row/column loops is arbitrary but needs to be row/column to match old copy_cycle code
-
-            for block_row_idx in 0..block_size {
-                for wire_idx in 0..NUM_WIRES {
-                    let var_idx = block.wires[wire_idx][block_row_idx] as usize; // an index into the variables array
-                    let real_var_idx = builder.real_variable_index[var_idx] as usize;
-                    let trace_row_idx = block_row_idx + offset;
-                    // Insert the real witness values from this block into the wire polys at the correct offset
-                    self.wires[wire_idx][trace_row_idx] = builder.get_variable(var_idx);
-                    // Add the address of the witness value to its corresponding copy cycle
-                    self.copy_cycles[real_var_idx].push(CycleNode {
-                        wire_index: wire_idx as u32,
-                        gate_index: trace_row_idx as u32,
-                    });
-                }
-            }
-
-            // Insert the selector values for this block into the selector polynomials at the correct offset
-            // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/398): implicit arithmetization/flavor consistency
-            for (selector_poly, selector) in self.selectors.iter_mut().zip(block.selectors.iter()) {
-                debug_assert_eq!(selector.len(), block_size);
-
-                for (src, des) in selector.iter().zip(selector_poly.iter_mut().skip(offset)) {
-                    *des = *src;
-                }
-            }
-
-            // Store the offset of the block containing RAM/ROM read/write gates for use in updating memory records
-            if block.has_ram_rom {
-                self.ram_rom_offset = offset as u32;
-            }
-            // Store offset of public inputs block for use in the pub(crate)input mechanism of the permutation argument
-            if block.is_pub_inputs {
-                self.pub_inputs_offset = offset as u32;
-            }
-
-            // If the trace is structured, we populate the data from the next block at a fixed block size offset
-            // otherwise, the next block starts immediately following the previous one
-            offset += block.get_fixed_size(is_structured) as usize;
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PermutationSubgroupElement {
     pub(crate) row_index: u32,
@@ -971,14 +819,13 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         input_y: &Self,
         input_infinity: &Self,
         predicate: &BoolCT<P::ScalarField, T>,
-        has_valid_witness_assignments: bool,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<CycleGroupCT<P, T>> {
         let constant_coordinates = input_x.is_constant && input_y.is_constant;
         let mut point_x = input_x.to_field_ct();
         let mut point_y = input_y.to_field_ct();
-        let mut infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
+        let infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
 
         // If a witness is not provided (we are in a write_vk scenario) we ensure the coordinates correspond to a valid
         // point to avoid erroneous failures during circuit construction. We only do this if the coordinates are
@@ -988,9 +835,12 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         let g1_y = F::from(BigUint::new(vec![
             2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
         ]));
-        if !has_valid_witness_assignments && !constant_coordinates {
+        if builder.is_write_vk_mode && !constant_coordinates {
             builder.set_variable(input_x.index, F::one().into());
             builder.set_variable(input_y.index, g1_y.into());
+            if !input_infinity.is_constant {
+                builder.set_variable(input_infinity.index, F::zero().into());
+            }
         }
 
         if !predicate.is_constant() {
@@ -1008,7 +858,7 @@ impl<F: PrimeField> WitnessOrConstant<F> {
                 builder,
                 driver,
             )?;
-            infinity = BoolCT::conditional_assign(
+            let _ = BoolCT::conditional_assign(
                 predicate,
                 &infinity,
                 &BoolCT::from(false),
@@ -1017,7 +867,61 @@ impl<F: PrimeField> WitnessOrConstant<F> {
             )?;
         }
 
-        CycleGroupCT::new_with_assert(point_x, point_y, infinity, true, builder, driver)
+        CycleGroupCT::new(point_x, point_y, true, builder, driver)
+    }
+
+    pub(crate) fn to_grumpkin_scalar<
+        P: HonkCurve<TranscriptFieldType, ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        scalar_lo: &Self,
+        scalar_hi: &Self,
+        predicate: &BoolCT<P::ScalarField, T>,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<CycleScalarCT<F>> {
+        let mut lo_as_field = scalar_lo.to_field_ct();
+        let mut hi_as_field = scalar_hi.to_field_ct();
+
+        assert!(
+            !scalar_lo.is_constant || scalar_hi.is_constant,
+            "to_grumpkin_scalar: scalar_lo is constant while scalar_hi is not."
+        );
+
+        if builder.is_write_vk_mode {
+            if !scalar_lo.is_constant {
+                builder.set_variable(scalar_lo.index, F::one().into());
+            }
+            if !scalar_hi.is_constant {
+                builder.set_variable(scalar_hi.index, F::zero().into());
+            }
+        }
+
+        if !predicate.is_constant() {
+            lo_as_field = FieldCT::conditional_assign(
+                predicate,
+                &lo_as_field,
+                &FieldCT::from(F::one()),
+                builder,
+                driver,
+            )?;
+            hi_as_field = FieldCT::conditional_assign(
+                predicate,
+                &hi_as_field,
+                &FieldCT::from(F::zero()),
+                builder,
+                driver,
+            )?;
+        } else {
+            let predicate_value = predicate.get_value(driver);
+            let predicate_value = T::get_public(&predicate_value).expect("Constants are public");
+            assert!(
+                !predicate_value.is_zero(),
+                "Creating Grumpkin scalar with a constant predicate equal to false."
+            );
+        }
+
+        CycleScalarCT::new(lo_as_field, hi_as_field, false, builder, driver)
     }
 }
 

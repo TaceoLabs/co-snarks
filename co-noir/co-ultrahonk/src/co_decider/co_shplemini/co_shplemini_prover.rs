@@ -20,7 +20,7 @@ use co_noir_common::{
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use ultrahonk::{NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils};
+use ultrahonk::{NUM_SMALL_IPA_EVALUATIONS, Utils};
 
 impl<
     T: NoirUltraHonkProver<P>,
@@ -49,9 +49,7 @@ impl<
     fn compute_batched_polys(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        multilinear_challenge: &[P::ScalarField],
         log_n: usize,
-        commitment_key: &ProverCrs<P>,
         has_zk: ZeroKnowledge,
     ) -> HonkProofResult<(SharedPolynomial<T, P>, SharedPolynomial<T, P>)> {
         let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
@@ -61,28 +59,12 @@ impl<
 
         // To achieve ZK, we mask the batched polynomial by a random polynomial of the same size
         if has_zk == ZeroKnowledge::Yes {
-            batched_unshifted = SharedPolynomial::<T, P>::random(n, self.net, self.state)?;
-            let masking_poly_comm_shared =
-                CoUtils::commit::<T, P>(batched_unshifted.as_ref(), commitment_key);
-
-            // In the provers, the size of multilinear_challenge is `virtual_log_n`, but we need to evaluate the
-            // hiding polynomial as multilinear in log_n variables
-            let masking_poly_eval_shared =
-                batched_unshifted.evaluate_mle(&multilinear_challenge[0..log_n]);
-            let (masking_poly_comm, masking_poly_eval) = T::open_point_and_field(
-                masking_poly_comm_shared,
-                masking_poly_eval_shared,
-                self.net,
-                self.state,
-            )?;
-            transcript.send_point_to_verifier::<P>(
-                "Gemini:masking_poly_comm".to_string(),
-                masking_poly_comm.into(),
-            );
-            transcript.send_fr_to_verifier::<P>(
-                "Gemini:masking_poly_eval".to_string(),
-                masking_poly_eval,
-            );
+            batched_unshifted = self
+                .memory
+                .gemini_masking_poly
+                .as_ref()
+                .expect("Gemini masking polynomial must be prepared in Oink")
+                .clone();
         }
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
@@ -185,13 +167,8 @@ impl<
         // To achieve fixed proof size in Ultra and Mega, the multilinear opening challenge is be padded to a fixed size.
         let virtual_log_n: usize = multilinear_challenge.len();
         // Compute batched polynomials
-        let (batched_unshifted, batched_to_be_shifted) = self.compute_batched_polys(
-            transcript,
-            multilinear_challenge,
-            log_n,
-            commitment_key,
-            has_zk,
-        )?;
+        let (batched_unshifted, batched_to_be_shifted) =
+            self.compute_batched_polys(transcript, log_n, has_zk)?;
 
         // We do not have any concatenated polynomials in UltraHonk
 
@@ -647,8 +624,7 @@ impl<
 
         // Take into account the constant proof size in Gemini
         if has_zk == ZeroKnowledge::Yes {
-            current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 + NUM_INTERLEAVING_CLAIMS as u64]);
+            current_nu = nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if has_zk == ZeroKnowledge::Yes {
@@ -740,8 +716,7 @@ impl<
         // 2 * CONST_PROOF_SIZE_LOG_N is the number of fold claims including the dummy ones, and +2 is reserved for
         // interleaving.
         if has_zk == ZeroKnowledge::Yes {
-            current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 + NUM_INTERLEAVING_CLAIMS as u64]);
+            current_nu = nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if let Some(libra_claims) = libra_opening_claims {

@@ -889,6 +889,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         Ok(arithmetic::rand(&mut self.state0))
     }
 
+    fn common_rng_seed(&mut self) -> eyre::Result<[u8; 32]> {
+        Ok(self.state0.rngs.generate_shared(self.id))
+    }
+
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(self.id, public_value)
     }

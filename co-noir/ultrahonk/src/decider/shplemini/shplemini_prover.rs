@@ -1,5 +1,5 @@
 use crate::{
-    NUM_INTERLEAVING_CLAIMS, NUM_SMALL_IPA_EVALUATIONS, Utils,
+    NUM_SMALL_IPA_EVALUATIONS, Utils,
     decider::{
         decider_prover::Decider,
         decider_verifier::DeciderVerifier,
@@ -42,9 +42,9 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     fn compute_batched_polys(
         &mut self,
         transcript: &mut Transcript<TranscriptFieldType, H>,
-        multilinear_challenge: &[P::ScalarField],
+        _multilinear_challenge: &[P::ScalarField],
         log_n: usize,
-        commitment_key: &ProverCrs<P>,
+        _commitment_key: &ProverCrs<P>,
     ) -> HonkProofResult<(Polynomial<P::ScalarField>, Polynomial<P::ScalarField>)> {
         let f_polynomials = Self::get_f_polynomials(&self.memory.polys);
         let g_polynomials = Self::get_g_polynomials(&self.memory.polys);
@@ -54,20 +54,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // To achieve ZK, we mask the batched polynomial by a random polynomial of the same size
         if self.has_zk == ZeroKnowledge::Yes {
-            batched_unshifted = Polynomial::<P::ScalarField>::random(n, &mut self.rng);
-            let masking_poly_comm = Utils::commit(&batched_unshifted.coefficients, commitment_key)?;
-            transcript.send_point_to_verifier::<P>(
-                "Gemini:masking_poly_comm".to_string(),
-                masking_poly_comm.into(),
-            );
-            // In the provers, the size of multilinear_challenge is `virtual_log_n`, but we need to evaluate the
-            // hiding polynomial as multilinear in log_n variables
-            let masking_poly_eval =
-                batched_unshifted.evaluate_mle(&multilinear_challenge[0..log_n]);
-            transcript.send_fr_to_verifier::<P>(
-                "Gemini:masking_poly_eval".to_string(),
-                masking_poly_eval,
-            );
+            batched_unshifted = self
+                .memory
+                .gemini_masking_poly
+                .clone()
+                .expect("Gemini masking polynomial must be prepared in Oink");
         }
 
         // Generate batching challenge \rho and powers 1,...,\rho^{m-1}
@@ -566,8 +557,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
         // Take into account the constant proof size in Gemini
         if has_zk == ZeroKnowledge::Yes {
-            current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 + NUM_INTERLEAVING_CLAIMS as u64]);
+            current_nu = nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if has_zk == ZeroKnowledge::Yes {
@@ -657,8 +647,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // 2 * CONST_PROOF_SIZE_LOG_N is the number of fold claims including the dummy ones, and +2 is reserved for
         // interleaving.
         if has_zk == ZeroKnowledge::Yes {
-            current_nu =
-                nu_challenge.pow([2 * virtual_log_n as u64 + NUM_INTERLEAVING_CLAIMS as u64]);
+            current_nu = nu_challenge.pow([2 * virtual_log_n as u64]);
         }
 
         if let Some(libra_claims) = libra_opening_claims {

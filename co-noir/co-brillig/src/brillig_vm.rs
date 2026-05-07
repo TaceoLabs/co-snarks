@@ -420,7 +420,7 @@ where
     fn handle_stop(&mut self, return_data: HeapVector) -> eyre::Result<CoBrilligResult<T, F>> {
         let size = self.memory.try_read_usize(return_data.size)?;
         let offset = if size > 0 {
-            self.memory.read_ref(return_data.pointer)?.unwrap_direct()
+            self.memory.read_ref(return_data.pointer)?.unwrap_direct() as usize
         } else {
             0
         };

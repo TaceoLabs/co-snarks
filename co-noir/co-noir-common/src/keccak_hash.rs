@@ -69,10 +69,11 @@ impl<F: PrimeField> TranscriptHasher<F> for Keccak256 {
     }
 
     fn split_challenge(challenge: Self::DataType) -> [Self::DataType; 2] {
-        // Challenges sizes are matched with the challenge sizes used in bb::fr
-        // match the parameter used in stdlib, which is derived from cycle_scalar (is 128)
-        const LO_BITS: u64 = 128;
-        const HI_BITS: u64 = 126;
+        // Match barretenberg field_conversion::split_challenge:
+        // split a 254-bit challenge into two 127-bit limbs.
+        const TOTAL_BITS: u64 = 254;
+        const LO_BITS: u64 = TOTAL_BITS / 2;
+        const HI_BITS: u64 = TOTAL_BITS - LO_BITS;
 
         let lo = challenge.slice(0, LO_BITS);
         let hi = challenge.slice(LO_BITS, LO_BITS + HI_BITS);

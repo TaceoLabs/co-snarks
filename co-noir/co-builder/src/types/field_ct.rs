@@ -63,17 +63,6 @@ impl<F: PrimeField> FieldCT<F> {
         }
     }
 
-    pub(crate) fn check_point_at_infinity<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        inp: &[Self],
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<BoolCT<P::ScalarField, T>> {
-        Self::accumulate(inp, builder, driver)?.is_zero(builder, driver)
-    }
-
     pub(crate) fn get_witness_index<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -175,7 +164,7 @@ impl<F: PrimeField> FieldCT<F> {
             result_inverted = inverted_check;
         } else {
             // In general, the witness has to be normalized.
-            witness_idx = self.get_witness_index(builder, driver);
+            witness_idx = self.normalize(builder, driver).witness_index;
         }
         // Get the normalized value of the witness
         let witness = builder.get_variable(witness_idx as usize);
@@ -318,7 +307,7 @@ impl<F: PrimeField> FieldCT<F> {
             driver.add_assign_with_public(q_c, &mut out);
 
             result.witness_index = builder.add_variable(out);
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
@@ -405,7 +394,7 @@ impl<F: PrimeField> FieldCT<F> {
                 driver.add_assign_with_public(q_c, &mut out);
 
                 result.witness_index = builder.add_variable(out);
-                builder.create_poly_gate(&PolyTriple {
+                builder.create_arithmetic_gate(&PolyTriple {
                     a: l.witness_index,
                     b: r.witness_index,
                     c: result.witness_index,
@@ -538,7 +527,7 @@ impl<F: PrimeField> FieldCT<F> {
         if let Some((poly_triple, out_value)) = &mut mul_raw_data.0 {
             let result = Self::from_witness_index(builder.add_variable(out_value.clone()));
             poly_triple.c = result.witness_index;
-            builder.create_poly_gate(poly_triple);
+            builder.create_arithmetic_gate(poly_triple);
             Ok(result)
         } else if let Some(res) = &mut mul_raw_data.1 {
             Ok(res.clone())
@@ -634,7 +623,7 @@ impl<F: PrimeField> FieldCT<F> {
                 let inverse = driver.invert(other_val)?;
                 let out_value = driver.mul_with_public(val, inverse);
                 result.witness_index = builder.add_variable(out_value);
-                builder.create_poly_gate(&PolyTriple {
+                builder.create_arithmetic_gate(&PolyTriple {
                     a: result.witness_index,
                     b: other.witness_index,
                     c: result.witness_index,
@@ -679,7 +668,7 @@ impl<F: PrimeField> FieldCT<F> {
             let q_o = -self.multiplicative_constant;
             let q_c = -self.additive_constant;
 
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: result.witness_index,
                 b: other.witness_index,
                 c: self.witness_index,
@@ -1018,92 +1007,6 @@ impl<F: PrimeField> FieldCT<F> {
         Ok(result)
     }
 
-    /**
-     * @brief Splits the field element into (lo, hi), where:
-     * - lo contains bits [0, lsb_index)
-     * - hi contains bits [lsb_index, num_bits)
-     */
-    pub(crate) fn split_at<
-        P: CurveGroup<ScalarField = F>,
-        T: NoirWitnessExtensionProtocol<P::ScalarField>,
-    >(
-        &self,
-        lsb_index: u8,
-        num_bits: Option<u8>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<[Self; 2]> {
-        const GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH: u8 = 252;
-        let num_bits = num_bits.unwrap_or(GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
-
-        assert!(lsb_index < num_bits);
-        assert!(num_bits <= GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
-
-        assert!(lsb_index < num_bits);
-        assert!(num_bits <= GRUMPKIN_MAX_NO_WRAP_INTEGER_BIT_LENGTH);
-
-        let value = self.get_value(builder, driver);
-
-        // Handle edge case when lsb_index == 0
-        if lsb_index == 0 {
-            if self.is_constant() {
-                let hi_val = T::get_public(&value).expect("Constants are public");
-                return Ok([FieldCT::default(), FieldCT::from(hi_val)]);
-            } else {
-                self.create_range_constraint(num_bits as usize, builder, driver)?;
-                return Ok([FieldCT::default(), self.clone()]);
-            }
-        }
-
-        let (hi, lo) = if T::is_shared(&value) {
-            let value = T::get_shared(&value).expect("Already checked it is shared");
-            // TACEO TODO: We are returning one more value than needed here
-            let [lo, hi] = driver.slice(value, lsb_index, 0, num_bits as usize)?;
-            (T::AcvmType::from(hi), T::AcvmType::from(lo))
-        } else {
-            let value: BigUint = T::get_public(&value)
-                .expect("Already checked it is public")
-                .into();
-
-            let lo_mask = (BigUint::one() << lsb_index) - BigUint::one();
-            let lo = &value & lo_mask;
-            let hi = &value >> lsb_index;
-
-            let hi_ = T::AcvmType::from(F::from(hi));
-            let lo_ = T::AcvmType::from(F::from(lo));
-            (hi_, lo_)
-        };
-
-        if self.is_constant() {
-            // If `*this` is constant, we can return the split values directly
-            let lo_val = T::get_public(&lo).expect("Constants are public");
-            let hi_val = T::get_public(&hi).expect("Constants are public");
-
-            let reconstructed = lo_val + (hi_val * F::from(BigUint::one() << lsb_index));
-            let original = T::get_public(&value).expect("Constants are public");
-            assert_eq!(reconstructed, original);
-
-            return Ok([FieldCT::from(lo_val), FieldCT::from(hi_val)]);
-        }
-
-        let lo_wit = Self::from_witness(lo, builder);
-        let hi_wit = Self::from_witness(hi, builder);
-
-        // Ensure that `lo_wit` is in the range [0, 2^lsb_index - 1]
-        lo_wit.create_range_constraint(lsb_index as usize, builder, driver)?;
-
-        // Ensure that `hi_wit` is in the range [0, 2^(num_bits - lsb_index) - 1]
-        hi_wit.create_range_constraint(num_bits as usize - lsb_index as usize, builder, driver)?;
-
-        // Check that *this = lo_wit + hi_wit * 2^{lsb_index}
-        let shift_factor = FieldCT::from(F::from(BigUint::one() << lsb_index));
-        let hi_shifted = hi_wit.multiply(&shift_factor, builder, driver)?;
-        let reconstructed = lo_wit.add(&hi_shifted, builder, driver);
-        self.assert_equal(&reconstructed, builder, driver);
-
-        Ok([lo_wit, hi_wit])
-    }
-
     pub(crate) fn create_range_constraint<
         P: CurveGroup<ScalarField = F>,
         T: NoirWitnessExtensionProtocol<P::ScalarField>,
@@ -1123,7 +1026,7 @@ impl<F: PrimeField> FieldCT<F> {
         } else {
             let index = self.get_witness_index(builder, driver);
             // We have plookup
-            builder.decompose_into_default_range(
+            builder.create_limbed_range_constraint(
                 driver,
                 index,
                 num_bits as u64,
@@ -1159,7 +1062,7 @@ impl<F: PrimeField> FieldCT<F> {
             builder.update_variable(self.witness_index as usize, val.into());
         }
 
-        builder.create_poly_gate(&PolyTriple {
+        builder.create_arithmetic_gate(&PolyTriple {
             a: self.witness_index,
             b: builder.zero_idx,
             c: builder.zero_idx,
@@ -1231,7 +1134,7 @@ impl<F: PrimeField> FieldCT<F> {
         // <=> this.v * inverse.v * [   q_m  ] + this.v * [q_l] + inverse.v * [   q_r  ] + 0 * [q_o] + [q_c] == 0
 
         // (a * mul_const + add_const) * b - 1 = 0
-        builder.create_poly_gate(&PolyTriple {
+        builder.create_arithmetic_gate(&PolyTriple {
             a: self.witness_index,             // input value
             b: inverse.witness_index,          // inverse
             c: builder.zero_idx,               // no output
@@ -1874,6 +1777,7 @@ impl<F: PrimeField> FieldCT<F> {
         // Split the field modulus at the same position
         let r_lo = Utils::slice_u256(field_modulus, 0, lo_bits as u64);
         let r_hi = Utils::slice_u256(field_modulus, lo_bits as u64, modulus_bits as u64);
+        let r_lo_minus_one = r_lo.clone() - BigUint::one();
 
         // Check if we need to borrow
         let lo_value = lo.get_value(builder, driver);
@@ -1881,16 +1785,16 @@ impl<F: PrimeField> FieldCT<F> {
             let lo_value: BigUint = T::get_public(&lo_value)
                 .expect("Constants are public")
                 .into();
-            let need_borrow = lo_value > r_lo;
+            let need_borrow = lo_value > r_lo_minus_one;
             FieldCT::from(F::from(need_borrow as u64))
         } else {
             let need_borrow = if T::is_shared(&lo_value) {
-                driver.gt(lo_value.to_owned(), F::from(r_lo.clone()).into())?
+                driver.gt(lo_value.to_owned(), F::from(r_lo_minus_one.clone()).into())?
             } else {
                 let lo_big: BigUint = T::get_public(&lo_value)
                     .expect("Already checked it is public")
                     .into();
-                F::from((lo_big > r_lo) as u64).into()
+                F::from((lo_big > r_lo_minus_one) as u64).into()
             };
             FieldCT::from_witness(need_borrow, builder)
         };
@@ -1910,7 +1814,7 @@ impl<F: PrimeField> FieldCT<F> {
         let shift = FieldCT::from(F::from(BigUint::one() << lo_bits));
         let lo_diff = lo
             .neg()
-            .add(&FieldCT::from(F::from(r_lo.clone())), builder, driver)
+            .add(&FieldCT::from(F::from(r_lo_minus_one)), builder, driver)
             .add(&borrow.multiply(&shift, builder, driver)?, builder, driver);
 
         hi_diff.create_range_constraint(hi_bits, builder, driver)?;
@@ -1971,6 +1875,121 @@ impl<F: PrimeField> FieldCT<F> {
 
         // Scale the sum by the value of B(x)
         result.multiply(&full_numerator_value, builder, driver)
+    }
+
+    /// Return (a < b) as bool circuit type.
+    /// Assumes both a and b are < 2^{num_bits}; this is not checked here.
+    pub fn ranged_less_than<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<P::ScalarField>,
+    >(
+        &self,
+        other: &Self,
+        num_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<BoolCT<F, T>> {
+        let a = self;
+        let b = other;
+
+        if a.is_constant() && b.is_constant() {
+            let a_val: BigUint = T::get_public(&a.get_value(builder, driver))
+                .expect("Constants are public")
+                .into();
+            let b_val: BigUint = T::get_public(&b.get_value(builder, driver))
+                .expect("Constants are public")
+                .into();
+            return Ok(BoolCT::from(a_val < b_val));
+        }
+
+        // Let q = (a < b)
+        // Assume both a and b are < K where K = 2^{num_bits}
+        //    q == 1 <=>  0 < b - a - 1     < K
+        //    q == 0 <=>  0 < b - a + K - 1 < K
+        // i.e. for any bool value of q:
+        //    (b - a - 1) * q + (b - a + K - 1) * (1 - q) = r < K
+        //     q * (b - a - b + a) + b - a + K - 1 - (K - 1) * q - q = r < K
+        //     b - a + (K - 1) - K * q = r < K
+        let range_biguint = BigUint::from(1u32) << num_bits;
+        let half_modulus: BigUint = F::MODULUS.into();
+        debug_assert!(
+            range_biguint < (half_modulus >> 1usize),
+            "ranged_less_than: 2^num_bits must be less than half the field modulus"
+        );
+        let range_constant_f = F::from(range_biguint);
+
+        let a_val = a.get_value(builder, driver);
+        let b_val = b.get_value(builder, driver);
+        let predicate_witness = driver.lt(a_val, b_val)?;
+        let predicate_witness_ct = WitnessCT::from_acvm_type(predicate_witness, builder);
+        let predicate = BoolCT::from_witness_ct(predicate_witness_ct, builder, false);
+
+        let neg_a_plus_k_minus_1 = {
+            let k_minus_1 = FieldCT::from(range_constant_f - F::one());
+            a.neg().add(&k_minus_1, builder, driver)
+        };
+        let neg_pred_times_k = {
+            let k = FieldCT::from(range_constant_f);
+            predicate
+                .to_field_ct(driver)
+                .neg()
+                .multiply(&k, builder, driver)?
+        };
+        let predicate_valid = b.add_two(&neg_a_plus_k_minus_1, &neg_pred_times_k, builder, driver);
+        predicate_valid.create_range_constraint(num_bits, builder, driver)?;
+
+        Ok(predicate)
+    }
+
+    pub(crate) fn add_normalize_unsafe<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        a: &FieldCT<F>,
+        b: &FieldCT<F>,
+        overflow_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<FieldCT<F>> {
+        if a.is_constant() && b.is_constant() {
+            let a_value = a.get_value(builder, driver);
+            let b_value = b.get_value(builder, driver);
+
+            let a_val = T::get_public(&a_value).expect("Already checked it is public");
+            let b_val = T::get_public(&b_value).expect("Already checked it is public");
+
+            let sum: BigUint = (a_val + b_val).into();
+
+            let normalized_sum = F::from(sum % (1u64 << 32));
+
+            Ok(FieldCT::from(normalized_sum))
+        } else {
+            let a_value = a.get_value(builder, driver);
+            let b_value = b.get_value(builder, driver);
+
+            let sum = T::add(driver, a_value, b_value);
+            let overflow = if T::is_shared(&sum) {
+                let sum_val = T::get_shared(&sum).expect("Already checked it is shared");
+                FieldCT::from_witness(T::sha256_get_overflow_bit(driver, sum_val)?.into(), builder)
+            } else {
+                let sum_val: BigUint = T::get_public(&sum)
+                    .expect("Already checked it is public")
+                    .into();
+                let normalized_sum = sum_val.iter_u32_digits().next().unwrap_or_default();
+                let overflow = (sum_val - normalized_sum) >> 32;
+                FieldCT::from_witness(F::from(overflow).into(), builder)
+            };
+
+            let result = a.add_two(
+                b,
+                &overflow.multiply(&FieldCT::from(-F::from(1u64 << 32)), builder, driver)?,
+                builder,
+                driver,
+            );
+
+            overflow.create_range_constraint(overflow_bits, builder, driver)?;
+            Ok(result)
+        }
     }
 }
 
@@ -2072,13 +2091,6 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> From<bool> for BoolCT<F,
 }
 
 impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
-    pub(crate) fn get_witness_index<P: CurveGroup<ScalarField = F>>(
-        &self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> u32 {
-        self.normalize(builder, driver).witness_index
-    }
     /**
      * @brief Create a `bool_t` from a witness index that is **known** to contain a constrained bool value.
      * @warning The witness value **is not** constrained to be boolean. We simply perform an out-of-circuit sanity check.
@@ -2318,7 +2330,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
             };
             let q3 = -P::ScalarField::one();
             let qc = P::ScalarField::from(i_a * i_b);
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
@@ -2402,7 +2414,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
             // Let r := a | b;
             // Constrain
             //      q_m * w_a * w_b + q_l * w_a + q_r * w_b + q_o * r + q_c = 0
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
@@ -2507,7 +2519,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
                 right_coefficient = P::ScalarField::one();
                 constant_coefficient = P::ScalarField::zero();
             }
-            builder.create_poly_gate(&PolyTriple {
+            builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
                 c: result.witness_index,
@@ -2548,7 +2560,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
         let q_o = -P::ScalarField::one();
         let q_m = P::ScalarField::zero();
         let q_r = P::ScalarField::zero();
-        builder.create_poly_gate(&PolyTriple {
+        builder.create_arithmetic_gate(&PolyTriple {
             a: self.witness_index,
             b: self.witness_index,
             c: new_witness,
@@ -2591,32 +2603,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> Clone for C
 impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupCT<P, T> {
     const ULTRA_NUM_TABLE_BITS: usize = 4;
     const TABLE_BITS: usize = Self::ULTRA_NUM_TABLE_BITS;
-
-    pub(crate) fn new(
-        x: FieldCT<P::ScalarField>,
-        y: FieldCT<P::ScalarField>,
-        is_infinity: BoolCT<P::ScalarField, T>,
-        driver: &mut T,
-    ) -> Self {
-        let is_standard = is_infinity.is_constant();
-        let is_constant = x.is_constant() && y.is_constant() && is_standard;
-
-        if is_standard
-            && !T::get_public(&is_infinity.get_value(driver))
-                .expect("Constants are public")
-                .is_zero()
-        {
-            return Self::default();
-        }
-
-        Self {
-            x,
-            y,
-            is_infinity,
-            is_standard,
-            is_constant,
-        }
-    }
+    const NUM_BITS: usize = <P::ScalarField as PrimeField>::MODULUS_BIT_SIZE as usize;
 
     pub(crate) fn new_from_parts(x: P::ScalarField, y: P::ScalarField, is_infinity: bool) -> Self {
         if is_infinity {
@@ -2642,38 +2629,12 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> CycleGroupC
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<()> {
-        assert!(
-            self.is_constant()
-                == (self.x.is_constant() && self.y.is_constant() && self.is_infinity.is_constant())
-        );
-        if self.is_infinity.is_constant()
-            && !T::get_public(&self.is_infinity.get_value(driver))
-                .expect("Constants are public")
-                .is_zero()
-        {
-            assert!(self.is_constant && self.is_standard);
-        }
-
-        if self.is_standard {
-            return Ok(());
-        }
-
-        self.is_standard = true;
+        // Set coordinates to (0, 0) if point is at infinity for canonical representation
         let zero = FieldCT::default();
         self.x = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.x, builder, driver)?;
         self.y = FieldCT::conditional_assign(&self.is_infinity, &zero, &self.y, builder, driver)?;
 
         Ok(())
-    }
-
-    pub(crate) fn get_standard_form(
-        &self,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<Self> {
-        let mut result = self.clone();
-        result.standardize(builder, driver)?;
-        Ok(result)
     }
 
     pub(crate) fn is_point_at_infinity(&self) -> &BoolCT<P::ScalarField, T> {
@@ -2785,7 +2746,50 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 {
     const OFFSET_GENERATOR_DOMAIN_SEPARATOR: &[u8] = "cycle_group_offset_generator".as_bytes();
 
-    pub(crate) fn new_with_assert(
+    pub(crate) fn new(
+        mut x: FieldCT<P::ScalarField>,
+        mut y: FieldCT<P::ScalarField>,
+        assert_on_curve: bool,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<Self> {
+        // Auto-detect infinity: point is at infinity iff both coordinates are zero
+        // we can check this efficiently using the observation that:
+        // (x^2 + 5 * y^2 = 0) has no non-trivial solutions in fr, since fr modulus p == 2 mod 5
+        let x_sqr = x.multiply(&x, builder, driver)?;
+        let five_y = y.multiply(&FieldCT::from(P::ScalarField::from(5u64)), builder, driver)?;
+        let is_infinity = y
+            .madd(&five_y, &x_sqr, builder, driver)?
+            .is_zero(builder, driver)?;
+
+        // For the simplicity of methods in this class, we ensure that the coordinates of a point always have the same
+        // constancy. If they don't, we convert the non-constant coordinate to a fixed witness. Should be rare.
+        if x.is_constant() != y.is_constant() {
+            if x.is_constant() {
+                x.convert_constant_to_fixed_witness(builder, driver);
+            } else {
+                y.convert_constant_to_fixed_witness(builder, driver);
+            }
+        }
+
+        let is_standard = is_infinity.is_constant();
+        let is_constant = x.is_constant() && y.is_constant() && is_standard;
+
+        let res = Self {
+            x,
+            y,
+            is_infinity,
+            is_standard,
+            is_constant,
+        };
+        if assert_on_curve {
+            res.validate_on_curve(builder, driver)?;
+        }
+
+        Ok(res)
+    }
+
+    pub(crate) fn new_with_infinity_control(
         x: FieldCT<P::ScalarField>,
         y: FieldCT<P::ScalarField>,
         is_infinity: BoolCT<P::ScalarField, T>,
@@ -2830,8 +2834,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let xx = self.x.multiply(&self.x, builder, driver)?;
         let xxx = xx.multiply(&self.x, builder, driver)?;
         let curve_b = FieldCT::from(P::get_curve_b());
-        let rhs = xxx.add(&curve_b, builder, driver);
-        let mut res = self.y.madd(&self.y, &rhs.neg(), builder, driver)?;
+        let rhs = xxx.neg().sub(&curve_b, builder, driver);
+        let mut res = self.y.madd(&self.y, &rhs, builder, driver)?;
 
         // If this is the point at infinity, then res is changed to 0, otherwise it remains unchanged
         let is_not_infinity = self.is_point_at_infinity().not();
@@ -2948,6 +2952,25 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 let point_val = T::get_public_point(&point_val).expect("Constants are public");
                 if point_val.is_zero() {
                     // oi mate, why are you creating a circuit that multiplies a known point at infinity?
+
+                    // Constant infinity * witness scalar contributes nothing to the result, however, we must still apply
+                    // the range constraints that the cycle_scalar constructor defers to this method.
+                    let scalar_lo_index = scalar.lo.get_witness_index(builder, driver);
+                    let scalar_hi_index = scalar.hi.get_witness_index(builder, driver);
+                    builder.create_limbed_range_constraint(
+                        driver,
+                        scalar_lo_index,
+                        CycleScalarCT::<P::ScalarField>::LO_BITS as u64,
+                        None,
+                        Self::TABLE_BITS as u64,
+                    )?;
+                    builder.create_limbed_range_constraint(
+                        driver,
+                        scalar_hi_index,
+                        CycleScalarCT::<P::ScalarField>::HI_BITS as u64,
+                        None,
+                        Self::TABLE_BITS as u64,
+                    )?;
                     continue;
                 }
                 // We are a UltraCircuit
@@ -3113,7 +3136,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             for j in 0..lookup_data[ColumnIdx::C2].len() {
                 let x = lookup_data[ColumnIdx::C2][j].to_owned();
                 let y = lookup_data[ColumnIdx::C3][j].to_owned();
-                lookup_points.push(CycleGroupCT::new(x, y, BoolCT::from(false), driver));
+                lookup_points.push(CycleGroupCT::new_with_infinity_control(
+                    x,
+                    y,
+                    BoolCT::from(false),
+                    false,
+                    builder,
+                    driver,
+                )?);
             }
 
             let offset_1 =
@@ -3172,7 +3202,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             );
         }
 
-        let num_rounds = num_bits.div_ceil(Self::TABLE_BITS);
+        let num_rounds = Self::NUM_BITS.div_ceil(Self::TABLE_BITS);
         let num_points = scalars.len();
         let table_size = (1 << Self::TABLE_BITS) as usize;
 
@@ -3408,18 +3438,27 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             if self.is_constant() {
                 let x3 = T::get_public(&x3).expect("Constants are public");
                 let y3 = T::get_public(&y3).expect("Constants are public");
-                result = CycleGroupCT::new(
+                result = CycleGroupCT::new_with_infinity_control(
                     FieldCT::from(x3),
                     FieldCT::from(y3),
                     self.is_point_at_infinity().to_owned(),
+                    false,
+                    builder,
                     driver,
-                );
+                )?;
                 return Ok(result);
             }
 
             let x = FieldCT::from_witness(x3, builder);
             let y = FieldCT::from_witness(y3, builder);
-            result = CycleGroupCT::new(x, y, self.is_point_at_infinity().to_owned(), driver);
+            result = CycleGroupCT::new_with_infinity_control(
+                x,
+                y,
+                self.is_point_at_infinity().to_owned(),
+                false,
+                builder,
+                driver,
+            )?;
         } else {
             let x1 = self.x.get_value(builder, driver);
             let y1 = modified_y.get_value(builder, driver);
@@ -3454,12 +3493,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 let result = CycleGroupCT::new_from_parts(x3, y3, inf_value.is_one());
                 return Ok(result);
             }
-            result = CycleGroupCT::new(
+            result = CycleGroupCT::new_with_infinity_control(
                 FieldCT::from_witness(x3, builder),
                 FieldCT::from_witness(y3, builder),
                 self.is_point_at_infinity().to_owned(),
+                false,
+                builder,
                 driver,
-            );
+            )?;
         }
         let ecc_dbl_gate = EccDblGate {
             x1: self.x.get_witness_index(builder, driver),
@@ -3525,7 +3566,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
             let x = FieldCT::from_witness(x3, builder);
             let y = FieldCT::from_witness(y3, builder);
-            result = CycleGroupCT::new(x, y, BoolCT::from(false), driver);
+            result = CycleGroupCT::new_with_infinity_control(
+                x,
+                y,
+                BoolCT::from(false),
+                false,
+                builder,
+                driver,
+            )?;
         } else {
             let p1 = self.get_value(builder, driver)?;
             let p2 = other.get_value(builder, driver)?;
@@ -3539,7 +3587,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let (x, y, _) = driver.pointshare_to_field_shares(p3)?;
             let r_x = FieldCT::from_witness(x, builder);
             let r_y = FieldCT::from_witness(y, builder);
-            result = CycleGroupCT::new(r_x, r_y, BoolCT::from(false), driver);
+            result = CycleGroupCT::new_with_infinity_control(
+                r_x,
+                r_y,
+                BoolCT::from(false),
+                false,
+                builder,
+                driver,
+            )?;
         }
 
         let add_gate = EccAddGate {
@@ -3549,7 +3604,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             y2: other.y.get_witness_index(builder, driver),
             x3: result.x.get_witness_index(builder, driver),
             y3: result.y.get_witness_index(builder, driver),
-            sign_coefficient: P::ScalarField::one(),
+            is_addition: true,
         };
         builder.create_ecc_add_gate(&add_gate);
 
@@ -3664,7 +3719,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
         let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
 
-        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, driver);
+        let result = CycleGroupCT::new_with_infinity_control(
+            result_x,
+            result_y,
+            result_is_infinity,
+            false,
+            builder,
+            driver,
+        )?;
 
         Ok(result)
     }
@@ -3720,9 +3782,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             lambda
         };
 
-        let x3 = lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
-        let y3 = lambda.madd(&x1.sub(&x3, builder, driver), &y1.neg(), builder, driver)?;
-        let add_result = CycleGroupCT::<P, T>::new(x3, y3, x_coordinates_match.to_owned(), driver);
+        let sub_result_x =
+            lambda.madd(&lambda, &x2.add(x1, builder, driver).neg(), builder, driver)?;
+        let sub_result_y = lambda.madd(
+            &x1.sub(&sub_result_x, builder, driver),
+            &y1.neg(),
+            builder,
+            driver,
+        )?;
 
         let dbl_result = self.dbl(None, builder, driver)?;
 
@@ -3734,14 +3801,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let mut result_x = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.x,
-            &add_result.x,
+            &sub_result_x,
             builder,
             driver,
         )?;
         let mut result_y = FieldCT::conditional_assign(
             &double_predicate,
             &dbl_result.y,
-            &add_result.y,
+            &sub_result_y,
             builder,
             driver,
         )?;
@@ -3774,8 +3841,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let both_infinity = lhs_infinity.and(rhs_infinity, builder, driver)?;
         let result_is_infinity = result_is_infinity.or(&both_infinity, builder, driver)?;
 
-        let result = CycleGroupCT::new(result_x, result_y, result_is_infinity, driver);
-        Ok(result)
+        CycleGroupCT::new_with_infinity_control(
+            result_x,
+            result_y,
+            result_is_infinity,
+            false,
+            builder,
+            driver,
+        )
     }
 
     fn neg(
@@ -3795,7 +3868,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
     ) -> eyre::Result<Self> {
-        let mut x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
+        let x = FieldCT::conditional_assign(predicate, &lhs.x, &rhs.x, builder, driver)?;
         let y = FieldCT::conditional_assign(predicate, &lhs.y, &rhs.y, builder, driver)?;
         let is_infinity = BoolCT::conditional_assign(
             predicate,
@@ -3804,30 +3877,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         )?;
-
-        let mut is_standard = lhs.is_standard && rhs.is_standard;
-        if predicate.is_constant() {
-            let value = T::get_public(&predicate.get_value(driver))
-                .expect("Constants are public")
-                .is_zero();
-            is_standard = if value {
-                rhs.is_standard
-            } else {
-                lhs.is_standard
-            };
-        }
-
-        // Rare case when we bump into two constants, s.t. lhs = -rhs
-        if x.is_constant() && !y.is_constant() {
-            x = FieldCT::from_witness_index(builder.put_constant_variable(
-                T::get_public(&x.get_value(builder, driver)).expect("Constants are public"),
-            ));
-        }
-
-        let mut result = CycleGroupCT::new(x, y, is_infinity, driver);
-        result.is_standard = is_standard;
-
-        Ok(result)
+        CycleGroupCT::new_with_infinity_control(x, y, is_infinity, false, builder, driver)
     }
 
     pub(crate) fn assert_equal(
@@ -3948,36 +3998,38 @@ impl<F: PrimeField> CycleScalarCT<F> {
             P::BaseField::MODULUS.into()
         };
         let (r_lo, r_hi) = Self::slice(cycle_group_modulus);
+        let r_lo_minus_one = r_lo.to_owned() - BigUint::one();
+        let both_constant = self.lo.is_constant() && self.hi.is_constant();
 
         let lo_value = self.lo.get_value(builder, driver);
-        let borrow = if self.lo.is_constant() {
+        let borrow = if both_constant {
             let lo_value: BigUint = T::get_public(&lo_value)
                 .expect("Constants are public")
                 .into();
-            let need_borrow = lo_value > r_lo;
+            let need_borrow = lo_value > r_lo_minus_one;
             FieldCT::from(P::ScalarField::from(need_borrow as u64))
         } else {
             let need_borrow = if T::is_shared(&lo_value) {
-                driver.gt(lo_value, F::from(r_lo.to_owned()).into())?
+                driver.gt(lo_value, F::from(r_lo_minus_one.to_owned()).into())?
             } else {
                 let lo_value: BigUint = T::get_public(&lo_value)
                     .expect("Already checked it is public")
                     .into();
-                let need_borrow = lo_value > r_lo;
+                let need_borrow = lo_value > r_lo_minus_one;
                 P::ScalarField::from(need_borrow as u64).into()
             };
             FieldCT::from_witness(need_borrow, builder)
         };
 
         // directly call `create_new_range_constraint` to avoid creating an arithmetic gate
-        if !self.lo.is_constant() {
+        if !both_constant {
             // We have a ultra builder
             let index = borrow.get_witness_index(builder, driver);
             builder.create_new_range_constraint(index, 1);
         }
 
         // Hi range check = r_hi - y_hi - borrow
-        // Lo range check = r_lo - y_lo + borrow * 2^{126}
+        // Lo range check = (r_lo - 1) - y_lo + borrow * 2^{LO_BITS}
         let borrow_scaled = borrow.multiply(
             &FieldCT::from(P::ScalarField::from(BigUint::one() << Self::LO_BITS)),
             builder,
@@ -3991,7 +4043,11 @@ impl<F: PrimeField> CycleScalarCT<F> {
         let lo_diff = self
             .lo
             .neg()
-            .add(&FieldCT::from(P::ScalarField::from(r_lo)), builder, driver)
+            .add(
+                &FieldCT::from(P::ScalarField::from(r_lo_minus_one)),
+                builder,
+                driver,
+            )
             .add(&borrow_scaled, builder, driver);
 
         hi_diff.create_range_constraint(Self::HI_BITS, builder, driver)?;
@@ -4093,7 +4149,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> StrausScala
         }
 
         let index = scalar.get_witness_index(builder, driver);
-        let slice_indices = builder.decompose_into_default_range(
+        let slice_indices = builder.create_limbed_range_constraint(
             driver,
             index,
             num_bits as u64,
@@ -4164,8 +4220,14 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             builder,
             driver,
         )?;
-        let mut modded_base_point =
-            CycleGroupCT::new(modded_x, modded_y, BoolCT::from(false), driver);
+        let mut modded_base_point = CycleGroupCT::new_with_infinity_control(
+            modded_x,
+            modded_y,
+            BoolCT::from(false),
+            false,
+            builder,
+            driver,
+        )?;
 
         // if the input point is constant, it is cheaper to fix the point as a witness and then derive the table, than it is
         // to derive the table and fix its witnesses to be constant! (due to group additions = 1 gate, and fixing x/y coords
@@ -4296,7 +4358,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let output_indices = builder.read_rom_array_pair(self.rom_id, index, driver)?;
         let x = FieldCT::from_witness_index(output_indices[0]);
         let y = FieldCT::from_witness_index(output_indices[1]);
-        Ok(CycleGroupCT::new(x, y, BoolCT::from(false), driver))
+        CycleGroupCT::new_with_infinity_control(x, y, BoolCT::from(false), false, builder, driver)
     }
 }
 

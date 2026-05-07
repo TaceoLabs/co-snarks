@@ -4,6 +4,7 @@ use crate::polynomials::polynomial::Polynomials;
 use ark_ec::CurveGroup;
 use std::sync::Arc;
 
+#[derive(Default)]
 pub struct PlainProvingKey<P: CurveGroup> {
     pub crs: Arc<ProverCrs<P>>,
     pub circuit_size: u32,

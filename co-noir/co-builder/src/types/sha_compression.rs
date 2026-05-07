@@ -123,6 +123,11 @@ impl<F: PrimeField> SHA256<F> {
             0xc67178f2,
         ];
 
+        // Match bb: these are not otherwise lookup-constrained in this function.
+        h_init[3].create_range_constraint(32, builder, driver)?;
+        h_init[7].create_range_constraint(32, builder, driver)?;
+        input[0].create_range_constraint(32, builder, driver)?;
+
         // Initialize round variables with previous block output
         let mut a = SparseValue::new(h_init[0].clone(), builder, driver);
         let mut b = Self::map_into_maj_sparse_form(h_init[1].clone(), builder, driver)?;
@@ -145,24 +150,30 @@ impl<F: PrimeField> SHA256<F> {
             h = g;
             g = f;
             f = e.clone();
-            e.normal = Self::add_normalize(&d.normal, &temp1, builder, driver)?;
+            e.normal = FieldCT::add_normalize_unsafe(&d.normal, &temp1, 3, builder, driver)?;
             d = c;
             c = b;
             b = a.clone();
-            a.normal = Self::add_normalize(&temp1, &maj, builder, driver)?;
+            a.normal = FieldCT::add_normalize_unsafe(&temp1, &maj, 3, builder, driver)?;
         }
+
+        // Apply range constraints to `a` and `e` which are the only outputs of the previous loop not already
+        // lookup-constrained via sparse form conversion. Although not strictly necessary, this simplifies the analysis that
+        // the output of compression is fully constrained at minimal cost.
+        a.normal.create_range_constraint(32, builder, driver)?;
+        e.normal.create_range_constraint(32, builder, driver)?;
 
         // Add into previous block output and return
         let mut output: [FieldCT<P::ScalarField>; 8] =
             array::from_fn(|_| FieldCT::<P::ScalarField>::default());
-        output[0] = Self::add_normalize(&a.normal, &h_init[0], builder, driver)?;
-        output[1] = Self::add_normalize(&b.normal, &h_init[1], builder, driver)?;
-        output[2] = Self::add_normalize(&c.normal, &h_init[2], builder, driver)?;
-        output[3] = Self::add_normalize(&d.normal, &h_init[3], builder, driver)?;
-        output[4] = Self::add_normalize(&e.normal, &h_init[4], builder, driver)?;
-        output[5] = Self::add_normalize(&f.normal, &h_init[5], builder, driver)?;
-        output[6] = Self::add_normalize(&g.normal, &h_init[6], builder, driver)?;
-        output[7] = Self::add_normalize(&h.normal, &h_init[7], builder, driver)?;
+        output[0] = FieldCT::add_normalize_unsafe(&a.normal, &h_init[0], 1, builder, driver)?;
+        output[1] = FieldCT::add_normalize_unsafe(&b.normal, &h_init[1], 1, builder, driver)?;
+        output[2] = FieldCT::add_normalize_unsafe(&c.normal, &h_init[2], 1, builder, driver)?;
+        output[3] = FieldCT::add_normalize_unsafe(&d.normal, &h_init[3], 1, builder, driver)?;
+        output[4] = FieldCT::add_normalize_unsafe(&e.normal, &h_init[4], 1, builder, driver)?;
+        output[5] = FieldCT::add_normalize_unsafe(&f.normal, &h_init[5], 1, builder, driver)?;
+        output[6] = FieldCT::add_normalize_unsafe(&g.normal, &h_init[6], 1, builder, driver)?;
+        output[7] = FieldCT::add_normalize_unsafe(&h.normal, &h_init[7], 1, builder, driver)?;
         // Apply 32-bit range checks on the outputs
         for output_elem in &mut output {
             output_elem.create_range_constraint(32, builder, driver)?;
@@ -316,12 +327,25 @@ impl<F: PrimeField> SHA256<F> {
                 let w_out_inv_pow_two =
                     w_out.multiply(&FieldCT::from(inv_pow_two), builder, driver)?;
                 let divisor = w_out_raw_inv_pow_two.sub(&w_out_inv_pow_two, builder, driver);
-                divisor.create_range_constraint(3, builder, driver)?;
+                // Sum of four 32-bit values: divisor ≤ 3.
+                divisor.create_range_constraint(2, builder, driver)?;
                 w_out
             };
 
             w_sparse[i] = SparseWitnessLimbs::new(w_out);
         }
+
+        // Explicitly constrain w[62] and w[63] to 32 bits. All other computed w_out values
+        // (w[16..61]) are implicitly constrained via lookups in convert_witness().
+        //
+        // While not strictly necessary for soundness, this simplifies security analysis at minimal cost.
+        //
+        w_sparse[62]
+            .normal
+            .create_range_constraint(32, builder, driver)?;
+        w_sparse[63]
+            .normal
+            .create_range_constraint(32, builder, driver)?;
 
         let mut w_extended = array::from_fn(|_| FieldCT::default());
         for i in 0..64 {
@@ -448,53 +472,6 @@ impl<F: PrimeField> SHA256<F> {
         )?;
 
         Ok(majority_result)
-    }
-
-    fn add_normalize<P: CurveGroup<ScalarField = F>, T: NoirWitnessExtensionProtocol<F>>(
-        a: &FieldCT<F>,
-        b: &FieldCT<F>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<FieldCT<F>> {
-        if a.is_constant() && b.is_constant() {
-            let a_value = a.get_value(builder, driver);
-            let b_value = b.get_value(builder, driver);
-
-            let a_val = T::get_public(&a_value).expect("Already checked it is public");
-            let b_val = T::get_public(&b_value).expect("Already checked it is public");
-
-            let sum: BigUint = (a_val + b_val).into();
-
-            let normalized_sum = F::from(sum % (1u64 << 32));
-
-            Ok(FieldCT::from(normalized_sum))
-        } else {
-            let a_value = a.get_value(builder, driver);
-            let b_value = b.get_value(builder, driver);
-
-            let sum = T::add(driver, a_value, b_value);
-            let overflow = if T::is_shared(&sum) {
-                let sum_val = T::get_shared(&sum).expect("Already checked it is shared");
-                FieldCT::from_witness(T::sha256_get_overflow_bit(driver, sum_val)?.into(), builder)
-            } else {
-                let sum_val: BigUint = T::get_public(&sum)
-                    .expect("Already checked it is public")
-                    .into();
-                let normalized_sum = sum_val.iter_u32_digits().next().unwrap_or_default();
-                let overflow = (sum_val - normalized_sum) >> 32;
-                FieldCT::from_witness(F::from(overflow).into(), builder)
-            };
-
-            let result = a.add_two(
-                b,
-                &overflow.multiply(&FieldCT::from(-F::from(1u64 << 32)), builder, driver)?,
-                builder,
-                driver,
-            );
-
-            overflow.create_range_constraint(3, builder, driver)?;
-            Ok(result)
-        }
     }
 
     fn map_into_maj_sparse_form<
