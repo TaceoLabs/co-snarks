@@ -4187,7 +4187,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             }
         }
 
-
         // Add aes128 constraints
         for constraint in constraint_system.aes128_constraints.iter() {
             self.create_aes128_constraints(driver, constraint)?;
