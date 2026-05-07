@@ -1,4 +1,4 @@
-use crate::{types::sha_compression::SHA256, ultra_builder::GenericUltraCircuitBuilder};
+use crate::ultra_builder::GenericUltraCircuitBuilder;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType};
 
 use ark_ff::PrimeField;
@@ -291,7 +291,7 @@ impl<F: PrimeField> BlakeUtils<F> {
         state[b] = lookup_output;
 
         // a = a + b + y
-        state[a] = SHA256::add_normalize_unsafe(
+        state[a] = FieldCT::add_normalize_unsafe(
             &state[a],
             &state[b].add(y, builder, driver),
             3,
@@ -320,7 +320,7 @@ impl<F: PrimeField> BlakeUtils<F> {
         )?;
 
         // c = c + d
-        state[c] = SHA256::add_normalize_unsafe(&state[c], &state[d], 3, builder, driver)?;
+        state[c] = FieldCT::add_normalize_unsafe(&state[c], &state[d], 3, builder, driver)?;
 
         // b = (b ^ c).ror(7)
         // Get the lookup accumulator where `lookup_4[ColumnIdx::C3][0]` contains the

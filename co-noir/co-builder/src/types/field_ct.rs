@@ -1940,6 +1940,57 @@ impl<F: PrimeField> FieldCT<F> {
 
         Ok(predicate)
     }
+
+    pub(crate) fn add_normalize_unsafe<
+        P: CurveGroup<ScalarField = F>,
+        T: NoirWitnessExtensionProtocol<F>,
+    >(
+        a: &FieldCT<F>,
+        b: &FieldCT<F>,
+        overflow_bits: usize,
+        builder: &mut GenericUltraCircuitBuilder<P, T>,
+        driver: &mut T,
+    ) -> eyre::Result<FieldCT<F>> {
+        if a.is_constant() && b.is_constant() {
+            let a_value = a.get_value(builder, driver);
+            let b_value = b.get_value(builder, driver);
+
+            let a_val = T::get_public(&a_value).expect("Already checked it is public");
+            let b_val = T::get_public(&b_value).expect("Already checked it is public");
+
+            let sum: BigUint = (a_val + b_val).into();
+
+            let normalized_sum = F::from(sum % (1u64 << 32));
+
+            Ok(FieldCT::from(normalized_sum))
+        } else {
+            let a_value = a.get_value(builder, driver);
+            let b_value = b.get_value(builder, driver);
+
+            let sum = T::add(driver, a_value, b_value);
+            let overflow = if T::is_shared(&sum) {
+                let sum_val = T::get_shared(&sum).expect("Already checked it is shared");
+                FieldCT::from_witness(T::sha256_get_overflow_bit(driver, sum_val)?.into(), builder)
+            } else {
+                let sum_val: BigUint = T::get_public(&sum)
+                    .expect("Already checked it is public")
+                    .into();
+                let normalized_sum = sum_val.iter_u32_digits().next().unwrap_or_default();
+                let overflow = (sum_val - normalized_sum) >> 32;
+                FieldCT::from_witness(F::from(overflow).into(), builder)
+            };
+
+            let result = a.add_two(
+                b,
+                &overflow.multiply(&FieldCT::from(-F::from(1u64 << 32)), builder, driver)?,
+                builder,
+                driver,
+            );
+
+            overflow.create_range_constraint(overflow_bits, builder, driver)?;
+            Ok(result)
+        }
+    }
 }
 
 impl<F: PrimeField> From<F> for FieldCT<F> {
