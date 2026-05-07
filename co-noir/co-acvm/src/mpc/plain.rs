@@ -316,6 +316,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         Ok(F::rand(&mut rng))
     }
 
+    fn common_rng_seed(&mut self) -> eyre::Result<[u8; 32]> {
+        Ok(rand::random())
+    }
+
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
         public_value
     }

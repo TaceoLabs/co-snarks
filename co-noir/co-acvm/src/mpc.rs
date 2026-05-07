@@ -248,6 +248,10 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
     // Generate a shared random value
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare>;
 
+    /// Generate a common random seed that is equal for all MPC parties without an
+    /// opening round.
+    fn common_rng_seed(&mut self) -> eyre::Result<[u8; 32]>;
+
     /// Transforms a public value into a shared value: \[a\] = a.
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare;
 

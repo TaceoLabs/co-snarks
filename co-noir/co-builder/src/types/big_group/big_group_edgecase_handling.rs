@@ -4,7 +4,8 @@ use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField, UniformRand};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
-use rand::thread_rng;
+use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 /**
  * @brief Given two lists of points that need to be multiplied by scalars, create a new list of length +1 with original
  * points masked, but the same scalar product sum
@@ -28,10 +29,10 @@ pub(crate) fn mask_points<
 
     debug_assert!(points.len() == scalars.len());
 
-    // TODO TACEO: Is thread_rng fine here?
-    // Sample a random curve point as the offset generator (free witness).
-    // The prover provides this point: the circuit only constrains it to lie on the curve.
-    let native_offset_generator = P::Affine::rand(&mut thread_rng());
+    // Use driver-provided common randomness so all MPC parties derive the same
+    // free witness without an extra opening round.
+    let mut rng = ChaCha12Rng::from_seed(driver.common_rng_seed()?);
+    let native_offset_generator = P::Affine::rand(&mut rng);
     let offset_generator_element =
         BigGroup::from_witness(&native_offset_generator, driver, builder)?;
 

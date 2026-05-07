@@ -51,7 +51,7 @@ where
         outputs: &[BrilligOutputs],
         predicate: &Expression<GenericFieldElement<F>>,
     ) -> CoAcvmResult<()> {
-        let predicate = {
+        let mask_predicate = {
             let predicate = self.evaluate_expression(predicate)?;
             // we skip if predicate is zero
             if T::is_public_zero(&predicate) {
@@ -60,9 +60,11 @@ where
                 let zeroes_result = vec![T::public_zero(); get_output_size(outputs)];
                 self.fill_output(zeroes_result, outputs);
                 return Ok(());
+            } else if T::is_public_one(&predicate) {
+                None
             } else {
                 // we need to cmux the result with random zeros
-                predicate
+                Some(predicate)
             }
         };
         tracing::debug!("solving brillig call: {}", id);
@@ -95,7 +97,11 @@ where
             self.value_store
                 .add_from_brillig(&mut self.driver, generated_pss)?;
             let brillig_result = self.driver.parse_brillig_result(unconstrained_witnesses)?;
-            let brillig_result = mask_brillig_result(predicate, brillig_result, &mut self.driver)?;
+            let brillig_result = if let Some(predicate) = mask_predicate {
+                mask_brillig_result(predicate, brillig_result, &mut self.driver)?
+            } else {
+                brillig_result
+            };
             self.fill_output(brillig_result, outputs);
             Ok(())
         } else {

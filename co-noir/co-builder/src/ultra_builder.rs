@@ -317,9 +317,38 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         driver: &mut T,
         big_constraint: &mut BigQuadConstraint<P::ScalarField>,
     ) -> eyre::Result<()> {
-        for j in 0..big_constraint.len() - 1 {
+        let num_products = big_constraint.len() - 1;
+        let lhs = big_constraint
+            .iter()
+            .take(num_products)
+            .map(|gate| {
+                assert_ne!(
+                    gate.a,
+                    u32::MAX,
+                    "mul_quad_ gate cannot have IS_CONSTANT for witness a. An error here probably means a conversion issue in acir_to_constraint_buf."
+                );
+                self.get_variable(gate.a as usize)
+            })
+            .collect::<Vec<_>>();
+        let rhs = big_constraint
+            .iter_mut()
+            .take(num_products)
+            .map(|gate| {
+                self.replace_and_check_zero_scaling(&mut gate.b, &gate.b_scaling);
+                self.get_variable(gate.b as usize)
+            })
+            .collect::<Vec<_>>();
+        let products = driver.mul_many(&lhs, &rhs)?;
+
+        for (j, term1) in products.into_iter().enumerate() {
             // Replace IS_CONSTANT indices with zero indices
-            self.set_zero_idx(&mut big_constraint[j]);
+            let (c_scaling, d_scaling) = (
+                big_constraint[j].c_scaling.clone(),
+                big_constraint[j].d_scaling.clone(),
+            );
+            self.replace_and_check_zero_scaling(&mut big_constraint[j].c, &c_scaling);
+            self.replace_and_check_zero_scaling(&mut big_constraint[j].d, &d_scaling);
+
             // Create the mul_add gate
             self.create_big_mul_add_gate(&big_constraint[j], true);
 
@@ -330,7 +359,6 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             let var_c = self.get_variable(gate.c as usize);
             let var_d = self.get_variable(gate.d as usize);
 
-            let term1 = driver.mul(var_a.to_owned(), var_b.to_owned())?;
             let term1 = driver.mul_with_public(gate.mul_scaling, term1);
             let term2 = driver.mul_with_public(gate.a_scaling, var_a);
             let term3 = driver.mul_with_public(gate.b_scaling, var_b);
@@ -362,26 +390,25 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
     }
 
     fn set_zero_idx(&self, mul_quad: &mut MulQuad<P::ScalarField>) {
-        let replace_and_check_zero_scaling =
-            |builder: &Self, index: &mut u32, scaling: &P::ScalarField| {
-                if *index == u32::MAX {
-                    *index = builder.zero_idx;
-                    assert_eq!(
-                        *scaling,
-                        P::ScalarField::zero(),
-                        "mul_quad_ gate with IS_CONSTANT witness index has non-zero scaling"
-                    );
-                }
-            };
-
         assert_ne!(
             mul_quad.a,
             u32::MAX,
             "mul_quad_ gate cannot have IS_CONSTANT for witness a. An error here probably means a conversion issue in acir_to_constraint_buf."
         );
-        replace_and_check_zero_scaling(self, &mut mul_quad.b, &mul_quad.b_scaling);
-        replace_and_check_zero_scaling(self, &mut mul_quad.c, &mul_quad.c_scaling);
-        replace_and_check_zero_scaling(self, &mut mul_quad.d, &mul_quad.d_scaling);
+        self.replace_and_check_zero_scaling(&mut mul_quad.b, &mul_quad.b_scaling);
+        self.replace_and_check_zero_scaling(&mut mul_quad.c, &mul_quad.c_scaling);
+        self.replace_and_check_zero_scaling(&mut mul_quad.d, &mul_quad.d_scaling);
+    }
+
+    fn replace_and_check_zero_scaling(&self, index: &mut u32, scaling: &P::ScalarField) {
+        if *index == u32::MAX {
+            *index = self.zero_idx;
+            assert_eq!(
+                *scaling,
+                P::ScalarField::zero(),
+                "mul_quad_ gate with IS_CONSTANT witness index has non-zero scaling"
+            );
+        }
     }
 
     pub(crate) fn create_big_mul_gate(&mut self, inp: &MulQuad<P::ScalarField>) {
@@ -4052,7 +4079,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         };
         builder.build_constraints(driver, constraint_system, crs, &metadata)?;
 
-        // TACEO TODO: Not happening in bb
         builder.finalize_circuit(true, driver)?;
 
         Ok(builder)
@@ -4082,7 +4108,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         };
         builder.build_constraints(driver, constraint_system, crs, &metadata)?;
 
-        // TACEO TODO: Not happening in bb
         builder.finalize_circuit(true, driver)?;
 
         Ok(builder.compute_dyadic_size())
