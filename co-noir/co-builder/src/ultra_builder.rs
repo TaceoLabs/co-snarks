@@ -49,6 +49,7 @@ use co_noir_common::utils::Utils;
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
 use num_bigint::BigUint;
+use std::collections::HashMap;
 use std::{array, collections::BTreeMap, sync::Arc};
 
 type GateBlocks<F> = UltraTraceBlocks<UltraTraceBlock<F>>;
@@ -921,6 +922,59 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 debug_assert_eq!(selector.len(), nominal_size);
             }
         }
+    }
+
+    // decomposes the shared values in batches, separated into the corresponding number of bits the values have
+    #[expect(clippy::type_complexity)]
+    fn prepare_for_range_decompose(
+        &mut self,
+        driver: &mut T,
+        constraint_system: &AcirFormat<P::ScalarField>,
+    ) -> eyre::Result<(
+        HashMap<u32, usize>,
+        Vec<Vec<Vec<T::ArithmeticShare>>>,
+        Vec<(bool, usize)>,
+    )> {
+        let mut to_decompose: Vec<Vec<T::ArithmeticShare>> = vec![];
+        let mut decompose_indices: Vec<(bool, usize)> = vec![];
+        let mut bits_locations: HashMap<u32, usize> = HashMap::new();
+
+        for constraint in constraint_system.range_constraints.iter() {
+            let val = &self.get_variable(constraint.witness as usize);
+
+            let num_bits = constraint.num_bits;
+            if num_bits > Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u32 && T::is_shared(val) {
+                let share_val = T::get_shared(val).expect("Already checked it is shared");
+                if let Some(&idx) = bits_locations.get(&num_bits) {
+                    to_decompose[idx].push(share_val);
+                    decompose_indices.push((true, to_decompose[idx].len() - 1));
+                } else {
+                    let new_idx = to_decompose.len();
+                    to_decompose.push(vec![share_val]);
+                    decompose_indices.push((true, 0));
+                    bits_locations.insert(num_bits, new_idx);
+                }
+            } else {
+                decompose_indices.push((false, 0));
+            }
+        }
+
+        let mut decomposed = Vec::with_capacity(to_decompose.len());
+
+        for (i, inp) in to_decompose.into_iter().enumerate() {
+            let num_bits = bits_locations
+                .iter()
+                .find_map(|(&key, &value)| if value == i { Some(key) } else { None })
+                .expect("Index not found in bitsloc");
+
+            decomposed.push(T::decompose_arithmetic_many(
+                driver,
+                &inp,
+                num_bits as usize,
+                Self::DEFAULT_PLOOKUP_RANGE_BITNUM,
+            )?);
+        }
+        Ok((bits_locations, decomposed, decompose_indices))
     }
 
     pub(crate) fn get_num_gates(&self) -> usize {
@@ -4106,11 +4160,33 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.create_logic_gate(driver, constraint)?;
         }
 
-        // Add range constraints.
-        // TODO Reinstate prepare_for_range_decompose in order to batch the decompositions
-        for constraint in constraint_system.range_constraints.iter() {
-            self.create_dyadic_range_constraint(driver, constraint.witness, constraint.num_bits)?;
+        // Add range constraints
+        // We want to decompose all shared elements in parallel
+        let (bits_locations, decomposed, decompose_indices) =
+            self.prepare_for_range_decompose(driver, constraint_system)?;
+
+        for (i, constraint) in constraint_system.range_constraints.iter().enumerate() {
+            let range = constraint.num_bits;
+
+            let idx_option = bits_locations.get(&range);
+            if let Some(idx) = idx_option
+                && decompose_indices[i].0
+            {
+                // Already decomposed
+                let idx = idx.to_owned();
+                self.create_limbed_range_constraint(
+                    driver,
+                    constraint.witness,
+                    range as u64,
+                    Some(&decomposed[idx][decompose_indices[i].1]),
+                    Self::DEFAULT_PLOOKUP_RANGE_BITNUM as u64,
+                )?;
+            } else {
+                // Either we do not have to decompose or the value is public
+                self.create_dyadic_range_constraint(driver, constraint.witness, range)?;
+            }
         }
+
 
         // Add aes128 constraints
         for constraint in constraint_system.aes128_constraints.iter() {
