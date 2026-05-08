@@ -160,14 +160,12 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         &self,
         driver: &mut T,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> usize {
-        let standard = self
-            .get_standard_form(builder, driver)
-            .expect("failed to canonicalize biggroup before set_public");
-        let start_idx = standard.x.set_public(driver, builder);
-        standard.y.set_public(driver, builder);
+    ) -> eyre::Result<usize> {
+        let standard = self.get_standard_form(builder, driver)?;
+        let start_idx = standard.x.set_public(driver, builder)?;
+        standard.y.set_public(driver, builder)?;
 
-        start_idx
+        Ok(start_idx)
     }
 
     pub(crate) fn set_point_at_infinity<P: CurveGroup<ScalarField = F>>(

@@ -46,7 +46,12 @@ where
     fn resolve(&self, address: MemoryAddress) -> eyre::Result<usize> {
         let address = match address {
             MemoryAddress::Direct(address) => address as usize,
-            MemoryAddress::Relative(offset) => self.get_stack_pointer()? + offset as usize,
+            MemoryAddress::Relative(offset) => {
+                let offset: usize = offset.try_into()?;
+                self.get_stack_pointer()?
+                    .checked_add(offset)
+                    .ok_or_else(|| eyre::eyre!("relative memory address overflow"))?
+            }
         };
         Ok(address)
     }

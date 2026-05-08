@@ -91,27 +91,25 @@ impl<F: PrimeField> BigField<F> {
         &self,
         driver: &mut T,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
-    ) -> usize {
+    ) -> eyre::Result<usize> {
         let mut reduced = self.clone();
-        reduced
-            .self_reduce(builder, driver)
-            .expect("failed to reduce bigfield before set_public");
+        reduced.self_reduce(builder, driver)?;
 
+        // Barretenberg exposes a BN254 base-field public input as two scalar-field
+        // elements: limbs (0,1) and (2,3), each packed in base 2^68.
         let shift = FieldCT::from(F::from(BigUint::from(1u64) << NUM_LIMB_BITS));
         let start_index = builder.public_inputs.len();
         let lo = reduced.binary_basis_limbs[0].element.add(
             &reduced.binary_basis_limbs[1]
                 .element
-                .multiply(&shift, builder, driver)
-                .expect("failed to pack bigfield lo limb"),
+                .multiply(&shift, builder, driver)?,
             builder,
             driver,
         );
         let hi = reduced.binary_basis_limbs[2].element.add(
             &reduced.binary_basis_limbs[3]
                 .element
-                .multiply(&shift, builder, driver)
-                .expect("failed to pack bigfield hi limb"),
+                .multiply(&shift, builder, driver)?,
             builder,
             driver,
         );
@@ -119,7 +117,7 @@ impl<F: PrimeField> BigField<F> {
         let hi_witness = hi.get_witness_index(builder, driver);
         builder.set_public_input(lo_witness);
         builder.set_public_input(hi_witness);
-        start_index
+        Ok(start_index)
     }
 
     pub(crate) fn is_constant(&self) -> bool {

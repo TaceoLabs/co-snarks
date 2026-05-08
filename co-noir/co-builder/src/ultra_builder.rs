@@ -4288,7 +4288,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         // Process the result of adding recursion constraints and propagate the public inputs as needed.
         if has_pairing_points {
-            honk_output.set_public(self, driver);
+            honk_output.set_public(self, driver)?;
         } else {
             self.add_default_to_public_inputs();
         }

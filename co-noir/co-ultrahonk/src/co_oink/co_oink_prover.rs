@@ -332,7 +332,7 @@ impl<
             num *= num_acc + x_i;
             denom *= denom_acc + x_i;
 
-            if i < proving_key.public_inputs.len() - 1 {
+            if i + 1 < proving_key.public_inputs.len() {
                 num_acc += self.memory.challenges.beta;
                 denom_acc -= self.memory.challenges.beta;
             }

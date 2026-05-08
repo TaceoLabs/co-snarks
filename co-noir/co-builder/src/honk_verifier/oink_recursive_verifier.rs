@@ -226,7 +226,7 @@ impl OinkRecursiveVerifier {
                 driver,
             )?;
 
-            if i != public_inputs.len() - 1 {
+            if i + 1 < public_inputs.len() {
                 numerator_acc = numerator_acc.add(beta, builder, driver);
                 denominator_acc = denominator_acc.sub(beta, builder, driver);
             }

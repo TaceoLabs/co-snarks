@@ -518,13 +518,13 @@ impl<C: CurveGroup, T: NoirWitnessExtensionProtocol<C::ScalarField>> PairingPoin
         &mut self,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
-    ) -> usize
+    ) -> eyre::Result<usize>
     where
         C::BaseField: PrimeField,
     {
-        let start_idx = self.p0.set_public(driver, builder);
-        self.p1.set_public(driver, builder);
-        start_idx
+        let start_idx = self.p0.set_public(driver, builder)?;
+        self.p1.set_public(driver, builder)?;
+        Ok(start_idx)
     }
 }
 impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::ScalarField>>

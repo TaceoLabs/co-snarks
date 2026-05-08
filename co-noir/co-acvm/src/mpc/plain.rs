@@ -972,8 +972,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         max_num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         let modulus: BigUint = F::MODULUS.into();
-        let scalar_value: BigUint = (*scalar).into();
-        let mut scalar_multiplier = scalar_value % &modulus;
+        let mut scalar_multiplier = scalar.into_bigint().into();
 
         let num_rounds = if max_num_bits == 0 || scalar_multiplier.is_zero() {
             F::MODULUS_BIT_SIZE as usize
@@ -1100,6 +1099,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             &lhs_as_biguint - &rhs_as_biguint
         } else {
             let missing = &rhs_as_biguint - &lhs_as_biguint;
+            // Limbs can represent unreduced bigfield values, so adding one
+            // modulus is not always enough to make the subtraction nonnegative.
             let num_moduli = (&missing + &modulus - BigUint::from(1u8)) / &modulus;
             &lhs_as_biguint + (&modulus * num_moduli) - &rhs_as_biguint
         };

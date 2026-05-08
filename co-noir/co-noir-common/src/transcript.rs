@@ -177,7 +177,8 @@ where
         HonkProof::new(self.proof_data)
     }
 
-    pub fn print(&self) {
+    #[expect(dead_code)]
+    pub(crate) fn print(&self) {
         self.manifest.print();
     }
 

@@ -39,6 +39,26 @@ where
     Ok(masked_result)
 }
 
+enum BrilligMask<T> {
+    Skip,
+    NoMask,
+    Mask(T),
+}
+
+fn brillig_mask<T, F>(predicate: T::AcvmType) -> BrilligMask<T::AcvmType>
+where
+    T: NoirWitnessExtensionProtocol<F>,
+    F: PrimeField,
+{
+    if T::is_public_zero(&predicate) {
+        BrilligMask::Skip
+    } else if T::is_public_one(&predicate) {
+        BrilligMask::NoMask
+    } else {
+        BrilligMask::Mask(predicate)
+    }
+}
+
 impl<T, F> CoSolver<T, F>
 where
     T: NoirWitnessExtensionProtocol<F>,
@@ -51,18 +71,17 @@ where
         outputs: &[BrilligOutputs],
         predicate: &Expression<GenericFieldElement<F>>,
     ) -> CoAcvmResult<()> {
-        let mask_predicate = {
-            let predicate = self.evaluate_expression(predicate)?;
+        let mask_predicate = match brillig_mask::<T, F>(self.evaluate_expression(predicate)?) {
             // we skip if predicate is zero
-            if T::is_public_zero(&predicate) {
+            BrilligMask::Skip => {
                 tracing::debug!("skipping brillig call as predicate is zero");
                 // short circuit and fill with zeros
                 let zeroes_result = vec![T::public_zero(); get_output_size(outputs)];
                 self.fill_output(zeroes_result, outputs);
                 return Ok(());
-            } else if T::is_public_one(&predicate) {
-                None
-            } else {
+            }
+            BrilligMask::NoMask => None,
+            BrilligMask::Mask(predicate) => {
                 // we need to cmux the result with random zeros
                 Some(predicate)
             }
