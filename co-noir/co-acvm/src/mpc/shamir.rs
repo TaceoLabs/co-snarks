@@ -535,6 +535,10 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAc
         self.state.rand(self.net)
     }
 
+    fn common_rng_seed(&mut self) -> eyre::Result<[u8; 32]> {
+        eyre::bail!("common no-communication RNG seed is not implemented for Shamir")
+    }
+
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
         arithmetic::promote_to_trivial_share(public_value)
     }

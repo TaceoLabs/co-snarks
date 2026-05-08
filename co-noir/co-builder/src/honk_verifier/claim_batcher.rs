@@ -116,6 +116,9 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
+        let num_powers = self.unshifted.commitments.len() + self.shifted.commitments.len();
+        let mut power_idx = 0usize;
+
         // Append the commitments/scalars from a given batch to the corresponding containers; update the batched
         // evaluation and the running batching challenge in place
         // TACEO TODO: Batch multiplications
@@ -131,7 +134,10 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                         builder,
                         driver,
                     );
-                    *rho_power = rho_power.multiply(rho, builder, driver)?;
+                    power_idx += 1;
+                    if power_idx < num_powers {
+                        *rho_power = rho_power.multiply(rho, builder, driver)?;
+                    }
                 }
                 HonkProofResult::Ok(())
             };

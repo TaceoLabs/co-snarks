@@ -95,9 +95,9 @@ impl LogDerivLookupRelation {
         relation_parameters: &RelationParameters<F>,
     ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
         let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
+        let beta = relation_parameters.beta;
+        let beta_sqr = beta * beta;
+        let beta_cube = beta_sqr * beta;
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
         let w_3 = input.witness.w_o();
@@ -117,12 +117,12 @@ impl LogDerivLookupRelation {
         let derived_table_entry_2 = negative_column_2_step_size.to_owned() * w_2_shift + w_2;
         let derived_table_entry_3 = negative_column_3_step_size.to_owned() * w_3_shift + w_3;
 
-        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
+        // (w_1 + \gamma q_2*w_1_shift) + β(w_2 + q_m*w_2_shift) + β²(w_3 + q_c*w_3_shift) + β³q_index.
         // deg 2 or 3
         derived_table_entry_1
-            + derived_table_entry_2 * eta_1
-            + derived_table_entry_3 * eta_2
-            + table_index.to_owned() * eta_3
+            + derived_table_entry_2 * beta
+            + derived_table_entry_3 * beta_sqr
+            + table_index.to_owned() * beta_cube
     }
 
     fn compute_read_term_verifier<F: PrimeField>(
@@ -130,9 +130,9 @@ impl LogDerivLookupRelation {
         relation_parameters: &RelationParameters<F>,
     ) -> F {
         let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
+        let beta = relation_parameters.beta;
+        let beta_sqr = beta * beta;
+        let beta_cube = beta_sqr * beta;
         let w_1 = input.witness.w_l();
         let w_2 = input.witness.w_r();
         let w_3 = input.witness.w_o();
@@ -152,23 +152,23 @@ impl LogDerivLookupRelation {
         let derived_table_entry_2 = negative_column_2_step_size.to_owned() * w_2_shift + w_2;
         let derived_table_entry_3 = negative_column_3_step_size.to_owned() * w_3_shift + w_3;
 
-        // (w_1 + \gamma q_2*w_1_shift) + η(w_2 + q_m*w_2_shift) + η₂(w_3 + q_c*w_3_shift) + η₃q_index.
+        // (w_1 + \gamma q_2*w_1_shift) + β(w_2 + q_m*w_2_shift) + β²(w_3 + q_c*w_3_shift) + β³q_index.
         // deg 2 or 3
         derived_table_entry_1
-            + derived_table_entry_2 * eta_1
-            + derived_table_entry_3 * eta_2
-            + table_index.to_owned() * eta_3
+            + derived_table_entry_2 * beta
+            + derived_table_entry_3 * beta_sqr
+            + table_index.to_owned() * beta_cube
     }
 
-    // Compute table_1 + gamma + table_2 * eta + table_3 * eta_2 + table_4 * eta_3
+    // Compute table_1 + gamma + table_2 * beta + table_3 * beta^2 + table_4 * beta^3
     fn compute_write_term<F: PrimeField>(
         input: &ProverUnivariates<F>,
         relation_parameters: &RelationParameters<F>,
     ) -> Univariate<F, MAX_PARTIAL_RELATION_LENGTH> {
         let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
+        let beta = relation_parameters.beta;
+        let beta_sqr = beta * beta;
+        let beta_cube = beta_sqr * beta;
 
         let table_1 = input.precomputed.table_1();
         let table_2 = input.precomputed.table_2();
@@ -177,9 +177,9 @@ impl LogDerivLookupRelation {
 
         table_1.to_owned()
             + gamma
-            + table_2.to_owned() * eta_1
-            + table_3.to_owned() * eta_2
-            + table_4.to_owned() * eta_3
+            + table_2.to_owned() * beta
+            + table_3.to_owned() * beta_sqr
+            + table_4.to_owned() * beta_cube
     }
 
     fn compute_write_term_verifier<F: PrimeField>(
@@ -187,9 +187,9 @@ impl LogDerivLookupRelation {
         relation_parameters: &RelationParameters<F>,
     ) -> F {
         let gamma = &relation_parameters.gamma;
-        let eta_1 = &relation_parameters.eta_1;
-        let eta_2 = &relation_parameters.eta_2;
-        let eta_3 = &relation_parameters.eta_3;
+        let beta = relation_parameters.beta;
+        let beta_sqr = beta * beta;
+        let beta_cube = beta_sqr * beta;
 
         let table_1 = input.precomputed.table_1();
         let table_2 = input.precomputed.table_2();
@@ -198,9 +198,9 @@ impl LogDerivLookupRelation {
 
         table_1.to_owned()
             + gamma
-            + table_2.to_owned() * eta_1
-            + table_3.to_owned() * eta_2
-            + table_4.to_owned() * eta_3
+            + table_2.to_owned() * beta
+            + table_3.to_owned() * beta_sqr
+            + table_4.to_owned() * beta_cube
     }
 }
 
@@ -221,9 +221,9 @@ impl<F: PrimeField> Relation<F> for LogDerivLookupRelation {
      *
      * \sum{i=0}^{n-1} \frac{read_counts_i}{write_term_i} - \frac{q_lookup}{read_term_i} = 0
      *
-     * where write_term = table_col_1 + \gamma + table_col_2 * \eta_1 + table_col_3 * \eta_2 + table_index * \eta_3
-     * and read_term = derived_table_entry_1 + \gamma + derived_table_entry_2 * \eta_1 + derived_table_entry_3 * \eta_2
-     * + table_index * \eta_3, with derived_table_entry_i = w_i - col_step_size_i\cdot w_i_shift. (The table entries
+     * where write_term = table_col_1 + \gamma + table_col_2 * \beta + table_col_3 * \beta^2 + table_index * \beta^3
+     * and read_term = derived_table_entry_1 + \gamma + derived_table_entry_2 * \beta + derived_table_entry_3 * \beta^2
+     * + table_index * \beta^3, with derived_table_entry_i = w_i - col_step_size_i\cdot w_i_shift. (The table entries
      *   must be 'derived' from wire values in this way since the stored witnesses are actually successive accumulators,
      *   the differences of which are equal to entries in a table. This is an efficiency trick to avoid using additional
      *   gates to reconstruct full size values from the limbs contained in tables).

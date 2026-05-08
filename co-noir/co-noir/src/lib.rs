@@ -5,8 +5,8 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoSolver};
-use co_builder::keys::plain_proving_key::PlainPkTrait;
-use co_builder::keys::proving_key::ProvingKeyTrait;
+use co_builder::keys::plain_proving_key::create_prover_instance;
+use co_builder::keys::proving_key::{self};
 use co_builder::keys::verification_key::VerifyingKeyTrait;
 use co_builder::prelude::{
     AcirFormat, HonkRecursion, Rep3CoBuilder, ShamirCoBuilder, UltraCircuitBuilder,
@@ -222,7 +222,11 @@ pub fn generate_proving_key_rep3<N: Network>(
         &mut driver,
     )?;
     // generate pk
-    Ok(Rep3ProvingKey::create(id, builder, &mut driver)?)
+    Ok(proving_key::create_prover_instance(
+        id,
+        builder,
+        &mut driver,
+    )?)
 }
 
 /// Generate a shamir shared proving key
@@ -258,7 +262,11 @@ pub fn generate_proving_key_shamir<N: Network>(
         &mut driver,
     )?;
     // generate pk
-    Ok(ShamirProvingKey::create(id, builder, &mut driver)?)
+    Ok(proving_key::create_prover_instance(
+        id,
+        builder,
+        &mut driver,
+    )?)
 }
 
 /// Generate a plain proving key
@@ -273,7 +281,7 @@ pub fn generate_proving_key_plain<P: HonkCurve<TranscriptFieldType>>(
     } else {
         &Arc::new(ProverCrs::<P>::default())
     };
-    let builder = UltraCircuitBuilder::create_circuit(
+    let mut builder = UltraCircuitBuilder::create_circuit(
         constraint_system,
         0,
         witness,
@@ -281,11 +289,8 @@ pub fn generate_proving_key_plain<P: HonkCurve<TranscriptFieldType>>(
         crs,
         &mut driver,
     )?;
-    Ok(PlainProvingKey::create::<PlainAcvmSolver<_>>(
-        builder,
-        prover_crs,
-        &mut driver,
-    )?)
+    create_prover_instance(&mut builder, crs.clone(), &mut driver)
+        .map_err(|e| eyre::eyre!("Failed to create proving key: {e:?}"))
 }
 
 /// Generate a verification key

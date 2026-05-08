@@ -5,13 +5,15 @@ use acir::native_types::{WitnessMap, WitnessStack};
 use ark_bn254::Bn254;
 use ark_ff::PrimeField;
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
-use co_builder::prelude::HonkRecursion;
-use co_builder::{keys::proving_key::ProvingKeyTrait, prelude::UltraCircuitBuilder};
+use co_builder::{
+    keys::proving_key,
+    prelude::{HonkRecursion, UltraCircuitBuilder},
+};
 use co_noir::{Bn254G1, HonkProof};
 use co_noir_common::{
     crs::{parse::CrsParser, ProverCrs},
     honk_proof::TranscriptFieldType,
-    keys::proving_key::ProvingKey,
+    keys::verification_key::VerifyingKey,
     mpc::plain::PlainUltraHonkDriver,
     transcript::{Poseidon2Sponge, TranscriptHasher},
     types::ZeroKnowledge,
@@ -81,8 +83,16 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         CrsParser::<Bn254G1>::get_crs::<Bn254>(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
             .expect("failed to get crs")
             .split();
-    let (proving_key, verifying_key) =
-        ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
+    let (proving_key, inner_vk) = proving_key::create_keys_barretenberg::<
+        Bn254G1,
+        PlainUltraHonkDriver,
+        _,
+    >(0, builder, &prover_crs, &mut driver)
+    .unwrap();
+    let verifying_key = VerifyingKey {
+        crs: verifier_crs,
+        inner_vk,
+    };
 
     let (proof, public_input) = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(
         proving_key,
@@ -146,8 +156,16 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         CrsParser::<Bn254G1>::get_crs::<Bn254>(CRS_PATH_G1, CRS_PATH_G2, crs_size, has_zk)
             .expect("failed to get crs")
             .split();
-    let (proving_key, verifying_key) =
-        ProvingKey::create_keys(0, builder, &prover_crs, verifier_crs, &mut driver).unwrap();
+    let (proving_key, inner_vk) = proving_key::create_keys_barretenberg::<
+        Bn254G1,
+        PlainUltraHonkDriver,
+        _,
+    >(0, builder, &prover_crs, &mut driver)
+    .unwrap();
+    let verifying_key = VerifyingKey {
+        crs: verifier_crs,
+        inner_vk,
+    };
 
     let (proof, public_input) = CoUltraHonk::<PlainUltraHonkDriver, _, H>::prove(
         proving_key,

@@ -22,34 +22,40 @@ fn get_output_size(outputs: &[BrilligOutputs]) -> usize {
         .sum()
 }
 
-enum BrilligMask<T, F>
+fn mask_brillig_result<T, F>(
+    cond: T::AcvmType,
+    result: Vec<T::AcvmType>,
+    driver: &mut T,
+) -> CoAcvmResult<Vec<T::AcvmType>>
 where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,
 {
-    NoMask,
-    Mask(T::AcvmType),
+    let masking_zeros = driver.shared_zeros(result.len())?;
+    let mut masked_result = Vec::with_capacity(result.len());
+    for (correct, mask) in izip!(result, masking_zeros) {
+        masked_result.push(driver.cmux(cond.clone(), correct, mask)?);
+    }
+    Ok(masked_result)
 }
 
-impl<T, F> BrilligMask<T, F>
+enum BrilligMask<T> {
+    Skip,
+    NoMask,
+    Mask(T),
+}
+
+fn brillig_mask<T, F>(predicate: T::AcvmType) -> BrilligMask<T::AcvmType>
 where
     T: NoirWitnessExtensionProtocol<F>,
     F: PrimeField,
 {
-    fn mask(self, result: Vec<T::AcvmType>, driver: &mut T) -> CoAcvmResult<Vec<T::AcvmType>> {
-        match self {
-            // we don't need any masking
-            BrilligMask::NoMask => Ok(result),
-            // we need to mask it
-            BrilligMask::Mask(cond) => {
-                let masking_zeros = driver.shared_zeros(result.len())?;
-                let mut masked_result = Vec::with_capacity(result.len());
-                for (correct, mask) in izip!(result, masking_zeros) {
-                    masked_result.push(driver.cmux(cond.clone(), correct, mask)?);
-                }
-                Ok(masked_result)
-            }
-        }
+    if T::is_public_zero(&predicate) {
+        BrilligMask::Skip
+    } else if T::is_public_one(&predicate) {
+        BrilligMask::NoMask
+    } else {
+        BrilligMask::Mask(predicate)
     }
 }
 
@@ -63,23 +69,22 @@ where
         id: &BrilligFunctionId,
         inputs: &[BrilligInputs<GenericFieldElement<F>>],
         outputs: &[BrilligOutputs],
-        predicate: &Option<Expression<GenericFieldElement<F>>>,
+        predicate: &Expression<GenericFieldElement<F>>,
     ) -> CoAcvmResult<()> {
-        let brillig_mask = if let Some(expr) = predicate {
-            let predicate = self.evaluate_expression(expr)?;
+        let mask_predicate = match brillig_mask::<T, F>(self.evaluate_expression(predicate)?) {
             // we skip if predicate is zero
-            if T::is_public_zero(&predicate) {
+            BrilligMask::Skip => {
                 tracing::debug!("skipping brillig call as predicate is zero");
                 // short circuit and fill with zeros
                 let zeroes_result = vec![T::public_zero(); get_output_size(outputs)];
                 self.fill_output(zeroes_result, outputs);
                 return Ok(());
-            } else {
-                // we need to cmux the result with random zeros
-                BrilligMask::Mask(predicate)
             }
-        } else {
-            BrilligMask::NoMask
+            BrilligMask::NoMask => None,
+            BrilligMask::Mask(predicate) => {
+                // we need to cmux the result with random zeros
+                Some(predicate)
+            }
         };
         tracing::debug!("solving brillig call: {}", id);
         let mut calldata = vec![];
@@ -111,7 +116,11 @@ where
             self.value_store
                 .add_from_brillig(&mut self.driver, generated_pss)?;
             let brillig_result = self.driver.parse_brillig_result(unconstrained_witnesses)?;
-            let brillig_result = brillig_mask.mask(brillig_result, &mut self.driver)?;
+            let brillig_result = if let Some(predicate) = mask_predicate {
+                mask_brillig_result(predicate, brillig_result, &mut self.driver)?
+            } else {
+                brillig_result
+            };
             self.fill_output(brillig_result, outputs);
             Ok(())
         } else {

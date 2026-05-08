@@ -79,16 +79,18 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         }
 
         // Final round
+        let eval_offset = usize::from(has_zk == ZeroKnowledge::Yes);
         let transcript_evaluations = transcript.receive_fr_vec_from_prover::<P>(
             "Sumcheck:evaluations".to_string(),
-            NUM_ALL_ENTITIES,
+            NUM_ALL_ENTITIES + eval_offset,
         )?;
-
+        let claimed_gemini_masking_evaluation =
+            (has_zk == ZeroKnowledge::Yes).then_some(transcript_evaluations[0]);
         for (eval, &transcript_eval) in self
             .memory
             .claimed_evaluations
             .iter_mut()
-            .zip(transcript_evaluations.iter())
+            .zip(transcript_evaluations.iter().skip(eval_offset))
         {
             *eval = transcript_eval;
         }
@@ -127,6 +129,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             multivariate_challenge,
             verified,
             claimed_libra_evaluation,
+            claimed_gemini_masking_evaluation,
         })
     }
 }

@@ -1,6 +1,6 @@
 use acir::{
     acir_field::GenericFieldElement,
-    circuit::{Circuit, ExpressionWidth, Opcode},
+    circuit::{Circuit, Opcode},
     native_types::{Witness, WitnessMap, WitnessStack},
 };
 use ark_ff::PrimeField;
@@ -25,9 +25,6 @@ use crate::{
     },
     pss_store::PssStore,
 };
-
-/// The default expression width defined used by the ACVM.
-pub(crate) const _CO_EXPRESSION_WIDTH: ExpressionWidth = ExpressionWidth::Bounded { width: 4 };
 
 mod assert_zero_solver;
 mod blackbox_solver;

@@ -268,9 +268,6 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
                 / self.libra_scaling_factor;
             // place the evaluation into the vector of Libra evaluations
             self.libra_evaluations.push(libra_evaluation);
-            for univariate in &mut self.libra_univariates {
-                *univariate *= self.libra_challenge.inverse().expect("non-zero");
-            }
         }
     }
 }

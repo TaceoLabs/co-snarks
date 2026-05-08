@@ -1,10 +1,11 @@
 use crate::types::big_group::BigGroup;
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use ark_ec::CurveGroup;
-use ark_ff::{One, PrimeField};
+use ark_ff::{One, PrimeField, UniformRand};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use num_bigint::BigUint;
-
+use rand::SeedableRng;
+use rand_chacha::ChaCha12Rng;
 /**
  * @brief Given two lists of points that need to be multiplied by scalars, create a new list of length +1 with original
  * points masked, but the same scalar product sum
@@ -20,7 +21,6 @@ pub(crate) fn mask_points<
 >(
     points: &mut [BigGroup<F, T>],
     scalars: &[FieldCT<F>],
-    masking_scalar: &FieldCT<F>,
     builder: &mut GenericUltraCircuitBuilder<P, T>,
     driver: &mut T,
 ) -> eyre::Result<(Vec<BigGroup<F, T>>, Vec<FieldCT<F>>)> {
@@ -29,15 +29,14 @@ pub(crate) fn mask_points<
 
     debug_assert!(points.len() == scalars.len());
 
-    // Get the offset generator G_offset in native and in-circuit form
-    let native_offset_generator =
-        BigGroup::<F, T>::precomputed_native_table_offset_generator::<P>()?;
-    let mut offset_generator_element =
+    // Use driver-provided common randomness so all MPC parties derive the same
+    // free witness without an extra opening round.
+    let mut rng = ChaCha12Rng::from_seed(driver.common_rng_seed()?);
+    let native_offset_generator = P::Affine::rand(&mut rng);
+    let offset_generator_element =
         BigGroup::from_witness(&native_offset_generator, driver, builder)?;
 
-    // Compute initial point to be added: (δ)⋅G_offset
-    let mut running_point =
-        offset_generator_element.scalar_mul(masking_scalar, 128, builder, driver)?;
+    let mut running_point = offset_generator_element;
 
     // Start the running scalar at 1
     let mut running_scalar = FieldCT::from(F::ONE);

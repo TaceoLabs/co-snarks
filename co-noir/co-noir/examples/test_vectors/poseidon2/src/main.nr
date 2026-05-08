@@ -1,5 +1,5 @@
-use dep::poseidon;
+use poseidon::bn254::permutation;
 
 fn main(plains: [Field; 4]) -> pub Field {
-    poseidon::bn254::hash_4(plains)
+    permutation::t4(plains)[0]
 }

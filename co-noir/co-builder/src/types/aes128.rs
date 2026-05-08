@@ -1,7 +1,4 @@
-use super::{
-    plookup::{ColumnIdx, MultiTableId, Plookup},
-    types::WitnessOrConstant,
-};
+use super::plookup::{ColumnIdx, MultiTableId, Plookup};
 use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
 
@@ -368,58 +365,4 @@ impl<F: PrimeField> AES128<F> {
 
         Ok(output)
     }
-}
-
-// Packs 16 bytes from the inputs (plaintext, iv, key) into a field element
-pub(crate) fn pack_input_bytes_into_field<
-    P: HonkCurve<TranscriptFieldType>,
-    T: NoirWitnessExtensionProtocol<P::ScalarField>,
->(
-    inputs: &[WitnessOrConstant<P::ScalarField>],
-    padding: usize,
-    builder: &mut GenericUltraCircuitBuilder<P, T>,
-    driver: &mut T,
-) -> eyre::Result<FieldCT<P::ScalarField>> {
-    let mut converted = FieldCT::default();
-    for input in &inputs[..(16 - padding)] {
-        converted = converted.multiply(
-            &FieldCT::from(P::ScalarField::from(256u64)),
-            builder,
-            driver,
-        )?;
-        let byte = input.to_field_ct();
-        converted = converted.add(&byte, builder, driver);
-    }
-    for _ in 0..padding {
-        converted = converted.multiply(
-            &FieldCT::from(P::ScalarField::from(256u64)),
-            builder,
-            driver,
-        )?;
-        let byte = FieldCT::from(P::ScalarField::from(padding as u32));
-        converted = converted.add(&byte, builder, driver);
-    }
-    Ok(converted)
-}
-
-// Packs 16 bytes from the outputs (witness indexes) into a field element for comparison
-pub(crate) fn pack_output_bytes_into_field<
-    P: CurveGroup,
-    T: NoirWitnessExtensionProtocol<P::ScalarField>,
->(
-    outputs: &[u32; 16],
-    builder: &mut GenericUltraCircuitBuilder<P, T>,
-    driver: &mut T,
-) -> eyre::Result<FieldCT<P::ScalarField>> {
-    let mut converted = FieldCT::default();
-    for &output in outputs {
-        converted = converted.multiply(
-            &FieldCT::from(P::ScalarField::from(256u64)),
-            builder,
-            driver,
-        )?;
-        let byte = FieldCT::from_witness_index(output);
-        converted = converted.add(&byte, builder, driver);
-    }
-    Ok(converted)
 }

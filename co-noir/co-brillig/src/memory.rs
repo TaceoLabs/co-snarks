@@ -45,8 +45,13 @@ where
 
     fn resolve(&self, address: MemoryAddress) -> eyre::Result<usize> {
         let address = match address {
-            MemoryAddress::Direct(address) => address,
-            MemoryAddress::Relative(offset) => self.get_stack_pointer()? + offset,
+            MemoryAddress::Direct(address) => address as usize,
+            MemoryAddress::Relative(offset) => {
+                let offset: usize = offset.try_into()?;
+                self.get_stack_pointer()?
+                    .checked_add(offset)
+                    .ok_or_else(|| eyre::eyre!("relative memory address overflow"))?
+            }
         };
         Ok(address)
     }
@@ -66,6 +71,7 @@ where
     /// of the data. This differs from the original Brillig implementation's read_slice.
     pub fn read_heap_array(&self, heap_array: HeapArray) -> eyre::Result<Vec<T::BrilligType>> {
         let HeapArray { pointer, size } = heap_array;
+        let size = size.to_usize();
         if size == 0 {
             return Ok(Vec::new());
         }
@@ -99,7 +105,7 @@ where
     }
 
     pub fn read_ref(&self, ptr: MemoryAddress) -> eyre::Result<MemoryAddress> {
-        Ok(MemoryAddress::direct(self.try_read_usize(ptr)?))
+        Ok(MemoryAddress::direct(self.try_read_usize(ptr)?.try_into()?))
     }
 
     /// Sets the value at `address` to `value`

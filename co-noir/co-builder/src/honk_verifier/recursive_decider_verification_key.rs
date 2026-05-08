@@ -23,6 +23,7 @@ pub(crate) struct RecursiveDeciderVerificationKey<
     pub(crate) relation_parameters: RelationParameters<FieldCT<C::ScalarField>>,
     pub(crate) target_sum: FieldCT<C::ScalarField>,
     pub(crate) witness_commitments: WitnessCommitments<C::ScalarField, T>,
+    pub(crate) gemini_masking_commitment: Option<BigGroup<C::ScalarField, T>>,
 }
 
 pub(crate) struct VKAndHash<

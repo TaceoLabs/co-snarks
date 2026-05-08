@@ -4,13 +4,17 @@ use ark_ec::{CurveGroup, PrimeGroup};
 use co_noir_common::constants::MAX_PARTIAL_RELATION_LENGTH;
 use co_noir_common::polynomials::entities::AllEntities;
 use co_noir_common::types::RelationParameters;
-use co_noir_common::{mpc::NoirUltraHonkProver, polynomials::entities::Polynomials};
+use co_noir_common::{
+    mpc::NoirUltraHonkProver,
+    polynomials::{entities::Polynomials, shared_polynomial::SharedPolynomial},
+};
 use itertools::izip;
 use std::iter;
 use ultrahonk::{NUM_ALPHAS, prelude::Univariate};
 
 pub(crate) struct ProverMemory<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) polys: AllEntities<Vec<T::ArithmeticShare>, Vec<P::ScalarField>>,
+    pub(crate) gemini_masking_poly: Option<SharedPolynomial<T, P>>,
     pub(crate) relation_parameters: RelationParameters<P::ScalarField>,
     pub(crate) alphas: [P::ScalarField; NUM_ALPHAS],
     pub(crate) gate_challenges: Vec<P::ScalarField>,
@@ -38,6 +42,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> ProverMemory<T, P> {
             eta_2: prover_memory.challenges.eta_2,
             eta_3: prover_memory.challenges.eta_3,
             beta: prover_memory.challenges.beta,
+            beta_sqr: prover_memory.challenges.beta_sqr,
+            beta_cube: prover_memory.challenges.beta_cube,
             gamma: prover_memory.challenges.gamma,
             public_input_delta: prover_memory.public_input_delta,
         };
@@ -81,6 +87,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> ProverMemory<T, P> {
 
         Self {
             polys: memory,
+            gemini_masking_poly: prover_memory.gemini_masking_poly,
             relation_parameters,
             alphas,
             gate_challenges,

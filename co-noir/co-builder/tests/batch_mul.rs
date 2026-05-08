@@ -9,13 +9,11 @@ use co_builder::{
 };
 use mpc_core::gadgets::field_from_hex_string;
 
-use num_traits::identities::One;
 use rand::{SeedableRng, rngs::StdRng};
 
 type TestEntry = (
-    u8,     // max_num_bits
-    u8,     // with_edge_cases
-    String, // masking_scalar as hex string
+    u8, // max_num_bits
+    u8, // with_edge_cases
     Vec<(
         (String, String, u8), // Input point as hex string coordinates and flag for infinity
         String,               // Scalar as hex string
@@ -31,7 +29,6 @@ struct TestData<T: NoirWitnessExtensionProtocol<Fr>> {
     scalars: Vec<FieldCT<Fr>>,
     with_edge_cases: bool,
     max_num_bits: usize,
-    masking_scalar: FieldCT<Fr>,
 }
 
 impl<T: NoirWitnessExtensionProtocol<Fr>> TestData<T> {
@@ -39,7 +36,6 @@ impl<T: NoirWitnessExtensionProtocol<Fr>> TestData<T> {
         num_points: usize,
         max_num_bits: usize,
         with_edge_cases: bool,
-        masking_scalar: FieldCT<Fr>,
         builder: &mut GenericUltraCircuitBuilder<Bn254G1, T>,
         driver: &mut T,
     ) -> Self {
@@ -68,7 +64,6 @@ impl<T: NoirWitnessExtensionProtocol<Fr>> TestData<T> {
             scalars,
             with_edge_cases,
             max_num_bits,
-            masking_scalar,
         }
     }
 
@@ -77,20 +72,7 @@ impl<T: NoirWitnessExtensionProtocol<Fr>> TestData<T> {
         builder: &mut GenericUltraCircuitBuilder<Bn254G1, T>,
         driver: &mut T,
     ) -> Self {
-        let (
-            max_num_bits,
-            with_edge_cases,
-            masking_scalar_hex,
-            point_scalar_pairs,
-            expected_result_hex,
-        ) = entry;
-
-        let masking_scalar = field_from_hex_string::<Fr>(&masking_scalar_hex).unwrap();
-        let masking_scalar = if with_edge_cases == 0 {
-            FieldCT::from(Fr::one())
-        } else {
-            FieldCT::from_witness(masking_scalar.into(), builder)
-        };
+        let (max_num_bits, with_edge_cases, point_scalar_pairs, expected_result_hex) = entry;
 
         let mut points = Vec::new();
         let mut scalars = Vec::new();
@@ -138,7 +120,6 @@ impl<T: NoirWitnessExtensionProtocol<Fr>> TestData<T> {
             scalars,
             with_edge_cases: with_edge_cases == 1,
             max_num_bits: max_num_bits as usize,
-            masking_scalar,
         }
     }
 
@@ -174,7 +155,6 @@ fn run_test<T: NoirWitnessExtensionProtocol<Fr>>(
         scalars,
         with_edge_cases,
         max_num_bits,
-        masking_scalar,
         expected_result,
     } = test_data;
 
@@ -187,7 +167,6 @@ fn run_test<T: NoirWitnessExtensionProtocol<Fr>>(
         &scalars,
         max_num_bits,
         with_edge_cases,
-        &masking_scalar,
         builder,
         driver,
     )
@@ -212,16 +191,44 @@ fn test_batch_mul_plaindriver() {
         let mut driver = PlainAcvmSolver::<Fr>::new();
         let mut builder = GenericUltraCircuitBuilder::<Bn254G1, _>::new(10);
         tracing::info!("Testing batch_mul with {} points", num_points);
-        let test_data = TestData::random(
-            num_points,
-            0,
-            false,
-            FieldCT::from(Fr::ONE),
-            &mut builder,
-            &mut driver,
-        );
+        let test_data = TestData::random(num_points, 0, false, &mut builder, &mut driver);
         run_test(test_data, &mut builder, &mut driver);
     }
+}
+
+#[test]
+fn test_batch_mul_short_non_trivial_scalars_plaindriver() {
+    let mut rng = StdRng::seed_from_u64(SEED);
+    let mut driver = PlainAcvmSolver::<Fr>::new();
+    let mut builder = GenericUltraCircuitBuilder::<Bn254G1, _>::new(10);
+    let scalar_values = [2u64, 3, 42, 127];
+    let mut points = Vec::new();
+    let mut scalars = Vec::new();
+    let mut expected_result = G1Affine::identity();
+
+    for scalar_value in scalar_values {
+        let point = G1Affine::rand(&mut rng);
+        let scalar = Fr::from(scalar_value);
+
+        expected_result = (expected_result + point * scalar).into_affine();
+        points.push(BigGroup::new(
+            BigField::from_witness_other_acvm_type(&point.x, &mut driver, &mut builder).unwrap(),
+            BigField::from_witness_other_acvm_type(&point.y, &mut driver, &mut builder).unwrap(),
+        ));
+        scalars.push(FieldCT::from_witness(scalar, &mut builder));
+    }
+
+    run_test(
+        TestData {
+            expected_result,
+            points,
+            scalars,
+            with_edge_cases: false,
+            max_num_bits: 8,
+        },
+        &mut builder,
+        &mut driver,
+    );
 }
 
 #[test]
@@ -239,7 +246,6 @@ fn test_batch_mul_edge_case_equivalence_plaindriver() {
     let test_data = TestData::get_from_file(TEST_FILE, &mut builder, &mut driver);
     test_data.into_iter().for_each(|mut data| {
         data.with_edge_cases = true;
-        data.masking_scalar = FieldCT::from(Fr::one());
         run_test(data, &mut builder, &mut driver);
     });
 }
@@ -252,9 +258,8 @@ fn test_batch_mul_edge_case_set_plaindriver() {
     let test_data = TestData::get_from_file(TEST_FILE, &mut builder, &mut driver);
     test_data.into_iter().for_each(|mut data| {
         data.with_edge_cases = true;
-        data.masking_scalar = FieldCT::from(Fr::one());
         data.points.push(BigGroup::point_at_infinity());
-        data.scalars.push(FieldCT::from(Fr::one()));
+        data.scalars.push(FieldCT::from(Fr::ONE));
         run_test(data, &mut builder, &mut driver);
     });
 }
