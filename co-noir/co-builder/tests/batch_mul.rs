@@ -212,10 +212,8 @@ fn test_batch_mul_short_non_trivial_scalars_plaindriver() {
 
         expected_result = (expected_result + point * scalar).into_affine();
         points.push(BigGroup::new(
-            BigField::from_witness_other_acvm_type(&point.x, &mut driver, &mut builder)
-                .unwrap(),
-            BigField::from_witness_other_acvm_type(&point.y, &mut driver, &mut builder)
-                .unwrap(),
+            BigField::from_witness_other_acvm_type(&point.x, &mut driver, &mut builder).unwrap(),
+            BigField::from_witness_other_acvm_type(&point.y, &mut driver, &mut builder).unwrap(),
         ));
         scalars.push(FieldCT::from_witness(scalar, &mut builder));
     }
