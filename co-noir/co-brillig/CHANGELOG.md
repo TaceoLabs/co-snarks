@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.4.0...co-brillig-v0.5.0) (2026-05-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* sync with latest Noir (1.0.0-beta.20) and Barretenberg (5.0.0-nightly.20260324) ([#543](https://github.com/TaceoLabs/co-snarks/issues/543))
+
+### Miscellaneous Chores
+
+* sync with latest Noir (1.0.0-beta.20) and Barretenberg (5.0.0-nightly.20260324) ([#543](https://github.com/TaceoLabs/co-snarks/issues/543)) ([7d99261](https://github.com/TaceoLabs/co-snarks/commit/7d992613f2adf55a9fe51d615d447a5d7ade7dd1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * mpc-core bumped from 0.10.0 to 0.11.0
+    * mpc-net bumped from 0.5.0 to 0.6.0
+
 ## [0.4.0](https://github.com/TaceoLabs/co-snarks/compare/co-brillig-v0.3.0...co-brillig-v0.4.0) (2025-11-06)
 
 

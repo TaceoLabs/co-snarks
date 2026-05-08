@@ -1,6 +1,6 @@
 [package]
 name = "noir-types"
-version = "0.1.1"
+version = "0.1.2"
 publish.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -16,7 +16,7 @@ acir.workspace = true
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true
 eyre = { workspace = true }
-co-noir-types = { version = "0.1.1", path = "../co-noir-types" }
+co-noir-types = { version = "0.1.2", path = "../co-noir-types" }
 ruint = { workspace = true }
 serde_json = { workspace = true }
 toml.workspace = true
