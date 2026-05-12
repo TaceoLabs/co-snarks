@@ -41,7 +41,7 @@ noirc-artifacts = { version = "1.0.0-beta.20", git = "https://github.com/noir-la
 ark-bls12-377 = "0.5"
 ark-bls12-381 = "0.5"
 ark-bn254 = "0.5"
-ark-ec = { version = "0.5", default-features = false }
+ark-ec = { version = "0.6", default-features = false }
 ark-groth16 = { version = "0.5" }
 ark-ff = "0.5"
 ark-grumpkin = "0.5"
