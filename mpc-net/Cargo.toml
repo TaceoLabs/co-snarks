@@ -43,7 +43,7 @@ parking_lot = "0.12.4"
 quinn = { version = "0.11", optional = true }
 rustls = { workspace = true, optional = true }
 serde = { workspace = true }
-tokio = { version = "1.48.0", features = [
+tokio = { version = "1.52.3", features = [
     "rt",
     "rt-multi-thread",
     "net",
