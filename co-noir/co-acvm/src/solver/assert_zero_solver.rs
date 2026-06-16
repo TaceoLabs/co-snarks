@@ -1,6 +1,6 @@
 use crate::mpc::NoirWitnessExtensionProtocol;
 use acir::{AcirField, acir_field::GenericFieldElement, native_types::Expression};
-use ark_ff::PrimeField;
+use ark_ff::{PrimeField, Zero};
 
 use crate::solver::solver_utils;
 
@@ -122,9 +122,27 @@ where
         // also if we are here and have more than one linear combination, we
         // cannot solve the expression
         if simplified.linear_combinations.is_empty() {
-            // we are done
-            tracing::trace!("nothing to do for us");
-            Ok(())
+            if let Some(residual) = T::get_public(&simplified.q_c) {
+                if residual.is_zero() {
+                    tracing::trace!("nothing to do for us");
+                    Ok(())
+                } else {
+                    Err(eyre::eyre!("UnsatisfiedConstraint"))?
+                }
+            } else if let Some(residual) = T::get_shared(&simplified.q_c) {
+                let opened = self.driver.open_many(&[residual])?;
+                if opened[0].is_zero() {
+                    tracing::trace!("nothing to do for us");
+                    Ok(())
+                } else {
+                    Err(eyre::eyre!("UnsatisfiedConstraint"))?
+                }
+            } else if T::is_public_zero(&simplified.q_c) {
+                tracing::trace!("nothing to do for us");
+                Ok(())
+            } else {
+                Err(eyre::eyre!("UnsatisfiedConstraint"))?
+            }
         } else if simplified.linear_combinations.len() == 1 {
             //we can solve it!
             tracing::trace!("solving equation...");
