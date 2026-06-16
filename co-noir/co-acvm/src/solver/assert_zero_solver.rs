@@ -186,8 +186,46 @@ where
 #[cfg(test)]
 mod tests {
     use super::{ensure_single_opened_zero_residual, ensure_zero_residual};
+    use crate::mpc::{NoirWitnessExtensionProtocol, plain::PlainAcvmSolver};
+    use crate::pss_store::PssStore;
+    use crate::solver::CoSolver;
+    use acir::{
+        acir_field::GenericFieldElement,
+        native_types::{Expression, Witness, WitnessMap},
+    };
     use ark_bn254::Fr;
     use ark_ff::{One, Zero};
+    use co_brillig::CoBrilligVM;
+    use intmap::IntMap;
+    use noirc_abi::Abi;
+
+    fn field(value: Fr) -> GenericFieldElement<Fr> {
+        GenericFieldElement::from_repr(value)
+    }
+
+    fn expression(q_c: Fr) -> Expression<GenericFieldElement<Fr>> {
+        Expression {
+            mul_terms: vec![],
+            linear_combinations: vec![],
+            q_c: field(q_c),
+        }
+    }
+
+    fn solver_with_witness(witness: WitnessMap<Fr>) -> CoSolver<PlainAcvmSolver<Fr>, Fr> {
+        let mut driver = PlainAcvmSolver::<Fr>::default();
+        let brillig = CoBrilligVM::init(driver.init_brillig_driver().unwrap(), vec![]);
+        CoSolver {
+            driver,
+            brillig,
+            abi: Abi::default(),
+            functions: vec![],
+            value_store: PssStore::new(),
+            witness_map: vec![witness],
+            function_index: 0,
+            memory_access: IntMap::new(),
+            pedantic_solving: true,
+        }
+    }
 
     #[test]
     fn public_zero_residual_succeeds() {
@@ -219,5 +257,44 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("open_many returned 0 values for one shared residual"));
+    }
+
+    #[test]
+    fn solve_assert_zero_accepts_simplified_public_zero_residual() {
+        let mut solver = solver_with_witness(WitnessMap::default());
+
+        assert!(solver.solve_assert_zero(&expression(Fr::zero())).is_ok());
+    }
+
+    #[test]
+    fn solve_assert_zero_rejects_simplified_public_nonzero_residual() {
+        let mut solver = solver_with_witness(WitnessMap::default());
+
+        let err = solver
+            .solve_assert_zero(&expression(Fr::one()))
+            .unwrap_err()
+            .to_string();
+
+        assert!(err.contains("UnsatisfiedConstraint"));
+    }
+
+    #[test]
+    fn solve_assert_zero_checks_residual_after_known_witness_simplification() {
+        let witness_id = Witness(1);
+        let mut witness = WitnessMap::default();
+        witness.insert(witness_id, Fr::from(5u64));
+        let mut solver = solver_with_witness(witness);
+        let mut expr = expression(-Fr::from(5u64));
+        expr.linear_combinations
+            .push((field(Fr::one()), witness_id));
+
+        assert!(solver.solve_assert_zero(&expr).is_ok());
+
+        let mut bad_expr = expression(-Fr::from(4u64));
+        bad_expr
+            .linear_combinations
+            .push((field(Fr::one()), witness_id));
+        let err = solver.solve_assert_zero(&bad_expr).unwrap_err().to_string();
+        assert!(err.contains("UnsatisfiedConstraint"));
     }
 }
