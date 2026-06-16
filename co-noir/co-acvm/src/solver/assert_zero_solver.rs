@@ -6,6 +6,26 @@ use crate::solver::solver_utils;
 
 use super::{CoAcvmResult, CoSolver};
 
+fn ensure_zero_residual<F: PrimeField>(residual: F) -> CoAcvmResult<()> {
+    if residual.is_zero() {
+        tracing::trace!("nothing to do for us");
+        Ok(())
+    } else {
+        Err(eyre::eyre!("UnsatisfiedConstraint"))?
+    }
+}
+
+fn ensure_single_opened_zero_residual<F: PrimeField>(opened: Vec<F>) -> CoAcvmResult<()> {
+    if opened.len() != 1 {
+        Err(eyre::eyre!(
+            "open_many returned {} values for one shared residual",
+            opened.len()
+        ))?
+    }
+
+    ensure_zero_residual(opened[0])
+}
+
 impl<T, F> CoSolver<T, F>
 where
     T: NoirWitnessExtensionProtocol<F>,
@@ -123,20 +143,10 @@ where
         // cannot solve the expression
         if simplified.linear_combinations.is_empty() {
             if let Some(residual) = T::get_public(&simplified.q_c) {
-                if residual.is_zero() {
-                    tracing::trace!("nothing to do for us");
-                    Ok(())
-                } else {
-                    Err(eyre::eyre!("UnsatisfiedConstraint"))?
-                }
+                ensure_zero_residual(residual)
             } else if let Some(residual) = T::get_shared(&simplified.q_c) {
                 let opened = self.driver.open_many(&[residual])?;
-                if opened[0].is_zero() {
-                    tracing::trace!("nothing to do for us");
-                    Ok(())
-                } else {
-                    Err(eyre::eyre!("UnsatisfiedConstraint"))?
-                }
+                ensure_single_opened_zero_residual(opened)
             } else if T::is_public_zero(&simplified.q_c) {
                 tracing::trace!("nothing to do for us");
                 Ok(())
@@ -170,5 +180,44 @@ where
             .ok_or(eyre::eyre!(
                 "cannot evaluate expression to const - has unknown"
             ))?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_single_opened_zero_residual, ensure_zero_residual};
+    use ark_bn254::Fr;
+    use ark_ff::{One, Zero};
+
+    #[test]
+    fn public_zero_residual_succeeds() {
+        assert!(ensure_zero_residual(Fr::zero()).is_ok());
+    }
+
+    #[test]
+    fn public_nonzero_residual_errors() {
+        let err = ensure_zero_residual(Fr::one()).unwrap_err().to_string();
+        assert!(err.contains("UnsatisfiedConstraint"));
+    }
+
+    #[test]
+    fn shared_zero_residual_succeeds_after_opening() {
+        assert!(ensure_single_opened_zero_residual(vec![Fr::zero()]).is_ok());
+    }
+
+    #[test]
+    fn shared_nonzero_residual_errors_after_opening() {
+        let err = ensure_single_opened_zero_residual(vec![Fr::one()])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("UnsatisfiedConstraint"));
+    }
+
+    #[test]
+    fn opened_shared_residual_must_preserve_input_length() {
+        let err = ensure_single_opened_zero_residual::<Fr>(Vec::new())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("open_many returned 0 values for one shared residual"));
     }
 }
