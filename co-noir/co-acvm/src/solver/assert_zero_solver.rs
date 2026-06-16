@@ -145,6 +145,9 @@ where
             if let Some(residual) = T::get_public(&simplified.q_c) {
                 ensure_zero_residual(residual)
             } else if let Some(residual) = T::get_shared(&simplified.q_c) {
+                // Opening is intentional here: valid executions reveal zero, while invalid
+                // executions abort after revealing the failing residual value.
+                // Backends that require private failure values should replace this with a zero-test.
                 let opened = self.driver.open_many(&[residual])?;
                 ensure_single_opened_zero_residual(opened)
             } else if T::is_public_zero(&simplified.q_c) {
