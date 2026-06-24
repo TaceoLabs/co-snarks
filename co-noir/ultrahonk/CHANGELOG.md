@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.7.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.6.0...ultrahonk-v0.7.0) (2026-05-08)
+
+
+### ⚠ BREAKING CHANGES
+
+* sync with latest Noir (1.0.0-beta.20) and Barretenberg (5.0.0-nightly.20260324) ([#543](https://github.com/TaceoLabs/co-snarks/issues/543))
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491))
+
+### Features
+
+* plain and ZK Rep3 UltraHonk recursive verifier ([#491](https://github.com/TaceoLabs/co-snarks/issues/491)) ([7ce7200](https://github.com/TaceoLabs/co-snarks/commit/7ce720060794b9d878b6cf412c493c4e3461b87d))
+* upgrade to Noir 1.0.0-beta.15 and BB 3.0.0-nightly.20251104 ([#485](https://github.com/TaceoLabs/co-snarks/issues/485)) ([cd1fb5b](https://github.com/TaceoLabs/co-snarks/commit/cd1fb5b260ba80b81eba2a37e036d180eedc090a))
+
+
+### Miscellaneous Chores
+
+* sync with latest Noir (1.0.0-beta.20) and Barretenberg (5.0.0-nightly.20260324) ([#543](https://github.com/TaceoLabs/co-snarks/issues/543)) ([7d99261](https://github.com/TaceoLabs/co-snarks/commit/7d992613f2adf55a9fe51d615d447a5d7ade7dd1))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * co-noir-common bumped from 0.2.0 to 0.3.0
+    * noir-types bumped from 0.1.1 to 0.1.2
+    * mpc-core bumped from 0.10.0 to 0.11.0
+
 ## [0.6.0](https://github.com/TaceoLabs/co-snarks/compare/ultrahonk-v0.5.0...ultrahonk-v0.6.0) (2025-11-06)
 
 
