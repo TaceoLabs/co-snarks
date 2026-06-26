@@ -918,6 +918,7 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
 
         (input_square, input_quad)
     }
+
     fn matmul_internal_return_sum(&self, input: &mut [F; T]) -> F {
         debug_assert!(T >= 4); // We only need the sum for T >= 4
         // Compute input sum
