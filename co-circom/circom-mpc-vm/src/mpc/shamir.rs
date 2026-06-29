@@ -2,8 +2,10 @@ use super::{VmCircomWitnessExtension, plain::CircomPlainVmWitnessExtension};
 use crate::{mpc::plain::to_usize, mpc_vm::VMConfig};
 use ark_ff::PrimeField;
 use co_circom_types::ShamirInputType;
+use itertools::Itertools;
 use mpc_core::{
     MpcState,
+    gadgets::poseidon2::Poseidon2,
     protocols::shamir::{ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState, arithmetic},
 };
 use mpc_net::Network;
@@ -460,9 +462,57 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
 
     fn poseidon2_accelerator<const T: usize>(
         &mut self,
-        _inputs: Vec<Self::VmType>,
+        inputs: Vec<Self::VmType>,
     ) -> eyre::Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
-        unimplemented!("Not implemented for Shamir")
+        if inputs
+            .iter()
+            .any(|x| matches!(x, ShamirVmType::Arithmetic(_)))
+        {
+            let inputs_len = inputs.len();
+            let poseidon = Poseidon2::<_, T, 5>::default();
+            let mut precomp =
+                poseidon.precompute_shamir(inputs_len, self.net0, &mut self.state0)?;
+
+            let mut iter = inputs.into_iter();
+            let mut state: [ShamirPrimeFieldShare<F>; T] = std::array::from_fn(|_| {
+                match iter
+                    .next()
+                    .expect("poseidon2_accelerator: not enough inputs")
+                {
+                    ShamirVmType::Public(x) => arithmetic::promote_to_trivial_share(x),
+                    ShamirVmType::Arithmetic(x) => x,
+                }
+            });
+
+            let trace = poseidon.shamir_permutation_in_place_with_precomputation_intermediate(
+                &mut state,
+                &mut precomp,
+                self.net0,
+                &mut self.state0,
+            )?;
+
+            let outputs = state.into_iter().map(ShamirVmType::Arithmetic).collect_vec();
+            let trace = trace.into_iter().map(ShamirVmType::Arithmetic).collect_vec();
+
+            Ok((outputs, trace))
+        } else {
+            self.plain
+                .poseidon2_accelerator::<T>(
+                    inputs
+                        .into_iter()
+                        .map(|x| match x {
+                            ShamirVmType::Public(x) => x,
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                )
+                .map(|(outs, trace)| {
+                    (
+                        outs.into_iter().map(ShamirVmType::Public).collect(),
+                        trace.into_iter().map(ShamirVmType::Public).collect(),
+                    )
+                })
+        }
     }
 }
 
