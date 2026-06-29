@@ -3,8 +3,11 @@
 #![warn(missing_docs)]
 
 use ark_ff::PrimeField;
-use circom_mpc_vm::{Rep3VmType, mpc_vm::Rep3WitnessExtension};
-use co_circom_types::{CompressedRep3SharedWitness, Rep3InputType, SharedWitness};
+use circom_mpc_vm::{
+    Rep3VmType, ShamirVmType,
+    mpc_vm::{Rep3WitnessExtension, ShamirWitnessExtension},
+};
+use co_circom_types::{CompressedRep3SharedWitness, Rep3InputType, ShamirInputType, SharedWitness};
 use color_eyre::eyre::{self, Context};
 use mpc_core::protocols::{
     rep3::{self, Rep3ShareVecType},
@@ -27,7 +30,7 @@ pub use circom_types::{
     traits::CircomArkworksPairingBridge,
 };
 pub use co_circom_types::{
-    Compression, Input, Rep3SharedInput, Rep3SharedWitness, ShamirSharedWitness,
+    Compression, Input, Rep3SharedInput, Rep3SharedWitness, ShamirSharedInput, ShamirSharedWitness,
 };
 pub use co_groth16::{CircomReduction, ConstraintMatrices, ProvingKey};
 pub use co_groth16::{Groth16, Rep3CoGroth16, ShamirCoGroth16};
@@ -133,6 +136,39 @@ pub fn generate_witness_rep3<F: PrimeField, N: Network>(
 
     // execute witness generation in MPC
     let witness_share = rep3_vm
+        .run(input, num_public_inputs)
+        .context("while running witness generation")?;
+
+    Ok(witness_share.into_shared_witness())
+}
+
+/// Generate a Shamir shared witness
+pub fn generate_witness_shamir<F: PrimeField, N: Network>(
+    circuit: &CoCircomCompilerParsed<F>,
+    input: ShamirSharedInput<F>,
+    config: VMConfig,
+    net0: &N,
+    net1: &N,
+    num_parties: usize,
+    threshold: usize,
+) -> eyre::Result<ShamirSharedWitness<F>> {
+    // init MPC protocol
+    // TODO we are not creating any randomness here
+    let shamir_vm =
+        ShamirWitnessExtension::new(net0, net1, num_parties, threshold, 0, circuit, config)
+            .context("while constructing MPC VM")?;
+
+    let num_public_inputs = input
+        .values()
+        .filter(|i| matches!(i, ShamirInputType::Public(_)))
+        .count();
+    let input = input
+        .into_iter()
+        .map(|(name, vale)| (name, ShamirVmType::from(vale)))
+        .collect();
+
+    // execute witness generation in MPC
+    let witness_share = shamir_vm
         .run(input, num_public_inputs)
         .context("while running witness generation")?;
 

@@ -3,6 +3,7 @@ use crate::mpc::batched_plain::BatchedCircomPlainVmWitnessExtension;
 use crate::mpc::batched_rep3::{BatchedCircomRep3VmWitnessExtension, BatchedRep3VmType};
 use crate::mpc::plain::CircomPlainVmWitnessExtension;
 use crate::mpc::rep3::{CircomRep3VmWitnessExtension, Rep3VmType};
+use crate::mpc::shamir::{CircomShamirVmWitnessExtension, ShamirVmType};
 use crate::types::{CoCircomCompilerParsed, FunDecl, InputList, OutputMapping, TemplateDecl};
 
 use super::accelerator::MpcAccelerator;
@@ -82,6 +83,12 @@ pub type BatchedRep3WitnessExtension<'a, F, N> =
 /// This is the only supported protocol at the moment.
 pub type Rep3WitnessExtension<'a, F, N> =
     WitnessExtension<F, CircomRep3VmWitnessExtension<'a, F, N>>;
+
+/// Shorthand type for the MPC-VM instantiated with a `Shamir` protocol.
+///
+/// This is the only supported protocol at the moment.  
+pub type ShamirWitnessExtension<'a, F, N> =
+    WitnessExtension<F, CircomShamirVmWitnessExtension<'a, F, N>>;
 
 type ConsumedFunCtx<T> = (usize, usize, Vec<T>, Arc<CodeBlock>, Vec<(T, Vec<T>)>);
 
@@ -1263,6 +1270,48 @@ impl<'a, F: PrimeField, N: Network> BatchedRep3WitnessExtension<'a, F, N> {
             ctx: WitnessExtensionCtx::new(
                 signals,
                 batched_constant_table,
+                parser.fun_decls.clone(),
+                parser.templ_decls.clone(),
+                parser.string_table.clone(),
+                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+            ),
+            main_inputs: parser.main_inputs,
+            main_outputs: parser.main_outputs,
+            main_input_list: parser.main_input_list.clone(),
+            output_mapping: parser.output_mapping.clone(),
+            config,
+        })
+    }
+}
+
+impl<'a, F: PrimeField, N: Network> ShamirWitnessExtension<'a, F, N> {
+    /// Create a new [ShamirWitnessExtension] VM
+    pub fn new(
+        net0: &'a N,
+        net1: &'a N,
+        num_parties: usize,
+        threshold: usize,
+        amount: usize,
+        parser: &CoCircomCompilerParsed<F>,
+        config: VMConfig,
+    ) -> eyre::Result<Self> {
+        let driver =
+            CircomShamirVmWitnessExtension::new(net0, net1, num_parties, threshold, amount)?;
+        let mut signals = vec![ShamirVmType::default(); parser.amount_signals];
+        signals[0] = ShamirVmType::Public(F::one());
+        let constant_table = parser
+            .constant_table
+            .clone()
+            .into_iter()
+            .map(ShamirVmType::Public)
+            .collect_vec();
+        Ok(Self {
+            driver,
+            signal_to_witness: parser.signal_to_witness.clone(),
+            main: parser.main.clone(),
+            ctx: WitnessExtensionCtx::new(
+                signals,
+                constant_table,
                 parser.fun_decls.clone(),
                 parser.templ_decls.clone(),
                 parser.string_table.clone(),

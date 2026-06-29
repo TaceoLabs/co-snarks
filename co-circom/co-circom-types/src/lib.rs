@@ -20,6 +20,9 @@ use std::error::Error;
 /// A REP3 shared input type
 pub type Rep3SharedInput<F> = BTreeMap<String, Rep3InputType<F>>;
 
+/// A Shamir shared input type
+pub type ShamirSharedInput<F> = BTreeMap<String, ShamirInputType<F>>;
+
 /// A batched REP3 shared input type. Should be used with the batched witness extension
 pub type BatchedRep3SharedInput<F> = BTreeMap<String, Vec<Rep3InputType<F>>>;
 
@@ -84,6 +87,62 @@ impl<F: PrimeField> From<F> for Rep3InputType<F> {
 
 impl<F: PrimeField> From<Rep3PrimeFieldShare<F>> for Rep3InputType<F> {
     fn from(value: Rep3PrimeFieldShare<F>) -> Self {
+        Self::Shared(value)
+    }
+}
+
+/// A Shamir input type
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum ShamirInputType<F: PrimeField> {
+    /// The public variant
+    Public(
+        #[serde(
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
+        )]
+        F,
+    ),
+    /// The shared variant
+    Shared(
+        #[serde(
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
+        )]
+        ShamirPrimeFieldShare<F>,
+    ),
+}
+
+impl<F: PrimeField> ShamirInputType<F> {
+    /// Returns true if the input is public
+    pub fn is_public(&self) -> bool {
+        matches!(self, ShamirInputType::Public(_))
+    }
+
+    /// Returns the public input or None
+    pub fn as_public(&self) -> Option<F> {
+        match self {
+            ShamirInputType::Public(value) => Some(*value),
+            ShamirInputType::Shared(_) => None,
+        }
+    }
+
+    /// Returns the shared input or None
+    pub fn as_shared(&self) -> Option<ShamirPrimeFieldShare<F>> {
+        match self {
+            ShamirInputType::Public(_) => None,
+            ShamirInputType::Shared(share) => Some(*share),
+        }
+    }
+}
+
+impl<F: PrimeField> From<F> for ShamirInputType<F> {
+    fn from(value: F) -> Self {
+        Self::Public(value)
+    }
+}
+
+impl<F: PrimeField> From<ShamirPrimeFieldShare<F>> for ShamirInputType<F> {
+    fn from(value: ShamirPrimeFieldShare<F>) -> Self {
         Self::Shared(value)
     }
 }

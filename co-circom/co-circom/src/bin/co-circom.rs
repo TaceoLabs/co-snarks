@@ -275,6 +275,9 @@ pub struct GenerateWitnessCli {
     /// The simplification level passed to the circom compiler (0-2)
     #[arg(short = 'O', default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..3))]
     pub simplification_level: u8,
+    /// The threshold of tolerated colluding parties (Shamir only)
+    #[arg(short, long, default_value_t = 1)]
+    pub threshold: usize,
 }
 
 /// Config for `generate_witness`
@@ -298,6 +301,13 @@ pub struct GenerateWitnessConfig {
     pub vm: VMConfig,
     /// Network config
     pub network: NetworkConfig,
+    /// The threshold of tolerated colluding parties (Shamir only)
+    #[serde(default = "default_threshold")]
+    pub threshold: usize,
+}
+
+fn default_threshold() -> usize {
+    1
 }
 
 /// Cli arguments for `translate_witness`
@@ -801,40 +811,70 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     let circuit = config.circuit;
     let protocol = config.protocol;
     let out = config.out;
-
-    if protocol != MPCProtocol::REP3 {
-        eyre::bail!("Only REP3 protocol is supported for witness generation");
-    }
+    let n = config.network.parties.len();
+    let t = config.threshold;
 
     // connect to network
     let [net0, net1] =
         TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
 
-    // parse input shares
-    let input_share_file =
-        BufReader::new(File::open(&input).context("while opening input share file")?);
-    let input_share: Rep3SharedInput<P::ScalarField> =
-        serde_json::from_reader(input_share_file).context("trying to parse input share file")?;
-
     // parse circuit file & put through our compiler
     let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
         .context("while parsing circuit file")?;
 
-    // Extend the witness
-    tracing::info!("Starting witness generation...");
-    let start = Instant::now();
-    let result_witness_share =
-        co_circom::generate_witness_rep3(&circuit, input_share, config.vm, &net0, &net1)?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Generate witness took {duration_ms} ms");
+    match protocol {
+        MPCProtocol::REP3 => {
+            // parse input shares
+            let input_share_file =
+                BufReader::new(File::open(&input).context("while opening input share file")?);
+            let input_share: Rep3SharedInput<P::ScalarField> = serde_json::from_reader(
+                input_share_file,
+            )
+            .context("trying to parse input share file")?;
 
-    // write result to output file
-    let out_file = BufWriter::new(std::fs::File::create(&out)?);
-    bincode::serialize_into(
-        out_file,
-        &CompressedRep3SharedWitness::from(result_witness_share),
-    )?;
-    tracing::info!("Witness successfully written to {}", out.display());
+            tracing::info!("Starting witness generation...");
+            let start = Instant::now();
+            let result_witness_share =
+                co_circom::generate_witness_rep3(&circuit, input_share, config.vm, &net0, &net1)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Generate witness took {duration_ms} ms");
+
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(
+                out_file,
+                &CompressedRep3SharedWitness::from(result_witness_share),
+            )?;
+            tracing::info!("Witness successfully written to {}", out.display());
+        }
+        MPCProtocol::SHAMIR => {
+
+            // parse input shares
+            let input_share_file =
+                BufReader::new(File::open(&input).context("while opening input share file")?);
+            let input_share: co_circom::ShamirSharedInput<P::ScalarField> =
+                serde_json::from_reader(input_share_file)
+                    .context("trying to parse input share file")?;
+
+            tracing::info!("Starting witness generation...");
+            let start = Instant::now();
+            // TODO we are not creating any randomness here
+            let result_witness_share = co_circom::generate_witness_shamir(
+                &circuit,
+                input_share,
+                config.vm,
+                &net0,
+                &net1,
+                n,
+                t,
+            )?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Generate witness took {duration_ms} ms");
+
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(out_file, &result_witness_share)?;
+            tracing::info!("Witness successfully written to {}", out.display());
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 
