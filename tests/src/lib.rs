@@ -7,9 +7,30 @@ pub mod test_utils {
     use co_circom_types::{Input, SharedWitness};
     use eyre::{Context as _, ContextCompat as _};
     use itertools::izip;
-    use mpc_core::protocols::rep3;
+    use mpc_core::protocols::{
+        rep3,
+        shamir::{self, ShamirPrimeFieldShare},
+    };
     use num_bigint::BigUint;
     use num_traits::Num as _;
+
+    pub fn combine_field_elements_for_vm_shamir(
+        a: SharedWitness<ark_bn254::Fr, ShamirPrimeFieldShare<ark_bn254::Fr>>,
+        b: SharedWitness<ark_bn254::Fr, ShamirPrimeFieldShare<ark_bn254::Fr>>,
+        c: SharedWitness<ark_bn254::Fr, ShamirPrimeFieldShare<ark_bn254::Fr>>,
+    ) -> Vec<ark_bn254::Fr> {
+        let mut res = Vec::with_capacity(a.public_inputs.len() + a.witness.len());
+        for (pa, pb, pc) in izip!(a.public_inputs, b.public_inputs, c.public_inputs) {
+            assert_eq!(pa, pb);
+            assert_eq!(pb, pc);
+            res.push(pa);
+        }
+        res.extend(
+            shamir::combine_field_elements(&[a.witness, b.witness, c.witness], &[1, 2, 3], 1)
+                .unwrap(),
+        );
+        res
+    }
 
     pub fn combine_field_elements_for_vm(
         a: SharedWitness<ark_bn254::Fr, rep3::arithmetic::FieldShare<ark_bn254::Fr>>,
