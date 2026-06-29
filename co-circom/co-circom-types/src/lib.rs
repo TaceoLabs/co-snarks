@@ -428,6 +428,49 @@ pub fn split_input<F: PrimeField>(
     Ok(shares)
 }
 
+/// Splits a JSON input into Shamir secret shares.
+pub fn split_input_shamir<F: PrimeField>(
+    input: Input,
+    public_inputs: &[String],
+    threshold: usize,
+    num_parties: usize,
+) -> eyre::Result<Vec<ShamirSharedInput<F>>> {
+    let mut shares: Vec<ShamirSharedInput<F>> = (0..num_parties)
+        .map(|_| ShamirSharedInput::<F>::default())
+        .collect();
+
+    let mut rng = rand::thread_rng();
+    for (name, val) in input {
+        let parsed_vals = if val.is_array() {
+            parse_array::<F>(&val)?
+                .into_iter()
+                .enumerate()
+                .filter_map(|(idx, field)| field.map(|field| (format!("{name}[{idx}]"), field)))
+                .collect::<BTreeMap<_, _>>()
+        } else if val.is_boolean() {
+            BTreeMap::from([(name.clone(), parse_boolean::<F>(&val)?)])
+        } else {
+            BTreeMap::from([(name.clone(), parse_field::<F>(&val)?)])
+        };
+
+        if public_inputs.contains(&name) {
+            for (k, v) in parsed_vals.into_iter() {
+                for share in shares.iter_mut() {
+                    share.insert(k.clone(), ShamirInputType::Public(v));
+                }
+            }
+        } else {
+            for (k, v) in parsed_vals.into_iter() {
+                let party_shares = shamir::share_field_element(v, threshold, num_parties, &mut rng);
+                for (share_map, party_share) in shares.iter_mut().zip(party_shares) {
+                    share_map.insert(k.clone(), ShamirInputType::Shared(party_share));
+                }
+            }
+        }
+    }
+    Ok(shares)
+}
+
 /// Merge multiple REP3 input shares
 pub fn merge_input_shares<F: PrimeField>(
     input_shares: Vec<Rep3SharedInput<F>>,

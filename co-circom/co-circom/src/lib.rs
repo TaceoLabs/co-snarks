@@ -40,6 +40,7 @@ pub use serde_json::Value;
 
 pub use co_circom_types::merge_input_shares;
 pub use co_circom_types::split_input;
+pub use co_circom_types::split_input_shamir;
 
 /// Split the witness into REP3 shares
 pub fn split_witness_rep3<F: PrimeField>(

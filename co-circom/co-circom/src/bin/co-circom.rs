@@ -179,6 +179,12 @@ pub struct SplitInputCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out_dir: Option<PathBuf>,
+    /// The threshold of tolerated colluding parties (Shamir only)
+    #[arg(short, long, default_value_t = 1)]
+    pub threshold: usize,
+    /// The number of parties (Shamir only)
+    #[arg(short, long, default_value_t = 3)]
+    pub num_parties: usize,
 }
 
 /// Config for `split_input`
@@ -197,6 +203,12 @@ pub struct SplitInputConfig {
     /// MPC compiler config
     #[serde(default)]
     pub compiler: CompilerConfig,
+    /// The threshold of tolerated colluding parties (Shamir only)
+    #[serde(default = "default_threshold")]
+    pub threshold: usize,
+    /// The number of parties (Shamir only)
+    #[serde(default = "default_num_parties")]
+    pub num_parties: usize,
 }
 
 /// Cli arguments for `merge_input_shares`
@@ -308,6 +320,10 @@ pub struct GenerateWitnessConfig {
 
 fn default_threshold() -> usize {
     1
+}
+
+fn default_num_parties() -> usize {
+    3
 }
 
 /// Cli arguments for `translate_witness`
@@ -722,9 +738,6 @@ fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
     let protocol = config.protocol;
     let out_dir = config.out_dir;
 
-    if protocol != MPCProtocol::REP3 {
-        eyre::bail!("Only REP3 protocol is supported for splitting inputs");
-    }
     let circuit_path = PathBuf::from(&circuit);
 
     //get the public inputs if any from parser
@@ -737,22 +750,47 @@ fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
 
     tracing::info!("Starting split input...");
     let start = Instant::now();
-    let shares = co_circom::split_input::<P::ScalarField>(input, &public_inputs)?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Split input took {duration_ms} ms");
 
-    // write out the shares to the output directory
     let base_name = input_path
         .file_name()
         .context("we have a file name")?
         .to_str()
         .context("input file name is not valid UTF-8")?;
-    for (i, share) in shares.iter().enumerate() {
-        let path = out_dir.join(format!("{base_name}.{i}.shared"));
-        let out_file = BufWriter::new(File::create(&path).context("while creating output file")?);
-        serde_json::to_writer(out_file, share).context("while serializing witness share")?;
-        tracing::info!("Wrote input share {} to file {}", i, path.display());
+
+    match protocol {
+        MPCProtocol::REP3 => {
+            let shares = co_circom::split_input::<P::ScalarField>(input, &public_inputs)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Split input took {duration_ms} ms");
+            for (i, share) in shares.iter().enumerate() {
+                let path = out_dir.join(format!("{base_name}.{i}.shared"));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                serde_json::to_writer(out_file, share).context("while serializing input share")?;
+                tracing::info!("Wrote input share {} to file {}", i, path.display());
+            }
+        }
+        MPCProtocol::SHAMIR => {
+            let t = config.threshold;
+            let n = config.num_parties;
+            let shares = co_circom::split_input_shamir::<P::ScalarField>(
+                input,
+                &public_inputs,
+                t,
+                n,
+            )?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Split input took {duration_ms} ms");
+            for (i, share) in shares.iter().enumerate() {
+                let path = out_dir.join(format!("{base_name}.{i}.shared"));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                serde_json::to_writer(out_file, share).context("while serializing input share")?;
+                tracing::info!("Wrote input share {} to file {}", i, path.display());
+            }
+        }
     }
+
     tracing::info!("Split input into shares successfully");
     Ok(ExitCode::SUCCESS)
 }
