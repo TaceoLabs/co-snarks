@@ -60,11 +60,22 @@ pub trait Rep3NetworkExt: Network {
         let id = PartyID::try_from(self.id())?;
         let next_id = id.next();
         let prev_id = id.prev();
-        let (prev_res, next_res) = mpc_net::join(
-            || self.send_and_recv_many(prev_id, data, prev_id),
-            || self.send_and_recv_many(next_id, data, next_id),
-        );
-        Ok((prev_res?, next_res?))
+        // Post BOTH sends before blocking on either receive. Each party emits all
+        // of its outgoing data up front, so no party can be parked on a `recv`
+        // before its peers have sent — which is exactly what previously forced
+        // the two send/recv pairs onto separate threads (`mpc_net::join`) to avoid
+        // a deadlock in the 3-party ring. This mirrors `shamir::network`'s
+        // `broadcast`/`broadcast_next`, which already use this ordering.
+        //
+        // Safe for arbitrarily large frames on the current transports: the peer's
+        // background reader thread drains the socket independently of its main
+        // thread's phase, so `send_many` here cannot deadlock against a peer that
+        // is itself still in its send phase.
+        self.send_many(prev_id, data)?;
+        self.send_many(next_id, data)?;
+        let prev_res = self.recv_many(prev_id)?;
+        let next_res = self.recv_many(next_id)?;
+        Ok((prev_res, next_res))
     }
 
     /// Sends data to the target party.

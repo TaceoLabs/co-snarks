@@ -4599,6 +4599,8 @@ dependencies = [
  "num-traits",
  "paste",
  "rand 0.8.6",
+ "rcgen",
+ "rustls",
  "serde_json",
  "sha2 0.10.9",
  "sha3",
