@@ -1,20 +1,17 @@
 //! Ephemeral TCP MPC network
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{collections::HashMap, sync::atomic::AtomicUsize};
 
-use eyre::ContextCompat as _;
-use futures::{SinkExt as _, StreamExt as _};
+use futures::StreamExt as _;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-use tokio::sync::mpsc;
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use tokio_util::sync::{CancellationToken, DropGuard};
 
-use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network};
+use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels};
 use bytes::Bytes;
 
 /// The default time to idle for incoming connections that were not picked up because, e.g. `init_session` for that session id was never called.
@@ -238,14 +235,10 @@ impl TcpNetworkHandler {
 
 /// A MPC network using `TcpStream`s
 #[derive(Debug)]
-#[expect(clippy::complexity)]
 pub struct TcpNetwork {
     id: usize,
-    send: HashMap<usize, (mpsc::Sender<Bytes>, AtomicUsize)>,
-    recv: HashMap<usize, (Mutex<mpsc::Receiver<eyre::Result<Bytes>>>, AtomicUsize)>,
+    channels: AsyncChannels,
     max_frame_length: usize,
-    /// A drop guard that cancels the cancellation token when dropped, used to stop tasks when the network is dropped.
-    _drop_guard: DropGuard,
 }
 
 impl TcpNetwork {
@@ -255,64 +248,21 @@ impl TcpNetwork {
         streams: HashMap<usize, TcpStream>,
         max_frame_length: usize,
     ) -> eyre::Result<Self> {
-        let cancellation_token = CancellationToken::new();
-        let mut send = HashMap::new();
-        let mut recv = HashMap::new();
+        let mut channels = AsyncChannels::default();
         let codec = LengthDelimitedCodec::builder()
             .length_field_type::<u64>()
             .max_frame_length(max_frame_length)
             .new_codec();
 
         for (other_id, stream) in streams {
-            let stream = Framed::new(stream, codec.clone());
-            let (mut sender, mut receiver) = stream.split();
-            let (send_tx, mut send_rx) = mpsc::channel::<Bytes>(32);
-            let (recv_tx, recv_rx) = mpsc::channel::<eyre::Result<Bytes>>(32);
-            tokio::spawn(async move {
-                while let Some(data) = send_rx.recv().await {
-                    if let Err(err) = sender.send(data).await {
-                        tracing::warn!("failed to send data: {err:?}");
-                        break;
-                    }
-                }
-            });
-            tokio::spawn({
-                let cancellation_token = cancellation_token.clone();
-                async move {
-                    loop {
-                        tokio::select! {
-                            _ = cancellation_token.cancelled() => {
-                                break;
-                            }
-                            msg = receiver.next() => {
-                                match msg {
-                                    Some(Ok(data)) => {
-                                        if recv_tx.send(Ok(data.into())).await.is_err() {
-                                            tracing::warn!("recv receiver dropped");
-                                            break;
-                                        }
-                                    }
-                                    Some(Err(err)) => {
-                                        let _ = recv_tx.send(Err(eyre::eyre!("tcp error: {err}"))).await;
-                                        break;
-                                    }
-                                    None => break,
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-            send.insert(other_id, (send_tx, AtomicUsize::default()));
-            recv.insert(other_id, (Mutex::new(recv_rx), AtomicUsize::default()));
+            let (sink, source) = Framed::new(stream, codec.clone()).split();
+            channels.add_peer(other_id, sink, source);
         }
 
         Ok(Self {
             id,
-            send,
-            recv,
+            channels,
             max_frame_length,
-            _drop_guard: cancellation_token.drop_guard(),
         })
     }
 }
@@ -323,38 +273,14 @@ impl Network for TcpNetwork {
     }
 
     fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
-        if data.len() > self.max_frame_length {
-            eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
-        }
-        let (sender, sent_bytes) = self.send.get(&to).context("party id out-of-bounds")?;
-        sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        sender.blocking_send(data)?;
-        Ok(())
+        self.channels.send(to, data, self.max_frame_length)
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Bytes> {
-        let (receiver, recv_bytes) = self.recv.get(&from).context("party id out-of-bounds")?;
-        let data = receiver
-            .lock()
-            .expect("not poisoned")
-            .blocking_recv()
-            .context("receiver sender dropped")??;
-        recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        Ok(data)
+        self.channels.recv(from)
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {
-        let mut stats = std::collections::BTreeMap::new();
-        for (id, (_, sent_bytes)) in self.send.iter() {
-            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
-            stats.insert(
-                *id,
-                (
-                    sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
-                    recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
-                ),
-            );
-        }
-        ConnectionStats::new(self.id, stats)
+        self.channels.stats(self.id)
     }
 }

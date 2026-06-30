@@ -9,13 +9,11 @@ use std::{
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network, config::Address,
+    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network,
+    async_net::AsyncChannels, config::Address,
 };
 use bytes::Bytes;
-use eyre::{Context as _, ContextCompat};
-use futures::{SinkExt, StreamExt as _};
-use intmap::IntMap;
-use parking_lot::Mutex;
+use eyre::Context as _;
 use quinn::{
     Connection, Endpoint, IdleTimeout, TransportConfig, VarInt, rustls::pki_types::PrivateKeyDer,
 };
@@ -333,15 +331,15 @@ impl QuicConnectionHandler {
         Ok((connections, endpoints))
     }
 
-    #[expect(clippy::complexity)]
-    pub fn get_streams(
-        &self,
-    ) -> eyre::Result<(
-        IntMap<usize, tokio::sync::mpsc::Sender<Bytes>>,
-        IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Bytes>>>,
-    )> {
-        let mut send = IntMap::with_capacity(self.connections.len() - 1);
-        let mut recv = IntMap::with_capacity(self.connections.len() - 1);
+    pub fn get_streams(&self) -> eyre::Result<AsyncChannels> {
+        let codec = LengthDelimitedCodec::builder()
+            .length_field_type::<u64>()
+            .max_frame_length(self.max_frame_length)
+            .new_codec();
+
+        // Open every bidirectional stream first — each open/handshake needs `block_on`,
+        // which would panic if attempted while inside the runtime context entered below.
+        let mut framed = Vec::with_capacity(self.connections.len());
         for (&id, conn) in self.connections.iter() {
             let (send_stream, recv_stream) = self.rt.block_on(async {
                 if id < self.id {
@@ -360,50 +358,18 @@ impl QuicConnectionHandler {
                     eyre::Ok((send_stream, recv_stream))
                 }
             })?;
-
-            let codec = LengthDelimitedCodec::builder()
-                .length_field_type::<u64>()
-                .max_frame_length(self.max_frame_length)
-                .new_codec();
-
-            let mut write = FramedWrite::new(send_stream, codec.clone());
-            let mut read = FramedRead::new(recv_stream, codec);
-
-            let (send_tx, mut send_rx) = tokio::sync::mpsc::channel(32);
-            let (recv_tx, recv_rx) = tokio::sync::mpsc::channel(32);
-
-            self.rt.spawn(async move {
-                while let Some(frame) = send_rx.recv().await {
-                    if let Err(err) = write.send(frame).await {
-                        tracing::warn!("failed to send data: {err:?}");
-                        break;
-                    }
-                }
-            });
-
-            self.rt.spawn(async move {
-                while let Some(frame) = read.next().await {
-                    match frame {
-                        Ok(frame) => {
-                            // `frame` is a `BytesMut` from the length-delimited codec;
-                            // `freeze` hands it on as `Bytes` without copying.
-                            if recv_tx.send(frame.freeze()).await.is_err() {
-                                tracing::warn!("recv receiver dropped");
-                                break;
-                            }
-                        }
-                        Err(err) => {
-                            tracing::warn!("failed to recv data: {err:?}");
-                            break;
-                        }
-                    }
-                }
-            });
-
-            assert!(send.insert(id, send_tx).is_none());
-            assert!(recv.insert(id, Mutex::new(recv_rx)).is_none());
+            let sink = FramedWrite::new(send_stream, codec.clone());
+            let source = FramedRead::new(recv_stream, codec.clone());
+            framed.push((id, sink, source));
         }
-        Ok((send, recv))
+
+        // Spawn the pump tasks onto our runtime by entering it for the duration.
+        let mut channels = AsyncChannels::default();
+        let _enter = self.rt.enter();
+        for (id, sink, source) in framed {
+            channels.add_peer(id, sink, source);
+        }
+        Ok(channels)
     }
 
     /// Shutdown all connections, and call [`quinn::Endpoint::wait_idle`] on all of them
@@ -452,43 +418,33 @@ impl Drop for QuicConnectionHandler {
 #[derive(Debug)]
 pub struct QuicNetwork {
     id: usize,
-    send: IntMap<usize, tokio::sync::mpsc::Sender<Bytes>>,
-    recv: IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Bytes>>>,
+    channels: AsyncChannels,
     conn_handler: Arc<QuicConnectionHandler>,
-    timeout: Duration,
 }
 
 impl QuicNetwork {
     /// Create a new [QuicNetwork]
     pub fn new(config: NetworkConfig) -> eyre::Result<Self> {
         let id = config.my_id;
-        let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()?;
         let conn_handler = QuicConnectionHandler::new(config, rt)?;
-        let (send, recv) = conn_handler.get_streams()?;
+        let channels = conn_handler.get_streams()?;
         Ok(QuicNetwork {
             id,
-            send,
-            recv,
+            channels,
             conn_handler: Arc::new(conn_handler),
-            timeout,
         })
     }
 
     /// Create a network fork with new streams for the same connections
     pub fn fork(&self) -> eyre::Result<Self> {
-        let id = self.id;
-        let (send, recv) = self.conn_handler.get_streams()?;
-        let conn_handler = Arc::clone(&self.conn_handler);
-        let timeout = self.timeout;
+        let channels = self.conn_handler.get_streams()?;
         Ok(QuicNetwork {
-            id,
-            send,
-            recv,
-            conn_handler,
-            timeout,
+            id: self.id,
+            channels,
+            conn_handler: Arc::clone(&self.conn_handler),
         })
     }
 }
@@ -499,47 +455,15 @@ impl Network for QuicNetwork {
     }
 
     fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
-        if data.len() > self.conn_handler.max_frame_length {
-            eyre::bail!(
-                "frame len {} > max {}",
-                data.len(),
-                self.conn_handler.max_frame_length
-            );
-        }
-        let stream = self.send.get(to).context("party id out-of-bounds")?;
-        stream.blocking_send(data)?;
-        Ok(())
+        self.channels
+            .send(to, data, self.conn_handler.max_frame_length)
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Bytes> {
-        let mut queue = self
-            .recv
-            .get(from)
-            .context("party id out-of-bounds")?
-            .lock();
-        queue.blocking_recv().context("while recv")
+        self.channels.recv(from)
     }
 
-    // NOTE: Unlike the TCP/TLS/local backends, which count application-level bytes
-    // (the `data.len()` actually sent/received), this reports QUIC transport-level
-    // UDP bytes, which include framing, ACKs, and retransmissions. The numbers are
-    // therefore not directly comparable across backends. Unifying stats accounting
-    // is deferred to the planned transport-core unification.
     fn get_connection_stats(&self) -> ConnectionStats {
-        let mut stats = std::collections::BTreeMap::new();
-        for (id, conn) in &self.conn_handler.connections {
-            let conn_stats = conn.stats();
-            stats.insert(
-                *id,
-                (
-                    conn_stats.udp_tx.bytes as usize,
-                    conn_stats.udp_rx.bytes as usize,
-                ),
-            );
-        }
-        ConnectionStats {
-            my_id: self.id,
-            stats,
-        }
+        self.channels.stats(self.id)
     }
 }

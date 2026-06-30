@@ -6,6 +6,9 @@ use std::{
     time::Duration,
 };
 
+// Shared async-transport core, used by the QUIC and ephemeral-TCP-session backends.
+#[cfg(any(feature = "quic", feature = "tcp-session"))]
+mod async_net;
 // Shared blocking-transport core, used by the TCP and TLS backends.
 #[cfg(any(feature = "tcp", feature = "tls"))]
 mod blocking;
