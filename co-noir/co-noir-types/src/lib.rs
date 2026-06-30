@@ -13,6 +13,9 @@ pub type Rep3SharedInput<F> = BTreeMap<String, Rep3Type<F>>;
 /// A REP3 shared witness type
 pub type Rep3SharedWitness<F> = Vec<Rep3Type<F>>;
 
+/// A shamir shared input type
+pub type ShamirSharedInput<F> = BTreeMap<String, ShamirType<F>>;
+
 /// A shamir shared witness type
 pub type ShamirSharedWitness<F> = Vec<ShamirType<F>>;
 
@@ -108,6 +111,35 @@ pub fn split_input_rep3<F: PrimeField>(
                 let shares = rep3::share_field_element(v, &mut rng);
                 for (w, share) in witnesses.iter_mut().zip(shares) {
                     w.insert(witness.clone(), Rep3Type::Shared(share));
+                }
+            }
+        }
+    }
+
+    witnesses
+}
+
+/// Split input into Shamir shares
+pub fn split_input_shamir<F: PrimeField>(
+    initial_witness: BTreeMap<String, PubPrivate<F>>,
+    degree: usize,
+    num_parties: usize,
+) -> Vec<ShamirSharedInput<F>> {
+    let mut rng = rand::thread_rng();
+    let mut witnesses = (0..num_parties)
+        .map(|_| BTreeMap::default())
+        .collect::<Vec<_>>();
+    for (witness, v) in initial_witness.into_iter() {
+        match v {
+            PubPrivate::Public(v) => {
+                for w in witnesses.iter_mut() {
+                    w.insert(witness.to_owned(), ShamirType::Public(v));
+                }
+            }
+            PubPrivate::Private(v) => {
+                let shares = shamir::share_field_element(v, degree, num_parties, &mut rng);
+                for (w, share) in witnesses.iter_mut().zip(shares) {
+                    w.insert(witness.clone(), ShamirType::Shared(share));
                 }
             }
         }
