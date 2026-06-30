@@ -5,7 +5,7 @@ use std::{
     cmp::Ordering,
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
-    sync::atomic::AtomicUsize,
+    sync::{Arc, atomic::AtomicUsize},
     time::{Duration, Instant},
 };
 
@@ -13,13 +13,80 @@ use crate::{
     ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network, config::Address,
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
 use intmap::IntMap;
 use itertools::Itertools;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use socket2::{Domain, Socket, TcpKeepalive, Type};
+
+/// Capacity (in frames) of each per-peer send queue. Bounds buffered-but-unsent
+/// memory and applies backpressure to `send` when a peer cannot keep up.
+const SEND_QUEUE_CAP: usize = 32;
+
+/// A message handed to a peer's background writer thread.
+enum WriteMsg {
+    /// A complete, length-prefixed frame to write to the socket.
+    Frame(Vec<u8>),
+    /// Flush the socket and acknowledge on the given channel.
+    Flush(Sender<()>),
+}
+
+/// Drains [`WriteMsg`]s for a single peer, writing them to `stream`. On the first
+/// write error it records the error in `err` and exits; subsequent `send`/`flush`
+/// calls observe `err` and surface it. Exits cleanly when all senders are dropped.
+fn writer_loop(mut stream: TcpStream, rx: Receiver<WriteMsg>, err: Arc<Mutex<Option<String>>>) {
+    for msg in rx.iter() {
+        match msg {
+            WriteMsg::Frame(buf) => {
+                if let Err(e) = stream.write_all(&buf) {
+                    *err.lock() = Some(e.to_string());
+                    break;
+                }
+            }
+            WriteMsg::Flush(ack) => {
+                if let Err(e) = stream.flush() {
+                    *err.lock() = Some(e.to_string());
+                    let _ = ack.send(());
+                    break;
+                }
+                let _ = ack.send(());
+            }
+        }
+    }
+}
+
+/// Given a fully-handshaked `stream` for `other_id`, spawn the per-peer writer and
+/// reader threads and register the resulting send queue / receive queue on `net`.
+fn setup_streams(net: &mut TcpNetwork, other_id: usize, stream: TcpStream, max_frame_length: usize) {
+    // Send side: a background writer thread owns one clone of the socket and drains
+    // the bounded send queue, so `send` only enqueues and never blocks on socket IO
+    // (except for backpressure when the queue is full).
+    let write_stream = stream.try_clone().expect("can clone stream");
+    let (send_tx, send_rx) = crossbeam_channel::bounded(SEND_QUEUE_CAP);
+    let err = Arc::new(Mutex::new(None));
+    {
+        let err = Arc::clone(&err);
+        std::thread::spawn(move || writer_loop(write_stream, send_rx, err));
+    }
+    net.send
+        .insert(other_id, (send_tx, AtomicUsize::default(), err));
+
+    // Recv side: a background reader thread owns the other clone and feeds frames
+    // into the bounded receive queue.
+    let mut read_stream = stream;
+    let (tx, rx) = crossbeam_channel::bounded(32);
+    std::thread::spawn(move || {
+        loop {
+            let data = read_next_frame(&mut read_stream, max_frame_length);
+            if tx.send(data).is_err() {
+                break;
+            }
+        }
+    });
+    net.recv.insert(other_id, (rx, AtomicUsize::default()));
+}
 
 /// A party in the network.
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -82,7 +149,7 @@ impl NetworkConfig {
 #[expect(clippy::complexity)]
 pub struct TcpNetwork {
     id: usize,
-    send: IntMap<usize, (Mutex<TcpStream>, AtomicUsize)>,
+    send: IntMap<usize, (Sender<WriteMsg>, AtomicUsize, Arc<Mutex<Option<String>>>)>,
     recv: IntMap<usize, (Receiver<eyre::Result<Vec<u8>>>, AtomicUsize)>,
     timeout: Duration,
     max_frame_length: usize,
@@ -155,23 +222,7 @@ impl TcpNetwork {
                         stream.set_nodelay(true)?;
                         stream.write_u64::<BigEndian>(i as u64)?;
                         stream.write_u64::<BigEndian>(id as u64)?;
-                        nets[i].send.insert(
-                            other_id,
-                            (
-                                Mutex::new(stream.try_clone().expect("can clone stream")),
-                                AtomicUsize::default(),
-                            ),
-                        );
-                        let (tx, rx) = crossbeam_channel::bounded(32);
-                        std::thread::spawn(move || {
-                            loop {
-                                let data = read_next_frame(&mut stream, max_frame_length);
-                                if tx.send(data).is_err() {
-                                    break;
-                                }
-                            }
-                        });
-                        nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
+                        setup_streams(&mut nets[i], other_id, stream, max_frame_length);
                     }
                     Ordering::Greater => {
                         let (stream, _) = listener.accept()?;
@@ -183,23 +234,7 @@ impl TcpNetwork {
                         stream.set_nodelay(true)?;
                         let i = stream.read_u64::<BigEndian>()? as usize;
                         let other_id = stream.read_u64::<BigEndian>()? as usize;
-                        nets[i].send.insert(
-                            other_id,
-                            (
-                                Mutex::new(stream.try_clone().expect("can clone stream")),
-                                AtomicUsize::default(),
-                            ),
-                        );
-                        let (tx, rx) = crossbeam_channel::bounded(32);
-                        std::thread::spawn(move || {
-                            loop {
-                                let data = read_next_frame(&mut stream, max_frame_length);
-                                if tx.send(data).is_err() {
-                                    break;
-                                }
-                            }
-                        });
-                        nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
+                        setup_streams(&mut nets[i], other_id, stream, max_frame_length);
                     }
                     Ordering::Equal => continue,
                 }
@@ -219,11 +254,18 @@ impl Network for TcpNetwork {
         if data.len() > self.max_frame_length {
             eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
         }
-        let (stream, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
+        let (tx, sent_bytes, err) = self.send.get(to).context("party id out-of-bounds")?;
+        if let Some(e) = err.lock().clone() {
+            eyre::bail!("connection to party {to} previously failed: {e}");
+        }
+        // Coalesce the length prefix and payload into a single buffer so each frame
+        // is one `write_all` (one segment under TCP_NODELAY) on the writer thread.
+        let mut frame = Vec::with_capacity(8 + data.len());
+        frame.extend_from_slice(&(data.len() as u64).to_be_bytes());
+        frame.extend_from_slice(data);
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        let mut stream = stream.lock();
-        stream.write_u64::<BigEndian>(data.len() as u64)?;
-        stream.write_all(data)?;
+        tx.send(WriteMsg::Frame(frame))
+            .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
         Ok(())
     }
 
@@ -234,9 +276,24 @@ impl Network for TcpNetwork {
         Ok(data)
     }
 
+    fn flush(&self) -> eyre::Result<()> {
+        for (to, (tx, _, err)) in self.send.iter() {
+            let (ack_tx, ack_rx) = crossbeam_channel::bounded(1);
+            tx.send(WriteMsg::Flush(ack_tx))
+                .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
+            ack_rx
+                .recv_timeout(self.timeout)
+                .map_err(|_| eyre::eyre!("timed out flushing send queue for party {to}"))?;
+            if let Some(e) = err.lock().clone() {
+                eyre::bail!("connection to party {to} failed: {e}");
+            }
+        }
+        Ok(())
+    }
+
     fn get_connection_stats(&self) -> ConnectionStats {
         let mut stats = std::collections::BTreeMap::new();
-        for (id, (_, sent_bytes)) in self.send.iter() {
+        for (id, (_, sent_bytes, _)) in self.send.iter() {
             let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
             stats.insert(
                 id,

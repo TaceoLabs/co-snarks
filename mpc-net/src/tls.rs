@@ -14,7 +14,7 @@ use crate::{
     ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network, config::Address,
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
-use crossbeam_channel::Receiver;
+use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
 use intmap::IntMap;
 use itertools::Itertools;
@@ -209,12 +209,61 @@ impl Write for TlsStream {
     }
 }
 
+/// Capacity (in frames) of each per-peer send queue. Bounds buffered-but-unsent
+/// memory and applies backpressure to `send` when a peer cannot keep up.
+const SEND_QUEUE_CAP: usize = 32;
+
+/// A message handed to a peer's background writer thread.
+enum WriteMsg {
+    /// A complete, length-prefixed frame to write to the stream.
+    Frame(Vec<u8>),
+    /// Flush the stream and acknowledge on the given channel.
+    Flush(Sender<()>),
+}
+
+/// Drains [`WriteMsg`]s for a single peer, writing them to `stream`. On the first
+/// write error it records the error in `err` and exits; subsequent `send`/`flush`
+/// calls observe `err` and surface it. Exits cleanly when all senders are dropped.
+fn writer_loop(mut stream: TlsStream, rx: Receiver<WriteMsg>, err: Arc<Mutex<Option<String>>>) {
+    for msg in rx.iter() {
+        match msg {
+            WriteMsg::Frame(buf) => {
+                if let Err(e) = stream.write_all(&buf) {
+                    *err.lock() = Some(e.to_string());
+                    break;
+                }
+            }
+            WriteMsg::Flush(ack) => {
+                if let Err(e) = stream.flush() {
+                    *err.lock() = Some(e.to_string());
+                    let _ = ack.send(());
+                    break;
+                }
+                let _ = ack.send(());
+            }
+        }
+    }
+}
+
+/// Given an owned send-direction `stream` for `other_id`, spawn its background
+/// writer thread and register the resulting send queue on `net`.
+fn setup_sender(net: &mut TlsNetwork, other_id: usize, stream: TlsStream) {
+    let (send_tx, send_rx) = crossbeam_channel::bounded(SEND_QUEUE_CAP);
+    let err = Arc::new(Mutex::new(None));
+    {
+        let err = Arc::clone(&err);
+        std::thread::spawn(move || writer_loop(stream, send_rx, err));
+    }
+    net.send
+        .insert(other_id, (send_tx, AtomicUsize::default(), err));
+}
+
 /// A MPC network using [TlsStream]s
 #[derive(Debug)]
 #[expect(clippy::complexity)]
 pub struct TlsNetwork {
     id: usize,
-    send: IntMap<usize, (Mutex<TlsStream>, AtomicUsize)>,
+    send: IntMap<usize, (Sender<WriteMsg>, AtomicUsize, Arc<Mutex<Option<String>>>)>,
     recv: IntMap<usize, (Receiver<eyre::Result<Vec<u8>>>, AtomicUsize)>,
     timeout: Duration,
     max_frame_length: usize,
@@ -322,9 +371,7 @@ impl TlsNetwork {
                             stream.write_u8(s)?;
 
                             if s == STREAM_0 {
-                                nets[i]
-                                    .send
-                                    .insert(other_id, (Mutex::new(stream), AtomicUsize::default()));
+                                setup_sender(&mut nets[i], other_id, stream);
                             } else {
                                 let (tx, rx) = crossbeam_channel::bounded(32);
                                 std::thread::spawn(move || {
@@ -366,9 +413,7 @@ impl TlsNetwork {
                                 });
                                 nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
                             } else {
-                                nets[i]
-                                    .send
-                                    .insert(other_id, (Mutex::new(stream), AtomicUsize::default()));
+                                setup_sender(&mut nets[i], other_id, stream);
                             }
                         }
                         Ordering::Equal => continue,
@@ -390,11 +435,18 @@ impl Network for TlsNetwork {
         if data.len() > self.max_frame_length {
             eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
         }
-        let (stream, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
+        let (tx, sent_bytes, err) = self.send.get(to).context("party id out-of-bounds")?;
+        if let Some(e) = err.lock().clone() {
+            eyre::bail!("connection to party {to} previously failed: {e}");
+        }
+        // Coalesce the length prefix and payload into a single buffer so each frame
+        // is one `write_all` (one TLS record stream write) on the writer thread.
+        let mut frame = Vec::with_capacity(8 + data.len());
+        frame.extend_from_slice(&(data.len() as u64).to_be_bytes());
+        frame.extend_from_slice(data);
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        let mut stream = stream.lock();
-        stream.write_u64::<BigEndian>(data.len() as u64)?;
-        stream.write_all(data)?;
+        tx.send(WriteMsg::Frame(frame))
+            .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
         Ok(())
     }
 
@@ -405,9 +457,24 @@ impl Network for TlsNetwork {
         Ok(data)
     }
 
+    fn flush(&self) -> eyre::Result<()> {
+        for (to, (tx, _, err)) in self.send.iter() {
+            let (ack_tx, ack_rx) = crossbeam_channel::bounded(1);
+            tx.send(WriteMsg::Flush(ack_tx))
+                .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
+            ack_rx
+                .recv_timeout(self.timeout)
+                .map_err(|_| eyre::eyre!("timed out flushing send queue for party {to}"))?;
+            if let Some(e) = err.lock().clone() {
+                eyre::bail!("connection to party {to} failed: {e}");
+            }
+        }
+        Ok(())
+    }
+
     fn get_connection_stats(&self) -> ConnectionStats {
         let mut stats = std::collections::BTreeMap::new();
-        for (id, (_, sent_bytes)) in self.send.iter() {
+        for (id, (_, sent_bytes, _)) in self.send.iter() {
             let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
             stats.insert(
                 id,

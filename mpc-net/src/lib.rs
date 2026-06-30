@@ -33,6 +33,17 @@ pub trait Network: Send + Sync {
     /// Receive data from other party
     fn recv(&self, from: usize) -> eyre::Result<Vec<u8>>;
 
+    /// Ensure all previously [`send`](Network::send)ed data has been handed off to
+    /// the operating system, and surface any error encountered while doing so.
+    ///
+    /// Backends that buffer sends on a background writer (e.g. TCP/TLS) flush their
+    /// queues here; backends that write inline return `Ok(())`. Call this at the end
+    /// of a protocol to confirm that the final sends — which may not be followed by a
+    /// receive — actually left the process.
+    fn flush(&self) -> eyre::Result<()> {
+        Ok(())
+    }
+
     /// Get connection statistics for the Network.
     /// The returned HashMap maps party_id to a tuple of (sent_bytes, received_bytes).
     fn get_connection_stats(&self) -> ConnectionStats;

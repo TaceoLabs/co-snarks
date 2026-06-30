@@ -24,6 +24,9 @@ fn assert_broadcast<N: Network>(net: &N) -> eyre::Result<()> {
     let data = vec![tag; BIG_LEN];
 
     let (prev_res, next_res) = net.broadcast_many(&data)?;
+    // Confirm all buffered sends have been handed off to the OS (no-op on backends
+    // that write inline; drains the writer thread on TCP/TLS).
+    net.flush()?;
 
     let prev = (my + 2) % 3;
     let next = (my + 1) % 3;

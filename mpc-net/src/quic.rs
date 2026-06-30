@@ -433,8 +433,16 @@ impl QuicConnectionHandler {
 
 impl Drop for QuicConnectionHandler {
     fn drop(&mut self) {
-        // ignore errors in drop
-        let _ = self.rt.block_on(self.shutdown());
+        // `Runtime::block_on` panics if it is called from within another runtime's
+        // async context. The current stack is fully synchronous and never drops a
+        // network from async code, but run the graceful shutdown on a dedicated
+        // thread so that a future async embedder cannot turn teardown into a panic.
+        // The child thread is not part of any runtime, so `block_on` is always
+        // valid there. Errors during shutdown are ignored (best-effort cleanup).
+        let res = std::thread::scope(|s| s.spawn(|| self.rt.block_on(self.shutdown())).join());
+        if let Ok(Err(err)) = res {
+            tracing::warn!("error during QUIC shutdown: {err:?}");
+        }
     }
 }
 
@@ -510,6 +518,11 @@ impl Network for QuicNetwork {
         queue.blocking_recv().context("while recv")
     }
 
+    // NOTE: Unlike the TCP/TLS/local backends, which count application-level bytes
+    // (the `data.len()` actually sent/received), this reports QUIC transport-level
+    // UDP bytes, which include framing, ACKs, and retransmissions. The numbers are
+    // therefore not directly comparable across backends. Unifying stats accounting
+    // is deferred to the planned transport-core unification.
     fn get_connection_stats(&self) -> ConnectionStats {
         let mut stats = std::collections::BTreeMap::new();
         for (id, conn) in &self.conn_handler.connections {
