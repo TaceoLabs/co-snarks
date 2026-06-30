@@ -6,6 +6,9 @@ use std::{
     time::Duration,
 };
 
+// Shared blocking-transport core, used by the TCP and TLS backends.
+#[cfg(any(feature = "tcp", feature = "tls"))]
+mod blocking;
 pub mod config;
 #[cfg(feature = "local")]
 pub mod local;

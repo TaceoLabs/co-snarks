@@ -3,23 +3,22 @@
 use std::{
     array,
     cmp::Ordering,
+    collections::HashMap,
     io::{Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs as _},
     path::PathBuf,
-    sync::{Arc, atomic::AtomicUsize},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network, config::Address,
+    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network,
+    blocking::BlockingChannels, config::Address,
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use bytes::Bytes;
-use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
-use intmap::IntMap;
 use itertools::Itertools;
-use parking_lot::Mutex;
 use rustls::{
     ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
@@ -210,62 +209,11 @@ impl Write for TlsStream {
     }
 }
 
-/// Capacity (in frames) of each per-peer send queue. Bounds buffered-but-unsent
-/// memory and applies backpressure to `send` when a peer cannot keep up.
-const SEND_QUEUE_CAP: usize = 32;
-
-/// A message handed to a peer's background writer thread.
-enum WriteMsg {
-    /// A complete, length-prefixed frame to write to the stream.
-    Frame(Vec<u8>),
-    /// Flush the stream and acknowledge on the given channel.
-    Flush(Sender<()>),
-}
-
-/// Drains [`WriteMsg`]s for a single peer, writing them to `stream`. On the first
-/// write error it records the error in `err` and exits; subsequent `send`/`flush`
-/// calls observe `err` and surface it. Exits cleanly when all senders are dropped.
-fn writer_loop(mut stream: TlsStream, rx: Receiver<WriteMsg>, err: Arc<Mutex<Option<String>>>) {
-    for msg in rx.iter() {
-        match msg {
-            WriteMsg::Frame(buf) => {
-                if let Err(e) = stream.write_all(&buf) {
-                    *err.lock() = Some(e.to_string());
-                    break;
-                }
-            }
-            WriteMsg::Flush(ack) => {
-                if let Err(e) = stream.flush() {
-                    *err.lock() = Some(e.to_string());
-                    let _ = ack.send(());
-                    break;
-                }
-                let _ = ack.send(());
-            }
-        }
-    }
-}
-
-/// Given an owned send-direction `stream` for `other_id`, spawn its background
-/// writer thread and register the resulting send queue on `net`.
-fn setup_sender(net: &mut TlsNetwork, other_id: usize, stream: TlsStream) {
-    let (send_tx, send_rx) = crossbeam_channel::bounded(SEND_QUEUE_CAP);
-    let err = Arc::new(Mutex::new(None));
-    {
-        let err = Arc::clone(&err);
-        std::thread::spawn(move || writer_loop(stream, send_rx, err));
-    }
-    net.send
-        .insert(other_id, (send_tx, AtomicUsize::default(), err));
-}
-
 /// A MPC network using [TlsStream]s
 #[derive(Debug)]
-#[expect(clippy::complexity)]
 pub struct TlsNetwork {
     id: usize,
-    send: IntMap<usize, (Sender<WriteMsg>, AtomicUsize, Arc<Mutex<Option<String>>>)>,
-    recv: IntMap<usize, (Receiver<eyre::Result<Bytes>>, AtomicUsize)>,
+    channels: BlockingChannels,
     timeout: Duration,
     max_frame_length: usize,
 }
@@ -331,14 +279,20 @@ impl TlsNetwork {
 
         let mut nets = array::from_fn(|_| Self {
             id,
-            send: IntMap::default(),
-            recv: IntMap::default(),
+            channels: BlockingChannels::default(),
             timeout,
             max_frame_length,
         });
 
         const STREAM_0: u8 = 0;
         const STREAM_1: u8 = 1;
+
+        // For each peer we open two TLS connections, one per direction. They are
+        // established in separate iterations of the `s` loop, so buffer the
+        // (write, read) halves per (net, peer) and register them together once both
+        // are present.
+        type Pair = (Option<TlsStream>, Option<TlsStream>);
+        let mut pending: Vec<HashMap<usize, Pair>> = (0..N).map(|_| HashMap::new()).collect();
 
         for i in 0..N {
             for s in [STREAM_0, STREAM_1] {
@@ -371,19 +325,13 @@ impl TlsNetwork {
                             stream.write_u64::<BigEndian>(id as u64)?;
                             stream.write_u8(s)?;
 
+                            // As the connecting party, STREAM_0 is our send direction
+                            // and STREAM_1 is our receive direction.
+                            let entry = pending[i].entry(other_id).or_insert((None, None));
                             if s == STREAM_0 {
-                                setup_sender(&mut nets[i], other_id, stream);
+                                entry.0 = Some(stream);
                             } else {
-                                let (tx, rx) = crossbeam_channel::bounded(32);
-                                std::thread::spawn(move || {
-                                    loop {
-                                        let data = read_next_frame(&mut stream, max_frame_length);
-                                        if tx.send(data).is_err() {
-                                            break;
-                                        }
-                                    }
-                                });
-                                nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
+                                entry.1 = Some(stream);
                             }
                         }
                         Ordering::Greater => {
@@ -402,24 +350,28 @@ impl TlsNetwork {
                             let other_id = stream.read_u64::<BigEndian>()? as usize;
                             let s_ = stream.read_u8()?;
 
+                            // As the accepting party, the peer's STREAM_0 is our receive
+                            // direction and its STREAM_1 is our send direction.
+                            let entry = pending[i].entry(other_id).or_insert((None, None));
                             if s_ == STREAM_0 {
-                                let (tx, rx) = crossbeam_channel::bounded(32);
-                                std::thread::spawn(move || {
-                                    loop {
-                                        let data = read_next_frame(&mut stream, max_frame_length);
-                                        if tx.send(data).is_err() {
-                                            break;
-                                        }
-                                    }
-                                });
-                                nets[i].recv.insert(other_id, (rx, AtomicUsize::default()));
+                                entry.1 = Some(stream);
                             } else {
-                                setup_sender(&mut nets[i], other_id, stream);
+                                entry.0 = Some(stream);
                             }
                         }
                         Ordering::Equal => continue,
                     }
                 }
+            }
+        }
+
+        for (i, net_pending) in pending.into_iter().enumerate() {
+            for (other_id, (write_stream, read_stream)) in net_pending {
+                let write_stream = write_stream.context("missing TLS send connection")?;
+                let read_stream = read_stream.context("missing TLS recv connection")?;
+                nets[i]
+                    .channels
+                    .add_peer(other_id, write_stream, read_stream, max_frame_length);
             }
         }
 
@@ -433,71 +385,18 @@ impl Network for TlsNetwork {
     }
 
     fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
-        if data.len() > self.max_frame_length {
-            eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
-        }
-        let (tx, sent_bytes, err) = self.send.get(to).context("party id out-of-bounds")?;
-        if let Some(e) = err.lock().clone() {
-            eyre::bail!("connection to party {to} previously failed: {e}");
-        }
-        // Coalesce the length prefix and payload into a single buffer so each frame
-        // is one `write_all` (one TLS record stream write) on the writer thread.
-        let mut frame = Vec::with_capacity(8 + data.len());
-        frame.extend_from_slice(&(data.len() as u64).to_be_bytes());
-        frame.extend_from_slice(&data);
-        sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        tx.send(WriteMsg::Frame(frame))
-            .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
-        Ok(())
+        self.channels.send(to, data, self.max_frame_length)
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Bytes> {
-        let (queue, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
-        let data = queue.recv_timeout(self.timeout)??;
-        recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        Ok(data)
+        self.channels.recv(from, self.timeout)
     }
 
     fn flush(&self) -> eyre::Result<()> {
-        for (to, (tx, _, err)) in self.send.iter() {
-            let (ack_tx, ack_rx) = crossbeam_channel::bounded(1);
-            tx.send(WriteMsg::Flush(ack_tx))
-                .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
-            ack_rx
-                .recv_timeout(self.timeout)
-                .map_err(|_| eyre::eyre!("timed out flushing send queue for party {to}"))?;
-            if let Some(e) = err.lock().clone() {
-                eyre::bail!("connection to party {to} failed: {e}");
-            }
-        }
-        Ok(())
+        self.channels.flush(self.timeout)
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {
-        let mut stats = std::collections::BTreeMap::new();
-        for (id, (_, sent_bytes, _)) in self.send.iter() {
-            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
-            stats.insert(
-                id,
-                (
-                    sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
-                    recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
-                ),
-            );
-        }
-        ConnectionStats {
-            my_id: self.id,
-            stats,
-        }
+        self.channels.stats(self.id)
     }
-}
-
-fn read_next_frame(stream: &mut TlsStream, max_frame_length: usize) -> eyre::Result<Bytes> {
-    let len = stream.read_u64::<BigEndian>()? as usize;
-    if len > max_frame_length {
-        eyre::bail!("frame len {len} > max {max_frame_length}");
-    }
-    let mut data = vec![0; len];
-    stream.read_exact(&mut data)?;
-    Ok(Bytes::from(data))
 }
