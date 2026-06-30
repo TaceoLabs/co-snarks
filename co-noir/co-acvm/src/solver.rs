@@ -234,6 +234,22 @@ impl<'a, N: Network> ShamirCoSolver<'a, ark_bn254::Fr, N> {
 
         Self::new_bn254_with_witness(ShamirAcvmSolver::new(net, state), compiled_program, witness)
     }
+
+    pub fn new_with_witness_and_amount(
+        net: &'a N,
+        num_parties: usize,
+        threshold: usize,
+        amount: usize,
+        compiled_program: ProgramArtifact,
+        witness: WitnessMap<
+            <ShamirAcvmSolver<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
+        >,
+    ) -> eyre::Result<Self> {
+        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, amount, net)?;
+        let state = ShamirState::from(preprocessing);
+
+        Self::new_bn254_with_witness(ShamirAcvmSolver::new(net, state), compiled_program, witness)
+    }
 }
 
 impl<F: PrimeField> PlainCoSolver<F> {
