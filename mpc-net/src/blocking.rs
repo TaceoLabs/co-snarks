@@ -13,8 +13,7 @@ use std::{
     time::Duration,
 };
 
-use byteorder::{BigEndian, ReadBytesExt as _};
-use bytes::Bytes;
+use bytes::{Buf as _, Bytes, BytesMut};
 use crossbeam_channel::{Receiver, Sender, bounded};
 use eyre::ContextCompat as _;
 use intmap::IntMap;
@@ -179,23 +178,84 @@ fn write_frame<W: Write>(stream: &mut W, payload: &[u8]) -> std::io::Result<()> 
     Ok(())
 }
 
-/// Reads length-prefixed frames from `stream` and forwards them. Exits when the receiver
-/// is dropped or a read fails (the error is delivered as the final item).
-fn reader_loop<R: Read>(mut stream: R, tx: Sender<eyre::Result<Bytes>>, max_frame_length: usize) {
+/// Amount of zeroed space appended to the receive buffer per read syscall.
+const READ_CHUNK: usize = 64 * 1024;
+
+/// Reads length-prefixed frames from `stream`, forwarding each into `tx`. A single read
+/// can yield several frames (amortizing syscalls) and frames are sliced out of the read
+/// buffer without copying. Exits when the receiver is dropped or a read fails (the error
+/// is delivered as the final item, then the loop stops).
+fn reader_loop<R: Read>(stream: R, tx: Sender<eyre::Result<Bytes>>, max_frame_length: usize) {
+    let mut reader = FrameReader {
+        stream,
+        buf: BytesMut::new(),
+        max_frame_length,
+    };
     loop {
-        let frame = read_next_frame(&mut stream, max_frame_length);
-        if tx.send(frame).is_err() {
-            break;
+        match reader.next_frame() {
+            Ok(frame) => {
+                if tx.send(Ok(frame)).is_err() {
+                    break;
+                }
+            }
+            Err(err) => {
+                let _ = tx.send(Err(err));
+                break;
+            }
         }
     }
 }
 
-fn read_next_frame<R: Read>(stream: &mut R, max_frame_length: usize) -> eyre::Result<Bytes> {
-    let len = stream.read_u64::<BigEndian>()? as usize;
-    if len > max_frame_length {
-        eyre::bail!("frame len {len} > max {max_frame_length}");
+/// A buffered, length-delimited frame reader over a blocking [`Read`]. This is the
+/// synchronous counterpart of `tokio_util`'s `LengthDelimitedCodec`: one growable,
+/// reused buffer; multiple frames parsed per read; zero-copy frame extraction via
+/// [`BytesMut::split_to`].
+struct FrameReader<R> {
+    stream: R,
+    buf: BytesMut,
+    max_frame_length: usize,
+}
+
+impl<R: Read> FrameReader<R> {
+    fn next_frame(&mut self) -> eyre::Result<Bytes> {
+        loop {
+            if self.buf.len() >= 8 {
+                let len =
+                    u64::from_be_bytes(self.buf[..8].try_into().expect("8 bytes")) as usize;
+                if len > self.max_frame_length {
+                    eyre::bail!("frame len {len} > max {}", self.max_frame_length);
+                }
+                if self.buf.len() >= 8 + len {
+                    // Whole frame buffered: drop the header and slice out the payload
+                    // (a refcounted view into the read buffer, no copy).
+                    self.buf.advance(8);
+                    return Ok(self.buf.split_to(len).freeze());
+                }
+                // Reserve room for the rest of this frame so subsequent reads don't realloc.
+                self.buf.reserve(8 + len - self.buf.len());
+            }
+            self.fill()?;
+        }
     }
-    let mut data = vec![0; len];
-    stream.read_exact(&mut data)?;
-    Ok(Bytes::from(data))
+
+    /// Append one chunk read from the stream to the buffer.
+    fn fill(&mut self) -> eyre::Result<()> {
+        let old = self.buf.len();
+        // Zero-extend by a chunk, read into the fresh space, then trim to bytes read.
+        self.buf.resize(old + READ_CHUNK, 0);
+        match self.stream.read(&mut self.buf[old..]) {
+            Ok(0) => {
+                self.buf.truncate(old);
+                eyre::bail!("connection closed by peer");
+            }
+            Ok(n) => {
+                self.buf.truncate(old + n);
+                Ok(())
+            }
+            Err(e) => {
+                self.buf.truncate(old);
+                Err(e.into())
+            }
+        }
+    }
 }
