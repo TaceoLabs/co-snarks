@@ -58,6 +58,22 @@ pub trait Network: Send + Sync {
         Ok(())
     }
 
+    /// Gracefully shut the network down, guaranteeing that every frame this party has
+    /// sent has been delivered to its peers and every frame its peers sent has been
+    /// received here.
+    ///
+    /// Implementations flush all pending sends and then perform an all-to-all barrier:
+    /// a sentinel is sent to every peer and one is awaited from every peer. Because the
+    /// transports deliver in order, observing a peer's sentinel proves all of its earlier
+    /// frames arrived first. This must be called by **all** parties once they have
+    /// finished exchanging protocol data (it blocks until every peer reaches it).
+    ///
+    /// The default implementation only [`flush`](Network::flush)es (sufficient for
+    /// backends with no cross-peer barrier, e.g. the in-process test network).
+    fn shutdown(&self) -> eyre::Result<()> {
+        self.flush()
+    }
+
     /// Get connection statistics for the Network.
     /// The returned HashMap maps party_id to a tuple of (sent_bytes, received_bytes).
     fn get_connection_stats(&self) -> ConnectionStats;

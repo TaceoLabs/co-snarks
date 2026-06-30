@@ -411,6 +411,10 @@ impl Network for TlsNetwork {
         self.channels.flush(self.timeout)
     }
 
+    fn shutdown(&self) -> eyre::Result<()> {
+        self.channels.shutdown(self.timeout, self.max_frame_length)
+    }
+
     fn get_connection_stats(&self) -> ConnectionStats {
         self.channels.stats(self.id)
     }

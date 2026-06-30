@@ -17,7 +17,7 @@ use bytes::{Bytes, BytesMut};
 use eyre::ContextCompat as _;
 use futures::{Sink, SinkExt as _, Stream, StreamExt as _};
 use parking_lot::Mutex;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::ConnectionStats;
@@ -25,7 +25,15 @@ use crate::ConnectionStats;
 /// Capacity (in frames) of each per-peer send/receive queue.
 pub(crate) const ASYNC_QUEUE_CAP: usize = 32;
 
-type SendEntry = (mpsc::Sender<Bytes>, AtomicUsize);
+/// A message handed to a peer's write pump.
+enum WriteMsg {
+    /// A frame payload to write to the sink.
+    Frame(Bytes),
+    /// Flush the sink and acknowledge on the given channel.
+    Flush(oneshot::Sender<()>),
+}
+
+type SendEntry = (mpsc::Sender<WriteMsg>, AtomicUsize);
 type RecvEntry = (Mutex<mpsc::Receiver<eyre::Result<Bytes>>>, AtomicUsize);
 
 /// Per-peer send/receive queues (and byte counters) shared by the async transports.
@@ -61,15 +69,26 @@ impl AsyncChannels {
         Si: Sink<Bytes> + Send + Unpin + 'static,
         St: Stream<Item = Result<BytesMut, io::Error>> + Send + Unpin + 'static,
     {
-        let (send_tx, mut send_rx) = mpsc::channel::<Bytes>(ASYNC_QUEUE_CAP);
+        let (send_tx, mut send_rx) = mpsc::channel::<WriteMsg>(ASYNC_QUEUE_CAP);
         let (recv_tx, recv_rx) = mpsc::channel::<eyre::Result<Bytes>>(ASYNC_QUEUE_CAP);
 
         tokio::spawn(async move {
-            while let Some(frame) = send_rx.recv().await {
-                if let Err(err) = sink.send(frame).await {
-                    let _ = err;
-                    tracing::warn!("failed to send data to party {other_id}");
-                    break;
+            while let Some(msg) = send_rx.recv().await {
+                match msg {
+                    WriteMsg::Frame(frame) => {
+                        if sink.send(frame).await.is_err() {
+                            tracing::warn!("failed to send data to party {other_id}");
+                            break;
+                        }
+                    }
+                    WriteMsg::Flush(ack) => {
+                        if sink.flush().await.is_err() {
+                            tracing::warn!("failed to flush data to party {other_id}");
+                            let _ = ack.send(());
+                            break;
+                        }
+                        let _ = ack.send(());
+                    }
                 }
             }
         });
@@ -110,7 +129,36 @@ impl AsyncChannels {
         }
         let (tx, sent_bytes) = self.send.get(&to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), Ordering::Relaxed);
-        tx.blocking_send(data)?;
+        tx.blocking_send(WriteMsg::Frame(data))
+            .map_err(|_| eyre::eyre!("write task for party {to} terminated"))?;
+        Ok(())
+    }
+
+    /// Drain every peer's write pump and flush its sink, surfacing any failure.
+    pub(crate) fn flush(&self) -> eyre::Result<()> {
+        for (to, (tx, _)) in self.send.iter() {
+            let (ack_tx, ack_rx) = oneshot::channel();
+            tx.blocking_send(WriteMsg::Flush(ack_tx))
+                .map_err(|_| eyre::eyre!("write task for party {to} terminated"))?;
+            ack_rx
+                .blocking_recv()
+                .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?;
+        }
+        Ok(())
+    }
+
+    /// Flush, then run an all-to-all sentinel barrier so every peer has received all of
+    /// this party's frames (and vice versa) before any connection is torn down. Must be
+    /// called by all parties after they have finished exchanging protocol data.
+    pub(crate) fn shutdown(&self, max_frame_length: usize) -> eyre::Result<()> {
+        self.flush()?;
+        let peers: Vec<usize> = self.send.keys().copied().collect();
+        for &to in &peers {
+            self.send(to, Bytes::new(), max_frame_length)?;
+        }
+        for &from in &peers {
+            self.recv(from)?;
+        }
         Ok(())
     }
 

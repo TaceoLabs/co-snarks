@@ -463,6 +463,14 @@ impl Network for QuicNetwork {
         self.channels.recv(from)
     }
 
+    fn flush(&self) -> eyre::Result<()> {
+        self.channels.flush()
+    }
+
+    fn shutdown(&self) -> eyre::Result<()> {
+        self.channels.shutdown(self.conn_handler.max_frame_length)
+    }
+
     fn get_connection_stats(&self) -> ConnectionStats {
         self.channels.stats(self.id)
     }

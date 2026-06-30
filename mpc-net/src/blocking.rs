@@ -117,6 +117,23 @@ impl BlockingChannels {
         Ok(())
     }
 
+    /// Flush, then run an all-to-all sentinel barrier so every peer has received all of
+    /// this party's frames (and vice versa) before any connection is torn down. Must be
+    /// called by all parties after they have finished exchanging protocol data.
+    pub(crate) fn shutdown(&self, timeout: Duration, max_frame_length: usize) -> eyre::Result<()> {
+        self.flush(timeout)?;
+        let peers: Vec<usize> = self.send.iter().map(|(id, _)| id).collect();
+        // Post every sentinel before awaiting any, mirroring the deadlock-free round
+        // pattern used elsewhere.
+        for &to in &peers {
+            self.send(to, Bytes::new(), max_frame_length)?;
+        }
+        for &from in &peers {
+            self.recv(from, timeout)?;
+        }
+        Ok(())
+    }
+
     /// Application-level (sent, received) byte counts per peer.
     pub(crate) fn stats(&self, my_id: usize) -> ConnectionStats {
         let mut stats = std::collections::BTreeMap::new();

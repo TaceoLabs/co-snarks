@@ -56,6 +56,19 @@ fn assert_many_frames<N: Network>(net: &N) -> eyre::Result<()> {
     Ok(())
 }
 
+/// Exchange one frame, then perform a coordinated graceful `shutdown`. `shutdown` must
+/// drain every peer (flush + sentinel barrier) and return without hanging.
+fn assert_shutdown<N: Network>(net: &N) -> eyre::Result<()> {
+    let my = net.id();
+    let next = (my + 1) % 3;
+    let prev = (my + 2) % 3;
+    net.send(next, vec![my as u8; 64].into())?;
+    let got = net.recv(prev)?;
+    assert_eq!(got.len(), 64);
+    net.shutdown()?;
+    Ok(())
+}
+
 /// Build all three party networks concurrently (each constructor blocks on the
 /// connection handshake), then run `body` on each.
 fn run_round<N: Network>(
@@ -222,4 +235,19 @@ fn tcp_many_small_frames() {
 #[test]
 fn tls_many_small_frames() {
     run_round(tls_builders(), assert_many_frames);
+}
+
+#[test]
+fn tcp_graceful_shutdown() {
+    run_round(tcp_builders(), assert_shutdown);
+}
+
+#[test]
+fn tls_graceful_shutdown() {
+    run_round(tls_builders(), assert_shutdown);
+}
+
+#[test]
+fn quic_graceful_shutdown() {
+    run_round(quic_builders(), assert_shutdown);
 }
