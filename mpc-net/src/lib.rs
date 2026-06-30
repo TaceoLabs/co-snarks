@@ -1,5 +1,6 @@
 //! A simple networking layer for MPC protocols.
 #![warn(missing_docs)]
+use bytes::Bytes;
 use std::{
     collections::{BTreeMap, HashMap},
     time::Duration,
@@ -30,8 +31,11 @@ pub trait Network: Send + Sync {
     fn id(&self) -> usize;
     /// Send data to other party
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()>;
-    /// Receive data from other party
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>>;
+    /// Receive data from other party.
+    ///
+    /// Returns [`Bytes`] so backends whose framing already produces a reference-counted
+    /// buffer (e.g. QUIC) can hand it back without an extra copy.
+    fn recv(&self, from: usize) -> eyre::Result<Bytes>;
 
     /// Ensure all previously [`send`](Network::send)ed data has been handed off to
     /// the operating system, and surface any error encountered while doing so.
@@ -59,8 +63,8 @@ impl Network for () {
         Ok(())
     }
 
-    fn recv(&self, _from: usize) -> eyre::Result<Vec<u8>> {
-        Ok(vec![])
+    fn recv(&self, _from: usize) -> eyre::Result<Bytes> {
+        Ok(Bytes::new())
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {

@@ -338,7 +338,7 @@ impl QuicConnectionHandler {
         &self,
     ) -> eyre::Result<(
         IntMap<usize, tokio::sync::mpsc::Sender<Vec<u8>>>,
-        IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Vec<u8>>>>,
+        IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Bytes>>>,
     )> {
         let mut send = IntMap::with_capacity(self.connections.len() - 1);
         let mut recv = IntMap::with_capacity(self.connections.len() - 1);
@@ -385,7 +385,9 @@ impl QuicConnectionHandler {
                 while let Some(frame) = read.next().await {
                     match frame {
                         Ok(frame) => {
-                            if recv_tx.send(frame.to_vec()).await.is_err() {
+                            // `frame` is a `BytesMut` from the length-delimited codec;
+                            // `freeze` hands it on as `Bytes` without copying.
+                            if recv_tx.send(frame.freeze()).await.is_err() {
                                 tracing::warn!("recv receiver dropped");
                                 break;
                             }
@@ -451,7 +453,7 @@ impl Drop for QuicConnectionHandler {
 pub struct QuicNetwork {
     id: usize,
     send: IntMap<usize, tokio::sync::mpsc::Sender<Vec<u8>>>,
-    recv: IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Vec<u8>>>>,
+    recv: IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Bytes>>>,
     conn_handler: Arc<QuicConnectionHandler>,
     timeout: Duration,
 }
@@ -509,7 +511,7 @@ impl Network for QuicNetwork {
         Ok(())
     }
 
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
+    fn recv(&self, from: usize) -> eyre::Result<Bytes> {
         let mut queue = self
             .recv
             .get(from)

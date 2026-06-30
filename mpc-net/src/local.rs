@@ -1,5 +1,6 @@
 //! Local MPC network
 
+use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
 use intmap::IntMap;
@@ -12,8 +13,8 @@ use crate::{ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, Network};
 pub struct LocalNetwork {
     id: usize,
     timeout: std::time::Duration,
-    send: IntMap<usize, (Sender<Vec<u8>>, AtomicUsize)>,
-    recv: IntMap<usize, (Receiver<Vec<u8>>, AtomicUsize)>,
+    send: IntMap<usize, (Sender<Bytes>, AtomicUsize)>,
+    recv: IntMap<usize, (Receiver<Bytes>, AtomicUsize)>,
 }
 
 impl LocalNetwork {
@@ -70,11 +71,11 @@ impl Network for LocalNetwork {
     fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
         let (sender, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        sender.send_timeout(data.to_owned(), self.timeout)?;
+        sender.send_timeout(Bytes::copy_from_slice(data), self.timeout)?;
         Ok(())
     }
 
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
+    fn recv(&self, from: usize) -> eyre::Result<Bytes> {
         let (receiver, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
         let data = receiver.recv_timeout(self.timeout)?;
         recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);

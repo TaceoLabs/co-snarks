@@ -13,6 +13,7 @@ use crate::{
     ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network, config::Address,
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
+use bytes::Bytes;
 use crossbeam_channel::{Receiver, Sender};
 use eyre::ContextCompat;
 use intmap::IntMap;
@@ -150,7 +151,7 @@ impl NetworkConfig {
 pub struct TcpNetwork {
     id: usize,
     send: IntMap<usize, (Sender<WriteMsg>, AtomicUsize, Arc<Mutex<Option<String>>>)>,
-    recv: IntMap<usize, (Receiver<eyre::Result<Vec<u8>>>, AtomicUsize)>,
+    recv: IntMap<usize, (Receiver<eyre::Result<Bytes>>, AtomicUsize)>,
     timeout: Duration,
     max_frame_length: usize,
 }
@@ -269,7 +270,7 @@ impl Network for TcpNetwork {
         Ok(())
     }
 
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
+    fn recv(&self, from: usize) -> eyre::Result<Bytes> {
         let (queue, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
         let data = queue.recv_timeout(self.timeout)??;
         recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
@@ -310,12 +311,12 @@ impl Network for TcpNetwork {
     }
 }
 
-fn read_next_frame(stream: &mut TcpStream, max_frame_length: usize) -> eyre::Result<Vec<u8>> {
+fn read_next_frame(stream: &mut TcpStream, max_frame_length: usize) -> eyre::Result<Bytes> {
     let len = stream.read_u64::<BigEndian>()? as usize;
     if len > max_frame_length {
         eyre::bail!("frame len {len} > max {max_frame_length}");
     }
     let mut data = vec![0; len];
     stream.read_exact(&mut data)?;
-    Ok(data)
+    Ok(Bytes::from(data))
 }

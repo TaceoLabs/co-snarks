@@ -15,6 +15,7 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use tokio_util::sync::{CancellationToken, DropGuard};
 
 use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network};
+use bytes::Bytes;
 
 /// The default time to idle for incoming connections that were not picked up because, e.g. `init_session` for that session id was never called.
 pub const DEFAULT_TIME_TO_IDLE: Duration = Duration::from_secs(30);
@@ -241,7 +242,7 @@ impl TcpNetworkHandler {
 pub struct TcpNetwork {
     id: usize,
     send: HashMap<usize, (mpsc::Sender<Vec<u8>>, AtomicUsize)>,
-    recv: HashMap<usize, (Mutex<mpsc::Receiver<eyre::Result<Vec<u8>>>>, AtomicUsize)>,
+    recv: HashMap<usize, (Mutex<mpsc::Receiver<eyre::Result<Bytes>>>, AtomicUsize)>,
     max_frame_length: usize,
     /// A drop guard that cancels the cancellation token when dropped, used to stop tasks when the network is dropped.
     _drop_guard: DropGuard,
@@ -266,7 +267,7 @@ impl TcpNetwork {
             let stream = Framed::new(stream, codec.clone());
             let (mut sender, mut receiver) = stream.split();
             let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
-            let (recv_tx, recv_rx) = mpsc::channel::<eyre::Result<Vec<u8>>>(32);
+            let (recv_tx, recv_rx) = mpsc::channel::<eyre::Result<Bytes>>(32);
             tokio::spawn(async move {
                 while let Some(data) = send_rx.recv().await {
                     if let Err(err) = sender.send(data.into()).await {
@@ -331,7 +332,7 @@ impl Network for TcpNetwork {
         Ok(())
     }
 
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
+    fn recv(&self, from: usize) -> eyre::Result<Bytes> {
         let (receiver, recv_bytes) = self.recv.get(&from).context("party id out-of-bounds")?;
         let data = receiver
             .lock()
