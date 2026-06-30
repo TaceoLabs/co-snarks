@@ -29,8 +29,12 @@ pub const DEFAULT_MAX_FRAME_LENGTH: usize = 64 * 1024 * 1024; // 64MB
 pub trait Network: Send + Sync {
     /// The id of the party
     fn id(&self) -> usize;
-    /// Send data to other party
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()>;
+    /// Send data to other party.
+    ///
+    /// Takes [`Bytes`] so the same buffer can be cheaply handed to multiple peers
+    /// (a reference-count bump per recipient, e.g. when broadcasting) and so backends
+    /// that buffer sends can enqueue it without copying.
+    fn send(&self, to: usize, data: Bytes) -> eyre::Result<()>;
     /// Receive data from other party.
     ///
     /// Returns [`Bytes`] so backends whose framing already produces a reference-counted
@@ -59,7 +63,7 @@ impl Network for () {
         0
     }
 
-    fn send(&self, _to: usize, _data: &[u8]) -> eyre::Result<()> {
+    fn send(&self, _to: usize, _data: Bytes) -> eyre::Result<()> {
         Ok(())
     }
 

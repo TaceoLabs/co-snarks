@@ -51,7 +51,7 @@ fn main() -> Result<()> {
         if id != my_id {
             tracing::info!("party {my_id} sending to {id}");
             let buf = vec![id as u8; 1024];
-            network.send(id, &buf)?;
+            network.send(id, buf.into())?;
         }
     }
     // recv from all parties

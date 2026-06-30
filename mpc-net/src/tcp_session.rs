@@ -241,7 +241,7 @@ impl TcpNetworkHandler {
 #[expect(clippy::complexity)]
 pub struct TcpNetwork {
     id: usize,
-    send: HashMap<usize, (mpsc::Sender<Vec<u8>>, AtomicUsize)>,
+    send: HashMap<usize, (mpsc::Sender<Bytes>, AtomicUsize)>,
     recv: HashMap<usize, (Mutex<mpsc::Receiver<eyre::Result<Bytes>>>, AtomicUsize)>,
     max_frame_length: usize,
     /// A drop guard that cancels the cancellation token when dropped, used to stop tasks when the network is dropped.
@@ -266,11 +266,11 @@ impl TcpNetwork {
         for (other_id, stream) in streams {
             let stream = Framed::new(stream, codec.clone());
             let (mut sender, mut receiver) = stream.split();
-            let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
+            let (send_tx, mut send_rx) = mpsc::channel::<Bytes>(32);
             let (recv_tx, recv_rx) = mpsc::channel::<eyre::Result<Bytes>>(32);
             tokio::spawn(async move {
                 while let Some(data) = send_rx.recv().await {
-                    if let Err(err) = sender.send(data.into()).await {
+                    if let Err(err) = sender.send(data).await {
                         tracing::warn!("failed to send data: {err:?}");
                         break;
                     }
@@ -322,13 +322,13 @@ impl Network for TcpNetwork {
         self.id
     }
 
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
+    fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
         if data.len() > self.max_frame_length {
             eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
         }
         let (sender, sent_bytes) = self.send.get(&to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        sender.blocking_send(data.to_vec())?;
+        sender.blocking_send(data)?;
         Ok(())
     }
 

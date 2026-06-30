@@ -251,7 +251,7 @@ impl Network for TcpNetwork {
         self.id
     }
 
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
+    fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
         if data.len() > self.max_frame_length {
             eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
         }
@@ -263,7 +263,7 @@ impl Network for TcpNetwork {
         // is one `write_all` (one segment under TCP_NODELAY) on the writer thread.
         let mut frame = Vec::with_capacity(8 + data.len());
         frame.extend_from_slice(&(data.len() as u64).to_be_bytes());
-        frame.extend_from_slice(data);
+        frame.extend_from_slice(&data);
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
         tx.send(WriteMsg::Frame(frame))
             .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;

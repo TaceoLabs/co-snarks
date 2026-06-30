@@ -337,7 +337,7 @@ impl QuicConnectionHandler {
     pub fn get_streams(
         &self,
     ) -> eyre::Result<(
-        IntMap<usize, tokio::sync::mpsc::Sender<Vec<u8>>>,
+        IntMap<usize, tokio::sync::mpsc::Sender<Bytes>>,
         IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Bytes>>>,
     )> {
         let mut send = IntMap::with_capacity(self.connections.len() - 1);
@@ -374,7 +374,7 @@ impl QuicConnectionHandler {
 
             self.rt.spawn(async move {
                 while let Some(frame) = send_rx.recv().await {
-                    if let Err(err) = write.send(Bytes::from(frame)).await {
+                    if let Err(err) = write.send(frame).await {
                         tracing::warn!("failed to send data: {err:?}");
                         break;
                     }
@@ -452,7 +452,7 @@ impl Drop for QuicConnectionHandler {
 #[derive(Debug)]
 pub struct QuicNetwork {
     id: usize,
-    send: IntMap<usize, tokio::sync::mpsc::Sender<Vec<u8>>>,
+    send: IntMap<usize, tokio::sync::mpsc::Sender<Bytes>>,
     recv: IntMap<usize, Mutex<tokio::sync::mpsc::Receiver<Bytes>>>,
     conn_handler: Arc<QuicConnectionHandler>,
     timeout: Duration,
@@ -498,7 +498,7 @@ impl Network for QuicNetwork {
         self.id
     }
 
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
+    fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
         if data.len() > self.conn_handler.max_frame_length {
             eyre::bail!(
                 "frame len {} > max {}",
@@ -507,7 +507,7 @@ impl Network for QuicNetwork {
             );
         }
         let stream = self.send.get(to).context("party id out-of-bounds")?;
-        stream.blocking_send(data.to_vec())?;
+        stream.blocking_send(data)?;
         Ok(())
     }
 

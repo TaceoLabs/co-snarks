@@ -68,10 +68,10 @@ impl Network for LocalNetwork {
         self.id
     }
 
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
+    fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
         let (sender, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        sender.send_timeout(Bytes::copy_from_slice(data), self.timeout)?;
+        sender.send_timeout(data, self.timeout)?;
         Ok(())
     }
 

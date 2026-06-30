@@ -3,6 +3,7 @@
 //! This module contains the networking functionality for the Rep3 MPC protocol.
 
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use bytes::Bytes;
 use mpc_net::Network;
 
 use super::id::PartyID;
@@ -90,7 +91,7 @@ pub trait Rep3NetworkExt: Network {
         let size = data.serialized_size(ark_serialize::Compress::No);
         let mut ser_data = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut ser_data)?;
-        self.send(to.into(), &ser_data)?;
+        self.send(to.into(), Bytes::from(ser_data))?;
         Ok(())
     }
 
