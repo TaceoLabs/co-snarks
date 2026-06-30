@@ -1,10 +1,11 @@
-//! Large-payload `broadcast_many` over the real TCP / TLS / QUIC transports.
+//! `Network` round-trips over the real TCP / TLS / QUIC transports.
 //!
-//! Guards the `broadcast_many` reorder (send-all-then-recv-all): the payloads are
-//! deliberately larger than a kernel socket buffer, so each `send_many` must make
-//! progress *while the peer is still in its own send phase*. The pre-reorder code
-//! relied on `mpc_net::join` to avoid a ring deadlock here; this test fails (hangs)
-//! if someone reverts to an interleaved `send;recv;send;recv` ordering.
+//! Two shapes are exercised per transport:
+//! - `*_large_broadcast`: one ~9.6 MB `broadcast_many` per party. Guards the
+//!   `broadcast_many` reorder and the large-frame paths (incl. the vectored-write
+//!   partial-write fallback in the blocking core).
+//! - `*_many_small_frames`: thousands of tiny back-to-back frames in a ring. Guards
+//!   framing correctness across the vectored send path and sequential reads.
 
 use std::net::{SocketAddr, TcpListener, UdpSocket};
 
@@ -15,6 +16,8 @@ use mpc_net::{config::Address, Network};
 
 /// ~9.6 MB serialized (32 bytes/elem) — comfortably exceeds default socket buffers.
 const BIG_LEN: usize = 300_000;
+/// Number of tiny frames each party streams to its neighbour.
+const N_FRAMES: usize = 1000;
 
 /// Each party broadcasts a vector tagged with its own id, then verifies it got the
 /// expected vectors back from its `prev` and `next` neighbours.
@@ -38,23 +41,41 @@ fn assert_broadcast<N: Network>(net: &N) -> eyre::Result<()> {
     Ok(())
 }
 
+/// Stream `N_FRAMES` tiny frames to `next` while receiving from `prev` in lockstep,
+/// verifying every frame's content and order.
+fn assert_many_frames<N: Network>(net: &N) -> eyre::Result<()> {
+    let my = net.id();
+    let next = (my + 1) % 3;
+    let prev = (my + 2) % 3;
+    for k in 0..N_FRAMES {
+        net.send(next, format!("{my}:{k}").into_bytes().into())?;
+        let got = net.recv(prev)?;
+        assert_eq!(&got[..], format!("{prev}:{k}").as_bytes());
+    }
+    net.flush()?;
+    Ok(())
+}
+
 /// Build all three party networks concurrently (each constructor blocks on the
-/// connection handshake), then run the broadcast round on each.
-fn run_round<N: Network>(builders: Vec<Box<dyn FnOnce() -> eyre::Result<N> + Send>>) {
+/// connection handshake), then run `body` on each.
+fn run_round<N: Network>(
+    builders: Vec<Box<dyn FnOnce() -> eyre::Result<N> + Send>>,
+    body: fn(&N) -> eyre::Result<()>,
+) {
     std::thread::scope(|s| {
         let handles: Vec<_> = builders
             .into_iter()
             .map(|build| {
                 s.spawn(move || -> eyre::Result<()> {
                     let net = build()?;
-                    assert_broadcast(&net)
+                    body(&net)
                 })
             })
             .collect();
         for h in handles {
             h.join()
                 .expect("party thread panicked")
-                .expect("broadcast round failed");
+                .expect("transport test body failed");
         }
     });
 }
@@ -80,8 +101,7 @@ fn install_crypto_provider() {
     let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
 }
 
-#[test]
-fn tcp_large_broadcast() {
+fn tcp_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::tcp::TcpNetwork> + Send>> {
     use mpc_net::tcp::{NetworkConfig, NetworkParty, TcpNetwork};
 
     let addrs = free_tcp_addrs(3);
@@ -91,27 +111,23 @@ fn tcp_large_broadcast() {
         .map(|(id, a)| NetworkParty::new(id, Address::new("127.0.0.1".into(), a.port())))
         .collect();
 
-    let builders = (0..3)
+    (0..3)
         .map(|id| {
             let parties = parties.clone();
             let bind = addrs[id];
             Box::new(move || TcpNetwork::new(NetworkConfig::new(id, bind, parties, None, None)))
                 as Box<dyn FnOnce() -> eyre::Result<TcpNetwork> + Send>
         })
-        .collect();
-
-    run_round(builders);
+        .collect()
 }
 
-#[test]
-fn tls_large_broadcast() {
+fn tls_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::tls::TlsNetwork> + Send>> {
     use mpc_net::tls::{NetworkConfig, NetworkParty, TlsNetwork};
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
     install_crypto_provider();
     let addrs = free_tcp_addrs(3);
 
-    // One self-signed cert+key per party; SAN must cover what we connect to.
     let mut certs: Vec<CertificateDer<'static>> = Vec::new();
     let mut keys: Vec<Vec<u8>> = Vec::new();
     for _ in 0..3 {
@@ -132,7 +148,7 @@ fn tls_large_broadcast() {
         })
         .collect();
 
-    let builders = (0..3)
+    (0..3)
         .map(|id| {
             let parties = parties.clone();
             let bind = addrs[id];
@@ -141,13 +157,10 @@ fn tls_large_broadcast() {
                 TlsNetwork::new(NetworkConfig::new(id, bind, key, parties, None, None))
             }) as Box<dyn FnOnce() -> eyre::Result<TlsNetwork> + Send>
         })
-        .collect();
-
-    run_round(builders);
+        .collect()
 }
 
-#[test]
-fn quic_large_broadcast() {
+fn quic_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::quic::QuicNetwork> + Send>> {
     use mpc_net::quic::{NetworkConfig, NetworkParty, QuicNetwork};
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
@@ -174,7 +187,7 @@ fn quic_large_broadcast() {
         })
         .collect();
 
-    let builders = (0..3)
+    (0..3)
         .map(|id| {
             let parties = parties.clone();
             let bind = addrs[id];
@@ -183,7 +196,30 @@ fn quic_large_broadcast() {
                 QuicNetwork::new(NetworkConfig::new(id, bind, key, parties, None, None))
             }) as Box<dyn FnOnce() -> eyre::Result<QuicNetwork> + Send>
         })
-        .collect();
+        .collect()
+}
 
-    run_round(builders);
+#[test]
+fn tcp_large_broadcast() {
+    run_round(tcp_builders(), assert_broadcast);
+}
+
+#[test]
+fn tls_large_broadcast() {
+    run_round(tls_builders(), assert_broadcast);
+}
+
+#[test]
+fn quic_large_broadcast() {
+    run_round(quic_builders(), assert_broadcast);
+}
+
+#[test]
+fn tcp_many_small_frames() {
+    run_round(tcp_builders(), assert_many_frames);
+}
+
+#[test]
+fn tls_many_small_frames() {
+    run_round(tls_builders(), assert_many_frames);
 }

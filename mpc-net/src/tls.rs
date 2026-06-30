@@ -4,7 +4,7 @@ use std::{
     array,
     cmp::Ordering,
     collections::HashMap,
-    io::{Read, Write},
+    io::{IoSlice, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs as _},
     path::PathBuf,
     sync::Arc,
@@ -199,6 +199,21 @@ impl Write for TlsStream {
             TlsStream::Client(stream) => stream.write(buf),
             TlsStream::Server(stream) => stream.write(buf),
         }
+    }
+
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
+        // rustls' `StreamOwned` does not override `write_vectored`, so the default would
+        // emit only the first slice (e.g. an 8-byte length header) as its own TLS record.
+        // Coalesce into a single buffer and write once so the framed message stays in one
+        // record. This keeps a single copy (as the previous framing did) rather than
+        // producing a tiny header record followed by the payload.
+        let total: usize = bufs.iter().map(|b| b.len()).sum();
+        let mut buf = Vec::with_capacity(total);
+        for b in bufs {
+            buf.extend_from_slice(b);
+        }
+        self.write_all(&buf)?;
+        Ok(total)
     }
 
     fn flush(&mut self) -> std::io::Result<()> {

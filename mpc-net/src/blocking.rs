@@ -8,7 +8,7 @@
 //! handed to [`BlockingChannels::add_peer`].
 
 use std::{
-    io::{Read, Write},
+    io::{IoSlice, Read, Write},
     sync::{Arc, atomic::AtomicUsize, atomic::Ordering},
     time::Duration,
 };
@@ -35,8 +35,9 @@ type RecvEntry = (Receiver<eyre::Result<Bytes>>, AtomicUsize);
 
 /// A message handed to a peer's background writer thread.
 pub(crate) enum WriteMsg {
-    /// A complete, length-prefixed frame to write to the stream.
-    Frame(Vec<u8>),
+    /// A frame payload to write. The length prefix is written by the writer thread via
+    /// a vectored write, so the payload itself is never copied to prepend the header.
+    Frame(Bytes),
     /// Flush the stream and acknowledge on the given channel.
     Flush(Sender<()>),
 }
@@ -85,11 +86,10 @@ impl BlockingChannels {
         if let Some(e) = err.lock().clone() {
             eyre::bail!("connection to party {to} previously failed: {e}");
         }
-        let mut frame = Vec::with_capacity(8 + data.len());
-        frame.extend_from_slice(&(data.len() as u64).to_be_bytes());
-        frame.extend_from_slice(&data);
         sent_bytes.fetch_add(data.len(), Ordering::Relaxed);
-        tx.send(WriteMsg::Frame(frame))
+        // The payload moves into the queue unchanged; the writer thread prepends the
+        // length prefix with a vectored write (no copy of the payload).
+        tx.send(WriteMsg::Frame(data))
             .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
         Ok(())
     }
@@ -141,8 +141,8 @@ impl BlockingChannels {
 fn writer_loop<W: Write>(mut stream: W, rx: Receiver<WriteMsg>, err: ErrSlot) {
     for msg in rx.iter() {
         match msg {
-            WriteMsg::Frame(buf) => {
-                if let Err(e) = stream.write_all(&buf) {
+            WriteMsg::Frame(payload) => {
+                if let Err(e) = write_frame(&mut stream, &payload) {
                     *err.lock() = Some(e.to_string());
                     break;
                 }
@@ -157,6 +157,26 @@ fn writer_loop<W: Write>(mut stream: W, rx: Receiver<WriteMsg>, err: ErrSlot) {
             }
         }
     }
+}
+
+/// Write one length-prefixed frame with a single vectored write, avoiding a copy to
+/// prepend the length. On a stream whose `write_vectored` does the real thing (e.g. a
+/// TCP socket's `writev`) the payload is never copied. On a partial write, the remainder
+/// is finished with plain `write_all`.
+fn write_frame<W: Write>(stream: &mut W, payload: &[u8]) -> std::io::Result<()> {
+    let header = (payload.len() as u64).to_be_bytes();
+    let total = header.len() + payload.len();
+    let n = stream.write_vectored(&[IoSlice::new(&header), IoSlice::new(payload)])?;
+    if n >= total {
+        return Ok(());
+    }
+    if n < header.len() {
+        stream.write_all(&header[n..])?;
+        stream.write_all(payload)?;
+    } else {
+        stream.write_all(&payload[n - header.len()..])?;
+    }
+    Ok(())
 }
 
 /// Reads length-prefixed frames from `stream` and forwards them. Exits when the receiver
