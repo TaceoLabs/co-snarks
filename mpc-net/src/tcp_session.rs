@@ -11,7 +11,10 @@ use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels};
+use crate::{
+    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network,
+    async_net::AsyncChannels,
+};
 use bytes::Bytes;
 
 /// The default time to idle for incoming connections that were not picked up because, e.g. `init_session` for that session id was never called.
@@ -248,7 +251,10 @@ impl TcpNetwork {
         streams: HashMap<usize, TcpStream>,
         max_frame_length: usize,
     ) -> eyre::Result<Self> {
-        let mut channels = AsyncChannels::default();
+        // `new` is called from within `init_session`'s async context, so the ambient
+        // runtime handle is available for the shutdown barrier's bounded receive.
+        let mut channels =
+            AsyncChannels::new(tokio::runtime::Handle::current(), DEFAULT_CONNECTION_TIMEOUT);
         let codec = LengthDelimitedCodec::builder()
             .length_field_type::<u64>()
             .max_frame_length(max_frame_length)

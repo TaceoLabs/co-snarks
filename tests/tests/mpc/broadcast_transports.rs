@@ -8,6 +8,7 @@
 //!   framing correctness across the vectored send path and sequential reads.
 
 use std::net::{SocketAddr, TcpListener, UdpSocket};
+use std::time::Duration;
 
 use ark_bn254::Fr;
 use ark_ff::Zero;
@@ -173,7 +174,9 @@ fn tls_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::tls::TlsNetwo
         .collect()
 }
 
-fn quic_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::quic::QuicNetwork> + Send>> {
+fn quic_builders(
+    timeout: Option<Duration>,
+) -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::quic::QuicNetwork> + Send>> {
     use mpc_net::quic::{NetworkConfig, NetworkParty, QuicNetwork};
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
@@ -206,7 +209,7 @@ fn quic_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::quic::QuicNe
             let bind = addrs[id];
             let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(keys[id].clone()));
             Box::new(move || {
-                QuicNetwork::new(NetworkConfig::new(id, bind, key, parties, None, None))
+                QuicNetwork::new(NetworkConfig::new(id, bind, key, parties, timeout, None))
             }) as Box<dyn FnOnce() -> eyre::Result<QuicNetwork> + Send>
         })
         .collect()
@@ -224,7 +227,7 @@ fn tls_large_broadcast() {
 
 #[test]
 fn quic_large_broadcast() {
-    run_round(quic_builders(), assert_broadcast);
+    run_round(quic_builders(None), assert_broadcast);
 }
 
 #[test]
@@ -249,5 +252,46 @@ fn tls_graceful_shutdown() {
 
 #[test]
 fn quic_graceful_shutdown() {
-    run_round(quic_builders(), assert_shutdown);
+    run_round(quic_builders(None), assert_shutdown);
+}
+
+/// A peer that completes the exchange but never shuts down (holding its connections
+/// open) must make the others' `shutdown` time out with an error rather than hang.
+#[test]
+fn quic_shutdown_times_out_on_stalled_peer() {
+    let timeout = Duration::from_secs(2);
+    let builders = quic_builders(Some(timeout));
+    std::thread::scope(|s| {
+        let handles: Vec<_> = builders
+            .into_iter()
+            .enumerate()
+            .map(|(id, build)| {
+                s.spawn(move || -> Option<eyre::Result<()>> {
+                    let net = build().unwrap();
+                    let my = net.id();
+                    let next = (my + 1) % 3;
+                    let prev = (my + 2) % 3;
+                    // Everyone completes the initial exchange.
+                    net.send(next, vec![my as u8; 8].into()).unwrap();
+                    let _ = net.recv(prev).unwrap();
+                    if id == 2 {
+                        // Stall past the others' timeout, holding connections open,
+                        // and never send a shutdown sentinel.
+                        std::thread::sleep(timeout * 2);
+                        None
+                    } else {
+                        Some(net.shutdown())
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            if let Some(result) = h.join().expect("thread panicked") {
+                assert!(
+                    result.is_err(),
+                    "shutdown should time out waiting for the stalled peer"
+                );
+            }
+        }
+    });
 }

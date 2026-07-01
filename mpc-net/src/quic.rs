@@ -176,12 +176,14 @@ struct QuicConnectionHandler {
     connections: BTreeMap<usize, Connection>,
     endpoints: Vec<Endpoint>,
     max_frame_length: usize,
+    timeout: Duration,
 }
 
 impl QuicConnectionHandler {
     pub fn new(config: NetworkConfig, rt: Runtime) -> eyre::Result<Self> {
         let id = config.my_id;
         let max_frame_length = config.max_frame_length.unwrap_or(DEFAULT_MAX_FRAME_LENGTH);
+        let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);
         let (connections, endpoints) = rt.block_on(Self::init(config))?;
         Ok(Self {
             id,
@@ -189,6 +191,7 @@ impl QuicConnectionHandler {
             connections,
             endpoints,
             max_frame_length,
+            timeout,
         })
     }
 
@@ -364,7 +367,7 @@ impl QuicConnectionHandler {
         }
 
         // Spawn the pump tasks onto our runtime by entering it for the duration.
-        let mut channels = AsyncChannels::default();
+        let mut channels = AsyncChannels::new(self.rt.handle().clone(), self.timeout);
         let _enter = self.rt.enter();
         for (id, sink, source) in framed {
             channels.add_peer(id, sink, source);

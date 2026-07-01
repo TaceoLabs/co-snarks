@@ -11,12 +11,14 @@ use std::{
     collections::HashMap,
     io,
     sync::atomic::{AtomicUsize, Ordering},
+    time::Duration,
 };
 
 use bytes::{Bytes, BytesMut};
 use eyre::ContextCompat as _;
 use futures::{Sink, SinkExt as _, Stream, StreamExt as _};
 use parking_lot::Mutex;
+use tokio::runtime::Handle;
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::{CancellationToken, DropGuard};
 
@@ -41,17 +43,25 @@ type RecvEntry = (Mutex<mpsc::Receiver<eyre::Result<Bytes>>>, AtomicUsize);
 pub(crate) struct AsyncChannels {
     send: HashMap<usize, SendEntry>,
     recv: HashMap<usize, RecvEntry>,
+    /// Handle to the runtime the pump tasks run on, used to bound the shutdown barrier.
+    handle: Handle,
+    /// Bounds how long the shutdown barrier waits for a peer's sentinel.
+    timeout: Duration,
     cancellation: CancellationToken,
     // Cancels the reader tasks when this struct is dropped.
     _drop_guard: DropGuard,
 }
 
-impl Default for AsyncChannels {
-    fn default() -> Self {
+impl AsyncChannels {
+    /// Create an empty set of channels. `handle` must reference the runtime the pump
+    /// tasks are spawned on; `timeout` bounds the shutdown barrier's receive.
+    pub(crate) fn new(handle: Handle, timeout: Duration) -> Self {
         let cancellation = CancellationToken::new();
         Self {
             send: HashMap::new(),
             recv: HashMap::new(),
+            handle,
+            timeout,
             _drop_guard: cancellation.clone().drop_guard(),
             cancellation,
         }
@@ -157,9 +167,32 @@ impl AsyncChannels {
             self.send(to, Bytes::new(), max_frame_length)?;
         }
         for &from in &peers {
-            self.recv(from)?;
+            // Bounded so a peer that never sends its sentinel (e.g. crashed) surfaces an
+            // error instead of hanging shutdown forever.
+            self.recv_timed(from)?;
         }
         Ok(())
+    }
+
+    /// Like [`recv`](Self::recv) but bounded by the configured timeout. Used by the
+    /// shutdown barrier; the hot-path `recv` stays an unbounded, lightweight blocking
+    /// wait (a protocol receive is expected to wait for its peer's frame).
+    fn recv_timed(&self, from: usize) -> eyre::Result<Bytes> {
+        let (receiver, recv_bytes) = self.recv.get(&from).context("party id out-of-bounds")?;
+        let mut guard = receiver.lock();
+        let received = self
+            .handle
+            .block_on(async { tokio::time::timeout(self.timeout, guard.recv()).await });
+        let data = match received {
+            Ok(Some(frame)) => frame?,
+            Ok(None) => eyre::bail!("receiver sender dropped"),
+            Err(_) => eyre::bail!(
+                "shutdown timed out after {:?} waiting for party {from}",
+                self.timeout
+            ),
+        };
+        recv_bytes.fetch_add(data.len(), Ordering::Relaxed);
+        Ok(data)
     }
 
     /// Receive the next frame from `from`, blocking until one is available.
