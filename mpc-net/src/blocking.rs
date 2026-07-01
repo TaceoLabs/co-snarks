@@ -179,19 +179,33 @@ fn writer_loop<W: Write>(mut stream: W, rx: Receiver<WriteMsg>, err: ErrSlot) {
 /// Write one length-prefixed frame with a single vectored write, avoiding a copy to
 /// prepend the length. On a stream whose `write_vectored` does the real thing (e.g. a
 /// TCP socket's `writev`) the payload is never copied. On a partial write, the remainder
-/// is finished with plain `write_all`.
+/// is written in a loop until the whole frame is sent or an error occurs.
 fn write_frame<W: Write>(stream: &mut W, payload: &[u8]) -> std::io::Result<()> {
     let header = (payload.len() as u64).to_be_bytes();
-    let total = header.len() + payload.len();
-    let n = stream.write_vectored(&[IoSlice::new(&header), IoSlice::new(payload)])?;
-    if n >= total {
-        return Ok(());
-    }
-    if n < header.len() {
-        stream.write_all(&header[n..])?;
-        stream.write_all(payload)?;
-    } else {
-        stream.write_all(&payload[n - header.len()..])?;
+    let mut bufs = [IoSlice::new(&header), IoSlice::new(payload)];
+    write_all_vectored(stream, &mut bufs)
+}
+
+/// Write all of the given slices to the stream, looping on partial writes. This is
+/// similar to [`std::io::Write::write_all`] but for vectored writes.
+///
+/// This is copied from [`std::io::Write::write_all_vectored`], which is still unstable.
+fn write_all_vectored<W: Write>(
+    writer: &mut W,
+    mut bufs: &mut [IoSlice<'_>],
+) -> std::io::Result<()> {
+    // Guarantee that bufs is empty if it contains no data,
+    // to avoid calling write_vectored if there is no data to be written.
+    IoSlice::advance_slices(&mut bufs, 0);
+    while !bufs.is_empty() {
+        match writer.write_vectored(bufs) {
+            Ok(0) => {
+                return Err(std::io::Error::from(std::io::ErrorKind::WriteZero));
+            }
+            Ok(n) => IoSlice::advance_slices(&mut bufs, n),
+            Err(ref e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
     }
     Ok(())
 }
