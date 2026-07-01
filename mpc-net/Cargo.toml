@@ -21,6 +21,10 @@ tls = ["dep:rustls", "dep:crossbeam-channel", "dep:socket2"]
 quic = ["dep:rustls", "dep:futures", "dep:quinn", "dep:tokio", "dep:tokio-util"]
 
 [[example]]
+name = "bench"
+required-features = ["tcp"]
+
+[[example]]
 name = "three_party_tcp"
 required-features = ["tcp"]
 
