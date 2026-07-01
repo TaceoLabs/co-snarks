@@ -72,7 +72,8 @@ impl BlockingChannels {
 
         let (recv_tx, recv_rx) = bounded(RECV_QUEUE_CAP);
         std::thread::spawn(move || reader_loop(read_stream, recv_tx, max_frame_length));
-        self.recv.insert(other_id, (recv_rx, AtomicUsize::default()));
+        self.recv
+            .insert(other_id, (recv_rx, AtomicUsize::default()));
     }
 
     /// Enqueue `data` to `to`. Coalesces the length prefix and payload into one buffer
@@ -237,8 +238,7 @@ impl<R: Read> FrameReader<R> {
     fn next_frame(&mut self) -> eyre::Result<Bytes> {
         loop {
             if self.buf.len() >= 8 {
-                let len =
-                    u64::from_be_bytes(self.buf[..8].try_into().expect("8 bytes")) as usize;
+                let len = u64::from_be_bytes(self.buf[..8].try_into().expect("8 bytes")) as usize;
                 if len > self.max_frame_length {
                     eyre::bail!("frame len {len} > max {}", self.max_frame_length);
                 }

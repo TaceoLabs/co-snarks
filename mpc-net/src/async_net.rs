@@ -127,7 +127,8 @@ impl AsyncChannels {
             }
         });
 
-        self.send.insert(other_id, (send_tx, AtomicUsize::default()));
+        self.send
+            .insert(other_id, (send_tx, AtomicUsize::default()));
         self.recv
             .insert(other_id, (Mutex::new(recv_rx), AtomicUsize::default()));
     }
