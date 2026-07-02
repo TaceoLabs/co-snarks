@@ -1,10 +1,7 @@
 //! A simple networking layer for MPC protocols.
 #![warn(missing_docs)]
 use bytes::Bytes;
-use std::{
-    collections::{BTreeMap, HashMap},
-    time::Duration,
-};
+use std::collections::{BTreeMap, HashMap};
 
 // Shared async-transport core, used by the QUIC and ephemeral-TCP-session backends.
 #[cfg(any(feature = "quic", feature = "tcp-session"))]
@@ -24,8 +21,6 @@ pub mod tcp_session;
 #[cfg(feature = "tls")]
 pub mod tls;
 
-/// The default connection timeout
-pub const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
 /// The default max frame length for sending messages
 pub const DEFAULT_MAX_FRAME_LENGTH: usize = 64 * 1024 * 1024; // 64MB
 
@@ -56,22 +51,6 @@ pub trait Network: Send + Sync {
     /// receive — actually left the process.
     fn flush(&self) -> eyre::Result<()> {
         Ok(())
-    }
-
-    /// Gracefully shut the network down, guaranteeing that every frame this party has
-    /// sent has been delivered to its peers and every frame its peers sent has been
-    /// received here.
-    ///
-    /// Implementations flush all pending sends and then perform an all-to-all barrier:
-    /// a sentinel is sent to every peer and one is awaited from every peer. Because the
-    /// transports deliver in order, observing a peer's sentinel proves all of its earlier
-    /// frames arrived first. This must be called by **all** parties once they have
-    /// finished exchanging protocol data (it blocks until every peer reaches it).
-    ///
-    /// The default implementation only [`flush`](Network::flush)es (sufficient for
-    /// backends with no cross-peer barrier, e.g. the in-process test network).
-    fn shutdown(&self) -> eyre::Result<()> {
-        self.flush()
     }
 
     /// Get connection statistics for the Network.

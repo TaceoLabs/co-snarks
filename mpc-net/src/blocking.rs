@@ -42,25 +42,41 @@ pub(crate) enum WriteMsg {
 }
 
 /// The per-peer send/receive queues (and byte counters) shared by the blocking transports.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct BlockingChannels {
     send: IntMap<usize, SendEntry>,
     recv: IntMap<usize, RecvEntry>,
+    timeout: Option<Duration>,
+    flush_timeout: Option<Duration>,
+    max_frame_length: usize,
+}
+
+impl BlockingChannels {
+    /// Create an empty set of channels.
+    pub(crate) fn new(
+        timeout: Option<Duration>,
+        flush_timeout: Option<Duration>,
+        max_frame_length: usize,
+    ) -> Self {
+        Self {
+            send: IntMap::new(),
+            recv: IntMap::new(),
+            timeout,
+            flush_timeout,
+            max_frame_length,
+        }
+    }
 }
 
 impl BlockingChannels {
     /// Register a peer from its already-handshaked writer and reader stream halves,
     /// spawning the background writer and reader threads.
-    pub(crate) fn add_peer<W, R>(
-        &mut self,
-        other_id: usize,
-        write_stream: W,
-        read_stream: R,
-        max_frame_length: usize,
-    ) where
+    pub(crate) fn add_peer<W, R>(&mut self, other_id: usize, write_stream: W, read_stream: R)
+    where
         W: Write + Send + 'static,
         R: Read + Send + 'static,
     {
+        let max_frame_length = self.max_frame_length;
         let (send_tx, send_rx) = bounded(SEND_QUEUE_CAP);
         let err: ErrSlot = Arc::new(Mutex::new(None));
         {
@@ -78,9 +94,9 @@ impl BlockingChannels {
 
     /// Enqueue `data` to `to`. Coalesces the length prefix and payload into one buffer
     /// so each frame is a single write on the writer thread.
-    pub(crate) fn send(&self, to: usize, data: Bytes, max_frame_length: usize) -> eyre::Result<()> {
-        if data.len() > max_frame_length {
-            eyre::bail!("frame len {} > max {}", data.len(), max_frame_length);
+    pub(crate) fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
+        if data.len() > self.max_frame_length {
+            eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
         }
         let (tx, sent_bytes, err) = self.send.get(to).context("party id out-of-bounds")?;
         if let Some(e) = err.lock().clone() {
@@ -94,43 +110,36 @@ impl BlockingChannels {
         Ok(())
     }
 
-    /// Receive the next frame from `from`, blocking up to `timeout`.
-    pub(crate) fn recv(&self, from: usize, timeout: Duration) -> eyre::Result<Bytes> {
+    /// Receive the next frame from `from`.
+    pub(crate) fn recv(&self, from: usize) -> eyre::Result<Bytes> {
         let (queue, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
-        let data = queue.recv_timeout(timeout)??;
+        let data = if let Some(timeout) = self.timeout {
+            queue.recv_timeout(timeout)??
+        } else {
+            queue.recv()??
+        };
         recv_bytes.fetch_add(data.len(), Ordering::Relaxed);
         Ok(data)
     }
 
     /// Drain every peer's send queue and surface any writer-thread error.
-    pub(crate) fn flush(&self, timeout: Duration) -> eyre::Result<()> {
+    pub(crate) fn flush(&self) -> eyre::Result<()> {
         for (to, (tx, _, err)) in self.send.iter() {
             let (ack_tx, ack_rx) = bounded(1);
             tx.send(WriteMsg::Flush(ack_tx))
                 .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
-            ack_rx
-                .recv_timeout(timeout)
-                .map_err(|_| eyre::eyre!("timed out flushing send queue for party {to}"))?;
+            if let Some(timeout) = self.flush_timeout {
+                ack_rx
+                    .recv_timeout(timeout)
+                    .map_err(|_| eyre::eyre!("timed out flushing send queue for party {to}"))?;
+            } else {
+                ack_rx
+                    .recv()
+                    .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
+            }
             if let Some(e) = err.lock().clone() {
                 eyre::bail!("connection to party {to} failed: {e}");
             }
-        }
-        Ok(())
-    }
-
-    /// Flush, then run an all-to-all sentinel barrier so every peer has received all of
-    /// this party's frames (and vice versa) before any connection is torn down. Must be
-    /// called by all parties after they have finished exchanging protocol data.
-    pub(crate) fn shutdown(&self, timeout: Duration, max_frame_length: usize) -> eyre::Result<()> {
-        self.flush(timeout)?;
-        let peers: Vec<usize> = self.send.iter().map(|(id, _)| id).collect();
-        // Post every sentinel before awaiting any, mirroring the deadlock-free round
-        // pattern used elsewhere.
-        for &to in &peers {
-            self.send(to, Bytes::new(), max_frame_length)?;
-        }
-        for &from in &peers {
-            self.recv(from, timeout)?;
         }
         Ok(())
     }

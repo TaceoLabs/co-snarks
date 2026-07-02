@@ -37,7 +37,7 @@ fn make_config(my_id: usize) -> NetworkConfig {
     let bind_addr: SocketAddr = format!("0.0.0.0:{}", BASE_PORT + my_id as u16)
         .parse()
         .expect("valid addr");
-    NetworkConfig::new(my_id, bind_addr, parties, None, Some(usize::MAX))
+    NetworkConfig::new(my_id, bind_addr, parties, None, None, None, None)
 }
 
 fn run_party(my_id: usize, msg_size: usize, rounds: usize) -> Result<()> {

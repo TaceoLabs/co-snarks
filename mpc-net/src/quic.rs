@@ -9,14 +9,11 @@ use std::{
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network,
-    async_net::AsyncChannels, config::Address,
+    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels, config::Address,
 };
 use bytes::Bytes;
 use eyre::Context as _;
-use quinn::{
-    Connection, Endpoint, IdleTimeout, TransportConfig, VarInt, rustls::pki_types::PrivateKeyDer,
-};
+use quinn::{Connection, Endpoint, TransportConfig, VarInt, rustls::pki_types::PrivateKeyDer};
 use quinn::{
     crypto::rustls::QuicClientConfig,
     rustls::{
@@ -87,10 +84,18 @@ pub struct NetworkConfigFile {
     pub bind_addr: SocketAddr,
     /// The path to our private key file.
     pub key_path: PathBuf,
-    /// The connection timeout
+    /// The send/recv timeout
     #[serde(default)]
     #[serde(with = "humantime_serde")]
     pub timeout: Option<Duration>,
+    /// The connection establish timeout
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
+    pub connect_timeout: Option<Duration>,
+    /// The flush timeout for the network. If not set, the flush will be unbounded.
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
+    pub flush_timeout: Option<Duration>,
     /// The max length (in bytes) of a single frame
     #[serde(default)]
     pub max_frame_length: Option<usize>,
@@ -107,8 +112,12 @@ pub struct NetworkConfig {
     pub bind_addr: SocketAddr,
     /// The private key.
     pub key: PrivateKeyDer<'static>,
-    /// The connection timeout
+    /// The send/recv timeout
     pub timeout: Option<Duration>,
+    /// The connection establish timeout
+    pub connect_timeout: Option<Duration>,
+    /// The flush timeout for the network. If not set, the flush will be unbounded.
+    pub flush_timeout: Option<Duration>,
     /// The max length (in bytes) of a single frame
     pub max_frame_length: Option<usize>,
 }
@@ -121,6 +130,8 @@ impl Clone for NetworkConfig {
             bind_addr: self.bind_addr,
             key: self.key.clone_key(),
             timeout: self.timeout,
+            connect_timeout: self.connect_timeout,
+            flush_timeout: self.flush_timeout,
             max_frame_length: self.max_frame_length,
         }
     }
@@ -134,6 +145,8 @@ impl NetworkConfig {
         key: PrivateKeyDer<'static>,
         parties: Vec<NetworkParty>,
         timeout: Option<Duration>,
+        connect_timeout: Option<Duration>,
+        flush_timeout: Option<Duration>,
         max_frame_length: Option<usize>,
     ) -> Self {
         Self {
@@ -142,6 +155,8 @@ impl NetworkConfig {
             bind_addr,
             key,
             timeout,
+            connect_timeout,
+            flush_timeout,
             max_frame_length,
         }
     }
@@ -163,6 +178,8 @@ impl TryFrom<NetworkConfigFile> for NetworkConfig {
             bind_addr: value.bind_addr,
             key,
             timeout: value.timeout,
+            connect_timeout: value.connect_timeout,
+            flush_timeout: value.flush_timeout,
             max_frame_length: value.max_frame_length,
         })
     }
@@ -176,14 +193,17 @@ struct QuicConnectionHandler {
     connections: BTreeMap<usize, Connection>,
     endpoints: Vec<Endpoint>,
     max_frame_length: usize,
-    timeout: Duration,
+    timeout: Option<Duration>,
+    flush_timeout: Option<Duration>,
 }
 
 impl QuicConnectionHandler {
     pub fn new(config: NetworkConfig, rt: Runtime) -> eyre::Result<Self> {
         let id = config.my_id;
         let max_frame_length = config.max_frame_length.unwrap_or(DEFAULT_MAX_FRAME_LENGTH);
-        let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);
+        let timeout = config.timeout;
+        let flush_timeout = config.flush_timeout;
+
         let (connections, endpoints) = rt.block_on(Self::init(config))?;
         Ok(Self {
             id,
@@ -192,6 +212,7 @@ impl QuicConnectionHandler {
             endpoints,
             max_frame_length,
             timeout,
+            flush_timeout,
         })
     }
 
@@ -204,6 +225,7 @@ impl QuicConnectionHandler {
             .iter()
             .map(|p| (p.id, p.cert.clone()))
             .collect();
+        let connect_timeout = config.connect_timeout;
 
         let mut root_store = RootCertStore::empty();
         for (id, cert) in &certs {
@@ -217,12 +239,6 @@ impl QuicConnectionHandler {
 
         let client_config = {
             let mut transport_config = TransportConfig::default();
-            // we dont set this to timeout, because it is the timeout for a idle connection
-            // maybe we want to make this configurable too?
-            transport_config.max_idle_timeout(Some(
-                IdleTimeout::try_from(config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT))
-                    .unwrap(),
-            ));
             // atm clients send keepalive packets
             transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
             let mut client_config =
@@ -265,13 +281,21 @@ impl QuicConnectionHandler {
                 };
                 let endpoint = quinn::Endpoint::client(local_client_socket)
                     .with_context(|| format!("creating client endpoint to party {}", party.id))?;
-                let conn = endpoint
+                let connect_future = endpoint
                     .connect_with(client_config.clone(), party_addr, &party.dns_name.hostname)
                     .with_context(|| {
                         format!("setting up client connection with party {}", party.id)
-                    })?
-                    .await
-                    .with_context(|| format!("connecting as a client to party {}", party.id))?;
+                    })?;
+                let conn = if let Some(connect_timeout) = connect_timeout {
+                    tokio::time::timeout(connect_timeout, connect_future)
+                        .await
+                        .with_context(|| {
+                            format!("timeout while connecting to party {}", party.id)
+                        })?
+                } else {
+                    connect_future.await
+                }
+                .with_context(|| format!("connecting as a client to party {}", party.id))?;
                 let mut uni = conn.open_uni().await?;
                 uni.write_u32(u32::try_from(id).expect("party id fits into u32"))
                     .await?;
@@ -289,13 +313,17 @@ impl QuicConnectionHandler {
             } else {
                 // we are the server, accept a connection
                 tracing::debug!("party {id} listening on {our_socket_addr}");
-                match tokio::time::timeout(
-                    config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT),
-                    server_endpoint.accept(),
-                )
-                .await
-                {
-                    Ok(Some(maybe_conn)) => {
+                let maybe_conn = if let Some(connect_timeout) = connect_timeout {
+                    tokio::time::timeout(connect_timeout, server_endpoint.accept())
+                        .await
+                        .with_context(|| {
+                            format!("timeout while waiting for party {} to connect", party.id)
+                        })?
+                } else {
+                    server_endpoint.accept().await
+                };
+                match maybe_conn {
+                    Some(maybe_conn) => {
                         let conn = maybe_conn.await?;
                         tracing::trace!(
                             "Conn with id {} from {} to {}",
@@ -315,15 +343,9 @@ impl QuicConnectionHandler {
                                 .is_none()
                         );
                     }
-                    Ok(None) => {
+                    None => {
                         eyre::bail!(
                             "server endpoint did not accept a connection from party {}",
-                            party.id
-                        )
-                    }
-                    Err(_) => {
-                        eyre::bail!(
-                            "party {} did not connect within 60 seconds - timeout",
                             party.id
                         )
                     }
@@ -367,7 +389,12 @@ impl QuicConnectionHandler {
         }
 
         // Spawn the pump tasks onto our runtime by entering it for the duration.
-        let mut channels = AsyncChannels::new(self.rt.handle().clone(), self.timeout);
+        let mut channels = AsyncChannels::new(
+            self.rt.handle().clone(),
+            self.max_frame_length,
+            self.timeout,
+            self.flush_timeout,
+        );
         let _enter = self.rt.enter();
         for (id, sink, source) in framed {
             channels.add_peer(id, sink, source);
@@ -458,8 +485,7 @@ impl Network for QuicNetwork {
     }
 
     fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
-        self.channels
-            .send(to, data, self.conn_handler.max_frame_length)
+        self.channels.send(to, data)
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Bytes> {
@@ -468,10 +494,6 @@ impl Network for QuicNetwork {
 
     fn flush(&self) -> eyre::Result<()> {
         self.channels.flush()
-    }
-
-    fn shutdown(&self) -> eyre::Result<()> {
-        self.channels.shutdown(self.conn_handler.max_frame_length)
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {

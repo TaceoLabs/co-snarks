@@ -15,7 +15,7 @@ use std::{
 };
 
 use bytes::{Bytes, BytesMut};
-use eyre::ContextCompat as _;
+use eyre::{Context, ContextCompat as _};
 use futures::{Sink, SinkExt as _, Stream, StreamExt as _};
 use parking_lot::Mutex;
 use tokio::runtime::Handle;
@@ -45,8 +45,10 @@ pub(crate) struct AsyncChannels {
     recv: HashMap<usize, RecvEntry>,
     /// Handle to the runtime the pump tasks run on, used to bound the shutdown barrier.
     handle: Handle,
-    /// Bounds how long the shutdown barrier waits for a peer's sentinel.
-    timeout: Duration,
+    /// Optional receive timeout for [`recv`](AsyncChannels::recv). If `None`, the receive is unbounded.
+    timeout: Option<Duration>,
+    flush_timeout: Option<Duration>,
+    max_frame_length: usize,
     cancellation: CancellationToken,
     // Cancels the reader tasks when this struct is dropped.
     _drop_guard: DropGuard,
@@ -54,14 +56,21 @@ pub(crate) struct AsyncChannels {
 
 impl AsyncChannels {
     /// Create an empty set of channels. `handle` must reference the runtime the pump
-    /// tasks are spawned on; `timeout` bounds the shutdown barrier's receive.
-    pub(crate) fn new(handle: Handle, timeout: Duration) -> Self {
+    /// tasks are spawned on.
+    pub(crate) fn new(
+        handle: Handle,
+        max_frame_length: usize,
+        timeout: Option<Duration>,
+        flush_timeout: Option<Duration>,
+    ) -> Self {
         let cancellation = CancellationToken::new();
         Self {
             send: HashMap::new(),
             recv: HashMap::new(),
             handle,
             timeout,
+            flush_timeout,
+            max_frame_length,
             _drop_guard: cancellation.clone().drop_guard(),
             cancellation,
         }
@@ -134,9 +143,9 @@ impl AsyncChannels {
     }
 
     /// Enqueue `data` to `to`.
-    pub(crate) fn send(&self, to: usize, data: Bytes, max_frame_length: usize) -> eyre::Result<()> {
-        if data.len() > max_frame_length {
-            eyre::bail!("frame len {} > max {}", data.len(), max_frame_length);
+    pub(crate) fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
+        if data.len() > self.max_frame_length {
+            eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
         }
         let (tx, sent_bytes) = self.send.get(&to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), Ordering::Relaxed);
@@ -151,58 +160,35 @@ impl AsyncChannels {
             let (ack_tx, ack_rx) = oneshot::channel();
             tx.blocking_send(WriteMsg::Flush(ack_tx))
                 .map_err(|_| eyre::eyre!("write task for party {to} terminated"))?;
-            ack_rx
-                .blocking_recv()
-                .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?;
+            if let Some(timeout) = self.flush_timeout {
+                self.handle
+                    .block_on(tokio::time::timeout(timeout, ack_rx))
+                    .context("timeout while flush")?
+                    .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?;
+            } else {
+                ack_rx
+                    .blocking_recv()
+                    .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?;
+            }
         }
         Ok(())
     }
 
-    /// Flush, then run an all-to-all sentinel barrier so every peer has received all of
-    /// this party's frames (and vice versa) before any connection is torn down. Must be
-    /// called by all parties after they have finished exchanging protocol data.
-    pub(crate) fn shutdown(&self, max_frame_length: usize) -> eyre::Result<()> {
-        self.flush()?;
-        let peers: Vec<usize> = self.send.keys().copied().collect();
-        for &to in &peers {
-            self.send(to, Bytes::new(), max_frame_length)?;
-        }
-        for &from in &peers {
-            // Bounded so a peer that never sends its sentinel (e.g. crashed) surfaces an
-            // error instead of hanging shutdown forever.
-            self.recv_timed(from)?;
-        }
-        Ok(())
-    }
-
-    /// Like [`recv`](Self::recv) but bounded by the configured timeout. Used by the
-    /// shutdown barrier; the hot-path `recv` stays an unbounded, lightweight blocking
-    /// wait (a protocol receive is expected to wait for its peer's frame).
-    fn recv_timed(&self, from: usize) -> eyre::Result<Bytes> {
+    /// Receive the next frame from `from`.
+    pub(crate) fn recv(&self, from: usize) -> eyre::Result<Bytes> {
         let (receiver, recv_bytes) = self.recv.get(&from).context("party id out-of-bounds")?;
         let mut guard = receiver.lock();
-        let received = self
-            .handle
-            .block_on(async { tokio::time::timeout(self.timeout, guard.recv()).await });
+        let received = if let Some(timeout) = self.timeout {
+            self.handle
+                .block_on(tokio::time::timeout(timeout, guard.recv()))
+        } else {
+            Ok(guard.blocking_recv())
+        };
         let data = match received {
             Ok(Some(frame)) => frame?,
             Ok(None) => eyre::bail!("receiver sender dropped"),
-            Err(_) => eyre::bail!(
-                "shutdown timed out after {:?} waiting for party {from}",
-                self.timeout
-            ),
+            Err(_) => eyre::bail!("recv timeout waiting for party {from}",),
         };
-        recv_bytes.fetch_add(data.len(), Ordering::Relaxed);
-        Ok(data)
-    }
-
-    /// Receive the next frame from `from`, blocking until one is available.
-    pub(crate) fn recv(&self, from: usize) -> eyre::Result<Bytes> {
-        let (receiver, recv_bytes) = self.recv.get(&from).context("party id out-of-bounds")?;
-        let data = receiver
-            .lock()
-            .blocking_recv()
-            .context("receiver sender dropped")??;
         recv_bytes.fetch_add(data.len(), Ordering::Relaxed);
         Ok(data)
     }

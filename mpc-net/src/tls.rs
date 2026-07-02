@@ -12,8 +12,7 @@ use std::{
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network,
-    blocking::BlockingChannels, config::Address,
+    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, blocking::BlockingChannels, config::Address,
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use bytes::Bytes;
@@ -82,10 +81,18 @@ pub struct NetworkConfigFile {
     pub bind_addr: SocketAddr,
     /// The path to our private key file.
     pub key_path: PathBuf,
-    /// The connection timeout
+    /// The send/recv timeout
     #[serde(default)]
     #[serde(with = "humantime_serde")]
     pub timeout: Option<Duration>,
+    /// The connection establish timeout
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
+    pub connect_timeout: Option<Duration>,
+    /// The flush timeout for the network. If not set, the flush will be unbounded.
+    #[serde(default)]
+    #[serde(with = "humantime_serde")]
+    pub flush_timeout: Option<Duration>,
     /// The max length (in bytes) of a single frame
     #[serde(default)]
     pub max_frame_length: Option<usize>,
@@ -102,8 +109,12 @@ pub struct NetworkConfig {
     pub bind_addr: SocketAddr,
     /// The private key.
     pub key: PrivateKeyDer<'static>,
-    /// The connection timeout
+    /// The send/recv timeout
     pub timeout: Option<Duration>,
+    /// The connection establish timeout
+    pub connect_timeout: Option<Duration>,
+    /// The flush timeout for the network. If not set, the flush will be unbounded.
+    pub flush_timeout: Option<Duration>,
     /// The max length (in bytes) of a single frame
     pub max_frame_length: Option<usize>,
 }
@@ -116,6 +127,8 @@ impl Clone for NetworkConfig {
             bind_addr: self.bind_addr,
             key: self.key.clone_key(),
             timeout: self.timeout,
+            connect_timeout: self.connect_timeout,
+            flush_timeout: self.flush_timeout,
             max_frame_length: self.max_frame_length,
         }
     }
@@ -129,6 +142,8 @@ impl NetworkConfig {
         key: PrivateKeyDer<'static>,
         parties: Vec<NetworkParty>,
         timeout: Option<Duration>,
+        connect_timeout: Option<Duration>,
+        flush_timeout: Option<Duration>,
         max_frame_length: Option<usize>,
     ) -> Self {
         Self {
@@ -137,6 +152,8 @@ impl NetworkConfig {
             bind_addr,
             key,
             timeout,
+            connect_timeout,
+            flush_timeout,
             max_frame_length,
         }
     }
@@ -158,6 +175,8 @@ impl TryFrom<NetworkConfigFile> for NetworkConfig {
             bind_addr: value.bind_addr,
             key,
             timeout: value.timeout,
+            connect_timeout: value.connect_timeout,
+            flush_timeout: value.flush_timeout,
             max_frame_length: value.max_frame_length,
         })
     }
@@ -229,8 +248,6 @@ impl Write for TlsStream {
 pub struct TlsNetwork {
     id: usize,
     channels: BlockingChannels,
-    timeout: Duration,
-    max_frame_length: usize,
 }
 
 impl TlsNetwork {
@@ -257,7 +274,9 @@ impl TlsNetwork {
             .sorted_by_key(|p| p.id)
             .map(|party| party.cert)
             .collect::<Vec<_>>();
-        let timeout = config.timeout.unwrap_or(DEFAULT_CONNECTION_TIMEOUT);
+        let timeout = config.timeout;
+        let connect_timeout = config.connect_timeout;
+        let flush_timeout = config.flush_timeout;
         let max_frame_length = config.max_frame_length.unwrap_or(DEFAULT_MAX_FRAME_LENGTH);
 
         let mut root_store = RootCertStore::empty();
@@ -285,7 +304,7 @@ impl TlsNetwork {
             socket.set_only_v6(false)?;
         }
         // set read_timeout to get a timeout in accept if no party connects
-        socket.set_read_timeout(Some(timeout))?;
+        socket.set_read_timeout(connect_timeout)?;
         let keepalive = TcpKeepalive::new().with_interval(Duration::from_secs(1));
         socket.set_tcp_keepalive(&keepalive)?;
         socket.bind(&bind_addr.into())?;
@@ -294,9 +313,7 @@ impl TlsNetwork {
 
         let mut nets = array::from_fn(|_| Self {
             id,
-            channels: BlockingChannels::default(),
-            timeout,
-            max_frame_length,
+            channels: BlockingChannels::new(timeout, flush_timeout, max_frame_length),
         });
 
         const STREAM_0: u8 = 0;
@@ -321,15 +338,23 @@ impl TlsNetwork {
                         Ordering::Less => {
                             let start = Instant::now();
                             let stream = loop {
-                                if let Ok(stream) = TcpStream::connect_timeout(&addr, timeout) {
-                                    break stream;
-                                }
-                                std::thread::sleep(Duration::from_millis(50));
-                                if start.elapsed() > timeout {
-                                    eyre::bail!("timeout while connecting to {addr}");
+                                if let Some(connect_timeout) = connect_timeout {
+                                    if let Ok(stream) =
+                                        TcpStream::connect_timeout(&addr, connect_timeout)
+                                    {
+                                        break stream;
+                                    } else if start.elapsed() > connect_timeout {
+                                        eyre::bail!(
+                                            "timeout while connecting to party {other_id} at {addr}"
+                                        );
+                                    }
+                                } else {
+                                    if let Ok(stream) = TcpStream::connect(addr) {
+                                        break stream;
+                                    }
                                 }
                             };
-                            stream.set_write_timeout(Some(timeout))?;
+                            stream.set_write_timeout(timeout)?;
                             stream.set_nodelay(true)?;
 
                             let name = ServerName::try_from(host_name)?.to_owned();
@@ -355,7 +380,7 @@ impl TlsNetwork {
                             let socket = Socket::from(stream);
                             socket.set_read_timeout(None)?;
                             let stream = TcpStream::from(socket);
-                            stream.set_write_timeout(Some(timeout))?;
+                            stream.set_write_timeout(timeout)?;
                             stream.set_nodelay(true)?;
 
                             let conn = ServerConnection::new(server_config.clone())?;
@@ -386,7 +411,7 @@ impl TlsNetwork {
                 let read_stream = read_stream.context("missing TLS recv connection")?;
                 nets[i]
                     .channels
-                    .add_peer(other_id, write_stream, read_stream, max_frame_length);
+                    .add_peer(other_id, write_stream, read_stream);
             }
         }
 
@@ -400,19 +425,15 @@ impl Network for TlsNetwork {
     }
 
     fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
-        self.channels.send(to, data, self.max_frame_length)
+        self.channels.send(to, data)
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Bytes> {
-        self.channels.recv(from, self.timeout)
+        self.channels.recv(from)
     }
 
     fn flush(&self) -> eyre::Result<()> {
-        self.channels.flush(self.timeout)
-    }
-
-    fn shutdown(&self) -> eyre::Result<()> {
-        self.channels.shutdown(self.timeout, self.max_frame_length)
+        self.channels.flush()
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {

@@ -6,13 +6,13 @@ use eyre::ContextCompat;
 use intmap::IntMap;
 use std::{sync::atomic::AtomicUsize, time::Duration};
 
-use crate::{ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, Network};
+use crate::{ConnectionStats, Network};
 
 /// A MPC network using channels. Used for testing.
 #[derive(Debug)]
 pub struct LocalNetwork {
     id: usize,
-    timeout: std::time::Duration,
+    timeout: Option<Duration>,
     send: IntMap<usize, (Sender<Bytes>, AtomicUsize)>,
     recv: IntMap<usize, (Receiver<Bytes>, AtomicUsize)>,
 }
@@ -20,11 +20,11 @@ pub struct LocalNetwork {
 impl LocalNetwork {
     /// Create new [LocalNetwork]s for `num_parties`.
     pub fn new(num_parties: usize) -> Vec<Self> {
-        Self::new_with_timeout(num_parties, DEFAULT_CONNECTION_TIMEOUT)
+        Self::new_with_timeout(num_parties, None)
     }
 
     /// Create new [LocalNetwork]s for `num_parties`, setting a timeout.
-    pub fn new_with_timeout(num_parties: usize, timeout: Duration) -> Vec<Self> {
+    pub fn new_with_timeout(num_parties: usize, timeout: Option<Duration>) -> Vec<Self> {
         let mut networks = Vec::with_capacity(num_parties);
         let mut senders = Vec::new();
         let mut receivers = Vec::new();
@@ -71,13 +71,25 @@ impl Network for LocalNetwork {
     fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
         let (sender, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        sender.send_timeout(data, self.timeout)?;
+        if let Some(timeout) = self.timeout {
+            sender
+                .send_timeout(data, timeout)
+                .map_err(|_| eyre::eyre!("send to party {to} timed out"))?;
+        } else {
+            sender.send(data)?;
+        }
         Ok(())
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Bytes> {
         let (receiver, recv_bytes) = self.recv.get(from).context("party id out-of-bounds")?;
-        let data = receiver.recv_timeout(self.timeout)?;
+        let data = if let Some(timeout) = self.timeout {
+            receiver
+                .recv_timeout(timeout)
+                .map_err(|_| eyre::eyre!("recv from party {from} timed out"))?
+        } else {
+            receiver.recv()?
+        };
         recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
         Ok(data)
     }

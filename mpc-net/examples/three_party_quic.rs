@@ -67,6 +67,9 @@ fn main() -> Result<()> {
         }
     }
 
+    // flush to make sure all messages are sent before exiting
+    network.flush()?;
+
     println!(
         "Network connection stats:\n{}",
         network.get_connection_stats()

@@ -11,10 +11,7 @@ use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-use crate::{
-    ConnectionStats, DEFAULT_CONNECTION_TIMEOUT, DEFAULT_MAX_FRAME_LENGTH, Network,
-    async_net::AsyncChannels,
-};
+use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels};
 use bytes::Bytes;
 
 /// The default time to idle for incoming connections that were not picked up because, e.g. `init_session` for that session id was never called.
@@ -102,6 +99,8 @@ pub struct TcpNetworkHandlerBuilder {
     parties: Vec<String>,
     time_to_idle: Duration,
     max_frame_length: usize,
+    timeout: Option<Duration>,
+    flush_timeout: Option<Duration>,
 }
 
 impl TcpNetworkHandlerBuilder {
@@ -118,6 +117,8 @@ impl TcpNetworkHandlerBuilder {
             parties,
             time_to_idle: DEFAULT_TIME_TO_IDLE,
             max_frame_length: DEFAULT_MAX_FRAME_LENGTH,
+            timeout: None,
+            flush_timeout: None,
         }
     }
 
@@ -134,6 +135,22 @@ impl TcpNetworkHandlerBuilder {
     /// Defaults to `DEFAULT_MAX_FRAME_LENGTH` (64MB)
     pub fn max_frame_length(mut self, max_frame_length: usize) -> Self {
         self.max_frame_length = max_frame_length;
+        self
+    }
+
+    /// Set the receive timeout for the network.
+    ///
+    /// Defaults to no timeout.
+    pub fn timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Set the flush timeout for the network.
+    ///
+    /// Defaults to no timeout.
+    pub fn flush_timeout(mut self, flush_timeout: Option<Duration>) -> Self {
+        self.flush_timeout = flush_timeout;
         self
     }
 
@@ -192,6 +209,8 @@ impl TcpNetworkHandlerBuilder {
             streams,
             parties: self.parties,
             max_frame_length: self.max_frame_length,
+            timeout: self.timeout,
+            flush_timeout: self.flush_timeout,
         })
     }
 }
@@ -203,6 +222,8 @@ pub struct TcpNetworkHandler {
     streams: TcpStreams,
     parties: Vec<String>,
     max_frame_length: usize,
+    timeout: Option<Duration>,
+    flush_timeout: Option<Duration>,
 }
 
 impl TcpNetworkHandler {
@@ -232,7 +253,13 @@ impl TcpNetworkHandler {
                 Ordering::Equal => continue,
             }
         }
-        TcpNetwork::new(self.party_id, streams, self.max_frame_length)
+        TcpNetwork::new(
+            self.party_id,
+            streams,
+            self.max_frame_length,
+            self.timeout,
+            self.flush_timeout,
+        )
     }
 }
 
@@ -241,7 +268,6 @@ impl TcpNetworkHandler {
 pub struct TcpNetwork {
     id: usize,
     channels: AsyncChannels,
-    max_frame_length: usize,
 }
 
 impl TcpNetwork {
@@ -250,11 +276,17 @@ impl TcpNetwork {
         id: usize,
         streams: HashMap<usize, TcpStream>,
         max_frame_length: usize,
+        timeout: Option<Duration>,
+        flush_timeout: Option<Duration>,
     ) -> eyre::Result<Self> {
         // `new` is called from within `init_session`'s async context, so the ambient
         // runtime handle is available for the shutdown barrier's bounded receive.
-        let mut channels =
-            AsyncChannels::new(tokio::runtime::Handle::current(), DEFAULT_CONNECTION_TIMEOUT);
+        let mut channels = AsyncChannels::new(
+            tokio::runtime::Handle::current(),
+            max_frame_length,
+            timeout,
+            flush_timeout,
+        );
         let codec = LengthDelimitedCodec::builder()
             .length_field_type::<u64>()
             .max_frame_length(max_frame_length)
@@ -265,11 +297,7 @@ impl TcpNetwork {
             channels.add_peer(other_id, sink, source);
         }
 
-        Ok(Self {
-            id,
-            channels,
-            max_frame_length,
-        })
+        Ok(Self { id, channels })
     }
 }
 
@@ -279,7 +307,7 @@ impl Network for TcpNetwork {
     }
 
     fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
-        self.channels.send(to, data, self.max_frame_length)
+        self.channels.send(to, data)
     }
 
     fn recv(&self, from: usize) -> eyre::Result<Bytes> {
@@ -288,10 +316,6 @@ impl Network for TcpNetwork {
 
     fn flush(&self) -> eyre::Result<()> {
         self.channels.flush()
-    }
-
-    fn shutdown(&self) -> eyre::Result<()> {
-        self.channels.shutdown(self.max_frame_length)
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {
