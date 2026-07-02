@@ -57,6 +57,7 @@ tracing = { workspace = true }
 clap = { workspace = true }
 color-eyre = { workspace = true }
 rcgen = { workspace = true }
+reserve-port = "2"
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

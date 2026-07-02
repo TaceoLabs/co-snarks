@@ -52,6 +52,5 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 [dev-dependencies]
 paste.workspace = true
 sha3.workspace = true
-reserve-port = "2"
 rcgen = { workspace = true }
 rustls = { workspace = true }
