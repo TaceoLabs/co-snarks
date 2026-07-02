@@ -295,9 +295,13 @@ impl TlsNetwork {
             .with_root_certificates(root_store)
             .with_no_client_auth();
 
-        let server_config = ServerConfig::builder()
+        let mut server_config = ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(vec![certs[id].clone()], key)?;
+        // Disable TLS 1.3 session tickets to avoid sending data back via the write half.
+        // It never gets read there, thus leading to sporadic errors.
+        // We don't need session tickets anyway, as we only ever connect once to each peer.
+        server_config.send_tls13_tickets = 0;
 
         let client_config = Arc::new(client_config);
         let server_config = Arc::new(server_config);
