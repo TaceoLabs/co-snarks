@@ -9,7 +9,7 @@
 
 use std::{
     io::{IoSlice, Read, Write},
-    sync::{Arc, atomic::AtomicUsize, atomic::Ordering},
+    sync::{atomic::AtomicUsize, atomic::Ordering},
     time::Duration,
 };
 
@@ -17,7 +17,6 @@ use bytes::{Buf as _, Bytes, BytesMut};
 use crossbeam_channel::{Receiver, Sender, bounded};
 use eyre::ContextCompat as _;
 use intmap::IntMap;
-use parking_lot::Mutex;
 
 use crate::ConnectionStats;
 
@@ -27,9 +26,7 @@ pub(crate) const SEND_QUEUE_CAP: usize = 32;
 /// Capacity (in frames) of each per-peer receive queue.
 pub(crate) const RECV_QUEUE_CAP: usize = 32;
 
-/// A shared, interior-mutable error slot set by a writer thread on failure.
-type ErrSlot = Arc<Mutex<Option<String>>>;
-type SendEntry = (Sender<WriteMsg>, AtomicUsize, ErrSlot);
+type SendEntry = (Sender<WriteMsg>, AtomicUsize);
 type RecvEntry = (Receiver<eyre::Result<Bytes>>, AtomicUsize);
 
 /// A message handed to a peer's background writer thread.
@@ -78,13 +75,9 @@ impl BlockingChannels {
     {
         let max_frame_length = self.max_frame_length;
         let (send_tx, send_rx) = bounded(SEND_QUEUE_CAP);
-        let err: ErrSlot = Arc::new(Mutex::new(None));
-        {
-            let err = Arc::clone(&err);
-            std::thread::spawn(move || writer_loop(write_stream, send_rx, err));
-        }
+        std::thread::spawn(move || writer_loop(write_stream, send_rx));
         self.send
-            .insert(other_id, (send_tx, AtomicUsize::default(), err));
+            .insert(other_id, (send_tx, AtomicUsize::default()));
 
         let (recv_tx, recv_rx) = bounded(RECV_QUEUE_CAP);
         std::thread::spawn(move || reader_loop(read_stream, recv_tx, max_frame_length));
@@ -98,10 +91,7 @@ impl BlockingChannels {
         if data.len() > self.max_frame_length {
             eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
         }
-        let (tx, sent_bytes, err) = self.send.get(to).context("party id out-of-bounds")?;
-        if let Some(e) = err.lock().clone() {
-            eyre::bail!("connection to party {to} previously failed: {e}");
-        }
+        let (tx, sent_bytes) = self.send.get(to).context("party id out-of-bounds")?;
         sent_bytes.fetch_add(data.len(), Ordering::Relaxed);
         // The payload moves into the queue unchanged; the writer thread prepends the
         // length prefix with a vectored write (no copy of the payload).
@@ -122,9 +112,9 @@ impl BlockingChannels {
         Ok(data)
     }
 
-    /// Drain every peer's send queue and surface any writer-thread error.
+    /// Drain every peer's write pump and flush its sink, surfacing any failure.
     pub(crate) fn flush(&self) -> eyre::Result<()> {
-        for (to, (tx, _, err)) in self.send.iter() {
+        for (to, (tx, _)) in self.send.iter() {
             let (ack_tx, ack_rx) = bounded(1);
             tx.send(WriteMsg::Flush(ack_tx))
                 .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
@@ -137,9 +127,6 @@ impl BlockingChannels {
                     .recv()
                     .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
             }
-            if let Some(e) = err.lock().clone() {
-                eyre::bail!("connection to party {to} failed: {e}");
-            }
         }
         Ok(())
     }
@@ -147,7 +134,7 @@ impl BlockingChannels {
     /// Application-level (sent, received) byte counts per peer.
     pub(crate) fn stats(&self, my_id: usize) -> ConnectionStats {
         let mut stats = std::collections::BTreeMap::new();
-        for (id, (_, sent_bytes, _)) in self.send.iter() {
+        for (id, (_, sent_bytes)) in self.send.iter() {
             let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
             stats.insert(
                 id,
@@ -161,21 +148,20 @@ impl BlockingChannels {
     }
 }
 
-/// Drains [`WriteMsg`]s for a single peer, writing them to `stream`. On the first write
-/// error it records the error in `err` and exits; subsequent `send`/`flush` calls observe
-/// it. Exits cleanly when all senders are dropped.
-fn writer_loop<W: Write>(mut stream: W, rx: Receiver<WriteMsg>, err: ErrSlot) {
+/// Drains [`WriteMsg`]s for a single peer, writing them to `stream`.
+/// Exits cleanly when all senders are dropped.
+fn writer_loop<W: Write>(mut stream: W, rx: Receiver<WriteMsg>) {
     for msg in rx.iter() {
         match msg {
             WriteMsg::Frame(payload) => {
                 if let Err(e) = write_frame(&mut stream, &payload) {
-                    *err.lock() = Some(e.to_string());
+                    tracing::warn!("writer thread failed: {e}");
                     break;
                 }
             }
             WriteMsg::Flush(ack) => {
                 if let Err(e) = stream.flush() {
-                    *err.lock() = Some(e.to_string());
+                    tracing::warn!("writer thread flush failed: {e}");
                     let _ = ack.send(());
                     break;
                 }
