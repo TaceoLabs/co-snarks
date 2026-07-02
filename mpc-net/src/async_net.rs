@@ -162,7 +162,7 @@ impl AsyncChannels {
                 .map_err(|_| eyre::eyre!("write task for party {to} terminated"))?;
             if let Some(timeout) = self.flush_timeout {
                 self.handle
-                    .block_on(tokio::time::timeout(timeout, ack_rx))
+                    .block_on(async { tokio::time::timeout(timeout, ack_rx).await })
                     .context("timeout while flush")?
                     .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?;
             } else {
@@ -180,7 +180,7 @@ impl AsyncChannels {
         let mut guard = receiver.lock();
         let received = if let Some(timeout) = self.timeout {
             self.handle
-                .block_on(tokio::time::timeout(timeout, guard.recv()))
+                .block_on(async { tokio::time::timeout(timeout, guard.recv()).await })
         } else {
             Ok(guard.blocking_recv())
         };
