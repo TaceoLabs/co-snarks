@@ -250,6 +250,14 @@ pub struct TlsNetwork {
     channels: BlockingChannels,
 }
 
+impl Drop for TlsNetwork {
+    fn drop(&mut self) {
+        if let Err(e) = self.channels.flush() {
+            tracing::error!("error flushing channels on drop: {e:?}");
+        }
+    }
+}
+
 impl TlsNetwork {
     /// Create a new [TlsNetwork]
     pub fn new(config: NetworkConfig) -> eyre::Result<Self> {

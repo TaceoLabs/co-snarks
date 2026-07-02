@@ -452,6 +452,14 @@ pub struct QuicNetwork {
     conn_handler: Arc<QuicConnectionHandler>,
 }
 
+impl Drop for QuicNetwork {
+    fn drop(&mut self) {
+        if let Err(e) = self.channels.flush() {
+            tracing::error!("error flushing channels on drop: {e:?}");
+        }
+    }
+}
+
 impl QuicNetwork {
     /// Create a new [QuicNetwork]
     pub fn new(config: NetworkConfig) -> eyre::Result<Self> {

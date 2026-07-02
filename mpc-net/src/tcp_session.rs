@@ -270,6 +270,14 @@ pub struct TcpNetwork {
     channels: AsyncChannels,
 }
 
+impl Drop for TcpNetwork {
+    fn drop(&mut self) {
+        if let Err(e) = self.channels.flush() {
+            tracing::error!("error flushing channels on drop: {e:?}");
+        }
+    }
+}
+
 impl TcpNetwork {
     /// Create a new `TcpNetwork`
     pub fn new(
