@@ -6,13 +6,13 @@ use std::{
     collections::HashMap,
     io::{IoSlice, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs as _},
-    path::PathBuf,
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, blocking::BlockingChannels, config::Address,
+    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, blocking::BlockingChannels,
+    config::NetworkConfig,
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use bytes::Bytes;
@@ -20,167 +20,9 @@ use eyre::ContextCompat;
 use itertools::Itertools;
 use rustls::{
     ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
-    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
+    pki_types::ServerName,
 };
-use serde::{Deserialize, Serialize};
 use socket2::{Domain, Socket, TcpKeepalive, Type};
-
-/// A party in the network config file.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct NetworkPartyConfig {
-    /// The id of the party, 0-based indexing.
-    pub id: usize,
-    /// The DNS name of the party.
-    pub dns_name: Address,
-    /// The path to the public certificate of the party.
-    pub cert_path: PathBuf,
-}
-
-/// A party in the network.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct NetworkParty {
-    /// The id of the party, 0-based indexing.
-    pub id: usize,
-    /// The DNS name of the party.
-    pub dns_name: Address,
-    /// The public certificate of the party.
-    pub cert: CertificateDer<'static>,
-}
-
-impl NetworkParty {
-    /// Construct a new [`NetworkParty`] type.
-    pub fn new(id: usize, address: Address, cert: CertificateDer<'static>) -> Self {
-        Self {
-            id,
-            dns_name: address,
-            cert,
-        }
-    }
-}
-
-impl TryFrom<NetworkPartyConfig> for NetworkParty {
-    type Error = std::io::Error;
-    fn try_from(value: NetworkPartyConfig) -> Result<Self, Self::Error> {
-        let cert = CertificateDer::from(std::fs::read(value.cert_path)?).into_owned();
-        Ok(NetworkParty {
-            id: value.id,
-            dns_name: value.dns_name,
-            cert,
-        })
-    }
-}
-
-/// The network configuration file.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct NetworkConfigFile {
-    /// The list of parties in the network.
-    pub parties: Vec<NetworkPartyConfig>,
-    /// Our own id in the network.
-    pub my_id: usize,
-    /// The [SocketAddr] we bind to.
-    pub bind_addr: SocketAddr,
-    /// The path to our private key file.
-    pub key_path: PathBuf,
-    /// The send/recv timeout
-    #[serde(default)]
-    #[serde(with = "humantime_serde")]
-    pub timeout: Option<Duration>,
-    /// The connection establish timeout
-    #[serde(default)]
-    #[serde(with = "humantime_serde")]
-    pub connect_timeout: Option<Duration>,
-    /// The flush timeout for the network. If not set, the flush will be unbounded.
-    #[serde(default)]
-    #[serde(with = "humantime_serde")]
-    pub flush_timeout: Option<Duration>,
-    /// The max length (in bytes) of a single frame
-    #[serde(default)]
-    pub max_frame_length: Option<usize>,
-}
-
-/// The network configuration.
-#[derive(Debug, Eq, PartialEq)]
-pub struct NetworkConfig {
-    /// The list of parties in the network.
-    pub parties: Vec<NetworkParty>,
-    /// Our own id in the network.
-    pub my_id: usize,
-    /// The [SocketAddr] we bind to.
-    pub bind_addr: SocketAddr,
-    /// The private key.
-    pub key: PrivateKeyDer<'static>,
-    /// The send/recv timeout
-    pub timeout: Option<Duration>,
-    /// The connection establish timeout
-    pub connect_timeout: Option<Duration>,
-    /// The flush timeout for the network. If not set, the flush will be unbounded.
-    pub flush_timeout: Option<Duration>,
-    /// The max length (in bytes) of a single frame
-    pub max_frame_length: Option<usize>,
-}
-
-impl Clone for NetworkConfig {
-    fn clone(&self) -> Self {
-        Self {
-            parties: self.parties.clone(),
-            my_id: self.my_id,
-            bind_addr: self.bind_addr,
-            key: self.key.clone_key(),
-            timeout: self.timeout,
-            connect_timeout: self.connect_timeout,
-            flush_timeout: self.flush_timeout,
-            max_frame_length: self.max_frame_length,
-        }
-    }
-}
-
-impl NetworkConfig {
-    /// Construct a new [`NetworkConfig`] type.
-    pub fn new(
-        id: usize,
-        bind_addr: SocketAddr,
-        key: PrivateKeyDer<'static>,
-        parties: Vec<NetworkParty>,
-        timeout: Option<Duration>,
-        connect_timeout: Option<Duration>,
-        flush_timeout: Option<Duration>,
-        max_frame_length: Option<usize>,
-    ) -> Self {
-        Self {
-            parties,
-            my_id: id,
-            bind_addr,
-            key,
-            timeout,
-            connect_timeout,
-            flush_timeout,
-            max_frame_length,
-        }
-    }
-}
-
-impl TryFrom<NetworkConfigFile> for NetworkConfig {
-    type Error = std::io::Error;
-    fn try_from(value: NetworkConfigFile) -> Result<Self, Self::Error> {
-        let parties = value
-            .parties
-            .into_iter()
-            .map(NetworkParty::try_from)
-            .collect::<Result<Vec<_>, _>>()?;
-        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(std::fs::read(value.key_path)?))
-            .clone_key();
-        Ok(NetworkConfig {
-            parties,
-            my_id: value.my_id,
-            bind_addr: value.bind_addr,
-            key,
-            timeout: value.timeout,
-            connect_timeout: value.connect_timeout,
-            flush_timeout: value.flush_timeout,
-            max_frame_length: value.max_frame_length,
-        })
-    }
-}
 
 /// A wrapper type for client and server TLS streams
 #[derive(Debug)]
@@ -269,19 +111,17 @@ impl TlsNetwork {
     pub fn networks<const N: usize>(config: NetworkConfig) -> eyre::Result<[Self; N]> {
         let id = config.my_id;
         let bind_addr = config.bind_addr;
-        let key = config.key;
         let addrs = config
             .parties
             .iter()
             .sorted_by_key(|p| p.id)
             .map(|party| party.dns_name.clone())
             .collect::<Vec<_>>();
-        let certs = config
-            .parties
-            .into_iter()
-            .sorted_by_key(|p| p.id)
-            .map(|party| party.cert)
-            .collect::<Vec<_>>();
+        let tls_config = config
+            .tls
+            .ok_or_else(|| eyre::eyre!("TLS config is required for TlsNetwork"))?;
+        let key = tls_config.key;
+        let certs = tls_config.certs;
         let timeout = config.timeout;
         let connect_timeout = config.connect_timeout;
         let flush_timeout = config.flush_timeout;

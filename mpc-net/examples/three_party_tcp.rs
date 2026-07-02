@@ -4,7 +4,8 @@ use clap::Parser;
 use color_eyre::{Result, eyre::Context};
 use mpc_net::{
     Network as _,
-    tcp::{NetworkConfig, TcpNetwork},
+    config::{NetworkConfig, NetworkConfigFile},
+    tcp::TcpNetwork,
 };
 
 #[derive(Parser)]
@@ -39,9 +40,10 @@ fn main() -> Result<()> {
     let args = Args::parse();
     install_tracing();
 
-    let config: NetworkConfig =
+    let config: NetworkConfigFile =
         toml::from_str(&std::fs::read_to_string(args.config).context("opening config file")?)
             .context("parsing config file")?;
+    let config = NetworkConfig::try_from(config)?;
     let my_id = config.my_id;
 
     let network = TcpNetwork::new(config)?;

@@ -14,7 +14,10 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_net::tcp::{NetworkConfig, TcpNetwork};
+use mpc_net::{
+    config::{NetworkConfig, NetworkConfigFile},
+    tcp::TcpNetwork,
+};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -297,7 +300,7 @@ pub struct GenerateWitnessConfig {
     #[serde(default)]
     pub vm: VMConfig,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `translate_witness`
@@ -343,7 +346,7 @@ pub struct TranslateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `generate_proof`
@@ -410,7 +413,7 @@ pub struct GenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `verify`
@@ -801,6 +804,7 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     let circuit = config.circuit;
     let protocol = config.protocol;
     let out = config.out;
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     if protocol != MPCProtocol::REP3 {
         eyre::bail!("Only REP3 protocol is supported for witness generation");
@@ -808,7 +812,7 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
 
     // connect to network
     let [net0, net1] =
-        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
     // parse input shares
     let input_share_file =
@@ -846,6 +850,7 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     let src_protocol = config.src_protocol;
     let target_protocol = config.target_protocol;
     let out = config.out;
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
         eyre::bail!("Only REP3 to SHAMIR translation is supported");
@@ -858,7 +863,7 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -891,6 +896,7 @@ fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     } else {
         CheckElement::No
     };
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     // parse witness shares
     let witness_file =
@@ -903,7 +909,7 @@ fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
             let [net0, net1] =
-                TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+                TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
             let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
             let (matrices, pkey) = zkey.into();
@@ -971,7 +977,7 @@ fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
         }
         ProofSystem::Plonk => {
             let nets =
-                TcpNetwork::networks::<8>(config.network).context("while connecting to network")?;
+                TcpNetwork::networks::<8>(network_config).context("while connecting to network")?;
             let zkey = Arc::new(
                 PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
             );

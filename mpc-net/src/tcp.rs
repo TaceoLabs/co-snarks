@@ -8,82 +8,14 @@ use std::{
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, blocking::BlockingChannels, config::Address,
+    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, blocking::BlockingChannels,
+    config::NetworkConfig,
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use bytes::Bytes;
 use eyre::ContextCompat;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
 use socket2::{Domain, Socket, TcpKeepalive, Type};
-
-/// A party in the network.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct NetworkParty {
-    /// The id of the party, 0-based indexing.
-    pub id: usize,
-    /// The DNS name of the party.
-    pub dns_name: Address,
-}
-
-impl NetworkParty {
-    /// Construct a new [`NetworkParty`] type.
-    pub fn new(id: usize, address: Address) -> Self {
-        Self {
-            id,
-            dns_name: address,
-        }
-    }
-}
-
-/// The network configuration.
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub struct NetworkConfig {
-    /// The list of parties in the network.
-    pub parties: Vec<NetworkParty>,
-    /// Our own id in the network.
-    pub my_id: usize,
-    /// The [SocketAddr] we bind to.
-    pub bind_addr: SocketAddr,
-    /// The send/recv timeout
-    #[serde(default)]
-    #[serde(with = "humantime_serde")]
-    pub timeout: Option<Duration>,
-    /// The connection establish timeout
-    #[serde(default)]
-    #[serde(with = "humantime_serde")]
-    pub connect_timeout: Option<Duration>,
-    /// The flush timeout for the network. If not set, the flush will be unbounded.
-    #[serde(default)]
-    #[serde(with = "humantime_serde")]
-    pub flush_timeout: Option<Duration>,
-    /// The max length (in bytes) of a single frame
-    #[serde(default)]
-    pub max_frame_length: Option<usize>,
-}
-
-impl NetworkConfig {
-    /// Construct a new [`NetworkConfig`] type.
-    pub fn new(
-        id: usize,
-        bind_addr: SocketAddr,
-        parties: Vec<NetworkParty>,
-        timeout: Option<Duration>,
-        connect_timeout: Option<Duration>,
-        flush_timeout: Option<Duration>,
-        max_frame_length: Option<usize>,
-    ) -> Self {
-        Self {
-            parties,
-            my_id: id,
-            bind_addr,
-            timeout,
-            connect_timeout,
-            flush_timeout,
-            max_frame_length,
-        }
-    }
-}
 
 /// A MPC network using [TcpStream]s
 #[derive(Debug)]

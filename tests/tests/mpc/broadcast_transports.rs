@@ -12,7 +12,10 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use ark_bn254::Fr;
 use ark_ff::Zero;
 use mpc_core::protocols::rep3::network::Rep3NetworkExt;
-use mpc_net::{config::Address, Network};
+use mpc_net::{
+    config::{Address, NetworkConfig, NetworkParty, TlsConfig},
+    Network,
+};
 
 /// ~9.6 MB serialized (32 bytes/elem) — comfortably exceeds default socket buffers.
 const BIG_LEN: usize = 300_000;
@@ -86,7 +89,7 @@ fn install_crypto_provider() {
 }
 
 fn tcp_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::tcp::TcpNetwork> + Send>> {
-    use mpc_net::tcp::{NetworkConfig, NetworkParty, TcpNetwork};
+    use mpc_net::tcp::TcpNetwork;
 
     let ports: [u16; 3] =
         std::array::from_fn(|_| reserve_port::ReservedPort::random_permanently_reserved().unwrap());
@@ -101,22 +104,14 @@ fn tcp_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::tcp::TcpNetwo
             let parties = parties.clone();
             let bind = SocketAddrV4::new(Ipv4Addr::LOCALHOST, ports[id]);
             Box::new(move || {
-                TcpNetwork::new(NetworkConfig::new(
-                    id,
-                    bind.into(),
-                    parties,
-                    None,
-                    None,
-                    None,
-                    None,
-                ))
+                TcpNetwork::new(NetworkConfig::builder(id, bind.into(), parties).build())
             }) as Box<dyn FnOnce() -> eyre::Result<TcpNetwork> + Send>
         })
         .collect()
 }
 
 fn tls_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::tls::TlsNetwork> + Send>> {
-    use mpc_net::tls::{NetworkConfig, NetworkParty, TlsNetwork};
+    use mpc_net::tls::TlsNetwork;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
     install_crypto_provider();
@@ -134,13 +129,7 @@ fn tls_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::tls::TlsNetwo
     let parties: Vec<_> = ports
         .iter()
         .enumerate()
-        .map(|(id, port)| {
-            NetworkParty::new(
-                id,
-                Address::new("127.0.0.1".into(), *port),
-                certs[id].clone(),
-            )
-        })
+        .map(|(id, port)| NetworkParty::new(id, Address::new("127.0.0.1".into(), *port)))
         .collect();
 
     (0..3)
@@ -148,24 +137,20 @@ fn tls_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::tls::TlsNetwo
             let parties = parties.clone();
             let bind = SocketAddrV4::new(Ipv4Addr::LOCALHOST, ports[id]);
             let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(keys[id].clone()));
+            let tls_config = TlsConfig::new(key, certs.clone());
             Box::new(move || {
-                TlsNetwork::new(NetworkConfig::new(
-                    id,
-                    bind.into(),
-                    key,
-                    parties,
-                    None,
-                    None,
-                    None,
-                    None,
-                ))
+                TlsNetwork::new(
+                    NetworkConfig::builder(id, bind.into(), parties)
+                        .tls_config(tls_config)
+                        .build(),
+                )
             }) as Box<dyn FnOnce() -> eyre::Result<TlsNetwork> + Send>
         })
         .collect()
 }
 
 fn quic_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::quic::QuicNetwork> + Send>> {
-    use mpc_net::quic::{NetworkConfig, NetworkParty, QuicNetwork};
+    use mpc_net::quic::QuicNetwork;
     use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
     install_crypto_provider();
@@ -183,13 +168,7 @@ fn quic_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::quic::QuicNe
     let parties: Vec<_> = ports
         .iter()
         .enumerate()
-        .map(|(id, port)| {
-            NetworkParty::new(
-                id,
-                Address::new("127.0.0.1".into(), *port),
-                certs[id].clone(),
-            )
-        })
+        .map(|(id, port)| NetworkParty::new(id, Address::new("127.0.0.1".into(), *port)))
         .collect();
 
     (0..3)
@@ -197,17 +176,13 @@ fn quic_builders() -> Vec<Box<dyn FnOnce() -> eyre::Result<mpc_net::quic::QuicNe
             let parties = parties.clone();
             let bind = SocketAddrV4::new(Ipv4Addr::LOCALHOST, ports[id]);
             let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(keys[id].clone()));
+            let tls_config = TlsConfig::new(key, certs.clone());
             Box::new(move || {
-                QuicNetwork::new(NetworkConfig::new(
-                    id,
-                    bind.into(),
-                    key,
-                    parties,
-                    None,
-                    None,
-                    None,
-                    None,
-                ))
+                QuicNetwork::new(
+                    NetworkConfig::builder(id, bind.into(), parties)
+                        .tls_config(tls_config)
+                        .build(),
+                )
             }) as Box<dyn FnOnce() -> eyre::Result<QuicNetwork> + Send>
         })
         .collect()

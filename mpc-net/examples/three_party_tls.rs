@@ -4,7 +4,8 @@ use clap::Parser;
 use color_eyre::{Result, eyre::Context};
 use mpc_net::{
     Network as _,
-    tls::{NetworkConfig, NetworkConfigFile, TlsNetwork},
+    config::{NetworkConfig, NetworkConfigFile},
+    tls::TlsNetwork,
 };
 
 #[derive(Parser)]
