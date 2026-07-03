@@ -17,5 +17,5 @@ id = 2
 dns_name = "127.0.0.1:10002"
 
 [network.tls]
-key = "../data/key2.der"
-certs = ["../data/cert0.der", "../data/cert1.der", "../data/cert2.der"]
+key = "data/key2.der"
+certs = ["data/cert0.der", "data/cert1.der", "data/cert2.der"]
