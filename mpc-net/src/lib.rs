@@ -1,10 +1,14 @@
 //! A simple networking layer for MPC protocols.
 #![warn(missing_docs)]
-use std::{
-    collections::{BTreeMap, HashMap},
-    time::Duration,
-};
+use bytes::Bytes;
+use std::collections::{BTreeMap, HashMap};
 
+// Shared async-transport core, used by the QUIC and ephemeral-TCP-session backends.
+#[cfg(any(feature = "quic", feature = "tcp-session"))]
+mod async_net;
+// Shared blocking-transport core, used by the TCP and TLS backends.
+#[cfg(any(feature = "tcp", feature = "tls"))]
+mod blocking;
 pub mod config;
 #[cfg(feature = "local")]
 pub mod local;
@@ -17,8 +21,6 @@ pub mod tcp_session;
 #[cfg(feature = "tls")]
 pub mod tls;
 
-/// The default connection timeout
-pub const DEFAULT_CONNECTION_TIMEOUT: Duration = Duration::from_secs(30);
 /// The default max frame length for sending messages
 pub const DEFAULT_MAX_FRAME_LENGTH: usize = 64 * 1024 * 1024; // 64MB
 
@@ -28,10 +30,28 @@ pub const DEFAULT_MAX_FRAME_LENGTH: usize = 64 * 1024 * 1024; // 64MB
 pub trait Network: Send + Sync {
     /// The id of the party
     fn id(&self) -> usize;
-    /// Send data to other party
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()>;
-    /// Receive data from other party
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>>;
+    /// Send data to other party.
+    ///
+    /// Takes [`Bytes`] so the same buffer can be cheaply handed to multiple peers
+    /// (a reference-count bump per recipient, e.g. when broadcasting) and so backends
+    /// that buffer sends can enqueue it without copying.
+    fn send(&self, to: usize, data: Bytes) -> eyre::Result<()>;
+    /// Receive data from other party.
+    ///
+    /// Returns [`Bytes`] so backends whose framing already produces a reference-counted
+    /// buffer (e.g. QUIC) can hand it back without an extra copy.
+    fn recv(&self, from: usize) -> eyre::Result<Bytes>;
+
+    /// Ensure all previously [`send`](Network::send)ed data has been handed off to
+    /// the operating system, and surface any error encountered while doing so.
+    ///
+    /// Backends that buffer sends on a background writer (e.g. TCP/TLS) flush their
+    /// queues here; backends that write inline return `Ok(())`. Call this at the end
+    /// of a protocol to confirm that the final sends — which may not be followed by a
+    /// receive — actually left the process.
+    fn flush(&self) -> eyre::Result<()> {
+        Ok(())
+    }
 
     /// Get connection statistics for the Network.
     /// The returned HashMap maps party_id to a tuple of (sent_bytes, received_bytes).
@@ -44,12 +64,12 @@ impl Network for () {
         0
     }
 
-    fn send(&self, _to: usize, _data: &[u8]) -> eyre::Result<()> {
+    fn send(&self, _to: usize, _data: Bytes) -> eyre::Result<()> {
         Ok(())
     }
 
-    fn recv(&self, _from: usize) -> eyre::Result<Vec<u8>> {
-        Ok(vec![])
+    fn recv(&self, _from: usize) -> eyre::Result<Bytes> {
+        Ok(Bytes::new())
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {

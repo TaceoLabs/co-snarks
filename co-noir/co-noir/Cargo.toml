@@ -28,7 +28,7 @@ co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
 color-eyre.workspace = true
 figment.workspace = true
 mpc-core = { version = "0.10.0", path = "../../mpc-core" }
-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
+mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["tcp"] }
 noirc-abi.workspace = true
 noirc-artifacts.workspace = true
 rand.workspace = true

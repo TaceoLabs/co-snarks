@@ -5,6 +5,7 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use bytes::Bytes;
 use itertools::izip;
 use mpc_net::Network;
 
@@ -29,7 +30,7 @@ pub trait ShamirNetworkExt: Network {
         let size = data.serialized_size(ark_serialize::Compress::No);
         let mut ser_data = Vec::with_capacity(size);
         data.serialize_uncompressed(&mut ser_data)?;
-        self.send(to, &ser_data)?;
+        self.send(to, Bytes::from(ser_data))?;
         Ok(())
     }
 
@@ -67,10 +68,11 @@ pub trait ShamirNetworkExt: Network {
         let mut ser_data = Vec::with_capacity(size);
         data.to_owned().serialize_uncompressed(&mut ser_data)?;
 
-        // Send
+        // Send (convert once; `clone` on `Bytes` is a refcount bump, not a copy)
+        let ser_data = Bytes::from(ser_data);
         for other_id in 0..num_parties {
             if other_id != self.id() {
-                self.send(other_id, &ser_data)?;
+                self.send(other_id, ser_data.clone())?;
             }
         }
 
@@ -103,10 +105,11 @@ pub trait ShamirNetworkExt: Network {
         let mut ser_data = Vec::with_capacity(size);
         data.to_owned().serialize_uncompressed(&mut ser_data)?;
 
-        // Send
+        // Send (convert once; `clone` on `Bytes` is a refcount bump, not a copy)
+        let ser_data = Bytes::from(ser_data);
         for s in 1..num {
             let other_id = (self.id() + s) % num_parties;
-            self.send(other_id, &ser_data)?;
+            self.send(other_id, ser_data.clone())?;
         }
 
         // Receive

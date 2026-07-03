@@ -1745,7 +1745,7 @@ mod ring_share {
         const SLICE_SIZE: u64 = 68;
         const LIMBS_PER_FIELD: usize = 4;
 
-        let nets = LocalNetwork::new_with_timeout(3, std::time::Duration::from_secs(120));
+        let nets = LocalNetwork::new_with_timeout(3, Some(std::time::Duration::from_secs(120)));
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| {
@@ -1834,7 +1834,7 @@ mod ring_share {
         const SLICE_SIZE: u64 = 68;
         const LIMBS_PER_FIELD: usize = 4;
 
-        let nets = LocalNetwork::new_with_timeout(3, std::time::Duration::from_secs(120));
+        let nets = LocalNetwork::new_with_timeout(3, Some(std::time::Duration::from_secs(120)));
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| {

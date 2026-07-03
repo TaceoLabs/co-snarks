@@ -20,7 +20,8 @@ use mpc_core::{
 };
 use mpc_net::{
     Network,
-    tcp::{NetworkConfig, TcpNetwork},
+    config::{NetworkConfig, NetworkConfigFile},
+    tcp::TcpNetwork,
 };
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -95,7 +96,7 @@ pub struct Config {
     /// Statesize for the hash function
     pub statesize: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Prefix for config env variables
@@ -415,7 +416,8 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -455,7 +457,8 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -496,7 +499,8 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -542,7 +546,8 @@ where
     let mut times = Vec::with_capacity(config.runs);
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -595,7 +600,8 @@ where
     let size = next_power_of_n(config.merkle_size, ARITY);
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -665,7 +671,8 @@ where
     let num_parties = config.network.parties.len();
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -722,7 +729,8 @@ where
     let num_parties = config.network.parties.len();
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -785,7 +793,8 @@ where
     let num_parties = config.network.parties.len();
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -864,7 +873,8 @@ where
     let num_parties = config.network.parties.len();
 
     // connect to network
-    let net = TcpNetwork::new(config.network.clone()).context("while connecting to network")?;
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     for _ in 0..config.runs {
         let share = share_random_input_shamir::<F, T, _, _>(

@@ -18,7 +18,9 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
-use mpc_net::tcp::{NetworkConfig, TcpNetwork};
+use mpc_net::config::NetworkConfig;
+use mpc_net::config::NetworkConfigFile;
+use mpc_net::tcp::TcpNetwork;
 use noir_types::HonkProofType;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
@@ -295,7 +297,7 @@ pub struct GenerateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `translate_witness`
@@ -335,7 +337,7 @@ pub struct TranslateWitnessConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `translate_witness`
@@ -375,7 +377,7 @@ pub struct TranslateProvingKeyConfig {
     /// The output file where the final witness share is written to
     pub out: PathBuf,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
 }
 
 /// Cli arguments for `build_proving_key`
@@ -424,7 +426,7 @@ pub struct BuildProvingKeyConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
     /// The path to the prover crs file
     pub crs: PathBuf,
 }
@@ -494,7 +496,7 @@ pub struct GenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
     /// The path to the prover crs file
     pub crs: PathBuf,
     /// Prove with or without the zero knowledge property
@@ -575,7 +577,7 @@ pub struct BuildAndGenerateProofConfig {
     /// The threshold of tolerated colluding parties
     pub threshold: usize,
     /// Network config
-    pub network: NetworkConfig,
+    pub network: NetworkConfigFile,
     /// Prove with or without the zero knowledge property
     pub zk: bool,
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
@@ -1176,6 +1178,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
     let circuit = config.circuit;
     let protocol = config.protocol;
     let out = config.out;
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     if protocol != MPCProtocol::REP3 {
         eyre::bail!("Only REP3 protocol is supported for witness generation");
@@ -1192,7 +1195,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
 
     // connect to network
     let [net0, net1] =
-        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
@@ -1215,6 +1218,7 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
     let src_protocol = config.src_protocol;
     let target_protocol = config.target_protocol;
     let out = config.out;
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
         eyre::bail!("Only REP3 to SHAMIR translation is supported");
@@ -1227,7 +1231,7 @@ fn run_translate_witness(config: TranslateWitnessConfig) -> color_eyre::Result<E
         bincode::deserialize_from(witness_file).context("while deserializing witness share")?;
 
     // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -1249,6 +1253,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
     let src_protocol = config.src_protocol;
     let target_protocol = config.target_protocol;
     let out = config.out;
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     if src_protocol != MPCProtocol::REP3 || target_protocol != MPCProtocol::SHAMIR {
         eyre::bail!("Only REP3 to SHAMIR translation is supported");
@@ -1261,7 +1266,7 @@ fn run_translate_proving_key(config: TranslateProvingKeyConfig) -> color_eyre::R
         bincode::deserialize_from(proving_key_file).context("while deserializing witness share")?;
 
     // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     // Translate proving key to shamir shares
     tracing::info!("Starting proving key translation...");
@@ -1286,6 +1291,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     let n = config.network.parties.len();
     let t = config.threshold;
     let crs_path = config.crs;
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     // parse witness shares
     let witness_file =
@@ -1305,7 +1311,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
 
     // connect to network
     let [net0, net1] =
-        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
     tracing::info!("Starting proving key generation...");
     match protocol {
@@ -1372,9 +1378,10 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let crs_path = config.crs;
     let fields_as_json = config.fields_as_json;
     let has_zk = ZeroKnowledge::from(config.zk);
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     // connect to network
-    let net = TcpNetwork::new(config.network).context("while connecting to network")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     // parse proving_key file
     let proving_key_file =
@@ -1565,6 +1572,7 @@ fn run_build_and_generate_proof(
     let t = config.threshold;
     let fields_as_json = config.fields_as_json;
     let has_zk = ZeroKnowledge::from(config.zk);
+    let network_config = NetworkConfig::try_from(config.network)?;
 
     // parse witness shares
     let witness_file =
@@ -1576,7 +1584,7 @@ fn run_build_and_generate_proof(
 
     // connect to network
     let [net0, net1] =
-        TcpNetwork::networks::<2>(config.network).context("while connecting to network")?;
+        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
     let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
     let prover_crs =

@@ -4,7 +4,8 @@ use clap::Parser;
 use color_eyre::{Result, eyre::Context};
 use mpc_net::{
     Network as _,
-    tls::{NetworkConfig, NetworkConfigFile, TlsNetwork},
+    config::{NetworkConfig, NetworkConfigFile},
+    tls::TlsNetwork,
 };
 
 #[derive(Parser)]
@@ -55,7 +56,7 @@ fn main() -> Result<()> {
         if id != my_id {
             tracing::info!("party {my_id} sending to {id}");
             let buf = vec![id as u8; 1024];
-            network.send(id, &buf)?;
+            network.send(id, buf.into())?;
         }
     }
     // recv from all parties
@@ -66,6 +67,9 @@ fn main() -> Result<()> {
             tracing::info!("party {my_id} received from {id}");
         }
     }
+
+    // flush to make sure all messages are sent before exiting
+    network.flush()?;
 
     println!(
         "Network connection stats:\n{}",

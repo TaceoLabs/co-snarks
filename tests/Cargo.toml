@@ -33,7 +33,12 @@ co-noir-common = { version = "0.2.0", path = "../co-noir/co-noir-common" }
 eyre.workspace = true
 itertools = { workspace = true }
 mpc-core = { version = "0.10.0", path = "../mpc-core" }
-mpc-net = { version = "0.5.0", path = "../mpc-net", default-features = false, features = ["local"] }
+mpc-net = { version = "0.5.0", path = "../mpc-net", features = [
+    "local",
+    "tcp",
+    "tls",
+    "quic",
+] }
 num-bigint.workspace = true
 num-traits = { workspace = true }
 noirc-artifacts = { workspace = true }
@@ -47,3 +52,5 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 [dev-dependencies]
 paste.workspace = true
 sha3.workspace = true
+rcgen = { workspace = true }
+rustls = { workspace = true }

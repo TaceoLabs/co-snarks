@@ -1,20 +1,18 @@
 //! Ephemeral TCP MPC network
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
-use std::{collections::HashMap, sync::atomic::AtomicUsize};
 
-use eyre::ContextCompat as _;
-use futures::{SinkExt as _, StreamExt as _};
+use futures::StreamExt as _;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-use tokio::sync::mpsc;
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
-use tokio_util::sync::{CancellationToken, DropGuard};
 
-use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network};
+use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels};
+use bytes::Bytes;
 
 /// The default time to idle for incoming connections that were not picked up because, e.g. `init_session` for that session id was never called.
 pub const DEFAULT_TIME_TO_IDLE: Duration = Duration::from_secs(30);
@@ -101,6 +99,8 @@ pub struct TcpNetworkHandlerBuilder {
     parties: Vec<String>,
     time_to_idle: Duration,
     max_frame_length: usize,
+    timeout: Option<Duration>,
+    flush_timeout: Option<Duration>,
 }
 
 impl TcpNetworkHandlerBuilder {
@@ -117,6 +117,8 @@ impl TcpNetworkHandlerBuilder {
             parties,
             time_to_idle: DEFAULT_TIME_TO_IDLE,
             max_frame_length: DEFAULT_MAX_FRAME_LENGTH,
+            timeout: None,
+            flush_timeout: None,
         }
     }
 
@@ -133,6 +135,22 @@ impl TcpNetworkHandlerBuilder {
     /// Defaults to `DEFAULT_MAX_FRAME_LENGTH` (64MB)
     pub fn max_frame_length(mut self, max_frame_length: usize) -> Self {
         self.max_frame_length = max_frame_length;
+        self
+    }
+
+    /// Set the receive timeout for the network.
+    ///
+    /// Defaults to no timeout.
+    pub fn timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Set the flush timeout for the network.
+    ///
+    /// Defaults to no timeout.
+    pub fn flush_timeout(mut self, flush_timeout: Option<Duration>) -> Self {
+        self.flush_timeout = flush_timeout;
         self
     }
 
@@ -191,6 +209,8 @@ impl TcpNetworkHandlerBuilder {
             streams,
             parties: self.parties,
             max_frame_length: self.max_frame_length,
+            timeout: self.timeout,
+            flush_timeout: self.flush_timeout,
         })
     }
 }
@@ -202,6 +222,8 @@ pub struct TcpNetworkHandler {
     streams: TcpStreams,
     parties: Vec<String>,
     max_frame_length: usize,
+    timeout: Option<Duration>,
+    flush_timeout: Option<Duration>,
 }
 
 impl TcpNetworkHandler {
@@ -231,20 +253,38 @@ impl TcpNetworkHandler {
                 Ordering::Equal => continue,
             }
         }
-        TcpNetwork::new(self.party_id, streams, self.max_frame_length)
+        TcpNetwork::new(
+            self.party_id,
+            streams,
+            self.max_frame_length,
+            self.timeout,
+            self.flush_timeout,
+        )
     }
 }
 
 /// A MPC network using `TcpStream`s
+///
+/// # Note
+/// On Drop, the network will attempt to flush all channels. If the flush fails, an error will be logged but not returned.
+/// This includes spawning a new thread to run the flush, so that if the network is dropped from within an async context, it will not panic.
 #[derive(Debug)]
-#[expect(clippy::complexity)]
 pub struct TcpNetwork {
     id: usize,
-    send: HashMap<usize, (mpsc::Sender<Vec<u8>>, AtomicUsize)>,
-    recv: HashMap<usize, (Mutex<mpsc::Receiver<eyre::Result<Vec<u8>>>>, AtomicUsize)>,
-    max_frame_length: usize,
-    /// A drop guard that cancels the cancellation token when dropped, used to stop tasks when the network is dropped.
-    _drop_guard: DropGuard,
+    channels: AsyncChannels,
+}
+
+impl Drop for TcpNetwork {
+    fn drop(&mut self) {
+        // flush calls `Runtime::block_on` and `blocking_send/blocking_recv` panics
+        // if called from within another runtime's async context.
+        // The child thread is not part of any runtime, so `block_on` is always
+        // valid there. Errors during shutdown are ignored (best-effort cleanup).
+        let res = std::thread::scope(|s| s.spawn(|| self.flush()).join());
+        if let Ok(Err(err)) = res {
+            tracing::error!("error flushing channels on drop: {err:?}");
+        }
+    }
 }
 
 impl TcpNetwork {
@@ -253,66 +293,28 @@ impl TcpNetwork {
         id: usize,
         streams: HashMap<usize, TcpStream>,
         max_frame_length: usize,
+        timeout: Option<Duration>,
+        flush_timeout: Option<Duration>,
     ) -> eyre::Result<Self> {
-        let cancellation_token = CancellationToken::new();
-        let mut send = HashMap::new();
-        let mut recv = HashMap::new();
+        // `new` is called from within `init_session`'s async context, so the ambient
+        // runtime handle is available for the shutdown barrier's bounded receive.
+        let mut channels = AsyncChannels::new(
+            tokio::runtime::Handle::current(),
+            max_frame_length,
+            timeout,
+            flush_timeout,
+        );
         let codec = LengthDelimitedCodec::builder()
             .length_field_type::<u64>()
             .max_frame_length(max_frame_length)
             .new_codec();
 
         for (other_id, stream) in streams {
-            let stream = Framed::new(stream, codec.clone());
-            let (mut sender, mut receiver) = stream.split();
-            let (send_tx, mut send_rx) = mpsc::channel::<Vec<u8>>(32);
-            let (recv_tx, recv_rx) = mpsc::channel::<eyre::Result<Vec<u8>>>(32);
-            tokio::spawn(async move {
-                while let Some(data) = send_rx.recv().await {
-                    if let Err(err) = sender.send(data.into()).await {
-                        tracing::warn!("failed to send data: {err:?}");
-                        break;
-                    }
-                }
-            });
-            tokio::spawn({
-                let cancellation_token = cancellation_token.clone();
-                async move {
-                    loop {
-                        tokio::select! {
-                            _ = cancellation_token.cancelled() => {
-                                break;
-                            }
-                            msg = receiver.next() => {
-                                match msg {
-                                    Some(Ok(data)) => {
-                                        if recv_tx.send(Ok(data.into())).await.is_err() {
-                                            tracing::warn!("recv receiver dropped");
-                                            break;
-                                        }
-                                    }
-                                    Some(Err(err)) => {
-                                        let _ = recv_tx.send(Err(eyre::eyre!("tcp error: {err}"))).await;
-                                        break;
-                                    }
-                                    None => break,
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-            send.insert(other_id, (send_tx, AtomicUsize::default()));
-            recv.insert(other_id, (Mutex::new(recv_rx), AtomicUsize::default()));
+            let (sink, source) = Framed::new(stream, codec.clone()).split();
+            channels.add_peer(other_id, sink, source);
         }
 
-        Ok(Self {
-            id,
-            send,
-            recv,
-            max_frame_length,
-            _drop_guard: cancellation_token.drop_guard(),
-        })
+        Ok(Self { id, channels })
     }
 }
 
@@ -321,39 +323,19 @@ impl Network for TcpNetwork {
         self.id
     }
 
-    fn send(&self, to: usize, data: &[u8]) -> eyre::Result<()> {
-        if data.len() > self.max_frame_length {
-            eyre::bail!("frame len {} > max {}", data.len(), self.max_frame_length);
-        }
-        let (sender, sent_bytes) = self.send.get(&to).context("party id out-of-bounds")?;
-        sent_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        sender.blocking_send(data.to_vec())?;
-        Ok(())
+    fn send(&self, to: usize, data: Bytes) -> eyre::Result<()> {
+        self.channels.send(to, data)
     }
 
-    fn recv(&self, from: usize) -> eyre::Result<Vec<u8>> {
-        let (receiver, recv_bytes) = self.recv.get(&from).context("party id out-of-bounds")?;
-        let data = receiver
-            .lock()
-            .expect("not poisoned")
-            .blocking_recv()
-            .context("receiver sender dropped")??;
-        recv_bytes.fetch_add(data.len(), std::sync::atomic::Ordering::Relaxed);
-        Ok(data)
+    fn recv(&self, from: usize) -> eyre::Result<Bytes> {
+        self.channels.recv(from)
+    }
+
+    fn flush(&self) -> eyre::Result<()> {
+        self.channels.flush()
     }
 
     fn get_connection_stats(&self) -> ConnectionStats {
-        let mut stats = std::collections::BTreeMap::new();
-        for (id, (_, sent_bytes)) in self.send.iter() {
-            let recv_bytes = &self.recv.get(id).expect("was in send so must be in recv").1;
-            stats.insert(
-                *id,
-                (
-                    sent_bytes.load(std::sync::atomic::Ordering::Relaxed),
-                    recv_bytes.load(std::sync::atomic::Ordering::Relaxed),
-                ),
-            );
-        }
-        ConnectionStats::new(self.id, stats)
+        self.channels.stats(self.id)
     }
 }
