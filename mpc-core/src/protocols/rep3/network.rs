@@ -70,13 +70,26 @@ pub trait Rep3NetworkExt: Network {
         //
         // Safe for arbitrarily large frames on the current transports: the peer's
         // background reader thread drains the socket independently of its main
-        // thread's phase, so `send_many` here cannot deadlock against a peer that
+        // thread's phase, so the sends here cannot deadlock against a peer that
         // is itself still in its send phase.
-        self.send_many(prev_id, data)?;
-        self.send_many(next_id, data)?;
+        self.send_both_many(data)?;
         let prev_res = self.recv_many(prev_id)?;
         let next_res = self.recv_many(next_id)?;
         Ok((prev_res, next_res))
+    }
+
+    /// Sends the same data to the other two parties, serializing it only once.
+    #[inline(always)]
+    fn send_both_many<F: CanonicalSerialize>(&self, data: &[F]) -> eyre::Result<()> {
+        let id = PartyID::try_from(self.id())?;
+        let size = data.serialized_size(ark_serialize::Compress::No);
+        let mut ser_data = Vec::with_capacity(size);
+        data.serialize_uncompressed(&mut ser_data)?;
+        // `clone` on `Bytes` is a refcount bump, not a copy
+        let ser_data = Bytes::from(ser_data);
+        self.send(id.prev().into(), ser_data.clone())?;
+        self.send(id.next().into(), ser_data)?;
+        Ok(())
     }
 
     /// Sends data to the target party.

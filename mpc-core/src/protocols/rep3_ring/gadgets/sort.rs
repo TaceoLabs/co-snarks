@@ -723,12 +723,10 @@ where
                 let index = pi[pi_2].a.0 as usize;
                 shuffled.push(gamma[index] + delta[index]);
             }
-            let (send0, send1) = mpc_net::join(
-                || net.send_many(PartyID::ID0, &shuffled),
-                || net.send_many(PartyID::ID1, &shuffled),
-            );
-            send0?;
-            send1?;
+            // ID0 and ID1 are the other two parties from ID2's view. This
+            // serializes once and enqueues on the non-blocking send queues, so
+            // no threads are needed.
+            net.send_both_many(&shuffled)?;
             shuffled
         }
     };
