@@ -20,6 +20,9 @@ use std::error::Error;
 /// A REP3 shared input type
 pub type Rep3SharedInput<F> = BTreeMap<String, Rep3InputType<F>>;
 
+/// A Shamir shared input type
+pub type ShamirSharedInput<F> = BTreeMap<String, ShamirInputType<F>>;
+
 /// A batched REP3 shared input type. Should be used with the batched witness extension
 pub type BatchedRep3SharedInput<F> = BTreeMap<String, Vec<Rep3InputType<F>>>;
 
@@ -84,6 +87,62 @@ impl<F: PrimeField> From<F> for Rep3InputType<F> {
 
 impl<F: PrimeField> From<Rep3PrimeFieldShare<F>> for Rep3InputType<F> {
     fn from(value: Rep3PrimeFieldShare<F>) -> Self {
+        Self::Shared(value)
+    }
+}
+
+/// A Shamir input type
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub enum ShamirInputType<F: PrimeField> {
+    /// The public variant
+    Public(
+        #[serde(
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
+        )]
+        F,
+    ),
+    /// The shared variant
+    Shared(
+        #[serde(
+            serialize_with = "mpc_core::serde_compat::ark_se",
+            deserialize_with = "mpc_core::serde_compat::ark_de"
+        )]
+        ShamirPrimeFieldShare<F>,
+    ),
+}
+
+impl<F: PrimeField> ShamirInputType<F> {
+    /// Returns true if the input is public
+    pub fn is_public(&self) -> bool {
+        matches!(self, ShamirInputType::Public(_))
+    }
+
+    /// Returns the public input or None
+    pub fn as_public(&self) -> Option<F> {
+        match self {
+            ShamirInputType::Public(value) => Some(*value),
+            ShamirInputType::Shared(_) => None,
+        }
+    }
+
+    /// Returns the shared input or None
+    pub fn as_shared(&self) -> Option<ShamirPrimeFieldShare<F>> {
+        match self {
+            ShamirInputType::Public(_) => None,
+            ShamirInputType::Shared(share) => Some(*share),
+        }
+    }
+}
+
+impl<F: PrimeField> From<F> for ShamirInputType<F> {
+    fn from(value: F) -> Self {
+        Self::Public(value)
+    }
+}
+
+impl<F: PrimeField> From<ShamirPrimeFieldShare<F>> for ShamirInputType<F> {
+    fn from(value: ShamirPrimeFieldShare<F>) -> Self {
         Self::Shared(value)
     }
 }
@@ -363,6 +422,49 @@ pub fn split_input<F: PrimeField>(
                 shares[0].insert(k.clone(), Rep3InputType::Shared(share0));
                 shares[1].insert(k.clone(), Rep3InputType::Shared(share1));
                 shares[2].insert(k.clone(), Rep3InputType::Shared(share2));
+            }
+        }
+    }
+    Ok(shares)
+}
+
+/// Splits a JSON input into Shamir secret shares.
+pub fn split_input_shamir<F: PrimeField>(
+    input: Input,
+    public_inputs: &[String],
+    threshold: usize,
+    num_parties: usize,
+) -> eyre::Result<Vec<ShamirSharedInput<F>>> {
+    let mut shares: Vec<ShamirSharedInput<F>> = (0..num_parties)
+        .map(|_| ShamirSharedInput::<F>::default())
+        .collect();
+
+    let mut rng = rand::thread_rng();
+    for (name, val) in input {
+        let parsed_vals = if val.is_array() {
+            parse_array::<F>(&val)?
+                .into_iter()
+                .enumerate()
+                .filter_map(|(idx, field)| field.map(|field| (format!("{name}[{idx}]"), field)))
+                .collect::<BTreeMap<_, _>>()
+        } else if val.is_boolean() {
+            BTreeMap::from([(name.clone(), parse_boolean::<F>(&val)?)])
+        } else {
+            BTreeMap::from([(name.clone(), parse_field::<F>(&val)?)])
+        };
+
+        if public_inputs.contains(&name) {
+            for (k, v) in parsed_vals.into_iter() {
+                for share in shares.iter_mut() {
+                    share.insert(k.clone(), ShamirInputType::Public(v));
+                }
+            }
+        } else {
+            for (k, v) in parsed_vals.into_iter() {
+                let party_shares = shamir::share_field_element(v, threshold, num_parties, &mut rng);
+                for (share_map, party_share) in shares.iter_mut().zip(party_shares) {
+                    share_map.insert(k.clone(), ShamirInputType::Shared(party_share));
+                }
             }
         }
     }

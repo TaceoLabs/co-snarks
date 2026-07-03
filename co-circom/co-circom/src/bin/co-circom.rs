@@ -182,6 +182,12 @@ pub struct SplitInputCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out_dir: Option<PathBuf>,
+    /// The threshold of tolerated colluding parties (Shamir only)
+    #[arg(short, long, default_value_t = 1)]
+    pub threshold: usize,
+    /// The number of parties (Shamir only)
+    #[arg(short, long, default_value_t = 3)]
+    pub num_parties: usize,
 }
 
 /// Config for `split_input`
@@ -200,6 +206,12 @@ pub struct SplitInputConfig {
     /// MPC compiler config
     #[serde(default)]
     pub compiler: CompilerConfig,
+    /// The threshold of tolerated colluding parties (Shamir only)
+    #[serde(default = "default_threshold")]
+    pub threshold: usize,
+    /// The number of parties (Shamir only)
+    #[serde(default = "default_num_parties")]
+    pub num_parties: usize,
 }
 
 /// Cli arguments for `merge_input_shares`
@@ -278,6 +290,12 @@ pub struct GenerateWitnessCli {
     /// The simplification level passed to the circom compiler (0-2)
     #[arg(short = 'O', default_value_t = 1, value_parser = clap::value_parser!(u8).range(0..3))]
     pub simplification_level: u8,
+    /// The threshold of tolerated colluding parties (Shamir only)
+    #[arg(short, long, default_value_t = 1)]
+    pub threshold: usize,
+    /// The number of parties (Shamir only)
+    #[arg(short, long, default_value_t = 3)]
+    pub num_parties: usize,
 }
 
 /// Config for `generate_witness`
@@ -301,6 +319,20 @@ pub struct GenerateWitnessConfig {
     pub vm: VMConfig,
     /// Network config
     pub network: NetworkConfigFile,
+    /// The threshold of tolerated colluding parties (Shamir only)
+    #[serde(default = "default_threshold")]
+    pub threshold: usize,
+    /// The number of parties (Shamir only)
+    #[serde(default = "default_num_parties")]
+    pub num_parties: usize,
+}
+
+fn default_threshold() -> usize {
+    1
+}
+
+fn default_num_parties() -> usize {
+    3
 }
 
 /// Cli arguments for `translate_witness`
@@ -715,9 +747,6 @@ fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
     let protocol = config.protocol;
     let out_dir = config.out_dir;
 
-    if protocol != MPCProtocol::REP3 {
-        eyre::bail!("Only REP3 protocol is supported for splitting inputs");
-    }
     let circuit_path = PathBuf::from(&circuit);
 
     //get the public inputs if any from parser
@@ -730,22 +759,43 @@ fn run_split_input<P: Pairing + CircomArkworksPairingBridge>(
 
     tracing::info!("Starting split input...");
     let start = Instant::now();
-    let shares = co_circom::split_input::<P::ScalarField>(input, &public_inputs)?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Split input took {duration_ms} ms");
 
-    // write out the shares to the output directory
     let base_name = input_path
         .file_name()
         .context("we have a file name")?
         .to_str()
         .context("input file name is not valid UTF-8")?;
-    for (i, share) in shares.iter().enumerate() {
-        let path = out_dir.join(format!("{base_name}.{i}.shared"));
-        let out_file = BufWriter::new(File::create(&path).context("while creating output file")?);
-        serde_json::to_writer(out_file, share).context("while serializing witness share")?;
-        tracing::info!("Wrote input share {} to file {}", i, path.display());
+
+    match protocol {
+        MPCProtocol::REP3 => {
+            let shares = co_circom::split_input::<P::ScalarField>(input, &public_inputs)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Split input took {duration_ms} ms");
+            for (i, share) in shares.iter().enumerate() {
+                let path = out_dir.join(format!("{base_name}.{i}.shared"));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                serde_json::to_writer(out_file, share).context("while serializing input share")?;
+                tracing::info!("Wrote input share {} to file {}", i, path.display());
+            }
+        }
+        MPCProtocol::SHAMIR => {
+            let t = config.threshold;
+            let n = config.num_parties;
+            let shares =
+                co_circom::split_input_shamir::<P::ScalarField>(input, &public_inputs, t, n)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Split input took {duration_ms} ms");
+            for (i, share) in shares.iter().enumerate() {
+                let path = out_dir.join(format!("{base_name}.{i}.shared"));
+                let out_file =
+                    BufWriter::new(File::create(&path).context("while creating output file")?);
+                serde_json::to_writer(out_file, share).context("while serializing input share")?;
+                tracing::info!("Wrote input share {} to file {}", i, path.display());
+            }
+        }
     }
+
     tracing::info!("Split input into shares successfully");
     Ok(ExitCode::SUCCESS)
 }
@@ -805,40 +855,68 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     let protocol = config.protocol;
     let out = config.out;
     let network_config = NetworkConfig::try_from(config.network)?;
+    let n = network_config.parties.len();
+    let t = config.threshold;
 
-    if protocol != MPCProtocol::REP3 {
-        eyre::bail!("Only REP3 protocol is supported for witness generation");
+    if protocol == MPCProtocol::SHAMIR && n != config.num_parties {
+        eyre::bail!(
+            "Number of parties in network config ({n}) does not match configured num_parties ({})",
+            config.num_parties
+        );
     }
 
     // connect to network
     let [net0, net1] =
         TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
-    // parse input shares
-    let input_share_file =
-        BufReader::new(File::open(&input).context("while opening input share file")?);
-    let input_share: Rep3SharedInput<P::ScalarField> =
-        serde_json::from_reader(input_share_file).context("trying to parse input share file")?;
-
     // parse circuit file & put through our compiler
     let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
         .context("while parsing circuit file")?;
 
-    // Extend the witness
-    tracing::info!("Starting witness generation...");
-    let start = Instant::now();
-    let result_witness_share =
-        co_circom::generate_witness_rep3(&circuit, input_share, config.vm, &net0, &net1)?;
-    let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
-    tracing::info!("Generate witness took {duration_ms} ms");
+    match protocol {
+        MPCProtocol::REP3 => {
+            // parse input shares
+            let input_share_file =
+                BufReader::new(File::open(&input).context("while opening input share file")?);
+            let input_share: Rep3SharedInput<P::ScalarField> =
+                serde_json::from_reader(input_share_file)
+                    .context("trying to parse input share file")?;
 
-    // write result to output file
-    let out_file = BufWriter::new(std::fs::File::create(&out)?);
-    bincode::serialize_into(
-        out_file,
-        &CompressedRep3SharedWitness::from(result_witness_share),
-    )?;
-    tracing::info!("Witness successfully written to {}", out.display());
+            tracing::info!("Starting witness generation...");
+            let start = Instant::now();
+            let result_witness_share =
+                co_circom::generate_witness_rep3(&circuit, input_share, config.vm, &net0, &net1)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Generate witness took {duration_ms} ms");
+
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(
+                out_file,
+                &CompressedRep3SharedWitness::from(result_witness_share),
+            )?;
+            tracing::info!("Witness successfully written to {}", out.display());
+        }
+        MPCProtocol::SHAMIR => {
+            // parse input shares
+            let input_share_file =
+                BufReader::new(File::open(&input).context("while opening input share file")?);
+            let input_share: co_circom::ShamirSharedInput<P::ScalarField> =
+                serde_json::from_reader(input_share_file)
+                    .context("trying to parse input share file")?;
+
+            tracing::info!("Starting witness generation...");
+            let start = Instant::now();
+            // TODO we are not creating any randomness here
+            let result_witness_share =
+                co_circom::generate_witness_shamir(&circuit, input_share, config.vm, &net0, n, t)?;
+            let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
+            tracing::info!("Generate witness took {duration_ms} ms");
+
+            let out_file = BufWriter::new(std::fs::File::create(&out)?);
+            bincode::serialize_into(out_file, &result_witness_share)?;
+            tracing::info!("Witness successfully written to {}", out.display());
+        }
+    }
     Ok(ExitCode::SUCCESS)
 }
 

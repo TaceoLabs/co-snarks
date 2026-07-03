@@ -8,6 +8,7 @@ pub(crate) mod batched_plain;
 pub(crate) mod batched_rep3;
 pub(crate) mod plain;
 pub(crate) mod rep3;
+pub(crate) mod shamir;
 
 /// This trait represents the operations used during witness extension by the co-circom MPC-VM
 pub trait VmCircomWitnessExtension<F: PrimeField> {
