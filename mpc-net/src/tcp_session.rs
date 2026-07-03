@@ -264,6 +264,10 @@ impl TcpNetworkHandler {
 }
 
 /// A MPC network using `TcpStream`s
+///
+/// # Note
+/// On Drop, the network will attempt to flush all channels. If the flush fails, an error will be logged but not returned.
+/// This includes spawning a new thread to run the flush, so that if the network is dropped from within an async context, it will not panic.
 #[derive(Debug)]
 pub struct TcpNetwork {
     id: usize,
@@ -272,8 +276,13 @@ pub struct TcpNetwork {
 
 impl Drop for TcpNetwork {
     fn drop(&mut self) {
-        if let Err(e) = self.channels.flush() {
-            tracing::error!("error flushing channels on drop: {e:?}");
+        // flush calls `Runtime::block_on` and `blocking_send/blocking_recv` panics
+        // if called from within another runtime's async context.
+        // The child thread is not part of any runtime, so `block_on` is always
+        // valid there. Errors during shutdown are ignored (best-effort cleanup).
+        let res = std::thread::scope(|s| s.spawn(|| self.flush()).join());
+        if let Ok(Err(err)) = res {
+            tracing::error!("error flushing channels on drop: {err:?}");
         }
     }
 }

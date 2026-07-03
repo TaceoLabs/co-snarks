@@ -293,8 +293,13 @@ pub struct QuicNetwork {
 
 impl Drop for QuicNetwork {
     fn drop(&mut self) {
-        if let Err(e) = self.channels.flush() {
-            tracing::error!("error flushing channels on drop: {e:?}");
+        // flush calls `Runtime::block_on` and `blocking_send/blocking_recv` panics
+        // if called from within another runtime's async context.
+        // The child thread is not part of any runtime, so `block_on` is always
+        // valid there. Errors during shutdown are ignored (best-effort cleanup).
+        let res = std::thread::scope(|s| s.spawn(|| self.flush()).join());
+        if let Ok(Err(err)) = res {
+            tracing::error!("error flushing channels on drop: {err:?}");
         }
     }
 }
