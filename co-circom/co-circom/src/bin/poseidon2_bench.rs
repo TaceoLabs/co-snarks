@@ -6,7 +6,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
 };
 use mpc_core::{
-    gadgets::poseidon2::Poseidon2,
+    gadgets::poseidon2::{CircomTraceBatchedHasher, CircomTraceShamirHasher, Poseidon2},
     protocols::{
         rep3::{
             self, Rep3PrimeFieldShare, Rep3State, conversion::A2BType, id::PartyID,
@@ -128,6 +128,14 @@ fn main() -> color_eyre::Result<ExitCode> {
 
     let cli = Cli::parse();
     let config = Config::parse(cli).context("while parsing config")?;
+    tracing::info!(
+        "Runnning poseidon2 benchmarks with: runs={}, threshold={}, batch_size={}, merkle_size={}, statesize={}",
+        config.runs,
+        config.threshold,
+        config.batch_size,
+        config.merkle_size,
+        config.statesize
+    );
 
     const D: u64 = 5;
     const ARITY: usize = 2;
@@ -135,11 +143,41 @@ fn main() -> color_eyre::Result<ExitCode> {
     type F = ark_bn254::Fr;
 
     match config.statesize {
+        2 => {
+            benches::<F, 2, D, ARITY, COMPRESSION_MODE>(&config)?;
+            if config.network.parties.len() == 3 && config.threshold == 1 && config.batch_size != 0
+            {
+                poseidon2_rep3_with_precomp_packed_array::<F, 2>(&config)?;
+                poseidon2_rep3_circom_accelerator_packed_array::<
+                    F,
+                    2,
+                    { 2 * PACKED_ARRAY_BATCH_SIZE },
+                >(&config)?;
+            }
+        }
         3 => {
             benches::<F, 3, D, ARITY, COMPRESSION_MODE>(&config)?;
+            if config.network.parties.len() == 3 && config.threshold == 1 && config.batch_size != 0
+            {
+                poseidon2_rep3_with_precomp_packed_array::<F, 3>(&config)?;
+                poseidon2_rep3_circom_accelerator_packed_array::<
+                    F,
+                    3,
+                    { 3 * PACKED_ARRAY_BATCH_SIZE },
+                >(&config)?;
+            }
         }
         4 => {
             benches::<F, 4, D, ARITY, COMPRESSION_MODE>(&config)?;
+            if config.network.parties.len() == 3 && config.threshold == 1 && config.batch_size != 0
+            {
+                poseidon2_rep3_with_precomp_packed_array::<F, 4>(&config)?;
+                poseidon2_rep3_circom_accelerator_packed_array::<
+                    F,
+                    4,
+                    { 4 * PACKED_ARRAY_BATCH_SIZE },
+                >(&config)?;
+            }
         }
         t => {
             eyre::bail!("Unsupported statesize: {}", t);
@@ -181,15 +219,18 @@ fn poseidon2_benches<F: PrimeField, const T: usize, const D: u64>(
 ) -> color_eyre::Result<ExitCode>
 where
     Poseidon2<F, T, D>: Default,
+    Poseidon2<F, T, 5>: Default,
 {
     poseidon2_plain::<F, T, D>(config)?;
     if config.network.parties.len() == 3 && config.threshold == 1 {
         // poseidon2_rep3::<F, T, D>(config)?;
         poseidon2_rep3_with_precomp::<F, T, D>(config)?;
+        poseidon2_rep3_circom_accelerator::<F, T, D>(config)?;
         // poseidon2_rep3_with_precomp_additive::<F, T, D>(config)?;
     }
     // poseidon2_shamir::<F, T, D>(config)?;
     poseidon2_shamir_with_precomp::<F, T, D>(config)?;
+    poseidon2_shamir_circom_accelerator::<F, T>(config)?;
 
     Ok(ExitCode::SUCCESS)
 }
@@ -200,12 +241,15 @@ fn poseidon2_packed_benches<F: PrimeField, const T: usize, const D: u64>(
 ) -> color_eyre::Result<ExitCode>
 where
     Poseidon2<F, T, D>: Default,
+    Poseidon2<F, T, 5>: Default,
 {
     poseidon2_plain_packed::<F, T, D>(config)?;
     if config.network.parties.len() == 3 && config.threshold == 1 {
         poseidon2_rep3_with_precomp_packed::<F, T, D>(config)?;
+        poseidon2_rep3_circom_accelerator_packed::<F, T>(config)?;
     }
     poseidon2_shamir_with_precomp_packed::<F, T, D>(config)?;
+    poseidon2_shamir_circom_accelerator_packed::<F, T>(config)?;
 
     Ok(ExitCode::SUCCESS)
 }
@@ -263,7 +307,7 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut input: Vec<F> = (0..T).map(|_| F::rand(&mut rng)).collect();
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
@@ -271,7 +315,10 @@ where
         let start = Instant::now();
         poseidon2.permutation_in_place(input.as_mut_slice().try_into().unwrap());
         let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
     }
 
     print_runtimes(times, config.network.my_id, "Poseidon2 plain");
@@ -291,7 +338,7 @@ where
 
     let mut times = Vec::with_capacity(config.runs);
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut input: Vec<F> = (0..config.batch_size * T)
             .map(|_| F::rand(&mut rng))
             .collect();
@@ -303,7 +350,10 @@ where
             poseidon2.permutation_in_place(input.try_into().unwrap());
         }
         let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
     }
 
     print_runtimes(
@@ -343,7 +393,7 @@ where
 
     let size = next_power_of_n(config.merkle_size, ARITY);
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let input: Vec<F> = (0..size).map(|_| F::rand(&mut rng)).collect();
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
@@ -355,7 +405,10 @@ where
             poseidon2.merkle_tree_sponge::<ARITY>(input);
         }
         let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
     }
 
     print_runtimes(
@@ -420,7 +473,7 @@ where
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
@@ -432,7 +485,10 @@ where
             &mut state,
         )?;
         let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
     }
 
     sleep(SLEEP);
@@ -461,7 +517,7 @@ where
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
@@ -474,11 +530,63 @@ where
             &net,
         )?;
         let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
     }
 
     sleep(SLEEP);
     print_runtimes(times, config.network.my_id, "Poseidon2 rep3 with precomp");
+
+    Ok(ExitCode::SUCCESS)
+}
+
+#[allow(dead_code)]
+fn poseidon2_rep3_circom_accelerator<F: PrimeField, const T: usize, const D: u64>(
+    config: &Config,
+) -> color_eyre::Result<ExitCode>
+where
+    Poseidon2<F, T, D>: Default,
+{
+    if config.threshold != 1 {
+        eyre::bail!("Threshold must be 1 for rep3");
+    }
+
+    let mut rng = rand::thread_rng();
+
+    let mut times = Vec::with_capacity(config.runs);
+
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
+
+    for i in 0..=config.runs {
+        let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
+
+        let poseidon2 = Poseidon2::<F, T, D>::default();
+
+        let start = Instant::now();
+        let mut precomp = poseidon2.precompute_rep3(1, &net, &mut state)?;
+        poseidon2.rep3_permutation_in_place_with_precomputation_intermediate(
+            share.as_mut_slice().try_into().unwrap(),
+            &mut precomp,
+            &net,
+        )?;
+        let duration = start.elapsed().as_micros() as f64;
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
+    }
+
+    sleep(SLEEP);
+    print_runtimes(
+        times,
+        config.network.my_id,
+        "Poseidon2 rep3 circom accelerator",
+    );
 
     Ok(ExitCode::SUCCESS)
 }
@@ -503,7 +611,7 @@ where
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut share = share_random_input_rep3::<F, T, _, _>(&net, T, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
@@ -517,7 +625,10 @@ where
             &mut state,
         )?;
         let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
     }
 
     sleep(SLEEP);
@@ -550,7 +661,7 @@ where
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut share =
             share_random_input_rep3::<F, T, _, _>(&net, config.batch_size * T, &mut rng)?;
 
@@ -564,7 +675,10 @@ where
             &net,
         )?;
         let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
     }
 
     sleep(SLEEP);
@@ -572,6 +686,177 @@ where
         times,
         config.network.my_id,
         format!("Poseidon2 rep3 with precomp packed n={}", config.batch_size).as_str(),
+    );
+
+    Ok(ExitCode::SUCCESS)
+}
+
+#[allow(dead_code)]
+fn poseidon2_rep3_circom_accelerator_packed<F: PrimeField, const T: usize>(
+    config: &Config,
+) -> color_eyre::Result<ExitCode>
+where
+    Poseidon2<F, T, 5>: Default,
+{
+    if config.threshold != 1 {
+        eyre::bail!("Threshold must be 1 for rep3");
+    }
+
+    let mut rng = rand::thread_rng();
+
+    let mut times = Vec::with_capacity(config.runs);
+
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
+
+    for i in 0..=config.runs {
+        let share = share_random_input_rep3::<F, T, _, _>(&net, config.batch_size * T, &mut rng)?;
+
+        let poseidon2 = Poseidon2::<F, T, 5>::default();
+
+        let start = Instant::now();
+        let mut precomp = poseidon2.precompute_rep3(config.batch_size, &net, &mut state)?;
+        poseidon2.rep3_permutation_in_place_with_precomputation_intermediate_vec(
+            share,
+            &mut precomp,
+            &net,
+        )?;
+        let duration = start.elapsed().as_micros() as f64;
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
+    }
+
+    sleep(SLEEP);
+    print_runtimes(
+        times,
+        config.network.my_id,
+        format!(
+            "Poseidon2 rep3 circom accelerator packed (vec) n={}",
+            config.batch_size
+        )
+        .as_str(),
+    );
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Fixed batch size used for [`poseidon2_rep3_circom_accelerator_packed_array`]. Unlike the
+/// `_vec` variant above, `rep3_permutation_in_place_with_precomputation_intermediate_packed`
+/// takes the batch size as a const generic (`BATCH_SIZE`) rather than at runtime, so it must be
+/// known at compile time. `config.batch_size` is ignored for this benchmark.
+const PACKED_ARRAY_BATCH_SIZE: usize = 8;
+
+#[allow(dead_code)]
+fn poseidon2_rep3_circom_accelerator_packed_array<F: PrimeField, const T: usize, const T2: usize>(
+    config: &Config,
+) -> color_eyre::Result<ExitCode>
+where
+    Poseidon2<F, T, 5>: Default,
+{
+    if config.threshold != 1 {
+        eyre::bail!("Threshold must be 1 for rep3");
+    }
+    assert_eq!(
+        T2,
+        T * PACKED_ARRAY_BATCH_SIZE,
+        "T2 must equal T * PACKED_ARRAY_BATCH_SIZE"
+    );
+
+    let mut rng = rand::thread_rng();
+
+    let mut times = Vec::with_capacity(config.runs);
+
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
+
+    for i in 0..=config.runs {
+        let share = share_random_input_rep3::<F, T, _, _>(&net, T2, &mut rng)?;
+        let share: [Rep3PrimeFieldShare<F>; T2] = share.try_into().unwrap();
+
+        let poseidon2 = Poseidon2::<F, T, 5>::default();
+
+        let start = Instant::now();
+        let mut precomp = poseidon2.precompute_rep3(PACKED_ARRAY_BATCH_SIZE, &net, &mut state)?;
+        poseidon2.rep3_permutation_in_place_with_precomputation_intermediate_packed::<
+            _,
+            T2,
+            PACKED_ARRAY_BATCH_SIZE,
+        >(share, &mut precomp, &net)?;
+        let duration = start.elapsed().as_micros() as f64;
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
+    }
+
+    sleep(SLEEP);
+    print_runtimes(
+        times,
+        config.network.my_id,
+        format!("Poseidon2 rep3 circom accelerator packed (array) n={PACKED_ARRAY_BATCH_SIZE}")
+            .as_str(),
+    );
+
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Comparison baseline for [`poseidon2_rep3_circom_accelerator_packed_array`]: same fixed batch
+/// size (`PACKED_ARRAY_BATCH_SIZE`) and precomputation, but without computing the circom witness
+/// trace, to isolate the overhead the trace computation adds. Unlike the trace-producing
+/// variant, `rep3_permutation_in_place_with_precomputation_packed` takes a plain slice, so no
+/// const generic batch size is needed here.
+#[allow(dead_code)]
+fn poseidon2_rep3_with_precomp_packed_array<F: PrimeField, const T: usize>(
+    config: &Config,
+) -> color_eyre::Result<ExitCode>
+where
+    Poseidon2<F, T, 5>: Default,
+{
+    if config.threshold != 1 {
+        eyre::bail!("Threshold must be 1 for rep3");
+    }
+
+    let mut rng = rand::thread_rng();
+
+    let mut times = Vec::with_capacity(config.runs);
+
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let mut state = Rep3State::new(&net, A2BType::default())?;
+
+    for i in 0..=config.runs {
+        let mut share =
+            share_random_input_rep3::<F, T, _, _>(&net, PACKED_ARRAY_BATCH_SIZE * T, &mut rng)?;
+
+        let poseidon2 = Poseidon2::<F, T, 5>::default();
+
+        let start = Instant::now();
+        let mut precomp = poseidon2.precompute_rep3(PACKED_ARRAY_BATCH_SIZE, &net, &mut state)?;
+        poseidon2.rep3_permutation_in_place_with_precomputation_packed(
+            &mut share,
+            &mut precomp,
+            &net,
+        )?;
+        let duration = start.elapsed().as_micros() as f64;
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
+    }
+
+    sleep(SLEEP);
+    print_runtimes(
+        times,
+        config.network.my_id,
+        format!("Poseidon2 rep3 with precomp packed (array, no trace) n={PACKED_ARRAY_BATCH_SIZE}")
+            .as_str(),
     );
 
     Ok(ExitCode::SUCCESS)
@@ -604,7 +889,7 @@ where
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let share = share_random_input_rep3::<F, T, _, _>(&net, size, &mut rng)?;
 
         let poseidon2 = Poseidon2::<F, T, D>::default();
@@ -616,7 +901,10 @@ where
             poseidon2.merkle_tree_sponge_rep3::<ARITY, _>(share, &net, &mut state)?;
         }
         let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        // skip the dry run (i == 0)
+        if i > 0 {
+            times.push(duration);
+        }
     }
 
     sleep(SLEEP);
@@ -674,7 +962,7 @@ where
     let network_config = NetworkConfig::try_from(config.network.clone())?;
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
             &net,
             num_parties,
@@ -691,7 +979,6 @@ where
         let preprocessing =
             ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
-        preprocess_times.push(duration);
         let mut state = ShamirState::from(preprocessing);
 
         let start = Instant::now();
@@ -700,8 +987,13 @@ where
             &net,
             &mut state,
         )?;
-        let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        let duration2 = start.elapsed().as_micros() as f64;
+
+        // skip the dry run (i == 0)
+        if i > 0 {
+            preprocess_times.push(duration);
+            times.push(duration2);
+        }
     }
 
     sleep(SLEEP);
@@ -732,7 +1024,7 @@ where
     let network_config = NetworkConfig::try_from(config.network.clone())?;
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
             &net,
             num_parties,
@@ -749,7 +1041,6 @@ where
         let preprocessing =
             ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
-        preprocess_times.push(duration);
         let mut state = ShamirState::from(preprocessing);
 
         let start = Instant::now();
@@ -760,8 +1051,13 @@ where
             &net,
             &mut state,
         )?;
-        let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        let duration2 = start.elapsed().as_micros() as f64;
+
+        // skip the dry run (i == 0)
+        if i > 0 {
+            preprocess_times.push(duration);
+            times.push(duration2);
+        }
     }
 
     sleep(SLEEP);
@@ -774,6 +1070,74 @@ where
         times,
         config.network.my_id,
         "Poseidon2 shamir with precomp -- online",
+    );
+
+    Ok(ExitCode::SUCCESS)
+}
+
+#[allow(dead_code)]
+fn poseidon2_shamir_circom_accelerator<F: PrimeField, const T: usize>(
+    config: &Config,
+) -> color_eyre::Result<ExitCode>
+where
+    Poseidon2<F, T, 5>: Default,
+{
+    let mut rng = rand::thread_rng();
+
+    let mut times = Vec::with_capacity(config.runs);
+    let mut preprocess_times = Vec::with_capacity(config.runs);
+    let num_parties = config.network.parties.len();
+
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+
+    for i in 0..=config.runs {
+        let mut share = share_random_input_shamir::<F, T, _, _>(
+            &net,
+            num_parties,
+            config.threshold,
+            T,
+            &mut rng,
+        )?;
+
+        let poseidon2 = Poseidon2::<F, T, 5>::default();
+
+        // init MPC protocol
+        let num_pairs = poseidon2.rand_required(1, true);
+        let start = Instant::now();
+        let preprocessing =
+            ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
+        let duration = start.elapsed().as_micros() as f64;
+        let mut state = ShamirState::from(preprocessing);
+
+        let start = Instant::now();
+        let mut precomp = poseidon2.precompute_shamir(1, &net, &mut state)?;
+        poseidon2.shamir_permutation_in_place_with_precomputation_intermediate(
+            share.as_mut_slice().try_into().unwrap(),
+            &mut precomp,
+            &net,
+            &mut state,
+        )?;
+        let duration2 = start.elapsed().as_micros() as f64;
+
+        // skip the dry run (i == 0)
+        if i > 0 {
+            preprocess_times.push(duration);
+            times.push(duration2);
+        }
+    }
+
+    sleep(SLEEP);
+    print_runtimes(
+        preprocess_times,
+        config.network.my_id,
+        "Poseidon2 shamir circom accelerator -- rand_generation",
+    );
+    print_runtimes(
+        times,
+        config.network.my_id,
+        "Poseidon2 shamir circom accelerator -- online",
     );
 
     Ok(ExitCode::SUCCESS)
@@ -796,7 +1160,7 @@ where
     let network_config = NetworkConfig::try_from(config.network.clone())?;
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
             &net,
             num_parties,
@@ -813,7 +1177,6 @@ where
         let preprocessing =
             ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
-        preprocess_times.push(duration);
         let mut state = ShamirState::from(preprocessing);
 
         let start = Instant::now();
@@ -824,8 +1187,13 @@ where
             &net,
             &mut state,
         )?;
-        let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        let duration2 = start.elapsed().as_micros() as f64;
+
+        // skip the dry run (i == 0)
+        if i > 0 {
+            preprocess_times.push(duration);
+            times.push(duration2);
+        }
     }
 
     sleep(SLEEP);
@@ -843,6 +1211,82 @@ where
         config.network.my_id,
         format!(
             "Poseidon2 shamir with precomp packed n={} -- online",
+            config.batch_size
+        )
+        .as_str(),
+    );
+
+    Ok(ExitCode::SUCCESS)
+}
+
+#[allow(dead_code)]
+fn poseidon2_shamir_circom_accelerator_packed<F: PrimeField, const T: usize>(
+    config: &Config,
+) -> color_eyre::Result<ExitCode>
+where
+    Poseidon2<F, T, 5>: Default,
+{
+    let mut rng = rand::thread_rng();
+
+    let mut times = Vec::with_capacity(config.runs);
+    let mut preprocess_times = Vec::with_capacity(config.runs);
+    let num_parties = config.network.parties.len();
+
+    // connect to network
+    let network_config = NetworkConfig::try_from(config.network.clone())?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+
+    for i in 0..=config.runs {
+        let share = share_random_input_shamir::<F, T, _, _>(
+            &net,
+            num_parties,
+            config.threshold,
+            config.batch_size * T,
+            &mut rng,
+        )?;
+
+        let poseidon2 = Poseidon2::<F, T, 5>::default();
+
+        // init MPC protocol
+        let num_pairs = poseidon2.rand_required(config.batch_size, true);
+        let start = Instant::now();
+        let preprocessing =
+            ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
+        let duration = start.elapsed().as_micros() as f64;
+        let mut state = ShamirState::from(preprocessing);
+
+        let start = Instant::now();
+        let mut precomp = poseidon2.precompute_shamir(config.batch_size, &net, &mut state)?;
+        poseidon2.shamir_permutation_in_place_with_precomputation_intermediate_vec(
+            share,
+            &mut precomp,
+            &net,
+            &mut state,
+        )?;
+        let duration2 = start.elapsed().as_micros() as f64;
+
+        // skip the dry run (i == 0)
+        if i > 0 {
+            preprocess_times.push(duration);
+            times.push(duration2);
+        }
+    }
+
+    sleep(SLEEP);
+    print_runtimes(
+        preprocess_times,
+        config.network.my_id,
+        format!(
+            "Poseidon2 shamir circom accelerator packed n={} -- rand_generation",
+            config.batch_size
+        )
+        .as_str(),
+    );
+    print_runtimes(
+        times,
+        config.network.my_id,
+        format!(
+            "Poseidon2 shamir circom accelerator packed n={} -- online",
             config.batch_size
         )
         .as_str(),
@@ -876,7 +1320,7 @@ where
     let network_config = NetworkConfig::try_from(config.network.clone())?;
     let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
-    for _ in 0..config.runs {
+    for i in 0..=config.runs {
         let share = share_random_input_shamir::<F, T, _, _>(
             &net,
             num_parties,
@@ -893,7 +1337,6 @@ where
         let preprocessing =
             ShamirPreprocessing::new(num_parties, config.threshold, num_pairs, &net)?;
         let duration = start.elapsed().as_micros() as f64;
-        preprocess_times.push(duration);
         let mut state = ShamirState::from(preprocessing);
 
         let start = Instant::now();
@@ -902,8 +1345,13 @@ where
         } else {
             poseidon2.merkle_tree_sponge_shamir::<ARITY, _>(share, &net, &mut state)?;
         }
-        let duration = start.elapsed().as_micros() as f64;
-        times.push(duration);
+        let duration2 = start.elapsed().as_micros() as f64;
+
+        // skip the dry run (i == 0)
+        if i > 0 {
+            preprocess_times.push(duration);
+            times.push(duration2);
+        }
     }
 
     sleep(SLEEP);
