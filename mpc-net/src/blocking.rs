@@ -288,3 +288,94 @@ impl<R: Read> FrameReader<R> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn write_frame_roundtrips_through_next_frame() {
+        let mut out = Vec::new();
+        write_frame(&mut out, b"hello world").unwrap();
+        let mut reader = FrameReader {
+            stream: out.as_slice(),
+            buf: BytesMut::new(),
+            max_frame_length: 1024,
+        };
+        assert_eq!(&reader.next_frame().unwrap()[..], b"hello world");
+    }
+
+    #[test]
+    fn write_frame_handles_empty_payload() {
+        let mut out = Vec::new();
+        write_frame(&mut out, b"").unwrap();
+        let mut reader = FrameReader {
+            stream: out.as_slice(),
+            buf: BytesMut::new(),
+            max_frame_length: 1024,
+        };
+        assert!(reader.next_frame().unwrap().is_empty());
+    }
+
+    #[test]
+    fn next_frame_reads_frame_larger_than_read_chunk() {
+        // Payload spans multiple `fill` calls since each only grows the buffer by
+        // `READ_CHUNK` bytes.
+        let payload = vec![0x42u8; READ_CHUNK * 2 + 1000];
+        let mut out = Vec::new();
+        write_frame(&mut out, &payload).unwrap();
+        let mut reader = FrameReader {
+            stream: out.as_slice(),
+            buf: BytesMut::new(),
+            max_frame_length: payload.len(),
+        };
+        let frame = reader.next_frame().unwrap();
+        assert_eq!(&frame[..], payload.as_slice());
+    }
+
+    #[test]
+    fn next_frame_reads_multiple_frames_written_to_shared_buffer() {
+        let mut out = Vec::new();
+        write_frame(&mut out, b"first").unwrap();
+        write_frame(&mut out, b"second").unwrap();
+        write_frame(&mut out, b"").unwrap();
+        write_frame(&mut out, b"third").unwrap();
+        let mut reader = FrameReader {
+            stream: out.as_slice(),
+            buf: BytesMut::new(),
+            max_frame_length: 1024,
+        };
+        assert_eq!(&reader.next_frame().unwrap()[..], b"first");
+        assert_eq!(&reader.next_frame().unwrap()[..], b"second");
+        assert!(reader.next_frame().unwrap().is_empty());
+        assert_eq!(&reader.next_frame().unwrap()[..], b"third");
+    }
+
+    #[test]
+    fn next_frame_errors_when_length_exceeds_max() {
+        let mut data = Vec::new();
+        write_frame(&mut data, b"too big").unwrap();
+        let mut reader = FrameReader {
+            stream: data.as_slice(),
+            buf: BytesMut::new(),
+            max_frame_length: 3,
+        };
+        let err = reader.next_frame().unwrap_err();
+        assert!(err.to_string().contains("frame len"));
+    }
+
+    #[test]
+    fn next_frame_errors_on_connection_closed_before_full_frame() {
+        let mut data = Vec::new();
+        write_frame(&mut data, &[0u8; 10]).unwrap();
+        // Truncate so the header claims a 10-byte payload but only 2 bytes follow.
+        data.truncate(8 + 2);
+        let mut reader = FrameReader {
+            stream: data.as_slice(),
+            buf: BytesMut::new(),
+            max_frame_length: 1024,
+        };
+        let err = reader.next_frame().unwrap_err();
+        assert!(err.to_string().contains("connection closed"));
+    }
+}
