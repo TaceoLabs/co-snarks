@@ -32,7 +32,7 @@ enum WriteMsg {
     /// A frame payload to write to the sink.
     Frame(Bytes),
     /// Flush the sink and acknowledge on the given channel.
-    Flush(oneshot::Sender<()>),
+    Flush(oneshot::Sender<eyre::Result<()>>),
 }
 
 type SendEntry = (mpsc::Sender<WriteMsg>, AtomicUsize);
@@ -103,10 +103,11 @@ impl AsyncChannels {
                     WriteMsg::Flush(ack) => {
                         if sink.flush().await.is_err() {
                             tracing::warn!("failed to flush data to party {other_id}");
-                            let _ = ack.send(());
+                            let _ = ack
+                                .send(Err(eyre::eyre!("failed to flush data to party {other_id}")));
                             break;
                         }
-                        let _ = ack.send(());
+                        let _ = ack.send(Ok(()));
                     }
                 }
             }
@@ -160,15 +161,18 @@ impl AsyncChannels {
             let (ack_tx, ack_rx) = oneshot::channel();
             tx.blocking_send(WriteMsg::Flush(ack_tx))
                 .map_err(|_| eyre::eyre!("write task for party {to} terminated"))?;
-            if let Some(timeout) = self.flush_timeout {
+            let result = if let Some(timeout) = self.flush_timeout {
                 self.handle
                     .block_on(async { tokio::time::timeout(timeout, ack_rx).await })
                     .context("timeout while flush")?
-                    .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?;
+                    .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?
             } else {
                 ack_rx
                     .blocking_recv()
-                    .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?;
+                    .map_err(|_| eyre::eyre!("write task for party {to} dropped flush ack"))?
+            };
+            if let Err(e) = result {
+                eyre::bail!("failed to flush send queue for party {to}: {e}");
             }
         }
         Ok(())

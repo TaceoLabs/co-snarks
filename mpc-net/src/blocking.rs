@@ -35,7 +35,7 @@ pub(crate) enum WriteMsg {
     /// a vectored write, so the payload itself is never copied to prepend the header.
     Frame(Bytes),
     /// Flush the stream and acknowledge on the given channel.
-    Flush(Sender<()>),
+    Flush(Sender<std::io::Result<()>>),
 }
 
 /// The per-peer send/receive queues (and byte counters) shared by the blocking transports.
@@ -118,14 +118,17 @@ impl BlockingChannels {
             let (ack_tx, ack_rx) = bounded(1);
             tx.send(WriteMsg::Flush(ack_tx))
                 .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
-            if let Some(timeout) = self.flush_timeout {
+            let result = if let Some(timeout) = self.flush_timeout {
                 ack_rx
                     .recv_timeout(timeout)
-                    .map_err(|_| eyre::eyre!("timed out flushing send queue for party {to}"))?;
+                    .map_err(|_| eyre::eyre!("timed out flushing send queue for party {to}"))?
             } else {
                 ack_rx
                     .recv()
-                    .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?;
+                    .map_err(|_| eyre::eyre!("writer thread for party {to} terminated"))?
+            };
+            if let Err(e) = result {
+                eyre::bail!("failed to flush send queue for party {to}: {e}");
             }
         }
         Ok(())
@@ -162,10 +165,10 @@ fn writer_loop<W: Write>(mut stream: W, rx: Receiver<WriteMsg>) {
             WriteMsg::Flush(ack) => {
                 if let Err(e) = stream.flush() {
                     tracing::warn!("writer thread flush failed: {e}");
-                    let _ = ack.send(());
+                    let _ = ack.send(Err(e));
                     break;
                 }
-                let _ = ack.send(());
+                let _ = ack.send(Ok(()));
             }
         }
     }
