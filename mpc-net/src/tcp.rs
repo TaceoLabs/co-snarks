@@ -101,6 +101,7 @@ impl TcpNetwork {
                                     break stream;
                                 }
                             }
+                            std::thread::sleep(Duration::from_millis(100));
                         };
                         stream.set_write_timeout(timeout)?;
                         stream.set_nodelay(true)?;
