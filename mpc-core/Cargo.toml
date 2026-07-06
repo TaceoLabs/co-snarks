@@ -46,7 +46,6 @@ ark-std = { workspace = true }
 paste.workspace = true
 criterion.workspace = true
 
-
 [[bench]]
 name = "local_mul_vec"
 harness = false
