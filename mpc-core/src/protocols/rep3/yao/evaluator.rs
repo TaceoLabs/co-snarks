@@ -118,12 +118,10 @@ impl<'a, N: Network> Rep3Evaluator<'a, N> {
             gate.copy_from_slice(block.as_ref());
             blocks.push(gate);
         }
-        let (send1, send2) = mpc_net::join(
-            || self.net.send_many(PartyID::ID1, &blocks),
-            || self.net.send_many(PartyID::ID2, &blocks),
-        );
-        send1?;
-        send2?;
+        // The evaluator is ID0, so ID1 and ID2 are the other two parties. This
+        // serializes once and enqueues on the non-blocking send queues, so no
+        // threads are needed.
+        self.net.send_both_many(&blocks)?;
 
         Ok(())
     }
