@@ -45,8 +45,6 @@ hex = "0.4.3"
 ark-std = { workspace = true }
 paste.workspace = true
 criterion.workspace = true
-mpc-net = { version = "0.5.0", path = "../mpc-net", features = ["local"] }
-
 
 [[bench]]
 name = "local_mul_vec"
