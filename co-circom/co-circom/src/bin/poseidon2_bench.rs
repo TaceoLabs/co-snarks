@@ -179,6 +179,18 @@ fn main() -> color_eyre::Result<ExitCode> {
                 >(&config)?;
             }
         }
+        16 => {
+            benches::<F, 16, D, ARITY, COMPRESSION_MODE>(&config)?;
+            if config.network.parties.len() == 3 && config.threshold == 1 && config.batch_size != 0
+            {
+                poseidon2_rep3_with_precomp_packed_array::<F, 16>(&config)?;
+                poseidon2_rep3_circom_accelerator_packed_array::<
+                    F,
+                    16,
+                    { 16 * PACKED_ARRAY_BATCH_SIZE },
+                >(&config)?;
+            }
+        }
         t => {
             eyre::bail!("Unsupported statesize: {}", t);
         }
