@@ -421,6 +421,59 @@ fn run_packed_rep3<const T: usize, const T2: usize, const BATCH_SIZE: usize>(
     (out_states, out_traces)
 }
 
+fn run_vec_rep3<const T: usize>(
+    params: &'static Poseidon2Params<Fr, T, 5>,
+    party_shares: Vec<Vec<Rep3PrimeFieldShare<Fr>>>, // outer: party, inner: flat T*batch elements
+) -> (Vec<Vec<Fr>>, Vec<Vec<Fr>>) {
+    let batch = party_shares[0].len() / T;
+    let (tx, rx) = mpsc::channel();
+    let nets = LocalNetwork::new(NUM_PARTIES);
+    for (net, flat_shares) in nets.into_iter().zip(party_shares) {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            let party_id = net.id();
+            let mut rep3_state = Rep3State::new(&net, A2BType::Yao).unwrap();
+            let poseidon2 = Poseidon2::new(params);
+            let mut precomp = poseidon2
+                .precompute_rep3(batch, &net, &mut rep3_state)
+                .unwrap();
+            let (out_state, out_traces) = poseidon2
+                .rep3_permutation_in_place_with_precomputation_intermediate_vec(
+                    flat_shares,
+                    &mut precomp,
+                    &net,
+                )
+                .unwrap();
+            tx.send((party_id, out_state, out_traces)).unwrap();
+        });
+    }
+    drop(tx);
+    #[expect(clippy::type_complexity)]
+    let mut results: Vec<(
+        usize,
+        Vec<Rep3PrimeFieldShare<Fr>>,
+        Vec<Vec<Rep3PrimeFieldShare<Fr>>>,
+    )> = rx.into_iter().collect();
+    results.sort_by_key(|(id, _, _)| *id);
+
+    let out_states: Vec<Vec<Fr>> = (0..batch)
+        .map(|b| {
+            (0..T)
+                .map(|i| results.iter().map(|(_, s, _)| s[b * T + i].a).sum())
+                .collect()
+        })
+        .collect();
+
+    let out_traces: Vec<Vec<Fr>> = (0..batch)
+        .map(|b| {
+            let per_party_traces: Vec<_> = results.iter().map(|(_, _, ts)| ts[b].clone()).collect();
+            reconstruct_rep3_vec(&per_party_traces)
+        })
+        .collect();
+
+    (out_states, out_traces)
+}
+
 fn run_plain<const T: usize>(
     params: &'static Poseidon2Params<Fr, T, 5>,
     input: [Fr; T],
@@ -527,6 +580,69 @@ macro_rules! define_tests {
                         trace,
                         &kat,
                         &format!(concat!("vec_shamir T=", stringify!($T), " slot={}"), slot),
+                    );
+                }
+            }
+
+            #[test]
+            fn [<kat_vec_rep3_t $T>]() {
+                let kat = parse_kat($T);
+                let mut rng = StdRng::seed_from_u64(42);
+                let input = $input_fn();
+                // Build 2 identical copies as the batch
+                let batch = 2usize;
+                let per_slot: Vec<Vec<[Rep3PrimeFieldShare<Fr>; $T]>> =
+                    (0..batch).map(|_| share_state_rep3(&input, &mut rng)).collect();
+                // flat: party → Vec of T*batch shares
+                let flat_per_party: Vec<Vec<Rep3PrimeFieldShare<Fr>>> = (0..NUM_PARTIES)
+                    .map(|p| {
+                        (0..batch)
+                            .flat_map(|slot| per_slot[slot][p].iter().copied())
+                            .collect()
+                    })
+                    .collect();
+                let (_, traces) = run_vec_rep3(&$params, flat_per_party);
+                for (slot, trace) in traces.iter().enumerate() {
+                    check_kat(
+                        trace,
+                        &kat,
+                        &format!(concat!("vec_rep3 T=", stringify!($T), " slot={}"), slot),
+                    );
+                }
+            }
+
+            #[test]
+            fn [<random_vec_rep3_t $T>]() {
+                let mut rng = StdRng::from_entropy();
+                let batch = 3usize;
+                let inputs: Vec<[Fr; $T]> =
+                    (0..batch).map(|_| array::from_fn(|_| Fr::rand(&mut rng))).collect();
+                let expected_traces: Vec<Vec<Fr>> = inputs
+                    .iter()
+                    .map(|input| run_plain(&$params, *input).1)
+                    .collect();
+                let per_slot: Vec<Vec<[Rep3PrimeFieldShare<Fr>; $T]>> = inputs
+                    .iter()
+                    .map(|input| share_state_rep3(input, &mut rng))
+                    .collect();
+                let flat_per_party: Vec<Vec<Rep3PrimeFieldShare<Fr>>> = (0..NUM_PARTIES)
+                    .map(|p| {
+                        (0..batch)
+                            .flat_map(|slot| per_slot[slot][p].iter().copied())
+                            .collect()
+                    })
+                    .collect();
+                let (_, traces) = run_vec_rep3(&$params, flat_per_party);
+                for (slot, (trace, expected)) in traces.iter().zip(expected_traces.iter()).enumerate() {
+                    check_kat(
+                        trace,
+                        expected,
+                        &format!(concat!("random_vec_rep3 T=", stringify!($T), " slot={}"), slot),
+                    );
+                    check_kat(
+                        expected,
+                        trace,
+                        &format!(concat!("random_vec_rep3_inv T=", stringify!($T), " slot={}"), slot),
                     );
                 }
             }
