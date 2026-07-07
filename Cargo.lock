@@ -942,7 +942,7 @@ dependencies = [
  "compiler",
  "constraint_generation",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-core",
  "parser",
  "program_structure",
@@ -962,7 +962,7 @@ dependencies = [
  "bincode",
  "co-circom-types",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-core",
  "mpc-net",
  "num-bigint 0.4.6",
@@ -1052,7 +1052,7 @@ dependencies = [
  "co-noir-types",
  "eyre",
  "intmap",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "libaes",
  "mpc-core",
  "mpc-net",
@@ -1078,7 +1078,7 @@ dependencies = [
  "ark-ff 0.5.0",
  "brillig",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-core",
  "mpc-net",
  "num-bigint 0.4.6",
@@ -1103,7 +1103,7 @@ dependencies = [
  "co-noir-common",
  "co-ultrahonk",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-core",
  "mpc-net",
  "noir-types",
@@ -1232,7 +1232,7 @@ dependencies = [
  "ark-poly",
  "ark-serialize 0.5.0",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-core",
  "mpc-net",
  "noir-types",
@@ -1270,7 +1270,7 @@ dependencies = [
  "ark-serialize 0.5.0",
  "co-circom-types",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-core",
  "mpc-net",
  "num-traits",
@@ -1294,7 +1294,7 @@ dependencies = [
  "co-noir-common",
  "criterion",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-core",
  "mpc-net",
  "noir-types",
@@ -2495,6 +2495,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2813,7 +2822,7 @@ dependencies = [
  "eyre",
  "fancy-garbling",
  "hex",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-net",
  "nom",
  "num-bigint 0.4.6",
@@ -2844,7 +2853,7 @@ dependencies = [
  "futures",
  "humantime-serde",
  "intmap",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "parking_lot",
  "quinn",
  "rcgen",
@@ -4599,7 +4608,7 @@ dependencies = [
  "co-plonk",
  "co-ultrahonk",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "libaes",
  "mpc-core",
  "mpc-net",
@@ -4964,7 +4973,7 @@ dependencies = [
  "ark-poly",
  "co-noir-common",
  "eyre",
- "itertools 0.14.0",
+ "itertools 0.15.0",
  "mpc-core",
  "noir-types",
  "num-bigint 0.4.6",
