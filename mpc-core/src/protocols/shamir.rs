@@ -10,7 +10,7 @@ use rand::{CryptoRng, Rng, SeedableRng};
 use rngs::ShamirRng;
 use std::time::Instant;
 
-use crate::{MpcState, RngType};
+use crate::{MpcState, RngType, protocols::wire::WireFormat};
 
 pub use arithmetic::types::ShamirPrimeFieldShare;
 pub use pointshare::types::ShamirPointShare;
@@ -37,7 +37,10 @@ impl<F: PrimeField> ShamirPreprocessing<F> {
         threshold: usize,
         amount: usize,
         net: &N,
-    ) -> eyre::Result<Self> {
+    ) -> eyre::Result<Self>
+    where
+        F: WireFormat,
+    {
         if 2 * threshold + 1 > num_parties {
             eyre::bail!("Threshold too large for number of parties")
         }
@@ -124,7 +127,10 @@ impl<F: PrimeField> ShamirState<F> {
     const DEFAULT_PAIR_GEN_AMOUNT: usize = 1024;
 
     /// Get a correlated randomness pair
-    pub fn get_pair<N: Network>(&mut self, net: &N) -> eyre::Result<(F, F)> {
+    pub fn get_pair<N: Network>(&mut self, net: &N) -> eyre::Result<(F, F)>
+    where
+        F: WireFormat,
+    {
         if self.rng_buffer.r_t.is_empty() {
             debug_assert!(self.rng_buffer.r_2t.is_empty());
             if self.rng_buffer.num_parties != 3 {
@@ -143,7 +149,10 @@ impl<F: PrimeField> ShamirState<F> {
     }
 
     /// Makes sure that num_triples are already preprocessed. It will thus create present_triples - num_triples new triples if not enough are present.
-    pub fn buffer_triples<N: Network>(&mut self, net: &N, num_triples: usize) -> eyre::Result<()> {
+    pub fn buffer_triples<N: Network>(&mut self, net: &N, num_triples: usize) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         let present_triples = self.rng_buffer.r_t.len();
         debug_assert_eq!(self.rng_buffer.r_2t.len(), present_triples);
         if present_triples >= num_triples {
@@ -157,7 +166,10 @@ impl<F: PrimeField> ShamirState<F> {
     }
 
     /// Generates a random field element and returns it as a share.
-    pub fn rand<N: Network>(&mut self, net: &N) -> eyre::Result<ShamirPrimeFieldShare<F>> {
+    pub fn rand<N: Network>(&mut self, net: &N) -> eyre::Result<ShamirPrimeFieldShare<F>>
+    where
+        F: WireFormat,
+    {
         self.get_pair(net)
             .map(|(r, _)| ShamirPrimeFieldShare::new(r))
     }

@@ -10,6 +10,7 @@ use mpc_core::protocols::shamir::network::ShamirNetworkExt;
 use mpc_core::protocols::shamir::{
     ShamirPointShare, ShamirPrimeFieldShare, arithmetic, pointshare, poly,
 };
+use mpc_core::protocols::wire::WireFormat;
 use mpc_net::Network;
 use num_traits::Zero;
 use rayon::prelude::*;
@@ -18,7 +19,10 @@ use rayon::prelude::*;
 #[derive(Debug)]
 pub struct ShamirUltraHonkDriver;
 
-impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver
+where
+    P::ScalarField: WireFormat,
+{
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;

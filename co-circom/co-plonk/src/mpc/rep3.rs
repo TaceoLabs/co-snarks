@@ -5,6 +5,7 @@ use mpc_core::{
     protocols::rep3::{
         Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, pointshare, poly,
     },
+    protocols::wire::WireFormat,
 };
 use mpc_net::Network;
 
@@ -13,7 +14,10 @@ use super::CircomPlonkProver;
 /// A Plonk driver for REP3 secret sharing
 pub struct Rep3PlonkDriver;
 
-impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
+impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver
+where
+    P::ScalarField: WireFormat,
+{
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShareG1 = Rep3PointShare<P::G1>;
     type PointShareG2 = Rep3PointShare<P::G2>;

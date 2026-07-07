@@ -13,10 +13,21 @@ use super::{
     ShamirPointShare, ShamirPrimeFieldShare, ShamirState, evaluate_poly, evaluate_poly_point,
     poly_with_zeros_from_precomputed, poly_with_zeros_from_precomputed_point,
 };
+use crate::protocols::wire::{self, WireFormat};
 
 const KING_ID: usize = 0;
 
 /// A extension trait that Shamir specific methods to [`Network`].
+///
+/// The `_raw` methods (e.g. [`send_many_raw`](ShamirNetworkExt::send_many_raw),
+/// [`recv_many_raw`](ShamirNetworkExt::recv_many_raw)) and the ark-format
+/// methods (e.g. [`send_many`](ShamirNetworkExt::send_many)) use two
+/// incompatible wire formats: a logical message sent with a `_raw` method
+/// must be received with a `_raw` method, and one sent with an ark-format
+/// method must be received with an ark-format method. Keep all legs of one
+/// exchange co-located in the same function so they flip together under
+/// refactors, rather than letting one leg's format drift out of sync with
+/// the others.
 pub trait ShamirNetworkExt: Network {
     /// Sends data to the target party
     #[inline(always)]
@@ -53,6 +64,22 @@ pub trait ShamirNetworkExt: Network {
         let res = Vec::<F>::deserialize_uncompressed_unchecked(&data[..])?;
 
         Ok(res)
+    }
+
+    /// Sends a slice of elements to the target party in the raw wire format
+    /// (see [`wire`]). The receiving side must use
+    /// [`recv_many_raw`](Self::recv_many_raw), never the ark-format methods.
+    #[inline(always)]
+    fn send_many_raw<F: WireFormat>(&self, to: usize, data: &[F]) -> eyre::Result<()> {
+        self.send(to, wire::to_bytes(data))
+    }
+
+    /// Receives a vector of elements in the raw wire format (see [`wire`])
+    /// from the party with the given id. The sending side must use
+    /// [`send_many_raw`](Self::send_many_raw), never the ark-format methods.
+    #[inline(always)]
+    fn recv_many_raw<F: WireFormat>(&self, from: usize) -> eyre::Result<Vec<F>> {
+        wire::from_bytes(self.recv(from)?)
     }
 
     /// Send and receive data to and from all parties.
@@ -127,7 +154,7 @@ pub trait ShamirNetworkExt: Network {
 
     /// Degree reduce
     #[inline(always)]
-    fn degree_reduce<F: PrimeField>(
+    fn degree_reduce<F: PrimeField + WireFormat>(
         &self,
 
         state: &mut ShamirState<F>,
@@ -147,7 +174,7 @@ pub trait ShamirNetworkExt: Network {
 
     /// Degree reduce many
     #[inline(always)]
-    fn degree_reduce_many<F: PrimeField>(
+    fn degree_reduce_many<F: PrimeField + WireFormat>(
         &self,
 
         state: &mut ShamirState<F>,
@@ -177,7 +204,7 @@ pub trait ShamirNetworkExt: Network {
                         *acc += *muls * lagrange;
                     }
                 } else {
-                    let r = self.recv_many::<F>(other_id)?;
+                    let r = self.recv_many_raw::<F>(other_id)?;
                     if r.len() != len {
                         eyre::bail!(
                             "During execution of degree_reduce_vec in MPC: Invalid number of elements received"
@@ -213,17 +240,17 @@ pub trait ShamirNetworkExt: Network {
                 if id == my_id {
                     my_share = vals;
                 } else {
-                    self.send_many(id, &vals)?;
+                    self.send_many_raw(id, &vals)?;
                 }
             }
             my_share
         } else {
             if my_id <= state.threshold * 2 {
                 // Only send if my items are required
-                self.send_many(KING_ID, &inputs)?;
+                self.send_many_raw(KING_ID, &inputs)?;
             }
             if my_id < num_non_zero {
-                let r = self.recv_many::<F>(KING_ID)?;
+                let r = self.recv_many_raw::<F>(KING_ID)?;
                 if r.len() != len {
                     eyre::bail!(
                         "During execution of degree_reduce_vec in MPC: Invalid number of elements received"
@@ -243,7 +270,7 @@ pub trait ShamirNetworkExt: Network {
 
     /// Degree reduce point
     #[inline(always)]
-    fn degree_reduce_point<C, F: PrimeField>(
+    fn degree_reduce_point<C, F: PrimeField + WireFormat>(
         &self,
 
         state: &mut ShamirState<F>,

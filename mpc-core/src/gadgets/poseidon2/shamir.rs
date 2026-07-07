@@ -2,6 +2,7 @@ use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::shamir::{
     ShamirPrimeFieldShare, ShamirState, arithmetic, network::ShamirNetworkExt,
 };
+use crate::protocols::wire::WireFormat;
 use ark_ff::PrimeField;
 use mpc_net::Network;
 
@@ -37,7 +38,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         num_poseidon: usize,
         net: &N,
         state: &mut ShamirState<F>,
-    ) -> eyre::Result<Poseidon2Precomputations<ShamirPrimeFieldShare<F>>> {
+    ) -> eyre::Result<Poseidon2Precomputations<ShamirPrimeFieldShare<F>>>
+    where
+        F: WireFormat,
+    {
         assert_eq!(D, 5);
         let num_sbox = self.num_sbox() * num_poseidon;
 
@@ -156,7 +160,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         input: &mut [F; T],
         net: &N,
         state: &mut ShamirState<F>,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         assert_eq!(D, 5);
         // Square
         let inp = input.iter().map(|i| i.square()).collect();
@@ -180,7 +187,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         input: &mut F,
         net: &N,
         state: &mut ShamirState<F>,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         assert_eq!(D, 5);
         // Square
         let mut sq = net.degree_reduce(state, input.square())?.a;
@@ -301,7 +311,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         r: usize,
         net: &N,
         shamir_state: &mut ShamirState<F>,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         self.add_rc_external(state, r);
         Self::sbox_shamir(state, net, shamir_state)?;
         Self::matmul_external(state);
@@ -315,7 +328,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         r: usize,
         net: &N,
         shamir_state: &mut ShamirState<F>,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         self.add_rc_internal(state, r);
         Self::single_sbox_shamir(&mut state[0], net, shamir_state)?;
         self.matmul_internal(state);
@@ -404,7 +420,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         state: &mut [ShamirPrimeFieldShare<F>; T],
         net: &N,
         shamir_state: &mut ShamirState<F>,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         // Linear layer at beginning
         let state = Self::matmul_external_shamir(state);
 
@@ -434,7 +453,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         state: &[ShamirPrimeFieldShare<F>; T],
         net: &N,
         shamir_state: &mut ShamirState<F>,
-    ) -> eyre::Result<[ShamirPrimeFieldShare<F>; T]> {
+    ) -> eyre::Result<[ShamirPrimeFieldShare<F>; T]>
+    where
+        F: WireFormat,
+    {
         let mut state = state.to_owned();
         self.shamir_permutation_in_place(&mut state, net, shamir_state)?;
         Ok(state)

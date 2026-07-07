@@ -5,6 +5,7 @@ use mpc_core::{
     protocols::shamir::{
         ShamirPrimeFieldShare, ShamirState, arithmetic, network::ShamirNetworkExt, pointshare,
     },
+    protocols::wire::WireFormat,
 };
 use mpc_net::Network;
 use rayon::prelude::*;
@@ -12,7 +13,10 @@ use rayon::prelude::*;
 /// A Groth16 driver using shamir secret sharing
 pub struct ShamirGroth16Driver;
 
-impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
+impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver
+where
+    P::ScalarField: WireFormat,
+{
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type ArithmeticHalfShare = P::ScalarField;
     type PointHalfShare<C>

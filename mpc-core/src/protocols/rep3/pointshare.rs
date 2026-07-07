@@ -8,6 +8,8 @@ use itertools::{Itertools, izip};
 use mpc_net::Network;
 use rayon::prelude::*;
 
+use crate::protocols::wire::WireFormat;
+
 use super::{
     Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, conversion, id::PartyID,
     network::Rep3NetworkExt,
@@ -242,7 +244,7 @@ pub fn is_zero_many<C: CurveGroup, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<(bool, bool)>>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: PrimeField + WireFormat,
 {
     let input_len = x.len();
     let (a_x, _, b_x, _) = conversion::point_share_to_fieldshares_pre_many::<C, N>(x, net, state)?;

@@ -407,6 +407,38 @@ mod field_share {
     }
 
     #[test]
+    fn rep3_raw_wire_methods() {
+        let nets = LocalNetwork::new_3_parties();
+        let mut rng = thread_rng();
+        // All parties use the same values, so every receive must equal `vals`.
+        let vals: Vec<ark_bn254::Fr> = (0..67).map(|_| ark_bn254::Fr::rand(&mut rng)).collect();
+        let mut threads = vec![];
+        for net in nets {
+            let vals = vals.clone();
+            threads.push(std::thread::spawn(move || -> eyre::Result<()> {
+                let id = PartyID::try_from(net.id())?;
+                let recv = net.reshare_many_raw(&vals)?;
+                assert_eq!(recv, vals);
+                let (prev, next) = net.broadcast_many_raw(&vals)?;
+                assert_eq!(prev, vals);
+                assert_eq!(next, vals);
+                let recv = net.send_and_recv_many_raw(id.next(), &vals, id.prev())?;
+                assert_eq!(recv, vals);
+                net.send_next_many_raw(&vals)?;
+                let recv: Vec<ark_bn254::Fr> = net.recv_prev_many_raw()?;
+                assert_eq!(recv, vals);
+                net.send_many_raw(id.prev(), &vals)?;
+                let recv: Vec<ark_bn254::Fr> = net.recv_many_raw(id.next())?;
+                assert_eq!(recv, vals);
+                Ok(())
+            }));
+        }
+        for t in threads {
+            t.join().unwrap().unwrap();
+        }
+    }
+
+    #[test]
     fn rep3_neg() {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
@@ -3678,6 +3710,7 @@ mod curve_share {
         conversion::{self, A2BType},
         pointshare, Rep3BigUintShare, Rep3State,
     };
+    use mpc_core::protocols::wire::WireFormat;
     use mpc_net::local::LocalNetwork;
     use num_bigint::BigUint;
     use rand::thread_rng;
@@ -3881,7 +3914,7 @@ mod curve_share {
 
     fn to_fieldshares_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: PrimeField + WireFormat,
     {
         let mut rng = thread_rng();
         let point_shares = rep3::share_curve_points(points, &mut rng);
@@ -3985,7 +4018,7 @@ mod curve_share {
 
     fn from_fieldshares<C: CurveGroup>(point: C)
     where
-        C::BaseField: PrimeField,
+        C::BaseField: PrimeField + WireFormat,
     {
         let mut rng = thread_rng();
         let (x, y) = point.into_affine().xy().unwrap_or_default();
@@ -4026,7 +4059,7 @@ mod curve_share {
 
     fn from_fieldshares_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: PrimeField + WireFormat,
     {
         let mut rng = thread_rng();
         let coords: Vec<_> = points
@@ -4150,7 +4183,7 @@ mod curve_share {
 
     fn point_is_zero_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: PrimeField + WireFormat,
     {
         let mut rng = thread_rng();
         let mut shares: [Vec<_>; 3] = [

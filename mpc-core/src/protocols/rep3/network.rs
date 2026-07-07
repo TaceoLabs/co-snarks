@@ -7,8 +7,20 @@ use bytes::Bytes;
 use mpc_net::Network;
 
 use super::id::PartyID;
+use crate::protocols::wire::{self, WireFormat};
 
 /// A extension trait that REP3 specific methods to [`Network`].
+///
+/// The `_raw` methods (e.g. [`reshare_many_raw`](Rep3NetworkExt::reshare_many_raw),
+/// [`send_next_many_raw`](Rep3NetworkExt::send_next_many_raw),
+/// [`recv_prev_many_raw`](Rep3NetworkExt::recv_prev_many_raw)) and the
+/// ark-format methods (e.g. [`reshare_many`](Rep3NetworkExt::reshare_many))
+/// use two incompatible wire formats: a logical message sent with a `_raw`
+/// method must be received with a `_raw` method, and one sent with an
+/// ark-format method must be received with an ark-format method. Keep all
+/// legs of one exchange co-located in the same function so they flip
+/// together under refactors, rather than letting one leg's format drift out
+/// of sync with the others.
 pub trait Rep3NetworkExt: Network {
     /// Sends `data` to the next party and receives from the previous party.
     #[inline(always)]
@@ -90,6 +102,74 @@ pub trait Rep3NetworkExt: Network {
         self.send(id.prev().into(), ser_data.clone())?;
         self.send(id.next().into(), ser_data)?;
         Ok(())
+    }
+
+    /// Sends a slice of elements to the target party in the raw wire format
+    /// (see [`wire`]). The receiving side must use
+    /// [`recv_many_raw`](Self::recv_many_raw), never the ark-format methods.
+    #[inline(always)]
+    fn send_many_raw<F: WireFormat>(&self, to: PartyID, data: &[F]) -> eyre::Result<()> {
+        self.send(to.into(), wire::to_bytes(data))
+    }
+
+    /// Sends a slice of elements to the next party in the raw wire format.
+    #[inline(always)]
+    fn send_next_many_raw<F: WireFormat>(&self, data: &[F]) -> eyre::Result<()> {
+        let id = PartyID::try_from(self.id())?;
+        self.send_many_raw(id.next(), data)
+    }
+
+    /// Receives a vector of elements in the raw wire format (see [`wire`])
+    /// from the party with the given id. The sending side must use
+    /// [`send_many_raw`](Self::send_many_raw), never the ark-format methods.
+    #[inline(always)]
+    fn recv_many_raw<F: WireFormat>(&self, from: PartyID) -> eyre::Result<Vec<F>> {
+        wire::from_bytes(self.recv(from.into())?)
+    }
+
+    /// Receives a vector of elements in the raw wire format from the previous
+    /// party.
+    #[inline(always)]
+    fn recv_prev_many_raw<F: WireFormat>(&self) -> eyre::Result<Vec<F>> {
+        let id = PartyID::try_from(self.id())?;
+        self.recv_many_raw(id.prev())
+    }
+
+    /// Performs multiple reshares with one networking round in the raw wire
+    /// format: sends `data` to the next party and receives from the previous.
+    #[inline(always)]
+    fn reshare_many_raw<F: WireFormat>(&self, data: &[F]) -> eyre::Result<Vec<F>> {
+        let id = PartyID::try_from(self.id())?;
+        self.send_many_raw(id.next(), data)?;
+        self.recv_many_raw(id.prev())
+    }
+
+    /// Broadcasts a slice of elements to the other two parties and receives
+    /// theirs, in the raw wire format. Serializes once; see
+    /// [`broadcast_many`](Self::broadcast_many) for the send/receive ordering
+    /// rationale.
+    #[inline(always)]
+    fn broadcast_many_raw<F: WireFormat>(&self, data: &[F]) -> eyre::Result<(Vec<F>, Vec<F>)> {
+        let id = PartyID::try_from(self.id())?;
+        let ser_data = wire::to_bytes(data);
+        // `clone` on `Bytes` is a refcount bump, not a copy
+        self.send(id.prev().into(), ser_data.clone())?;
+        self.send(id.next().into(), ser_data)?;
+        let prev_res = self.recv_many_raw(id.prev())?;
+        let next_res = self.recv_many_raw(id.next())?;
+        Ok((prev_res, next_res))
+    }
+
+    /// Sends to `to` and receives from `from`, in the raw wire format.
+    #[inline(always)]
+    fn send_and_recv_many_raw<F: WireFormat>(
+        &self,
+        to: PartyID,
+        data: &[F],
+        from: PartyID,
+    ) -> eyre::Result<Vec<F>> {
+        self.send_many_raw(to, data)?;
+        self.recv_many_raw(from)
     }
 
     /// Sends data to the target party.

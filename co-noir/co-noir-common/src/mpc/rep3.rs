@@ -8,6 +8,7 @@ use ark_ff::{Field, Zero};
 use itertools::izip;
 use mpc_core::protocols::rep3::Rep3BigUintShare;
 use mpc_core::protocols::rep3::conversion;
+use mpc_core::protocols::wire::WireFormat;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
@@ -21,7 +22,11 @@ use std::any::TypeId;
 #[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
-impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver
+where
+    P::ScalarField: WireFormat,
+    P::BaseField: WireFormat,
+{
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;

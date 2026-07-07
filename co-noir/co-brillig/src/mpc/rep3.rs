@@ -9,6 +9,7 @@ use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{self, Rep3BitShare, Rep3RingShare};
+use mpc_core::protocols::wire::WireFormat;
 use mpc_net::Network;
 use num_bigint::BigUint;
 use num_traits::AsPrimitive;
@@ -73,7 +74,7 @@ impl<'a, F: PrimeField, N: Network> Rep3BrilligDriver<'a, F, N> {
     }
 }
 
-impl<F: PrimeField> Rep3BrilligType<F> {
+impl<F: PrimeField + WireFormat> Rep3BrilligType<F> {
     /// Creates a new public field element from the provided field
     pub fn public_field(val: F) -> Self {
         Self::Public(Public::Field(val))
@@ -190,7 +191,7 @@ where
     }
 }
 
-impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> {
+impl<F: PrimeField + WireFormat, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> {
     type BrilligType = Rep3BrilligType<F>;
 
     fn fork(&mut self) -> eyre::Result<(Self, Self)> {

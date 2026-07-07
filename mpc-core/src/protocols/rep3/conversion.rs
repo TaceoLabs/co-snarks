@@ -3,6 +3,7 @@
 //! This module contains conversions between share types
 
 use crate::protocols::rep3::{PartyID, arithmetic::BinaryShare};
+use crate::protocols::wire::WireFormat;
 
 use super::{
     Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, detail,
@@ -353,7 +354,7 @@ pub fn bit_inject<F: PrimeField, N: Network>(
 }
 
 /// Translates a vector of shared bit into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
-pub fn bit_inject_many<F: PrimeField, N: Network>(
+pub fn bit_inject_many<F: PrimeField + WireFormat, N: Network>(
     x: &[Rep3BigUintShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -376,10 +377,10 @@ pub fn bit_inject_many<F: PrimeField, N: Network>(
                 res_a.push(r0);
             }
             // Send to P1
-            net.send_next_many(&res_a)?;
+            net.send_next_many_raw(&res_a)?;
 
             // Receive from P2
-            let res_b: Vec<F> = net.recv_prev_many()?;
+            let res_b: Vec<F> = net.recv_prev_many_raw()?;
             if res_b.len() != x.len() {
                 eyre::bail!("Received wrong number of elements");
             }
@@ -395,10 +396,10 @@ pub fn bit_inject_many<F: PrimeField, N: Network>(
                 });
             }
             // Send to P2
-            net.send_next_many(&res_a)?;
+            net.send_next_many_raw(&res_a)?;
 
             // Receive from P0
-            let res_b: Vec<F> = net.recv_prev_many()?;
+            let res_b: Vec<F> = net.recv_prev_many_raw()?;
             if res_b.len() != x.len() {
                 eyre::bail!("Received wrong number of elements");
             }
@@ -406,7 +407,7 @@ pub fn bit_inject_many<F: PrimeField, N: Network>(
         }
         PartyID::ID2 => {
             // Receive from P1
-            let res_b: Vec<F> = net.recv_prev_many()?;
+            let res_b: Vec<F> = net.recv_prev_many_raw()?;
             if res_b.len() != x.len() {
                 eyre::bail!("Received wrong number of elements");
             }
@@ -420,7 +421,7 @@ pub fn bit_inject_many<F: PrimeField, N: Network>(
             }
 
             // Send to P0
-            net.send_next_many(&res_a)?;
+            net.send_next_many_raw(&res_a)?;
             res_b
         }
     };
@@ -887,7 +888,7 @@ pub(crate) fn point_share_to_fieldshares_pre_many<C: CurveGroup, N: Network>(
     Vec<Rep3PrimeFieldShare<C::BaseField>>,
 )>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: PrimeField + WireFormat,
 {
     assert!(
         x.iter()
@@ -959,7 +960,7 @@ where
     // reshare x01
     let mut reshared_inputs: Vec<_> = x01_x.iter().map(|el| el.a.to_owned()).collect();
     reshared_inputs.extend(x01_y.iter().map(|el| el.a.to_owned()));
-    let local_b = net.reshare_many(&reshared_inputs)?;
+    let local_b = net.reshare_many_raw(&reshared_inputs)?;
     if local_b.len() != 2 * input_len {
         eyre::bail!("Expected 2*{input_len} elements");
     }
@@ -1003,7 +1004,7 @@ pub fn point_share_to_fieldshares_many<C: CurveGroup, N: Network>(
     Vec<Rep3PrimeFieldShare<C::BaseField>>,
 )>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: PrimeField + WireFormat,
 {
     let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre_many(x, net, state)?;
     detail::point_addition_many(&x01_x, &x01_y, &x2_x, &x2_y, net, state)
@@ -1018,7 +1019,7 @@ pub fn fieldshares_to_pointshare<C: CurveGroup, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PointShare<C>>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: PrimeField + WireFormat,
 {
     let mut y_x = Rep3PrimeFieldShare::zero_share();
     let mut y_y = Rep3PrimeFieldShare::zero_share();
@@ -1120,7 +1121,7 @@ pub fn fieldshares_to_pointshare_many<C: CurveGroup, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PointShare<C>>>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: PrimeField + WireFormat,
 {
     let mut y_x = vec![Rep3PrimeFieldShare::zero_share(); x.len()];
     let mut y_y = vec![Rep3PrimeFieldShare::zero_share(); x.len()];
@@ -1247,8 +1248,8 @@ where
 
     match state.id {
         PartyID::ID0 => {
-            net.send_next_many(&z_b)?;
-            let rcv = net.recv_prev_many::<C::BaseField>()?;
+            net.send_next_many_raw(&z_b)?;
+            let rcv = net.recv_prev_many_raw::<C::BaseField>()?;
             if rcv.len() != 3 * x.len() {
                 eyre::bail!("Expected 3 * {} elements", x.len());
             }
@@ -1261,7 +1262,7 @@ where
             }
         }
         PartyID::ID1 => {
-            let rcv = net.recv_prev_many::<C::BaseField>()?;
+            let rcv = net.recv_prev_many_raw::<C::BaseField>()?;
             if rcv.len() != 3 * x.len() {
                 eyre::bail!("Expected 3 * {} elements", x.len());
             }
@@ -1274,7 +1275,7 @@ where
             }
         }
         PartyID::ID2 => {
-            net.send_next_many(&z_b)?;
+            net.send_next_many_raw(&z_b)?;
         }
     }
 

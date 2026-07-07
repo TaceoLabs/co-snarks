@@ -8,6 +8,7 @@ use mpc_core::protocols::shamir::network::ShamirNetworkExt;
 use mpc_core::protocols::shamir::{
     ShamirPointShare, ShamirPrimeFieldShare, ShamirState, arithmetic, pointshare,
 };
+use mpc_core::protocols::wire::WireFormat;
 use mpc_net::Network;
 
 use super::CircomPlonkProver;
@@ -15,7 +16,10 @@ use super::CircomPlonkProver;
 /// A Plonk driver using shamir secret sharing
 pub struct ShamirPlonkDriver;
 
-impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver {
+impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver
+where
+    P::ScalarField: WireFormat,
+{
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShareG1 = ShamirPointShare<P::G1>;
     type PointShareG2 = ShamirPointShare<P::G2>;

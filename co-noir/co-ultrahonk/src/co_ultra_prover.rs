@@ -24,6 +24,7 @@ use co_noir_common::{
 use mpc_core::protocols::{
     rep3::{Rep3State, conversion::A2BType},
     shamir::{ShamirPreprocessing, ShamirState},
+    wire::WireFormat,
 };
 use mpc_net::Network;
 use noir_types::HonkProof;
@@ -90,6 +91,9 @@ impl<
 
 impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     Rep3CoUltraHonk<C, H>
+where
+    C::ScalarField: WireFormat,
+    C::BaseField: WireFormat,
 {
     #[expect(clippy::type_complexity)]
     pub fn prove<N: Network>(
@@ -110,6 +114,8 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
 
 impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     ShamirCoUltraHonk<C, H>
+where
+    C::ScalarField: WireFormat,
 {
     #[expect(clippy::type_complexity)]
     pub fn prove<N: Network>(

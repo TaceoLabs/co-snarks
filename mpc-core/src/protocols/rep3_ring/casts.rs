@@ -6,6 +6,7 @@ use super::{Rep3RingShare, conversion, ring::int_ring::IntRing2k, yao};
 use crate::protocols::{
     rep3::{self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, conversion::A2BType},
     rep3_ring::ring::{bit::Bit, ring_impl::RingElement},
+    wire::WireFormat,
 };
 use ark_ff::PrimeField;
 use mpc_net::Network;
@@ -33,7 +34,7 @@ where
 }
 
 /// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the ring_to_field cast.
-pub fn ring_to_field_selector<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_selector<T: IntRing2k, F: PrimeField + WireFormat, N: Network>(
     x: Rep3RingShare<T>,
     net: &N,
     state: &mut Rep3State,
@@ -211,7 +212,7 @@ where
 }
 
 /// A cast of a Rep3RingShare to a Rep3PrimeFieldShare
-pub fn ring_to_field_a2b_many<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_a2b_many<T: IntRing2k, F: PrimeField + WireFormat, N: Network>(
     shares: &[Rep3RingShare<T>],
     net: &N,
     state: &mut Rep3State,

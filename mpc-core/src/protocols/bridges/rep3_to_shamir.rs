@@ -1,3 +1,4 @@
+use crate::protocols::wire::WireFormat;
 use crate::protocols::{
     rep3::{Rep3PointShare, Rep3PrimeFieldShare},
     shamir::{ShamirPointShare, ShamirPrimeFieldShare, ShamirState, network::ShamirNetworkExt},
@@ -12,7 +13,10 @@ impl<F: PrimeField> ShamirState<F> {
         &mut self,
         input: Rep3PrimeFieldShare<F>,
         net: &N,
-    ) -> eyre::Result<ShamirPrimeFieldShare<F>> {
+    ) -> eyre::Result<ShamirPrimeFieldShare<F>>
+    where
+        F: WireFormat,
+    {
         // Essentially, a mul function
         let my_lagrange_coeff = self.open_lagrange_2t[0]
             .inverse()
@@ -26,7 +30,10 @@ impl<F: PrimeField> ShamirState<F> {
         &mut self,
         input: Vec<Rep3PrimeFieldShare<F>>,
         net: &N,
-    ) -> eyre::Result<Vec<ShamirPrimeFieldShare<F>>> {
+    ) -> eyre::Result<Vec<ShamirPrimeFieldShare<F>>>
+    where
+        F: WireFormat,
+    {
         // Essentially, a mul_vec function
         let my_lagrange_coeff = self.open_lagrange_2t[0]
             .inverse()
@@ -45,7 +52,10 @@ impl<F: PrimeField> ShamirState<F> {
         &mut self,
         input: F,
         net: &N,
-    ) -> eyre::Result<ShamirPrimeFieldShare<F>> {
+    ) -> eyre::Result<ShamirPrimeFieldShare<F>>
+    where
+        F: WireFormat,
+    {
         // Essentially, a mul function
         let my_lagrange_coeff = self.open_lagrange_2t[0]
             .inverse()
@@ -59,7 +69,10 @@ impl<F: PrimeField> ShamirState<F> {
         &mut self,
         input: Vec<F>,
         net: &N,
-    ) -> eyre::Result<Vec<ShamirPrimeFieldShare<F>>> {
+    ) -> eyre::Result<Vec<ShamirPrimeFieldShare<F>>>
+    where
+        F: WireFormat,
+    {
         // Essentially, a mul_vec function
         let my_lagrange_coeff = self.open_lagrange_2t[0]
             .inverse()
@@ -81,6 +94,7 @@ impl<F: PrimeField> ShamirState<F> {
     ) -> eyre::Result<ShamirPointShare<C>>
     where
         C: CurveGroup + std::ops::Mul<F, Output = C> + for<'a> std::ops::Mul<&'a F, Output = C>,
+        F: WireFormat,
     {
         // Essentially, a scalar_mul function
         let my_lagrange_coeff = self.open_lagrange_2t[0]

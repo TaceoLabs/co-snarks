@@ -21,7 +21,7 @@ use mpc_core::protocols::rep3::{
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
-    protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
+    protocols::rep3_ring::lut_field::Rep3FieldLookupTable, protocols::wire::WireFormat,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
@@ -45,7 +45,7 @@ pub struct Rep3AcvmSolver<'a, F: PrimeField, N: Network> {
     phantom_data: PhantomData<F>,
 }
 
-impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
+impl<'a, F: PrimeField + WireFormat, N: Network> Rep3AcvmSolver<'a, F, N> {
     pub fn new(net0: &'a N, net1: &'a N, a2b_type: A2BType) -> eyre::Result<Self> {
         let mut state0 = Rep3State::new(net0, a2b_type)?;
         let state1 = state0.fork(0)?;
@@ -320,7 +320,7 @@ impl<F: PrimeField> From<Rep3Type<F>> for Rep3AcvmType<F> {
     }
 }
 
-impl<F: PrimeField> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
+impl<F: PrimeField + WireFormat> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
     fn from(val: Rep3AcvmType<F>) -> Self {
         match val {
             Rep3AcvmType::Public(public) => Rep3BrilligType::public_field(public),
@@ -329,7 +329,7 @@ impl<F: PrimeField> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
     }
 }
 
-impl<F: PrimeField> Rep3AcvmType<F> {
+impl<F: PrimeField + WireFormat> Rep3AcvmType<F> {
     fn from_brillig_type<N: Network>(
         value: Rep3BrilligType<F>,
         net: &N,
@@ -355,7 +355,9 @@ fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] 
     output
 }
 
-impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<'a, F, N> {
+impl<'a, F: PrimeField + WireFormat, N: Network> NoirWitnessExtensionProtocol<F>
+    for Rep3AcvmSolver<'a, F, N>
+{
     type Lookup = Rep3FieldLookupTable<F>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;

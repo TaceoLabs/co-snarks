@@ -1,11 +1,14 @@
 use crate::{
     gadgets::poseidon2::Poseidon2,
-    protocols::rep3::{Rep3PrimeFieldShare, Rep3State},
+    protocols::{
+        rep3::{Rep3PrimeFieldShare, Rep3State},
+        wire::WireFormat,
+    },
 };
 use ark_ff::{PrimeField, Zero};
 use mpc_net::Network;
 
-impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
+impl<F: PrimeField + WireFormat, const T: usize, const D: u64> Poseidon2<F, T, D> {
     /// Create a Merkle tree with a given arity using Poseidon2 in sponge mode and with the Rep3 MPC protocol.
     pub fn merkle_tree_sponge_rep3<const ARITY: usize, N: Network>(
         &self,

@@ -19,6 +19,7 @@ use mpc_core::{
         network::Rep3NetworkExt,
         yao,
     },
+    protocols::wire::WireFormat,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
@@ -101,7 +102,7 @@ impl<'a, F: PrimeField, N: Network> CircomRep3VmWitnessExtension<'a, F, N> {
     }
 }
 
-impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
+impl<F: PrimeField + WireFormat, N: Network> VmCircomWitnessExtension<F>
     for CircomRep3VmWitnessExtension<'_, F, N>
 {
     type Public = F;

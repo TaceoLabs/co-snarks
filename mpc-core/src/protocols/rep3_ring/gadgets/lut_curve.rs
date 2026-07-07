@@ -5,6 +5,7 @@
 use crate::protocols::{
     rep3::{Rep3PointShare, Rep3PrimeFieldShare, Rep3State, network::Rep3NetworkExt, pointshare},
     rep3_ring::{Rep3RingShare, conversion, gadgets, ring::int_ring::IntRing2k},
+    wire::WireFormat,
 };
 use ark_ec::CurveGroup;
 use mpc_net::Network;
@@ -20,6 +21,7 @@ pub fn read_public_lut<C: CurveGroup, T: IntRing2k, N: Network>(
 ) -> eyre::Result<Rep3PointShare<C>>
 where
     Standard: Distribution<T>,
+    C::ScalarField: WireFormat,
 {
     let n = lut.len();
     let k = n.next_power_of_two().ilog2() as usize;
@@ -50,6 +52,7 @@ pub fn read_public_luts<C: CurveGroup, T: IntRing2k, N: Network>(
 ) -> eyre::Result<Vec<Rep3PointShare<C>>>
 where
     Standard: Distribution<T>,
+    C::ScalarField: WireFormat,
 {
     let n = luts.len();
     let k = n.next_power_of_two().ilog2() as usize;
@@ -84,6 +87,7 @@ pub fn read_shared_lut<C: CurveGroup, T: IntRing2k, N: Network>(
 ) -> eyre::Result<C>
 where
     Standard: Distribution<T>,
+    C::ScalarField: WireFormat,
 {
     let n = lut.len();
     let k = n.next_power_of_two().ilog2() as usize;
@@ -114,6 +118,7 @@ pub fn write_lut<C: CurveGroup, T: IntRing2k, N: Network>(
 ) -> eyre::Result<()>
 where
     Standard: Distribution<T>,
+    C::ScalarField: WireFormat,
 {
     let n = lut.len();
     let k = n.next_power_of_two().ilog2() as usize;

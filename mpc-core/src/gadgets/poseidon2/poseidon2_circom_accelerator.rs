@@ -1,6 +1,7 @@
 use std::array;
 
 use super::{Poseidon2, Poseidon2Precomputations};
+use crate::protocols::wire::WireFormat;
 use crate::{
     gadgets::poseidon2::{
         poseidon2_bn254_t2::{WITNESS_INDICES_SIZE_T2, WITNESS_INDICES_T2},
@@ -14,7 +15,7 @@ use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_net::Network;
 
-impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
+impl<F: PrimeField + WireFormat, const T: usize, const D: u64> Poseidon2<F, T, D> {
     /// The matrix multiplication in the external rounds of the Poseidon2 permutation. Implemented for the Rep3 MPC protocol.
     pub fn matmul_external_rep3_intermediate_t16(
         input: &mut [Rep3PrimeFieldShare<F>; T],
@@ -1154,7 +1155,9 @@ pub trait CircomTraceBatchedHasher<F: PrimeField, const T: usize> {
     )>;
 }
 
-impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2<F, T, 5> {
+impl<F: PrimeField + WireFormat, const T: usize> CircomTraceBatchedHasher<F, T>
+    for Poseidon2<F, T, 5>
+{
     type Precomputation = Poseidon2Precomputations<Rep3PrimeFieldShare<F>>;
 
     fn rep3_permutation_in_place_with_precomputation_intermediate_packed<

@@ -17,6 +17,7 @@ use crate::protocols::rep3::{
         streaming_evaluator::StreamingRep3Evaluator, streaming_garbler::StreamingRep3Garbler,
     },
 };
+use crate::protocols::wire::WireFormat;
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::izip;
@@ -572,7 +573,7 @@ where
 }
 
 /// Translates a vector of shared bits into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
-pub fn bit_inject_from_bits_to_field_many<F: PrimeField, N: Network>(
+pub fn bit_inject_from_bits_to_field_many<F: PrimeField + WireFormat, N: Network>(
     x: &[Rep3RingShare<Bit>],
     net: &N,
     state: &mut Rep3State,
@@ -597,10 +598,10 @@ pub fn bit_inject_from_bits_to_field_many<F: PrimeField, N: Network>(
                 res_a.push(r0);
             }
             // Send to P1
-            net.send_next_many(&res_a)?;
+            net.send_next_many_raw(&res_a)?;
 
             // Receive from P2
-            let res_b: Vec<F> = net.recv_prev_many()?;
+            let res_b: Vec<F> = net.recv_prev_many_raw()?;
             if res_b.len() != x.len() {
                 eyre::bail!("Received wrong number of elements");
             }
@@ -616,10 +617,10 @@ pub fn bit_inject_from_bits_to_field_many<F: PrimeField, N: Network>(
                 });
             }
             // Send to P2
-            net.send_next_many(&res_a)?;
+            net.send_next_many_raw(&res_a)?;
 
             // Receive from P0
-            let res_b: Vec<F> = net.recv_prev_many()?;
+            let res_b: Vec<F> = net.recv_prev_many_raw()?;
             if res_b.len() != x.len() {
                 eyre::bail!("Received wrong number of elements");
             }
@@ -627,7 +628,7 @@ pub fn bit_inject_from_bits_to_field_many<F: PrimeField, N: Network>(
         }
         PartyID::ID2 => {
             // Receive from P1
-            let res_b: Vec<F> = net.recv_prev_many()?;
+            let res_b: Vec<F> = net.recv_prev_many_raw()?;
             if res_b.len() != x.len() {
                 eyre::bail!("Received wrong number of elements");
             }
@@ -645,7 +646,7 @@ pub fn bit_inject_from_bits_to_field_many<F: PrimeField, N: Network>(
             }
 
             // Send to P0
-            net.send_next_many(&res_a)?;
+            net.send_next_many_raw(&res_a)?;
             res_b
         }
     };

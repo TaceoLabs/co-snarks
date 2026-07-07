@@ -12,6 +12,7 @@ use crate::protocols::rep3_ring::{arithmetic, conversion};
 use crate::protocols::{
     rep3::{self, arithmetic::FieldShare},
     rep3_ring::Rep3RingShare,
+    wire::WireFormat,
 };
 use ark_ff::{One, PrimeField, Zero};
 use mpc_net::Network;
@@ -24,7 +25,7 @@ type PermRing = u32;
 
 /// Sorts the inputs (both public and shared, where shared is inputted *before* public) using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
-pub fn radix_sort_fields<F: PrimeField, N: Network>(
+pub fn radix_sort_fields<F: PrimeField + WireFormat, N: Network>(
     mut priv_inputs: Vec<FieldShare<F>>,
     pub_inputs: Vec<F>,
     bitsize: usize,
@@ -64,7 +65,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Network>(
 /// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). The values public/shared values need to be organized to match the order given in `order` (false means a public value, true means a private value). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 #[expect(clippy::too_many_arguments)]
-pub fn radix_sort_fields_vec_by<F: PrimeField, N: Network>(
+pub fn radix_sort_fields_vec_by<F: PrimeField + WireFormat, N: Network>(
     priv_key: &[FieldShare<F>],
     pub_key: &[F],
     order: &[bool],
@@ -355,7 +356,7 @@ where
     Ok(result)
 }
 
-fn apply_inv_field<F: PrimeField, N: Network>(
+fn apply_inv_field<F: PrimeField + WireFormat, N: Network>(
     rho: &[Rep3RingShare<PermRing>],
     bits: &[Rep3PrimeFieldShare<F>],
     net0: &N,
@@ -547,7 +548,7 @@ where
     Ok(result)
 }
 
-fn shuffle_field<F: PrimeField, N: Network>(
+fn shuffle_field<F: PrimeField + WireFormat, N: Network>(
     pi: &[Rep3RingShare<PermRing>],
     input: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -580,7 +581,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 let pi_3 = pi.b.0 as usize;
                 *des = shuffled_1[pi_3] - alpha;
             }
-            net.send_next_many(&shuffled_3)?;
+            net.send_next_many_raw(&shuffled_3)?;
 
             // Opt Reshare
             let mut result = Vec::with_capacity(len);
@@ -606,7 +607,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 let pi_1 = pi.b.0 as usize;
                 shuffled_1.push(beta_2[pi_1] + alpha);
             }
-            let delta = net.reshare_many(&shuffled_1)?;
+            let delta = net.reshare_many_raw(&shuffled_1)?;
             // second shuffle
             let mut beta_2_prime = beta_2;
             for (des, pi) in beta_2_prime.iter_mut().zip(pi) {
@@ -622,7 +623,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 rand.push(beta - b);
                 result.push(Rep3PrimeFieldShare::new(F::zero(), b));
             }
-            let rcv: Vec<F> = net.send_and_recv_many(PartyID::ID2, &rand, PartyID::ID2)?;
+            let rcv: Vec<F> = net.send_and_recv_many_raw(PartyID::ID2, &rand, PartyID::ID2)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.a = r1 + r2;
             }
@@ -635,7 +636,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 let alpha_3_ = state.rngs.rand.random_field_element_rng1::<F>();
                 alpha_3.push(alpha_3_);
             }
-            let gamma: Vec<F> = net.recv_prev_many()?;
+            let gamma: Vec<F> = net.recv_prev_many_raw()?;
             // first shuffle
             let mut shuffled_1 = Vec::with_capacity(len);
             for (pi, alpha) in pi.iter().zip(alpha_3.iter()) {
@@ -657,7 +658,7 @@ fn shuffle_field<F: PrimeField, N: Network>(
                 rand.push(beta - a);
                 result.push(Rep3PrimeFieldShare::new(a, F::zero()));
             }
-            let rcv: Vec<F> = net.send_and_recv_many(PartyID::ID1, &rand, PartyID::ID1)?;
+            let rcv: Vec<F> = net.send_and_recv_many_raw(PartyID::ID1, &rand, PartyID::ID1)?;
             for (res, (r1, r2)) in result.iter_mut().zip(rcv.into_iter().zip(rand)) {
                 res.b = r1 + r2;
             }

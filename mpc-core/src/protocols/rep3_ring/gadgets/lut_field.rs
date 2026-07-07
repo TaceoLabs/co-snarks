@@ -5,6 +5,7 @@
 use crate::protocols::{
     rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network::Rep3NetworkExt},
     rep3_ring::{Rep3RingShare, binary, conversion, gadgets, ring::int_ring::IntRing2k},
+    wire::WireFormat,
 };
 use ark_ff::PrimeField;
 use mpc_net::Network;
@@ -214,7 +215,7 @@ where
 
 /// Takes a secret-shared lookup table containing field elements, and a replicated binary share of an index and returns a non-replicated additive sharing of the looked up value lut`\[`index`\]`.
 /// The algorithm is inspired by Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf).
-pub fn read_shared_lut<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn read_shared_lut<F: PrimeField + WireFormat, T: IntRing2k, N: Network>(
     lut: &[Rep3PrimeFieldShare<F>],
     index: Rep3RingShare<T>,
     net: &N,
@@ -240,7 +241,7 @@ where
 
 /// Takes a secret-shared lookup table containing field elements, and a replicated binary share of an index and puts another secret-shared field element (value) and puts it at lut`\[`index`\]`.
 /// The algorithm is inspired by Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf).
-pub fn write_lut<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn write_lut<F: PrimeField + WireFormat, T: IntRing2k, N: Network>(
     value: &Rep3PrimeFieldShare<F>,
     lut: &mut [Rep3PrimeFieldShare<F>],
     index: Rep3RingShare<T>,
@@ -261,7 +262,7 @@ where
 }
 
 /// The second part of writing to a shared lookup table, i.e, takes the shared value, the shared LUT and and one_hot_vector (all elements 0 except for the index to write to which is set to one) and writes to the shared LUT.
-pub fn write_lut_from_ohv<F: PrimeField, N: Network>(
+pub fn write_lut_from_ohv<F: PrimeField + WireFormat, N: Network>(
     value: &Rep3PrimeFieldShare<F>,
     lut: &mut [Rep3PrimeFieldShare<F>],
     ohv: &[Rep3PrimeFieldShare<F>],
@@ -274,7 +275,7 @@ pub fn write_lut_from_ohv<F: PrimeField, N: Network>(
     for (l, e) in lut.iter().zip(ohv.iter()) {
         local_a.push(e * &(value - l) + l.a + state.rngs.rand.masking_field_element::<F>());
     }
-    let local_b = net.reshare_many(&local_a)?;
+    let local_b = net.reshare_many_raw(&local_a)?;
 
     for (des, (src_a, src_b)) in lut.iter_mut().zip(local_a.into_iter().zip(local_b)) {
         des.a = src_a;

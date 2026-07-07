@@ -1,6 +1,9 @@
 use crate::{
     gadgets::poseidon2::Poseidon2,
-    protocols::shamir::{ShamirPrimeFieldShare, ShamirState},
+    protocols::{
+        shamir::{ShamirPrimeFieldShare, ShamirState},
+        wire::WireFormat,
+    },
 };
 use ark_ff::{PrimeField, Zero};
 use mpc_net::Network;
@@ -12,7 +15,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         input_: Vec<ShamirPrimeFieldShare<F>>,
         net: &N,
         state: &mut ShamirState<F>,
-    ) -> eyre::Result<ShamirPrimeFieldShare<F>> {
+    ) -> eyre::Result<ShamirPrimeFieldShare<F>>
+    where
+        F: WireFormat,
+    {
         assert!(T > ARITY);
         let mut len = input_.len();
         let log = len.ilog(ARITY);
@@ -63,7 +69,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         input_: Vec<ShamirPrimeFieldShare<F>>,
         net: &N,
         state: &mut ShamirState<F>,
-    ) -> eyre::Result<ShamirPrimeFieldShare<F>> {
+    ) -> eyre::Result<ShamirPrimeFieldShare<F>>
+    where
+        F: WireFormat,
+    {
         assert!(T >= ARITY);
         let mut len = input_.len();
         let log = len.ilog(ARITY);

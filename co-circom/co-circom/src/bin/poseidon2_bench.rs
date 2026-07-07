@@ -16,6 +16,7 @@ use mpc_core::{
             self, ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState,
             network::ShamirNetworkExt,
         },
+        wire::WireFormat,
     },
 };
 use mpc_net::{
@@ -150,7 +151,7 @@ fn main() -> color_eyre::Result<ExitCode> {
 }
 
 fn benches<
-    F: PrimeField,
+    F: PrimeField + WireFormat,
     const T: usize,
     const D: u64,
     const ARITY: usize,
@@ -176,7 +177,7 @@ where
 }
 
 #[allow(dead_code)]
-fn poseidon2_benches<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_benches<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -195,7 +196,7 @@ where
 }
 
 #[allow(dead_code)]
-fn poseidon2_packed_benches<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_packed_benches<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -212,7 +213,7 @@ where
 
 #[allow(dead_code)]
 fn poseidon2_mt_benches<
-    F: PrimeField,
+    F: PrimeField + WireFormat,
     const T: usize,
     const D: u64,
     const ARITY: usize,
@@ -401,7 +402,7 @@ fn share_random_input_rep3<
 }
 
 #[allow(dead_code)]
-fn poseidon2_rep3<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_rep3<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -442,7 +443,7 @@ where
 }
 
 #[allow(dead_code)]
-fn poseidon2_rep3_with_precomp<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_rep3_with_precomp<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -484,7 +485,7 @@ where
 }
 
 #[allow(dead_code)]
-fn poseidon2_rep3_with_precomp_additive<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_rep3_with_precomp_additive<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -531,7 +532,7 @@ where
 }
 
 #[allow(dead_code)]
-fn poseidon2_rep3_with_precomp_packed<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_rep3_with_precomp_packed<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -579,7 +580,7 @@ where
 
 #[allow(dead_code)]
 fn poseidon2_mt_rep3<
-    F: PrimeField,
+    F: PrimeField + WireFormat,
     const T: usize,
     const D: u64,
     const ARITY: usize,
@@ -658,7 +659,7 @@ fn share_random_input_shamir<
 }
 
 #[allow(dead_code)]
-fn poseidon2_shamir<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_shamir<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -716,7 +717,7 @@ where
 }
 
 #[allow(dead_code)]
-fn poseidon2_shamir_with_precomp<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_shamir_with_precomp<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -780,7 +781,7 @@ where
 }
 
 #[allow(dead_code)]
-fn poseidon2_shamir_with_precomp_packed<F: PrimeField, const T: usize, const D: u64>(
+fn poseidon2_shamir_with_precomp_packed<F: PrimeField + WireFormat, const T: usize, const D: u64>(
     config: &Config,
 ) -> color_eyre::Result<ExitCode>
 where
@@ -853,7 +854,7 @@ where
 
 #[allow(dead_code)]
 fn poseidon2_mt_shamir<
-    F: PrimeField,
+    F: PrimeField + WireFormat,
     const T: usize,
     const D: u64,
     const ARITY: usize,

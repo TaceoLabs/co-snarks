@@ -4,6 +4,7 @@ use brillig::{BitSize, IntegerBitSize};
 use mpc_core::{
     MpcState as _,
     protocols::shamir::{self, ShamirPrimeFieldShare, ShamirState},
+    protocols::wire::WireFormat,
 };
 use mpc_net::Network;
 use std::marker::PhantomData;
@@ -56,7 +57,7 @@ impl<'a, F: PrimeField, N: Network> ShamirBrilligDriver<'a, F, N> {
     }
 }
 
-impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, N> {
+impl<F: PrimeField + WireFormat, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, N> {
     type BrilligType = ShamirBrilligType<F>;
 
     fn fork(&mut self) -> eyre::Result<(Self, Self)> {

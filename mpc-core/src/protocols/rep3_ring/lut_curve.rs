@@ -11,6 +11,7 @@ use crate::{
             network::Rep3NetworkExt, pointshare,
         },
         rep3_ring::{gadgets, lut_field::Rep3FieldLookupTable, ring::bit::Bit},
+        wire::WireFormat,
     },
 };
 use ark_ec::CurveGroup;
@@ -63,7 +64,10 @@ impl<C: CurveGroup> Default for Rep3CurveLookupTable<C> {
     }
 }
 
-impl<C: CurveGroup> Rep3CurveLookupTable<C> {
+impl<C: CurveGroup> Rep3CurveLookupTable<C>
+where
+    C::ScalarField: WireFormat,
+{
     /// Construct a new [`Rep3CurveLookupTable`]
     pub fn new() -> Self {
         Self::default()
@@ -207,7 +211,10 @@ impl<C: CurveGroup> Rep3CurveLookupTable<C> {
     }
 }
 
-impl<C: CurveGroup> LookupTableProvider<C> for Rep3CurveLookupTable<C> {
+impl<C: CurveGroup> LookupTableProvider<C> for Rep3CurveLookupTable<C>
+where
+    C::ScalarField: WireFormat,
+{
     type SecretShare = Rep3PointShare<C>;
     type IndexSecretShare = Rep3PrimeFieldShare<C::ScalarField>;
     type LutType = PublicPrivateLut<C>;

@@ -12,6 +12,7 @@ use crate::protocols::{
         },
     },
     rep3_ring::conversion,
+    wire::WireFormat,
 };
 use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
@@ -358,7 +359,7 @@ pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
 }
 
 /// A cast of a vector of Rep3RingShare to a vector of Rep3PrimeFieldShare
-pub fn ring_to_field_many<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_many<T: IntRing2k, F: PrimeField + WireFormat, N: Network>(
     inputs: &[Rep3RingShare<T>],
     net: &N,
     state: &mut Rep3State,

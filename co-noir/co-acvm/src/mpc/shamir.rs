@@ -15,6 +15,7 @@ use mpc_core::{
             ShamirPointShare, ShamirPrimeFieldShare, ShamirState, arithmetic,
             network::ShamirNetworkExt, pointshare,
         },
+        wire::WireFormat,
     },
 };
 use mpc_net::Network;
@@ -157,7 +158,9 @@ impl<F: PrimeField> From<ShamirBrilligType<F>> for ShamirAcvmType<F> {
     }
 }
 
-impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for ShamirAcvmSolver<'a, F, N> {
+impl<'a, F: PrimeField + WireFormat, N: Network> NoirWitnessExtensionProtocol<F>
+    for ShamirAcvmSolver<'a, F, N>
+{
     type Lookup = Rep3FieldLookupTable<F>; // This is just a dummy and unused
 
     type ArithmeticShare = ShamirPrimeFieldShare<F>;

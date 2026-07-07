@@ -11,6 +11,7 @@ use mpc_core::MpcState;
 use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirState};
+use mpc_core::protocols::wire::WireFormat;
 use mpc_net::Network;
 use num_traits::ToPrimitive;
 use std::marker::PhantomData;
@@ -356,7 +357,10 @@ impl<P: Pairing> Rep3CoGroth16<P> {
     }
 }
 
-impl<P: Pairing> ShamirCoGroth16<P> {
+impl<P: Pairing> ShamirCoGroth16<P>
+where
+    P::ScalarField: WireFormat,
+{
     /// Create a [`Proof`].
     pub fn prove<N: Network, R: R1CSToQAP>(
         net0: &N,

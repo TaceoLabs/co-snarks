@@ -17,6 +17,7 @@ use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::shamir::ShamirPreprocessing;
 use mpc_core::protocols::shamir::ShamirState;
+use mpc_core::protocols::wire::WireFormat;
 use mpc_net::Network;
 use round1::Round1;
 use std::marker::PhantomData;
@@ -213,7 +214,10 @@ mod plonk_utils {
     }
 }
 
-impl<P: Pairing> Rep3CoPlonk<P> {
+impl<P: Pairing> Rep3CoPlonk<P>
+where
+    P::ScalarField: WireFormat,
+{
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
         nets: &[N; 8],
@@ -229,7 +233,10 @@ impl<P: Pairing> Rep3CoPlonk<P> {
     }
 }
 
-impl<P: Pairing> ShamirCoPlonk<P> {
+impl<P: Pairing> ShamirCoPlonk<P>
+where
+    P::ScalarField: WireFormat,
+{
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
         nets: &[N; 8],

@@ -5,6 +5,7 @@ use super::binary;
 use super::conversion;
 use crate::protocols::rep3::network::Rep3NetworkExt;
 use crate::protocols::rep3::{Rep3BigUintShare, Rep3PrimeFieldShare};
+use crate::protocols::wire::WireFormat;
 use ark_ec::CurveGroup;
 use ark_ff::One;
 use ark_ff::PrimeField;
@@ -446,7 +447,7 @@ pub(crate) fn point_addition<F: PrimeField, N: Network>(
 ///
 /// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
 #[expect(clippy::type_complexity)]
-pub(crate) fn point_addition_many<F: PrimeField, N: Network>(
+pub(crate) fn point_addition_many<F: PrimeField + WireFormat, N: Network>(
     a_x: &[Rep3PrimeFieldShare<F>],
     a_y: &[Rep3PrimeFieldShare<F>],
     b_x: &[Rep3PrimeFieldShare<F>],

@@ -11,6 +11,7 @@ use crate::{
             network::Rep3NetworkExt,
         },
         rep3_ring::{conversion, gadgets, ring::bit::Bit},
+        wire::WireFormat,
     },
 };
 use ark_ff::PrimeField;
@@ -63,7 +64,7 @@ impl<F: PrimeField> Default for Rep3FieldLookupTable<F> {
     }
 }
 
-impl<F: PrimeField> Rep3FieldLookupTable<F> {
+impl<F: PrimeField + WireFormat> Rep3FieldLookupTable<F> {
     /// Construct a new [`Rep3FieldLookupTable`]
     pub fn new() -> Self {
         Self::default()
@@ -302,7 +303,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     }
 }
 
-impl<F: PrimeField> LookupTableProvider<F> for Rep3FieldLookupTable<F> {
+impl<F: PrimeField + WireFormat> LookupTableProvider<F> for Rep3FieldLookupTable<F> {
     type SecretShare = Rep3PrimeFieldShare<F>;
     type IndexSecretShare = Rep3PrimeFieldShare<F>;
     type LutType = PublicPrivateLut<F>;

@@ -12,6 +12,7 @@ use mpc_core::{
         id::PartyID,
         network::Rep3NetworkExt,
     },
+    protocols::wire::WireFormat,
 };
 use num_bigint::BigUint;
 
@@ -112,7 +113,7 @@ impl<F: PrimeField> TryFrom<Vec<Rep3InputType<F>>> for BatchedRep3VmType<F> {
 }
 
 #[expect(unused_variables)]
-impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
+impl<F: PrimeField + WireFormat, N: Network> VmCircomWitnessExtension<F>
     for BatchedCircomRep3VmWitnessExtension<'_, F, N>
 {
     type Public = Vec<F>;

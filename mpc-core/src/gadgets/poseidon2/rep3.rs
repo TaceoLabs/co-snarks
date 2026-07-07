@@ -4,10 +4,11 @@ use super::{Poseidon2, Poseidon2Precomputations};
 use crate::protocols::rep3::{
     Rep3PrimeFieldShare, Rep3State, arithmetic, id::PartyID, network::Rep3NetworkExt,
 };
+use crate::protocols::wire::WireFormat;
 use ark_ff::PrimeField;
 use mpc_net::Network;
 
-impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
+impl<F: PrimeField + WireFormat, const T: usize, const D: u64> Poseidon2<F, T, D> {
     /// Create Poseidon2Precomputations for the Rep3 MPC protocol.
     pub fn precompute_rep3<N: Network>(
         &self,
@@ -211,7 +212,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         input.iter_mut().for_each(|x| {
             *x += state.rngs.rand.masking_field_element::<F>();
         });
-        let b = net.reshare_many(input)?;
+        let b = net.reshare_many_raw(input)?;
         let shares = array::from_fn(|i| Rep3PrimeFieldShare::new(input[i], b[i]));
 
         Ok(shares)
@@ -255,7 +256,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let id = PartyID::try_from(net.id())?;
 
         // Open
-        let (b, c) = net.broadcast_many(input)?;
+        let (b, c) = net.broadcast_many_raw(input)?;
         let mut y = b;
         for (y, (c, i)) in y.iter_mut().zip(c.into_iter().zip(input.iter())) {
             *y += c + i;

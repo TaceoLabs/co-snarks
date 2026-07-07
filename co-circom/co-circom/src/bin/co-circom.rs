@@ -14,6 +14,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use mpc_core::protocols::wire::WireFormat;
 use mpc_net::{
     config::{NetworkConfig, NetworkConfigFile},
     tcp::TcpNetwork,
@@ -799,7 +800,10 @@ fn run_merge_input_shares<P: Pairing + CircomArkworksPairingBridge>(
 #[instrument(level = "debug", skip(config))]
 fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateWitnessConfig,
-) -> color_eyre::Result<ExitCode> {
+) -> color_eyre::Result<ExitCode>
+where
+    P::ScalarField: WireFormat,
+{
     let input = config.input;
     let circuit = config.circuit;
     let protocol = config.protocol;
@@ -845,7 +849,10 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
 #[instrument(level = "debug", skip(config))]
 fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: TranslateWitnessConfig,
-) -> color_eyre::Result<ExitCode> {
+) -> color_eyre::Result<ExitCode>
+where
+    P::ScalarField: WireFormat,
+{
     let witness = config.witness;
     let src_protocol = config.src_protocol;
     let target_protocol = config.target_protocol;
@@ -882,7 +889,10 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
 #[instrument(level = "debug", skip(config))]
 fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
-) -> color_eyre::Result<ExitCode> {
+) -> color_eyre::Result<ExitCode>
+where
+    P::ScalarField: WireFormat,
+{
     let proof_system = config.proof_system;
     let witness = config.witness;
     let zkey = config.zkey;

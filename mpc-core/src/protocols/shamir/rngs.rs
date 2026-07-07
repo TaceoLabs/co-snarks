@@ -4,7 +4,10 @@ use ark_ff::PrimeField;
 use itertools::{Itertools, izip};
 use mpc_net::Network;
 
-use crate::{RngType, protocols::shamir::interpolate_poly_from_precomputed};
+use crate::{
+    RngType,
+    protocols::{shamir::interpolate_poly_from_precomputed, wire::WireFormat},
+};
 use rand::{Rng, SeedableRng};
 
 use super::{evaluate_poly, network::ShamirNetworkExt, precompute_interpolation_polys};
@@ -293,7 +296,10 @@ impl<F: PrimeField> ShamirRng<F> {
         seeded: usize,
         polys: &[Vec<F>],
         net: &N,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         let sending = self.num_parties - seeded - 1;
         if sending == 0 {
             return Ok(());
@@ -305,7 +311,7 @@ impl<F: PrimeField> ShamirRng<F> {
             for (des, p) in to_send.iter_mut().zip(polys.iter()) {
                 *des = evaluate_poly(p, rcv_id_f);
             }
-            net.send_many(rcv_id, &to_send)?;
+            net.send_many_raw(rcv_id, &to_send)?;
         }
         Ok(())
     }
@@ -315,14 +321,17 @@ impl<F: PrimeField> ShamirRng<F> {
         seeded: usize,
         output: &mut [Vec<F>],
         net: &N,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         let receiving = self.num_parties - seeded - 1;
         if receiving == 0 {
             return Ok(());
         }
         for i in 1..=receiving {
             let send_id = (self.id + self.num_parties - seeded - i) % self.num_parties;
-            let shares = net.recv_many(send_id)?;
+            let shares = net.recv_many_raw(send_id)?;
             for (r, s) in output.iter_mut().zip(shares.iter()) {
                 r[send_id] = *s;
             }
@@ -335,7 +344,10 @@ impl<F: PrimeField> ShamirRng<F> {
         &mut self,
         amount: usize,
         net: &N,
-    ) -> eyre::Result<(Vec<Vec<F>>, Vec<Vec<F>>)> {
+    ) -> eyre::Result<(Vec<Vec<F>>, Vec<Vec<F>>)>
+    where
+        F: WireFormat,
+    {
         let mut rcv_t = vec![vec![F::default(); self.num_parties]; amount];
         let mut rcv_2t = vec![vec![F::default(); self.num_parties]; amount];
 
@@ -398,11 +410,10 @@ impl<F: PrimeField> ShamirRng<F> {
     // We use DN07 to generate t+1 double shares from the randomness of the n parties.
     // With Atlas we would be able to expand this to n double shares, but only t+1 of them would be uniformly random.
     // Thus, with Atlas we would have to rotate the King server during multiplication.
-    pub(super) fn buffer_triples<N: Network>(
-        &mut self,
-        net: &N,
-        amount: usize,
-    ) -> eyre::Result<()> {
+    pub(super) fn buffer_triples<N: Network>(&mut self, net: &N, amount: usize) -> eyre::Result<()>
+    where
+        F: WireFormat,
+    {
         let (rcv_rt, rcv_r2t) = self.random_double_share(amount, net)?;
 
         // reserve buffer

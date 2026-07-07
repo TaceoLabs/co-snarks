@@ -8,6 +8,7 @@ use mpc_net::Network;
 use rayon::prelude::*;
 
 use super::{ShamirPrimeFieldShare, ShamirState, network::ShamirNetworkExt};
+use crate::protocols::wire::WireFormat;
 
 mod ops;
 pub(super) mod types;
@@ -59,7 +60,7 @@ pub fn add_vec_assign<F: PrimeField>(lhs: &mut [ShamirShare<F>], rhs: &[ShamirSh
 }
 
 /// Performs multiplication between two shares.
-pub fn mul<F: PrimeField, N: Network>(
+pub fn mul<F: PrimeField + WireFormat, N: Network>(
     a: ShamirShare<F>,
     b: ShamirShare<F>,
     net: &N,
@@ -79,7 +80,7 @@ pub fn local_mul_vec<F: PrimeField>(a: &[ShamirShare<F>], b: &[ShamirShare<F>]) 
 }
 
 /// Performs element-wise multiplication of two slices of shares.
-pub fn mul_vec<F: PrimeField, N: Network>(
+pub fn mul_vec<F: PrimeField + WireFormat, N: Network>(
     a: &[ShamirShare<F>],
     b: &[ShamirShare<F>],
     net: &N,
@@ -107,7 +108,7 @@ pub fn mul_assign_public<F: PrimeField>(shared: &mut ShamirShare<F>, public: F) 
 }
 
 /// Performs division of two shared values, returning a / b.
-pub fn div<F: PrimeField, N: Network>(
+pub fn div<F: PrimeField + WireFormat, N: Network>(
     a: ShamirShare<F>,
     b: ShamirShare<F>,
     net: &N,
@@ -129,7 +130,7 @@ pub fn div_shared_by_public<F: PrimeField>(
 }
 
 /// Performs division of a public value by a shared value, returning public / shared.
-pub fn div_public_by_shared<F: PrimeField, N: Network>(
+pub fn div_public_by_shared<F: PrimeField + WireFormat, N: Network>(
     public: F,
     shared: ShamirShare<F>,
     net: &N,
@@ -139,7 +140,7 @@ pub fn div_public_by_shared<F: PrimeField, N: Network>(
 }
 
 /// Computes the inverse of a shared field element
-pub fn inv<F: PrimeField, N: Network>(
+pub fn inv<F: PrimeField + WireFormat, N: Network>(
     a: ShamirShare<F>,
     net: &N,
     state: &mut ShamirState<F>,
@@ -154,7 +155,7 @@ pub fn inv<F: PrimeField, N: Network>(
 }
 
 /// Computes the inverse of a vector of shared field elements
-pub fn inv_vec<F: PrimeField, N: Network>(
+pub fn inv_vec<F: PrimeField + WireFormat, N: Network>(
     a: &[ShamirShare<F>],
     net: &N,
     state: &mut ShamirState<F>,

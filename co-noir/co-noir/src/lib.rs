@@ -27,6 +27,7 @@ use color_eyre::eyre::{self, Context, Result};
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
     shamir::{self, ShamirPreprocessing, ShamirState},
+    wire::WireFormat,
 };
 use mpc_net::Network;
 use noirc_abi::Abi;
@@ -90,7 +91,7 @@ pub fn generate_witness_rep3<N: Network>(
 }
 
 /// Translate a REP3 shared witness to a shamir shared witness
-pub fn translate_witness<F: PrimeField, N: Network>(
+pub fn translate_witness<F: PrimeField + WireFormat, N: Network>(
     witness_share: Rep3SharedWitness<F>,
     net: &N,
 ) -> Result<ShamirSharedWitness<F>> {
@@ -132,7 +133,11 @@ pub fn translate_witness<F: PrimeField, N: Network>(
 pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
     proving_key: Rep3ProvingKey<P>,
     net: &N,
-) -> Result<ShamirProvingKey<P>> {
+) -> Result<ShamirProvingKey<P>>
+where
+    P::ScalarField: WireFormat,
+    P::BaseField: WireFormat,
+{
     // extract shares
     let shares = proving_key
         .polynomials
@@ -340,7 +345,11 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 /// Split a proving key into RPE3 shares
 pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
     proving_key: PlainProvingKey<P>,
-) -> Result<[Rep3ProvingKey<P>; 3]> {
+) -> Result<[Rep3ProvingKey<P>; 3]>
+where
+    P::ScalarField: WireFormat,
+    P::BaseField: WireFormat,
+{
     let mut rng = rand::thread_rng();
     let witness_entities = proving_key
         .polynomials
@@ -369,7 +378,10 @@ pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>>(
     proving_key: PlainProvingKey<P>,
     degree: usize,
     num_parties: usize,
-) -> Result<Vec<ShamirProvingKey<P>>> {
+) -> Result<Vec<ShamirProvingKey<P>>>
+where
+    P::ScalarField: WireFormat,
+{
     let mut rng = rand::thread_rng();
     let witness_entities = proving_key
         .polynomials

@@ -10,6 +10,7 @@ use super::{
     ShamirPointShare, ShamirPrimeFieldShare, ShamirState, network::ShamirNetworkExt, reconstruct,
     reconstruct_point,
 };
+use crate::protocols::wire::WireFormat;
 
 mod ops;
 pub(super) mod types;
@@ -87,7 +88,10 @@ pub fn scalar_mul<C: CurveGroup, N: Network>(
     b: FieldShare<C::ScalarField>,
     net: &N,
     state: &mut ShamirState<C::ScalarField>,
-) -> eyre::Result<PointShare<C>> {
+) -> eyre::Result<PointShare<C>>
+where
+    C::ScalarField: WireFormat,
+{
     let mul = (b * a).a;
     net.degree_reduce_point(state, mul)
 }

@@ -9,6 +9,7 @@ use color_eyre::eyre::{self, Context};
 use mpc_core::protocols::{
     rep3::{self, Rep3ShareVecType},
     shamir::{ShamirPreprocessing, ShamirState},
+    wire::WireFormat,
 };
 use mpc_net::Network;
 
@@ -50,7 +51,7 @@ pub fn split_witness_rep3<F: PrimeField>(
 }
 
 /// Uncompress into [`Rep3SharedWitness`].
-pub fn uncompress_shared_witness<F: PrimeField, N: Network>(
+pub fn uncompress_shared_witness<F: PrimeField + WireFormat, N: Network>(
     compressed_witness: CompressedRep3SharedWitness<F>,
     net: &N,
 ) -> eyre::Result<Rep3SharedWitness<F>> {
@@ -86,7 +87,7 @@ pub fn split_witness_shamir<F: PrimeField>(
 }
 
 /// Translate the REP3 shared witness into a shamir shared witness
-pub fn translate_witness<F: PrimeField, N: Network>(
+pub fn translate_witness<F: PrimeField + WireFormat, N: Network>(
     witness: CompressedRep3SharedWitness<F>,
     net: &N,
 ) -> eyre::Result<ShamirSharedWitness<F>> {
@@ -111,7 +112,7 @@ pub fn translate_witness<F: PrimeField, N: Network>(
 }
 
 /// Generate a REP3 shared witness
-pub fn generate_witness_rep3<F: PrimeField, N: Network>(
+pub fn generate_witness_rep3<F: PrimeField + WireFormat, N: Network>(
     circuit: &CoCircomCompilerParsed<F>,
     input: Rep3SharedInput<F>,
     config: VMConfig,
