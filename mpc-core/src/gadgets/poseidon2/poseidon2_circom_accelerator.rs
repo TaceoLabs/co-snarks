@@ -361,7 +361,6 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok(trace)
     }
 
-
     /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol. Returns a value needed for the trace when T > 4.
     #[expect(clippy::type_complexity)]
     pub fn rep3_external_round_precomp_intermediate<N: Network>(
@@ -496,8 +495,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
     ) -> eyre::Result<(
-        Vec<Vec<Rep3PrimeFieldShare<F>>>,
-        Vec<Vec<Rep3PrimeFieldShare<F>>>,
+        Vec<Rep3PrimeFieldShare<F>>,
+        Vec<Rep3PrimeFieldShare<F>>,
         Vec<Rep3PrimeFieldShare<F>>,
         Vec<Rep3PrimeFieldShare<F>>,
         Option<Vec<[Rep3PrimeFieldShare<F>; T]>>,
@@ -536,8 +535,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
     ) -> eyre::Result<(
-        Vec<Vec<Rep3PrimeFieldShare<F>>>,
-        Vec<Vec<Rep3PrimeFieldShare<F>>>,
+        Vec<Rep3PrimeFieldShare<F>>,
+        Vec<Rep3PrimeFieldShare<F>>,
         Vec<Rep3PrimeFieldShare<F>>,
     )> {
         assert!(state.len().is_multiple_of(T));
@@ -626,15 +625,14 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     #[expect(clippy::type_complexity)]
+    /// Flat-buffer variant: returns squares/quads as a single `Vec` of length `input.len()`
+    /// (batch item `b`'s values live at `[b*T, (b+1)*T)`) instead of one `Vec` per batch item,
+    /// cutting the allocation count from `2*batch` down to `2` regardless of batch size.
     fn sbox_rep3_precomp_intermediate_vec<N: Network>(
         input: &mut [Rep3PrimeFieldShare<F>],
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
-    ) -> eyre::Result<(
-        Vec<Vec<Rep3PrimeFieldShare<F>>>,
-        Vec<Vec<Rep3PrimeFieldShare<F>>>,
-    )> {
-        let t2 = input.len() / T;
+    ) -> eyre::Result<(Vec<Rep3PrimeFieldShare<F>>, Vec<Rep3PrimeFieldShare<F>>)> {
         assert!(input.len().is_multiple_of(T));
         for (i, inp) in input.iter_mut().enumerate() {
             *inp -= precomp.r[precomp.offset + i];
@@ -644,28 +642,11 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let y = arithmetic::open_vec(input, net)?;
         let id = PartyID::try_from(net.id())?;
 
-        let mut squares = vec![Vec::with_capacity(input.len()); t2];
-        let mut quads = vec![Vec::with_capacity(input.len()); t2];
-        let mut squ;
-        let mut quad;
-        let mut count = 0;
-        for (inp, y, squares_, quads_) in izip!(
-            input.chunks_exact_mut(T),
-            y.chunks_exact(T),
-            squares.iter_mut(),
-            quads.iter_mut()
-        ) {
-            for (inp, y) in inp.iter_mut().zip(y) {
-                (*inp, squ, quad) = Self::sbox_rep3_precomp_post_intermediate(
-                    y,
-                    precomp,
-                    precomp.offset + count,
-                    id,
-                );
-                squares_.push(squ);
-                quads_.push(quad);
-                count += 1;
-            }
+        let mut squares = vec![Rep3PrimeFieldShare::<F>::default(); input.len()];
+        let mut quads = vec![Rep3PrimeFieldShare::<F>::default(); input.len()];
+        for (i, (inp, y)) in input.iter_mut().zip(y).enumerate() {
+            (*inp, squares[i], quads[i]) =
+                Self::sbox_rep3_precomp_post_intermediate(&y, precomp, precomp.offset + i, id);
         }
 
         precomp.offset += input.len();
@@ -703,21 +684,25 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((sum, squares, quads))
     }
 
-    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
-    #[expect(clippy::type_complexity)]
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented
+    /// for the Rep3 MPC protocol. Writes into caller-provided scratch buffers instead of
+    /// allocating fresh `Vec`s every round: since a single permutation call invokes this in a loop
+    /// (`rounds_p` times) with the same batch size each time, the caller allocates `gather_buf`/
+    /// `squares_buf`/`quads_buf`/`sum_buf` once before the loop and reuses them across all
+    /// iterations, dropping the allocation count from up to `4 * rounds_p` down to `4` total.
+    #[expect(clippy::too_many_arguments)]
     pub fn rep3_internal_round_precomp_intermediate_packed<N: Network>(
         &self,
         state: &mut [Rep3PrimeFieldShare<F>],
         r: usize,
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
-    ) -> eyre::Result<(
-        Option<Vec<Rep3PrimeFieldShare<F>>>,
-        Vec<Rep3PrimeFieldShare<F>>,
-        Vec<Rep3PrimeFieldShare<F>>,
-    )> {
+        gather_buf: &mut Vec<Rep3PrimeFieldShare<F>>,
+        squares_buf: &mut Vec<Rep3PrimeFieldShare<F>>,
+        quads_buf: &mut Vec<Rep3PrimeFieldShare<F>>,
+        sum_buf: &mut Vec<Rep3PrimeFieldShare<F>>,
+    ) -> eyre::Result<bool> {
         let id = PartyID::try_from(net.id())?;
-        let t2 = state.len() / T;
         for inp in state.iter_mut().step_by(T) {
             if id == PartyID::ID0 {
                 inp.a += self.params.round_constants_internal[r];
@@ -725,27 +710,32 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
                 inp.b += self.params.round_constants_internal[r];
             }
         }
-        let mut vec = state.iter().cloned().step_by(T).collect::<Vec<_>>();
-        let (squares, quads) =
-            Self::single_sbox_rep3_precomp_intermediate_packed::<N>(&mut vec, precomp, net)?;
-        for (inp, r) in state.iter_mut().step_by(T).zip(vec) {
-            *inp = r;
+        gather_buf.clear();
+        gather_buf.extend(state.iter().cloned().step_by(T));
+        Self::single_sbox_rep3_precomp_intermediate_packed::<N>(
+            gather_buf,
+            precomp,
+            net,
+            squares_buf,
+            quads_buf,
+        )?;
+        for (inp, r) in state.iter_mut().step_by(T).zip(gather_buf.iter()) {
+            *inp = *r;
         }
-        let sum = if T >= 4 {
-            let mut sum = Vec::with_capacity(t2);
+        let has_sum = T >= 4;
+        if has_sum {
+            sum_buf.clear();
             for state_chunk in state.chunks_exact_mut(T) {
-                sum.push(self.matmul_internal_rep3_return_sum(
+                sum_buf.push(self.matmul_internal_rep3_return_sum(
                     state_chunk.try_into().expect("Chunk size checked"),
                 ));
             }
-            Some(sum)
         } else {
             for state_chunk in state.chunks_exact_mut(T) {
                 self.matmul_internal_rep3(state_chunk.try_into().expect("Chunk size checked"));
             }
-            None
-        };
-        Ok((sum, squares, quads))
+        }
+        Ok(has_sum)
     }
 
     /// Fixed-`BATCH_SIZE` counterpart to [`Self::rep3_internal_round_precomp_intermediate_packed`]
@@ -772,10 +762,9 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             }
         }
         let mut arr: [Rep3PrimeFieldShare<F>; BATCH_SIZE] = array::from_fn(|i| state[i * T]);
-        let (squares, quads) =
-            Self::single_sbox_rep3_precomp_intermediate_fixed::<N, BATCH_SIZE>(
-                &mut arr, precomp, net,
-            )?;
+        let (squares, quads) = Self::single_sbox_rep3_precomp_intermediate_fixed::<N, BATCH_SIZE>(
+            &mut arr, precomp, net,
+        )?;
         for (inp, v) in state.iter_mut().step_by(T).zip(arr) {
             *inp = v;
         }
@@ -842,13 +831,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Ok((squ, quad))
     }
 
-    #[expect(clippy::type_complexity)]
     fn single_sbox_rep3_precomp_intermediate_packed<N: Network>(
         input: &mut [Rep3PrimeFieldShare<F>],
         precomp: &mut Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
         net: &N,
-    ) -> eyre::Result<(Vec<Rep3PrimeFieldShare<F>>, Vec<Rep3PrimeFieldShare<F>>)> {
-        let num_parallel = input.len() / T;
+        squares: &mut Vec<Rep3PrimeFieldShare<F>>,
+        quads: &mut Vec<Rep3PrimeFieldShare<F>>,
+    ) -> eyre::Result<()> {
         assert_eq!(D, 5);
 
         for (i, inp) in input.iter_mut().enumerate() {
@@ -859,20 +848,19 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // Open
         let y = arithmetic::open_vec(input, net)?;
-        let mut squares = Vec::with_capacity(num_parallel);
-        let mut quads = Vec::with_capacity(num_parallel);
-        let mut squ;
-        let mut quad;
+        squares.clear();
+        quads.clear();
         for (i, (inp, y)) in izip!(input.iter_mut(), y.iter()).enumerate() {
-            (*inp, squ, quad) =
+            let (res, squ, quad) =
                 Self::sbox_rep3_precomp_post_intermediate(y, precomp, precomp.offset + i, id);
+            *inp = res;
             squares.push(squ);
             quads.push(quad);
         }
 
         precomp.offset += input.len();
 
-        Ok((squares, quads))
+        Ok(())
     }
 
     /// Fixed-`BATCH_SIZE` counterpart to [`Self::single_sbox_rep3_precomp_intermediate_packed`]
@@ -1540,9 +1528,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         // Internal rounds
         let mut final_mul = [[None, None]; BATCH_SIZE];
         for r in 0..p {
-            let (sum, squares_, quads_) = self.rep3_internal_round_precomp_intermediate_fixed::<N, BATCH_SIZE>(
-                &mut state, r, precomp, net,
-            )?;
+            let (sum, squares_, quads_) = self
+                .rep3_internal_round_precomp_intermediate_fixed::<N, BATCH_SIZE>(
+                    &mut state, r, precomp, net,
+                )?;
             for b in 0..BATCH_SIZE {
                 put!(b, idx_sq2[b], squares_[b]);
                 put!(b, idx_sq2[b], quads_[b]);
@@ -1705,7 +1694,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 }
             }
             for b in 0..batch {
-                for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                for (sq, qu) in squares_[b * T..(b + 1) * T]
+                    .iter()
+                    .zip(quads_[b * T..(b + 1) * T].iter())
+                {
                     put!(b, idx_sq1[b], *sq);
                     put!(b, idx_sq1[b], *qu);
                 }
@@ -1714,19 +1706,29 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
 
         // Internal rounds
         let mut final_mul = vec![None; batch];
+        let mut gather_buf = Vec::with_capacity(batch);
+        let mut squares_buf = Vec::with_capacity(batch);
+        let mut quads_buf = Vec::with_capacity(batch);
+        let mut sum_buf = Vec::with_capacity(batch);
         for r in 0..p {
-            let (sum, squares_, quads_) = self
-                .rep3_internal_round_precomp_intermediate_packed::<N>(
-                    &mut state, r, precomp, net,
-                )?;
+            let has_sum = self.rep3_internal_round_precomp_intermediate_packed::<N>(
+                &mut state,
+                r,
+                precomp,
+                net,
+                &mut gather_buf,
+                &mut squares_buf,
+                &mut quads_buf,
+                &mut sum_buf,
+            )?;
             for b in 0..batch {
-                put!(b, idx_sq2[b], squares_[b]);
-                put!(b, idx_sq2[b], quads_[b]);
+                put!(b, idx_sq2[b], squares_buf[b]);
+                put!(b, idx_sq2[b], quads_buf[b]);
             }
             if T == 4 && r == p - 1 {
-                let sum_vec = sum.as_ref().expect("T >= 4 means sum should be Some");
+                debug_assert!(has_sum, "T >= 4 means sum should be populated");
                 for b in 0..batch {
-                    final_mul[b] = Some(sum_vec[b]);
+                    final_mul[b] = Some(sum_buf[b]);
                 }
             }
             if T != 4 {
@@ -1758,7 +1760,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 }
             }
             for b in 0..batch {
-                for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                for (sq, qu) in squares_[b * T..(b + 1) * T]
+                    .iter()
+                    .zip(quads_[b * T..(b + 1) * T].iter())
+                {
                     put!(b, idx_sq3[b], *sq);
                     put!(b, idx_sq3[b], *qu);
                 }
@@ -1849,7 +1854,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 for b in 0..batch {
                     put!(b, idx_sq1[b], res[b]);
                     put!(b, idx_sq1[b], Rep3PrimeFieldShare::<F>::default());
-                    for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                    for (sq, qu) in squares_[b * T..(b + 1) * T]
+                        .iter()
+                        .zip(quads_[b * T..(b + 1) * T].iter())
+                    {
                         put!(b, idx_sq1[b], *sq);
                         put!(b, idx_sq1[b], *qu);
                     }
@@ -1863,7 +1871,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                     }
                 }
                 for b in 0..batch {
-                    for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                    for (sq, qu) in squares_[b * T..(b + 1) * T]
+                        .iter()
+                        .zip(quads_[b * T..(b + 1) * T].iter())
+                    {
                         put!(b, idx_sq1[b], *sq);
                         put!(b, idx_sq1[b], *qu);
                     }
@@ -1873,25 +1884,35 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
 
         // Internal rounds
         let mut final_mul = vec![[None, None]; batch];
+        let mut gather_buf = Vec::with_capacity(batch);
+        let mut squares_buf = Vec::with_capacity(batch);
+        let mut quads_buf = Vec::with_capacity(batch);
+        let mut sum_buf = Vec::with_capacity(batch);
         for r in 0..p {
-            let (sum, squares_, quads_) = self
-                .rep3_internal_round_precomp_intermediate_packed::<N>(
-                    &mut state, r, precomp, net,
-                )?;
+            let has_sum = self.rep3_internal_round_precomp_intermediate_packed::<N>(
+                &mut state,
+                r,
+                precomp,
+                net,
+                &mut gather_buf,
+                &mut squares_buf,
+                &mut quads_buf,
+                &mut sum_buf,
+            )?;
             for b in 0..batch {
-                put!(b, idx_sq2[b], squares_[b]);
-                put!(b, idx_sq2[b], quads_[b]);
+                put!(b, idx_sq2[b], squares_buf[b]);
+                put!(b, idx_sq2[b], quads_buf[b]);
             }
             if r == 0 {
-                let sum_vec = sum.as_ref().expect("T=16 sum should be Some");
+                debug_assert!(has_sum, "T=16 sum should be populated");
                 for b in 0..batch {
-                    final_mul[b][0] = Some(sum_vec[b]);
+                    final_mul[b][0] = Some(sum_buf[b]);
                 }
             }
             if r == p - 1 {
-                let sum_vec = sum.as_ref().expect("T=16 sum should be Some");
+                debug_assert!(has_sum, "T=16 sum should be populated");
                 for b in 0..batch {
-                    final_mul[b][1] = Some(sum_vec[b]);
+                    final_mul[b][1] = Some(sum_buf[b]);
                 }
             }
             if r < p - 2 {
@@ -1920,7 +1941,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 }
             }
             for b in 0..batch {
-                for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                for (sq, qu) in squares_[b * T..(b + 1) * T]
+                    .iter()
+                    .zip(quads_[b * T..(b + 1) * T].iter())
+                {
                     put!(b, idx_sq3[b], *sq);
                     put!(b, idx_sq3[b], *qu);
                 }
@@ -2043,5 +2067,4 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
             state, precomp, net,
         )
     }
-
 }

@@ -232,21 +232,23 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
 
     /// General (dynamic-length) sbox, used by the internal-round packed/vec batching path where
     /// the collected "one element per batch item" buffer's length is not known at compile time.
-    #[expect(clippy::type_complexity)]
+    /// Writes into caller-provided scratch buffers instead of allocating fresh `Vec`s every call.
     fn sbox_shamir_precomp_intermediate<N: Network>(
         input: &mut [ShamirPrimeFieldShare<F>],
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
         net: &N,
         shamir_state: &mut ShamirState<F>,
-    ) -> eyre::Result<(Vec<ShamirPrimeFieldShare<F>>, Vec<ShamirPrimeFieldShare<F>>)> {
+        squares: &mut Vec<ShamirPrimeFieldShare<F>>,
+        quads: &mut Vec<ShamirPrimeFieldShare<F>>,
+    ) -> eyre::Result<()> {
         for (i, inp) in input.iter_mut().enumerate() {
             *inp -= precomp.r[precomp.offset + i];
         }
 
         let y = arithmetic::open_vec(input, net, shamir_state)?;
 
-        let mut squares = Vec::with_capacity(input.len());
-        let mut quads = Vec::with_capacity(input.len());
+        squares.clear();
+        quads.clear();
         for (i, (inp, y)) in input.iter_mut().zip(y).enumerate() {
             let (r, r2, r3, r4, r5) = precomp.get(precomp.offset + i);
             let (res, squ, quad) =
@@ -257,7 +259,7 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         }
 
         precomp.offset += input.len();
-        Ok((squares, quads))
+        Ok(())
     }
 
     fn single_sbox_shamir_precomp_intermediate<N: Network>(
@@ -314,39 +316,29 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
     }
 
     #[expect(clippy::type_complexity)]
+    /// Flat-buffer variant: returns squares/quads as a single `Vec` of length `input.len()`
+    /// (batch item `b`'s values live at `[b*T, (b+1)*T)`) instead of one `Vec` per batch item,
+    /// cutting the allocation count from `2*batch` down to `2` regardless of batch size.
     fn sbox_shamir_precomp_intermediate_vec<N: Network>(
         input: &mut [ShamirPrimeFieldShare<F>],
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
         net: &N,
         shamir_state: &mut ShamirState<F>,
-    ) -> eyre::Result<(
-        Vec<Vec<ShamirPrimeFieldShare<F>>>,
-        Vec<Vec<ShamirPrimeFieldShare<F>>>,
-    )> {
-        let t2 = input.len() / T;
+    ) -> eyre::Result<(Vec<ShamirPrimeFieldShare<F>>, Vec<ShamirPrimeFieldShare<F>>)> {
         assert!(input.len().is_multiple_of(T));
         for (i, inp) in input.iter_mut().enumerate() {
             *inp -= precomp.r[precomp.offset + i];
         }
         let y = arithmetic::open_vec(input, net, shamir_state)?;
-        let mut squares = vec![Vec::with_capacity(T); t2];
-        let mut quads = vec![Vec::with_capacity(T); t2];
-        let mut count = 0;
-        for (inp, y_chunk, sq, qu) in izip!(
-            input.chunks_exact_mut(T),
-            y.chunks_exact(T),
-            squares.iter_mut(),
-            quads.iter_mut()
-        ) {
-            for (inp, y) in inp.iter_mut().zip(y_chunk) {
-                let (r, r2, r3, r4, r5) = precomp.get(precomp.offset + count);
-                let (res, squ, quad) =
-                    Self::sbox_shamir_precomp_post_intermediate(y, r, r2, r3, r4, r5);
-                *inp = res;
-                sq.push(squ);
-                qu.push(quad);
-                count += 1;
-            }
+        let mut squares = vec![ShamirPrimeFieldShare::<F>::default(); input.len()];
+        let mut quads = vec![ShamirPrimeFieldShare::<F>::default(); input.len()];
+        for (i, (inp, y)) in input.iter_mut().zip(y.iter()).enumerate() {
+            let (r, r2, r3, r4, r5) = precomp.get(precomp.offset + i);
+            let (res, squ, quad) =
+                Self::sbox_shamir_precomp_post_intermediate(y, r, r2, r3, r4, r5);
+            *inp = res;
+            squares[i] = squ;
+            quads[i] = quad;
         }
         precomp.offset += input.len();
         Ok((squares, quads))
@@ -535,7 +527,13 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         ))
     }
 
-    #[expect(clippy::type_complexity)]
+    /// One internal round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented
+    /// for the Shamir MPC protocol. Writes into caller-provided scratch buffers instead of
+    /// allocating fresh `Vec`s every round: since a single permutation call invokes this in a loop
+    /// (`rounds_p` times) with the same batch size each time, the caller allocates `gather_buf`/
+    /// `squares_buf`/`quads_buf`/`sum_buf` once before the loop and reuses them across all
+    /// iterations, dropping the allocation count from up to `4 * rounds_p` down to `4` total.
+    #[expect(clippy::too_many_arguments)]
     fn shamir_internal_round_precomp_intermediate_packed<N: Network>(
         &self,
         state: &mut [ShamirPrimeFieldShare<F>],
@@ -543,37 +541,41 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         precomp: &mut Poseidon2Precomputations<ShamirPrimeFieldShare<F>>,
         net: &N,
         shamir_state: &mut ShamirState<F>,
-    ) -> eyre::Result<(
-        Option<Vec<ShamirPrimeFieldShare<F>>>,
-        Vec<ShamirPrimeFieldShare<F>>,
-        Vec<ShamirPrimeFieldShare<F>>,
-    )> {
-        let t2 = state.len() / T;
+        gather_buf: &mut Vec<ShamirPrimeFieldShare<F>>,
+        squares_buf: &mut Vec<ShamirPrimeFieldShare<F>>,
+        quads_buf: &mut Vec<ShamirPrimeFieldShare<F>>,
+        sum_buf: &mut Vec<ShamirPrimeFieldShare<F>>,
+    ) -> eyre::Result<bool> {
         for inp in state.iter_mut().step_by(T) {
             *inp += self.params.round_constants_internal[r];
         }
-        let mut first_elems: Vec<ShamirPrimeFieldShare<F>> =
-            state.iter().cloned().step_by(T).collect();
-        let (squares, quads) =
-            Self::sbox_shamir_precomp_intermediate(&mut first_elems, precomp, net, shamir_state)?;
-        for (inp, val) in state.iter_mut().step_by(T).zip(first_elems) {
-            *inp = val;
+        gather_buf.clear();
+        gather_buf.extend(state.iter().cloned().step_by(T));
+        Self::sbox_shamir_precomp_intermediate(
+            gather_buf,
+            precomp,
+            net,
+            shamir_state,
+            squares_buf,
+            quads_buf,
+        )?;
+        for (inp, val) in state.iter_mut().step_by(T).zip(gather_buf.iter()) {
+            *inp = *val;
         }
-        let sum = if T >= 4 {
-            let mut sums = Vec::with_capacity(t2);
+        let has_sum = T >= 4;
+        if has_sum {
+            sum_buf.clear();
             for chunk in state.chunks_exact_mut(T) {
-                sums.push(self.matmul_internal_shamir_return_sum(
+                sum_buf.push(self.matmul_internal_shamir_return_sum(
                     chunk.try_into().expect("Chunk size checked"),
                 ));
             }
-            Some(sums)
         } else {
             for chunk in state.chunks_exact_mut(T) {
                 self.matmul_internal_shamir_shares(chunk.try_into().expect("Chunk size checked"));
             }
-            None
         };
-        Ok((sum, squares, quads))
+        Ok(has_sum)
     }
 
     /// Fixed-`BATCH_SIZE` counterpart to
@@ -666,8 +668,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         net: &N,
         shamir_state: &mut ShamirState<F>,
     ) -> eyre::Result<(
-        Vec<Vec<ShamirPrimeFieldShare<F>>>,
-        Vec<Vec<ShamirPrimeFieldShare<F>>>,
+        Vec<ShamirPrimeFieldShare<F>>,
+        Vec<ShamirPrimeFieldShare<F>>,
         Vec<ShamirPrimeFieldShare<F>>,
         Vec<ShamirPrimeFieldShare<F>>,
         Option<Vec<[ShamirPrimeFieldShare<F>; T]>>,
@@ -712,8 +714,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         net: &N,
         shamir_state: &mut ShamirState<F>,
     ) -> eyre::Result<(
-        Vec<Vec<ShamirPrimeFieldShare<F>>>,
-        Vec<Vec<ShamirPrimeFieldShare<F>>>,
+        Vec<ShamirPrimeFieldShare<F>>,
+        Vec<ShamirPrimeFieldShare<F>>,
         Vec<ShamirPrimeFieldShare<F>>,
     )> {
         assert!(state.len().is_multiple_of(T));
@@ -1122,13 +1124,14 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         // Internal rounds
         let mut final_mul = [None; BATCH_SIZE];
         for r in 0..p {
-            let (sum, squares_, quads_) = self.shamir_internal_round_precomp_intermediate_fixed::<N, BATCH_SIZE>(
-                &mut state,
-                r,
-                precomp,
-                net,
-                shamir_state,
-            )?;
+            let (sum, squares_, quads_) = self
+                .shamir_internal_round_precomp_intermediate_fixed::<N, BATCH_SIZE>(
+                    &mut state,
+                    r,
+                    precomp,
+                    net,
+                    shamir_state,
+                )?;
             for b in 0..BATCH_SIZE {
                 put!(b, idx_sq2[b], squares_[b]);
                 put!(b, idx_sq2[b], quads_[b]);
@@ -1309,13 +1312,14 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         // Internal rounds
         let mut final_mul = [[None, None]; BATCH_SIZE];
         for r in 0..p {
-            let (sum, squares_, quads_) = self.shamir_internal_round_precomp_intermediate_fixed::<N, BATCH_SIZE>(
-                state.as_mut_slice(),
-                r,
-                precomp,
-                net,
-                shamir_state,
-            )?;
+            let (sum, squares_, quads_) = self
+                .shamir_internal_round_precomp_intermediate_fixed::<N, BATCH_SIZE>(
+                    state.as_mut_slice(),
+                    r,
+                    precomp,
+                    net,
+                    shamir_state,
+                )?;
             for b in 0..BATCH_SIZE {
                 put!(b, idx_sq2[b], squares_[b]);
                 put!(b, idx_sq2[b], quads_[b]);
@@ -1484,7 +1488,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 }
             }
             for b in 0..batch {
-                for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                for (sq, qu) in squares_[b * T..(b + 1) * T]
+                    .iter()
+                    .zip(quads_[b * T..(b + 1) * T].iter())
+                {
                     put!(b, idx_sq1[b], *sq);
                     put!(b, idx_sq1[b], *qu);
                 }
@@ -1493,22 +1500,30 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
 
         // Internal rounds
         let mut final_mul = vec![None; batch];
+        let mut gather_buf = Vec::with_capacity(batch);
+        let mut squares_buf = Vec::with_capacity(batch);
+        let mut quads_buf = Vec::with_capacity(batch);
+        let mut sum_buf = Vec::with_capacity(batch);
         for r in 0..p {
-            let (sum, squares_, quads_) = self.shamir_internal_round_precomp_intermediate_packed(
+            let has_sum = self.shamir_internal_round_precomp_intermediate_packed(
                 &mut state,
                 r,
                 precomp,
                 net,
                 shamir_state,
+                &mut gather_buf,
+                &mut squares_buf,
+                &mut quads_buf,
+                &mut sum_buf,
             )?;
             for b in 0..batch {
-                put!(b, idx_sq2[b], squares_[b]);
-                put!(b, idx_sq2[b], quads_[b]);
+                put!(b, idx_sq2[b], squares_buf[b]);
+                put!(b, idx_sq2[b], quads_buf[b]);
             }
             if T == 4 && r == p - 1 {
-                let sum_vec = sum.as_ref().expect("T >= 4 means sum should be Some");
+                debug_assert!(has_sum, "T >= 4 means sum should be populated");
                 for b in 0..batch {
-                    final_mul[b] = Some(sum_vec[b]);
+                    final_mul[b] = Some(sum_buf[b]);
                 }
             }
             if T != 4 {
@@ -1546,7 +1561,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 }
             }
             for b in 0..batch {
-                for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                for (sq, qu) in squares_[b * T..(b + 1) * T]
+                    .iter()
+                    .zip(quads_[b * T..(b + 1) * T].iter())
+                {
                     put!(b, idx_sq3[b], *sq);
                     put!(b, idx_sq3[b], *qu);
                 }
@@ -1642,7 +1660,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 for b in 0..batch {
                     put!(b, idx_sq1[b], res[b]);
                     put!(b, idx_sq1[b], ShamirPrimeFieldShare::<F>::default());
-                    for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                    for (sq, qu) in squares_[b * T..(b + 1) * T]
+                        .iter()
+                        .zip(quads_[b * T..(b + 1) * T].iter())
+                    {
                         put!(b, idx_sq1[b], *sq);
                         put!(b, idx_sq1[b], *qu);
                     }
@@ -1662,7 +1683,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                     }
                 }
                 for b in 0..batch {
-                    for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                    for (sq, qu) in squares_[b * T..(b + 1) * T]
+                        .iter()
+                        .zip(quads_[b * T..(b + 1) * T].iter())
+                    {
                         put!(b, idx_sq1[b], *sq);
                         put!(b, idx_sq1[b], *qu);
                     }
@@ -1672,28 +1696,36 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
 
         // Internal rounds
         let mut final_mul = vec![[None, None]; batch];
+        let mut gather_buf = Vec::with_capacity(batch);
+        let mut squares_buf = Vec::with_capacity(batch);
+        let mut quads_buf = Vec::with_capacity(batch);
+        let mut sum_buf = Vec::with_capacity(batch);
         for r in 0..p {
-            let (sum, squares_, quads_) = self.shamir_internal_round_precomp_intermediate_packed(
+            let has_sum = self.shamir_internal_round_precomp_intermediate_packed(
                 &mut state,
                 r,
                 precomp,
                 net,
                 shamir_state,
+                &mut gather_buf,
+                &mut squares_buf,
+                &mut quads_buf,
+                &mut sum_buf,
             )?;
             for b in 0..batch {
-                put!(b, idx_sq2[b], squares_[b]);
-                put!(b, idx_sq2[b], quads_[b]);
+                put!(b, idx_sq2[b], squares_buf[b]);
+                put!(b, idx_sq2[b], quads_buf[b]);
             }
             if r == 0 {
-                let sum_vec = sum.as_ref().expect("T=16 sum should be Some");
+                debug_assert!(has_sum, "T=16 sum should be populated");
                 for b in 0..batch {
-                    final_mul[b][0] = Some(sum_vec[b]);
+                    final_mul[b][0] = Some(sum_buf[b]);
                 }
             }
             if r == p - 1 {
-                let sum_vec = sum.as_ref().expect("T=16 sum should be Some");
+                debug_assert!(has_sum, "T=16 sum should be populated");
                 for b in 0..batch {
-                    final_mul[b][1] = Some(sum_vec[b]);
+                    final_mul[b][1] = Some(sum_buf[b]);
                 }
             }
             if r < p - 2 {
@@ -1728,7 +1760,10 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 }
             }
             for b in 0..batch {
-                for (sq, qu) in squares_[b].iter().zip(quads_[b].iter()) {
+                for (sq, qu) in squares_[b * T..(b + 1) * T]
+                    .iter()
+                    .zip(quads_[b * T..(b + 1) * T].iter())
+                {
                     put!(b, idx_sq3[b], *sq);
                     put!(b, idx_sq3[b], *qu);
                 }
