@@ -3,6 +3,8 @@
 use bytes::Bytes;
 use std::collections::{BTreeMap, HashMap};
 
+pub use bytes;
+
 // Shared async-transport core, used by the QUIC and ephemeral-TCP-session backends.
 #[cfg(any(feature = "quic", feature = "tcp-session"))]
 mod async_net;
