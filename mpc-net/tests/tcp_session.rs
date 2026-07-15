@@ -1,11 +1,14 @@
 //! Tests for `mpc_net::tcp_session`.
 #![cfg(feature = "tcp-session")]
 
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    time::Duration,
+};
 
 use mpc_net::{
-    join, join3,
-    tcp_session::{TcpNetwork, TcpNetworkHandler, TcpNetworkHandlerBuilder},
+    DEFAULT_MAX_FRAME_LENGTH, join, join3,
+    tcp_session::{NetworkConfig, TcpNetwork, TcpNetworkHandler},
 };
 use reserve_port::ReservedPort;
 
@@ -23,10 +26,18 @@ async fn handlers(n: usize) -> Vec<TcpNetworkHandler> {
         let addrs = addrs.clone();
         let bind_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), ports[id]);
         async move {
-            TcpNetworkHandlerBuilder::new(id, bind_addr, addrs)
-                .build()
-                .await
-                .unwrap()
+            TcpNetworkHandler::new(NetworkConfig {
+                party_id: id,
+                bind_addr,
+                node_addrs: addrs,
+                init_session_timeout: None,
+                timeout: None,
+                flush_timeout: None,
+                time_to_idle: Duration::from_secs(60),
+                max_frame_length: DEFAULT_MAX_FRAME_LENGTH,
+            })
+            .await
+            .unwrap()
         }
     }))
     .await

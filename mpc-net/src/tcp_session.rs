@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use futures::StreamExt as _;
+use serde::Deserialize;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
 use tokio::{net::TcpStream, sync::oneshot};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
@@ -14,8 +15,44 @@ use tokio_util::codec::{Framed, LengthDelimitedCodec};
 use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels};
 use bytes::Bytes;
 
-/// The default time to idle for incoming connections that were not picked up because, e.g. `init_session` for that session id was never called.
-pub const DEFAULT_TIME_TO_IDLE: Duration = Duration::from_secs(30);
+/// The network configuration file.
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+pub struct NetworkConfig {
+    /// Our own id in the network.
+    pub party_id: usize,
+    /// The [SocketAddr] we bind to.
+    pub bind_addr: SocketAddr,
+    /// The addresses of the other nodes (ordered by party_id, including our own address).
+    pub node_addrs: Vec<String>,
+    /// The `init_session` timeout for the network. If not set, the `init_session` will be unbounded.
+    #[serde(with = "humantime_serde", default)]
+    #[allow(
+        dead_code,
+        reason = "can be used via tokio::time::timeout around init_session, but up to downstream code to do so"
+    )]
+    pub init_session_timeout: Option<Duration>,
+    /// The send/recv timeout
+    #[serde(with = "humantime_serde", default)]
+    pub timeout: Option<Duration>,
+    /// The flush timeout for the network. If not set, the flush will be unbounded.
+    #[serde(with = "humantime_serde", default)]
+    pub flush_timeout: Option<Duration>,
+    /// The time to idle for incoming connections that were not picked up because, e.g.
+    /// `init_session` for that session id was never called. Defaults to `DEFAULT_TIME_TO_IDLE` (30 seconds)
+    #[serde(with = "humantime_serde", default = "default_time_to_idle")]
+    pub time_to_idle: Duration,
+    /// The max length (in bytes) of a single frame
+    #[serde(default = "default_max_frame_length")]
+    pub max_frame_length: usize,
+}
+
+fn default_max_frame_length() -> usize {
+    DEFAULT_MAX_FRAME_LENGTH
+}
+
+fn default_time_to_idle() -> Duration {
+    Duration::from_secs(30)
+}
 
 #[derive(Debug)]
 pub(crate) enum MaybeTcpStream {
@@ -91,76 +128,36 @@ impl TcpStreams {
     }
 }
 
-/// TCP session network handler builder. Use `build` to create a new `TcpNetworkHandler`.
+/// TCP session network handler. Listens for incoming connections and matches them to sessions based on a session id and party id.
 #[derive(Debug, Clone)]
-pub struct TcpNetworkHandlerBuilder {
+pub struct TcpNetworkHandler {
     party_id: usize,
-    bind_addr: SocketAddr,
-    parties: Vec<String>,
-    time_to_idle: Duration,
+    streams: TcpStreams,
+    node_addrs: Vec<String>,
     max_frame_length: usize,
     timeout: Option<Duration>,
     flush_timeout: Option<Duration>,
 }
 
-impl TcpNetworkHandlerBuilder {
-    /// Create a new `TcpNetworkHandlerBuilder`. Use `build` to create a new `TcpNetworkHandler`.
-    ///
-    /// # Arguments
-    /// - `party_id`: The id of this party (must be unique across all parties).
-    /// - `bind_addr`: The address to bind the TCP listener to.
-    /// - `parties`: The list of all parties' addresses (including this party's address). The index of each address in the list is the party id.
-    pub fn new(party_id: usize, bind_addr: SocketAddr, parties: Vec<String>) -> Self {
-        Self {
-            party_id,
-            bind_addr,
-            parties,
-            time_to_idle: DEFAULT_TIME_TO_IDLE,
-            max_frame_length: DEFAULT_MAX_FRAME_LENGTH,
-            timeout: None,
-            flush_timeout: None,
-        }
-    }
-
-    /// Set the time to idle for incoming connections that were not picked up because, e.g. `init_session` for that session id was never called.
-    ///
-    /// Defaults to `DEFAULT_TIME_TO_IDLE` (30 seconds)
-    pub fn time_to_idle(mut self, time_to_idle: Duration) -> Self {
-        self.time_to_idle = time_to_idle;
-        self
-    }
-
-    /// Set the maximum length of a frame that can be sent or received. This is used to prevent DoS attacks by sending very large frames.
-    ///
-    /// Defaults to `DEFAULT_MAX_FRAME_LENGTH` (64MB)
-    pub fn max_frame_length(mut self, max_frame_length: usize) -> Self {
-        self.max_frame_length = max_frame_length;
-        self
-    }
-
-    /// Set the receive timeout for the network.
-    ///
-    /// Defaults to no timeout.
-    pub fn timeout(mut self, timeout: Option<Duration>) -> Self {
-        self.timeout = timeout;
-        self
-    }
-
-    /// Set the flush timeout for the network.
-    ///
-    /// Defaults to no timeout.
-    pub fn flush_timeout(mut self, flush_timeout: Option<Duration>) -> Self {
-        self.flush_timeout = flush_timeout;
-        self
-    }
-
+impl TcpNetworkHandler {
     /// Creates a new `TcpNetworkHandler`. Use `init_session` to create a new `TcpNetwork` for a session.
     ///
     /// Spawns two background tasks:
     /// - One for accepting incoming connections.
     /// - One for cleaning up idle (incoming connections that were not picked up because, e.g. `init_session` for that session id was never called) connections.
-    pub async fn build(self) -> eyre::Result<TcpNetworkHandler> {
-        let listener = tokio::net::TcpListener::bind(self.bind_addr).await?;
+    pub async fn new(
+        NetworkConfig {
+            party_id,
+            bind_addr,
+            node_addrs,
+            init_session_timeout: _,
+            timeout,
+            flush_timeout,
+            time_to_idle,
+            max_frame_length,
+        }: NetworkConfig,
+    ) -> eyre::Result<Self> {
+        let listener = tokio::net::TcpListener::bind(bind_addr).await?;
         let streams = TcpStreams::new();
 
         tokio::spawn({
@@ -183,16 +180,15 @@ impl TcpNetworkHandlerBuilder {
 
         tokio::spawn({
             let streams = streams.clone();
-            let mut interval = tokio::time::interval(self.time_to_idle * 2);
+            let mut interval = tokio::time::interval(time_to_idle * 2);
             async move {
                 loop {
                     interval.tick().await;
                     let mut streams = streams.streams.lock().await;
                     let now = Instant::now();
                     let before_cleanup = streams.len();
-                    streams.retain(|_, (_, last_used)| {
-                        now.duration_since(*last_used) < self.time_to_idle
-                    });
+                    streams
+                        .retain(|_, (_, last_used)| now.duration_since(*last_used) < time_to_idle);
                     let after_cleanup = streams.len();
                     let removed = before_cleanup - after_cleanup;
                     if removed > 0 {
@@ -205,35 +201,22 @@ impl TcpNetworkHandlerBuilder {
         });
 
         Ok(TcpNetworkHandler {
-            party_id: self.party_id,
+            party_id,
             streams,
-            parties: self.parties,
-            max_frame_length: self.max_frame_length,
-            timeout: self.timeout,
-            flush_timeout: self.flush_timeout,
+            node_addrs,
+            max_frame_length,
+            timeout,
+            flush_timeout,
         })
     }
-}
 
-/// TCP session network handler. Listens for incoming connections and matches them to sessions based on a session id and party id.
-#[derive(Debug, Clone)]
-pub struct TcpNetworkHandler {
-    party_id: usize,
-    streams: TcpStreams,
-    parties: Vec<String>,
-    max_frame_length: usize,
-    timeout: Option<Duration>,
-    flush_timeout: Option<Duration>,
-}
-
-impl TcpNetworkHandler {
     /// Initializes a new `TcpNetwork` for a session.
     ///
     /// All parties must call this method with the same `session_id` to establish the connections for that session.
     /// The `session_id` should be unique for each session, but can be reused across different sessions as long as they are not active at the same time.
     pub async fn init_session(&self, session_id: u128) -> eyre::Result<TcpNetwork> {
         let mut streams = HashMap::new();
-        for (other_id, addr) in self.parties.iter().enumerate() {
+        for (other_id, addr) in self.node_addrs.iter().enumerate() {
             match other_id.cmp(&self.party_id) {
                 Ordering::Less => {
                     tracing::debug!("connecting to peer: {addr}");
