@@ -9,7 +9,7 @@ pub use bytes;
 #[cfg(any(feature = "quic", feature = "tcp-session"))]
 mod async_net;
 // Shared blocking-transport core, used by the TCP and TLS backends.
-#[cfg(any(feature = "tcp", feature = "tls"))]
+#[cfg(any(feature = "tcp", feature = "tls", feature = "tcp-session-blocking"))]
 mod blocking;
 pub mod config;
 #[cfg(feature = "local")]
@@ -20,6 +20,8 @@ pub mod quic;
 pub mod tcp;
 #[cfg(feature = "tcp-session")]
 pub mod tcp_session;
+#[cfg(feature = "tcp-session-blocking")]
+pub mod tcp_session_blocking;
 #[cfg(feature = "tls")]
 pub mod tls;
 
