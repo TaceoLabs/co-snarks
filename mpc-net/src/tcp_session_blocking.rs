@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use byteorder::{NetworkEndian, ReadBytesExt as _, WriteBytesExt as _};
 use crossbeam_channel::Sender;
-use eyre::Context;
+use eyre::Context as _;
 use serde::Deserialize;
 
 use crate::blocking::BlockingChannels;
@@ -116,13 +116,13 @@ impl TcpStreams {
         stream.set_read_timeout(self.init_session_timeout)?;
         stream.set_write_timeout(self.write_timeout)?;
 
-        tracing::debug!("reading session id..");
+        tracing::trace!("reading session id..");
         let session_id = stream.read_u128::<NetworkEndian>()?;
-        tracing::debug!("got session id: {session_id:?}");
+        tracing::trace!("got session id: {session_id:?}");
 
-        tracing::debug!("reading party id..");
+        tracing::trace!("reading party id..");
         let party_id = stream.read_u64::<NetworkEndian>()? as usize;
-        tracing::debug!("got party id: {party_id}");
+        tracing::trace!("got party id: {party_id}");
 
         // reset read timeout to None, so that we don't timeout in the recv task
         stream.set_read_timeout(None)?;
@@ -140,13 +140,13 @@ impl TcpStreams {
                 );
             }
             Some((MaybeTcpStream::Waiter(tx), _)) => {
-                tracing::debug!("found waiter, sending stream");
+                tracing::trace!("found waiter, sending stream");
                 if tx.send(stream).is_err() {
                     tracing::warn!("failed to send stream to waiter, receiver dropped");
                 }
             }
             None => {
-                tracing::debug!("no waiter found, inserting stream");
+                tracing::trace!("no waiter found, inserting stream");
                 streams.insert(
                     (session_id, party_id),
                     (MaybeTcpStream::TcpStream(stream), Instant::now()),
@@ -195,7 +195,7 @@ impl TcpNetworkHandler {
             move || {
                 loop {
                     if let Ok((stream, addr)) = listener.accept() {
-                        tracing::debug!("accepted incoming connection from {addr}");
+                        tracing::trace!("accepted incoming connection from {addr}");
                         if let Err(err) = streams.insert(stream) {
                             tracing::warn!("failed to insert incoming connection: {err:?}");
                         }
@@ -245,11 +245,12 @@ impl TcpNetworkHandler {
     /// All parties must call this method with the same `session_id` to establish the connections for that session.
     /// The `session_id` should be unique for each session, but can be reused across different sessions as long as they are not active at the same time.
     pub fn init_session(&self, session_id: u128) -> eyre::Result<TcpNetwork> {
+        tracing::debug!("initializing session {session_id}");
         let mut streams = HashMap::new();
         for (other_id, addr) in self.node_addrs.iter().enumerate() {
             match other_id.cmp(&self.party_id) {
                 Ordering::Less => {
-                    tracing::debug!("connecting to peer: {addr}");
+                    tracing::trace!("connecting to peer: {addr}");
                     let mut stream = if let Some(init_session_timeout) = self.init_session_timeout {
                         let addr = addr.to_socket_addrs()?.next().ok_or_else(|| {
                             eyre::eyre!("failed to resolve address {addr} to a socket address")
@@ -262,15 +263,15 @@ impl TcpNetworkHandler {
                     stream.set_write_timeout(self.timeout)?;
                     stream.write_u128::<NetworkEndian>(session_id)?;
                     stream.write_u64::<NetworkEndian>(self.party_id as u64)?;
-                    tracing::debug!("connected");
+                    tracing::trace!("connected");
                     streams.insert(other_id, stream);
                 }
                 Ordering::Greater => {
-                    tracing::debug!("waiting for peer: {addr}");
+                    tracing::trace!("waiting for peer: {addr}");
                     let stream =
                         self.streams
                             .get(session_id, other_id, self.init_session_timeout)?;
-                    tracing::debug!("got connection from peer");
+                    tracing::trace!("got connection from peer");
                     streams.insert(other_id, stream);
                 }
                 Ordering::Equal => continue,

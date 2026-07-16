@@ -99,13 +99,13 @@ impl TcpStreams {
     pub(crate) async fn insert(&self, mut stream: TcpStream) -> eyre::Result<()> {
         stream.set_nodelay(true)?;
 
-        tracing::debug!("reading session id..");
+        tracing::trace!("reading session id..");
         let session_id = stream.read_u128().await?;
-        tracing::debug!("got session id: {session_id:?}");
+        tracing::trace!("got session id: {session_id:?}");
 
-        tracing::debug!("reading party id..");
+        tracing::trace!("reading party id..");
         let party_id = stream.read_u64().await? as usize;
-        tracing::debug!("got party id: {party_id}");
+        tracing::trace!("got party id: {party_id}");
 
         let mut streams = self.streams.lock().await;
         let maybe_stream = streams.remove(&(session_id, party_id));
@@ -120,13 +120,13 @@ impl TcpStreams {
                 );
             }
             Some((MaybeTcpStream::Waiter(tx), _)) => {
-                tracing::debug!("found waiter, sending stream");
+                tracing::trace!("found waiter, sending stream");
                 if tx.send(stream).is_err() {
                     tracing::warn!("failed to send stream to waiter, receiver dropped");
                 }
             }
             None => {
-                tracing::debug!("no waiter found, inserting stream");
+                tracing::trace!("no waiter found, inserting stream");
                 streams.insert(
                     (session_id, party_id),
                     (MaybeTcpStream::TcpStream(stream), Instant::now()),
@@ -174,7 +174,7 @@ impl TcpNetworkHandler {
             async move {
                 loop {
                     if let Ok((stream, addr)) = listener.accept().await {
-                        tracing::debug!("accepted incoming connection from {addr}");
+                        tracing::trace!("accepted incoming connection from {addr}");
                         if let Err(err) = streams.insert(stream).await {
                             tracing::warn!("failed to insert incoming connection: {err:?}");
                         }
@@ -224,22 +224,23 @@ impl TcpNetworkHandler {
     /// All parties must call this method with the same `session_id` to establish the connections for that session.
     /// The `session_id` should be unique for each session, but can be reused across different sessions as long as they are not active at the same time.
     pub async fn init_session(&self, session_id: u128) -> eyre::Result<TcpNetwork> {
+        tracing::debug!("initializing session {session_id}");
         let mut streams = HashMap::new();
         for (other_id, addr) in self.node_addrs.iter().enumerate() {
             match other_id.cmp(&self.party_id) {
                 Ordering::Less => {
-                    tracing::debug!("connecting to peer: {addr}");
+                    tracing::trace!("connecting to peer: {addr}");
                     let mut stream = TcpStream::connect(addr).await?;
                     stream.set_nodelay(true)?;
                     stream.write_u128(session_id).await?;
                     stream.write_u64(self.party_id as u64).await?;
-                    tracing::debug!("connected");
+                    tracing::trace!("connected");
                     streams.insert(other_id, stream);
                 }
                 Ordering::Greater => {
-                    tracing::debug!("waiting for peer: {addr}");
+                    tracing::trace!("waiting for peer: {addr}");
                     let stream = self.streams.get(session_id, other_id).await?;
-                    tracing::debug!("got connection from peer");
+                    tracing::trace!("got connection from peer");
                     streams.insert(other_id, stream);
                 }
                 Ordering::Equal => continue,
