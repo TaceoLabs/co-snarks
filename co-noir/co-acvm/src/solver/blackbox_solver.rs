@@ -109,7 +109,7 @@ where
         if let Some(w_value) = T::get_public(&w_value) {
             let w_value = GenericFieldElement::from_repr(w_value);
             if w_value.num_bits() > num_bits {
-                return Err(eyre::eyre!("UnsatisfiedConstraint"))?;
+                return Err(eyre::eyre!("UnsatisfiedConstraint").into());
             }
         }
         Ok(())
@@ -196,7 +196,8 @@ where
                 "InvalidInputBitSize: expected at most {} bits, got {}",
                 num_bits,
                 public_value.num_bits()
-            ))?;
+            )
+            .into());
         }
         Ok(())
     }

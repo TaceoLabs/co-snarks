@@ -112,10 +112,8 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         let mut buffer = Vec::with_capacity(zkey.n_constraints);
         debug_assert_eq!(zkey.n_constraints, map.len());
         for index in map {
-            match plonk_utils::get_witness(id, witness, zkey, *index) {
-                Ok(witness) => buffer.push(witness),
-                Err(err) => return Err(err),
-            }
+            let witness = plonk_utils::get_witness(id, witness, zkey, *index)?;
+            buffer.push(witness);
         }
         buffer.resize(zkey.domain_size, T::ArithmeticShare::default());
         // Compute the coefficients of the wire polynomials a(X), b(X) and c(X) from A,B & C buffers

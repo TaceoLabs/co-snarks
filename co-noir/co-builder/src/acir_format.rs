@@ -748,22 +748,8 @@ impl<F: PrimeField> AcirFormat<F> {
                     .blake3_constraints
                     .push(opcode_index);
             }
-            BlackBoxFuncCall::EcdsaSecp256k1 {
-                public_key_x: _,
-                public_key_y: _,
-                signature: _,
-                hashed_message: _,
-                output: _,
-                predicate: _,
-            } => todo!("BlackBoxFuncCall::EcdsaSecp256k1"),
-            BlackBoxFuncCall::EcdsaSecp256r1 {
-                public_key_x: _,
-                public_key_y: _,
-                signature: _,
-                hashed_message: _,
-                output: _,
-                ..
-            } => todo!("BlackBoxFuncCall::EcdsaSecp256r1"),
+            BlackBoxFuncCall::EcdsaSecp256k1 { .. } => todo!("BlackBoxFuncCall::EcdsaSecp256k1"),
+            BlackBoxFuncCall::EcdsaSecp256r1 { .. } => todo!("BlackBoxFuncCall::EcdsaSecp256r1"),
             BlackBoxFuncCall::MultiScalarMul {
                 points,
                 scalars,
@@ -804,10 +790,7 @@ impl<F: PrimeField> AcirFormat<F> {
                     .ec_add_constraints
                     .push(opcode_index);
             }
-            BlackBoxFuncCall::Keccakf1600 {
-                inputs: _,
-                outputs: _,
-            } => todo!("BlackBoxFuncCall::Keccakf1600"),
+            BlackBoxFuncCall::Keccakf1600 { .. } => todo!("BlackBoxFuncCall::Keccakf1600"),
             BlackBoxFuncCall::RecursiveAggregation {
                 verification_key,
                 proof,
