@@ -86,10 +86,13 @@ impl TcpStreams {
         let maybe_stream = streams.remove(&(session_id, party_id));
         match maybe_stream {
             Some((MaybeTcpStream::TcpStream(stream), _)) => Ok(stream),
-            Some((MaybeTcpStream::Waiter(_), _)) => {
-                eyre::bail!("tried to get same session_id twice")
-            }
-            None => {
+            x @ (None | Some((MaybeTcpStream::Waiter(_), _))) => {
+                if x.is_some() {
+                    tracing::warn!(
+                        "got duplicate connection waiter for session_id {session_id} and party_id {party_id}, replacing old waiter"
+                    );
+                }
+                drop(x); // drop old waiter if it exists, so that old waiter doesn't block forever
                 let (tx, rx) = crossbeam_channel::bounded(1);
                 streams.insert(
                     (session_id, party_id),
@@ -128,7 +131,13 @@ impl TcpStreams {
         let maybe_stream = streams.remove(&(session_id, party_id));
         match maybe_stream {
             Some((MaybeTcpStream::TcpStream(_), _)) => {
-                eyre::bail!("tried to insert same session_id twice")
+                tracing::warn!(
+                    "got duplicate incoming connection for session_id {session_id} and party_id {party_id}, replacing old connection"
+                );
+                streams.insert(
+                    (session_id, party_id),
+                    (MaybeTcpStream::TcpStream(stream), Instant::now()),
+                );
             }
             Some((MaybeTcpStream::Waiter(tx), _)) => {
                 tracing::debug!("found waiter, sending stream");
