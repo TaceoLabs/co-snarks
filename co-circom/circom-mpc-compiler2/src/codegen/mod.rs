@@ -222,6 +222,14 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             .map_err(|_| eyre!("template/function body exceeds 65535 field registers"))
     }
 
+    /// Allocates a contiguous block of `n` field registers (for instructions like
+    /// [`Instr::LoadN`] that write `n` consecutive registers at runtime), returning the
+    /// base register checked against the ISA's `u16` register-index width.
+    pub(crate) fn alloc_freg_n(&mut self, n: u32) -> Result<u16> {
+        u16::try_from(self.regs.alloc_n(n))
+            .map_err(|_| eyre!("template/function body exceeds 65535 field registers"))
+    }
+
     /// Lowers one template body into a [`TemplateCode`], resetting per-body state
     /// first. `mappings` is this template's io-map offsets, computed by the caller from
     /// `circuit.c_producer.io_map` (used for mapped subcomponent signal access, Task 8).

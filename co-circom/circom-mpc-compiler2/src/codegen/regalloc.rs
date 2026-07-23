@@ -21,7 +21,7 @@
 /// the pointer, `free_to` rewinds it back to an earlier [`mark`](Self::mark). The
 /// allocator tracks the highest pointer value ever reached in `high_water`, which
 /// becomes the frame's register-file size once lowering of a body is complete.
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct RegAlloc {
     /// The next register number that `alloc` will hand out.
     next: u32,
@@ -32,8 +32,18 @@ pub(crate) struct RegAlloc {
 impl RegAlloc {
     /// Allocates a fresh register, returning its number.
     pub(crate) fn alloc(&mut self) -> u32 {
+        self.alloc_n(1)
+    }
+
+    /// Allocates a contiguous block of `n` registers, returning the base register number.
+    ///
+    /// This is the counterpart to [`Self::alloc`] for instructions that write more than
+    /// one consecutive register at runtime (e.g. `LoadN`/`StoreN`/`EqN`/`BinN`): the whole
+    /// block must be reserved atomically so `high_water` accounts for every register the
+    /// instruction actually touches, not just its base register.
+    pub(crate) fn alloc_n(&mut self, n: u32) -> u32 {
         let r = self.next;
-        self.next += 1;
+        self.next += n;
         self.high_water = self.high_water.max(self.next);
         r
     }
@@ -69,6 +79,23 @@ mod tests {
         assert_eq!(regs.alloc(), 0);
         assert_eq!(regs.alloc(), 1);
         assert_eq!(regs.high_water(), 2);
+    }
+
+    #[test]
+    fn alloc_n_reserves_a_contiguous_block_and_tracks_high_water() {
+        let mut regs = RegAlloc::default();
+        assert_eq!(regs.alloc(), 0);
+        assert_eq!(regs.alloc_n(3), 1, "block must start right after reg 0");
+        assert_eq!(
+            regs.high_water(),
+            4,
+            "high water must account for the whole n-register block"
+        );
+        assert_eq!(
+            regs.alloc(),
+            4,
+            "next alloc must start after the reserved block"
+        );
     }
 
     #[test]

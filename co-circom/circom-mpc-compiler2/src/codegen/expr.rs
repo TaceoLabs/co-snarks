@@ -93,11 +93,15 @@ fn materialize<F: PrimeField>(cg: &mut CodeGen<'_, F>, addr_src: Src, size: usiz
     if size == 1 {
         return Ok(addr_src);
     }
-    let dst = cg.alloc_freg()?;
+    let n = u32::try_from(size)?;
+    // `LoadN` writes `n` consecutive registers at runtime, so the whole block must be
+    // reserved as one unit (`alloc_freg_n`), not a single register (`alloc_freg`) — see
+    // `RegAlloc::alloc_n`.
+    let dst = cg.alloc_freg_n(n)?;
     cg.instrs.push(Instr::LoadN {
         dst,
         src: addr_src,
-        n: u32::try_from(size)?,
+        n,
     });
     Ok(Src::Reg(dst))
 }
