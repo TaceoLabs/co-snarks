@@ -97,3 +97,76 @@ fn array_copy_end_to_end() {
         Some(vec![Fr::from(7u64), Fr::from(9u64)])
     );
 }
+
+/// The milestone test for Task 3 (symbolic index evaluation): a signal-valued array
+/// index (`out1 <-- a[idx]`, the brief's own `in[a]` example) exercises the
+/// `ToAddress`->`Instr::ToIndex`->`Dynamic` path in `codegen::index`; a 2D array indexed
+/// by two signals (`out2 <-- b[i][j]`) exercises the same path nested inside
+/// `AddAddress`/`MulAddress` folding (both operands `Dynamic`, materializing into
+/// `IMul`/`IAdd`); a 2D array indexed by literals (`out3 <== b[0][1]`) exercises the
+/// `Const` leaf through the very same `addr_from_location_rule`/`eval_index` path that
+/// replaced Task 2's constant-only special case.
+///
+/// None of the KAT suite's candidate circuits (`array_equals`, `constants_test`,
+/// `isequal`, `iszero`, `winner`) exercise computed array indexing at all — the only one
+/// that compiles today without loops/branches/functions/subcomponents is `array_equals`,
+/// and it never indexes its arrays (see `array_equals_kat`, this file). Per the plan's
+/// sanctioned fallback, this instead exercises a purpose-written circuit.
+#[test]
+fn dynamic_index_end_to_end() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/dynamic_index.circom", config).unwrap(),
+    );
+
+    let mut inputs = BTreeMap::new();
+    for k in 0..4 {
+        inputs.insert(format!("a[{k}]"), Fr::from(10 + k as u64));
+    }
+    inputs.insert("idx".to_string(), Fr::from(2u64));
+    for k in 0..6 {
+        // `b[2][3]` is passed flat, row-major (circom's own convention): `b[r][c]` lives
+        // at input key `b[r*3 + c]`.
+        inputs.insert(format!("b[{k}]"), Fr::from(100 + k as u64));
+    }
+    inputs.insert("i".to_string(), Fr::from(1u64));
+    inputs.insert("j".to_string(), Fr::from(2u64));
+
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+
+    assert_eq!(
+        finalized.get_output("out1"),
+        Some(vec![Fr::from(12u64)]),
+        "a[idx=2]"
+    );
+    assert_eq!(
+        finalized.get_output("out2"),
+        Some(vec![Fr::from(105u64)]),
+        "b[i=1][j=2] = b[1*3+2] = b[5]"
+    );
+    assert_eq!(
+        finalized.get_output("out3"),
+        Some(vec![Fr::from(101u64)]),
+        "b[0][1] = b[1]"
+    );
+}
+
+/// A real KAT circuit exercising `EqN`: `a === b` on two size-2 arrays lowers to
+/// `AssertBucket { evaluate: ComputeBucket { op: Eq(2), .. } }` (circom's front end
+/// always wraps `===` this way, regardless of array size — see
+/// `codegen::stmt::lower_assert`'s doc comment), so this is also the milestone test for
+/// `Instr::Assert` (implemented this task specifically to make `EqN` reachable: it is the
+/// *only* IR shape that ever carries an `Eq` operator of size > 1). `array_equals` is the
+/// one candidate from the brief's KAT list that compiles today without loops, branches,
+/// functions, or subcomponents (`constants_test` needs a loop, `isequal`/`iszero` need a
+/// branch, `winner` needs functions, loops, and subcomponents — all out of scope until
+/// their own tasks).
+#[test]
+fn array_equals_kat() {
+    common::assert_kats("array_equals", CompilerConfig::default());
+}

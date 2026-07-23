@@ -31,6 +31,7 @@ use std::collections::HashMap;
 
 mod env;
 mod expr;
+mod index;
 mod regalloc;
 mod stmt;
 
@@ -230,6 +231,15 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             .map_err(|_| eyre!("template/function body exceeds 65535 field registers"))
     }
 
+    /// Allocates a fresh integer register, checked against the ISA's `u8` register-index
+    /// width. Realistically unreachable (it would take 256 levels of nested dynamic
+    /// addressing in a single statement), but `RegAlloc` itself has no width limit, so
+    /// this is where the ISA's actual budget is enforced.
+    pub(crate) fn alloc_ireg(&mut self) -> Result<u8> {
+        u8::try_from(self.iregs.alloc())
+            .map_err(|_| eyre!("template/function body exceeds 255 integer registers"))
+    }
+
     /// Lowers one template body into a [`TemplateCode`], resetting per-body state
     /// first. `mappings` is this template's io-map offsets, computed by the caller from
     /// `circuit.c_producer.io_map` (used for mapped subcomponent signal access, Task 8).
@@ -297,5 +307,19 @@ mod tests {
         assert_eq!(names.intern("b"), 1);
         assert_eq!(names.intern("a"), 0, "repeated string must reuse its id");
         assert_eq!(names.into_names(), vec!["a".to_string(), "b".to_string()]);
+    }
+
+    #[test]
+    fn alloc_ireg_errors_past_255() {
+        let config = CompilerConfig::default();
+        let mut cg = CodeGen::<ark_bn254::Fr>::new(&config);
+        for _ in 0..256 {
+            cg.alloc_ireg().unwrap();
+        }
+        let err = cg.alloc_ireg().unwrap_err();
+        assert!(
+            err.to_string().contains("255 integer registers"),
+            "error message should mention the register budget, got: {err}"
+        );
     }
 }

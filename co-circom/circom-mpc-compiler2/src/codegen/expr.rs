@@ -5,7 +5,7 @@
 //! [`ComputeBucket`], or as the right-hand side of a [`StoreBucket`]
 //! ([`crate::codegen::stmt`] handles the statement-level buckets that consume these
 //! values).
-use super::{CodeGen, instr_kind_name};
+use super::{CodeGen, index, instr_kind_name};
 use crate::frontend::get_size_from_size_option;
 use ark_ff::PrimeField;
 use circom_compiler::intermediate_representation::ir_interface::{
@@ -37,50 +37,48 @@ pub(crate) fn lower_expr<F: PrimeField>(
     }
 }
 
-/// Lowers a [`ValueBucket`]: either a field constant (the common case) or a raw index
-/// value. Index values only ever occur inside address sub-trees, which this task does
-/// not evaluate yet (Task 3 adds dynamic addressing).
+/// Lowers a [`ValueBucket`]: a field constant is the only shape valid in expression
+/// position. A raw index value (`parse_as == U32`) here would mean the front end handed
+/// us an address sub-tree where a value sub-tree was expected — those are only ever
+/// evaluated by [`index::eval_index`], never lowered through here.
 fn lower_value(vb: &ValueBucket) -> Result<Src> {
     match vb.parse_as {
         ValueType::BigInt => Ok(Src::Const(u32::try_from(vb.value)?)),
         ValueType::U32 => bail!(
-            "not yet lowered: index value used in expression position \
-             (dynamic addressing lands in Task 3)"
+            "unexpected raw index value (U32-parsed ValueBucket) in expression position, \
+             expected a field constant (BigInt-parsed)"
         ),
     }
 }
 
-/// Resolves a [`LocationRule`] to a constant, component-relative address.
+/// Resolves a [`LocationRule`] to a component-relative [`Addr`], symbolically evaluating
+/// a computed `Indexed` location via [`index::eval_index`].
 ///
-/// Only the "already a constant" case is handled this task: a
-/// [`LocationRule::Indexed`] whose `location` is itself a constant [`ValueBucket`]
-/// (`parse_as == U32`) — the same numbers the old stack-based compiler pushed directly
-/// as `PushIndex`. Anything else (a computed index, or a `Mapped` location used for
-/// subcomponent signal access) is out of scope until Task 3 / Task 8 respectively.
-pub(super) fn const_index_from_location_rule(loc: &LocationRule) -> Result<u32> {
+/// `Mapped` locations are used for subcomponent IO ([`AddressType::SubcmpSignal`]) only —
+/// they cannot occur for a plain `Signal`/`Var` load or store, so this errors if one
+/// shows up here (matches the old stack-based compiler's paths); real `Mapped` handling
+/// lands in Task 8.
+pub(super) fn addr_from_location_rule<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    loc: &LocationRule,
+) -> Result<Addr> {
     match loc {
-        LocationRule::Indexed { location, .. } => match location.as_ref() {
-            Instruction::Value(vb) if vb.parse_as == ValueType::U32 => Ok(u32::try_from(vb.value)?),
-            other => bail!(
-                "not yet lowered: dynamic address expression ({}), Task 3",
-                instr_kind_name(other)
-            ),
-        },
+        LocationRule::Indexed { location, .. } => Ok(index::eval_index(cg, location)?.to_addr()),
         LocationRule::Mapped { .. } => {
             bail!("not yet lowered: Mapped location (subcomponent signal access, Task 8)")
         }
     }
 }
 
-/// Lowers a [`LoadBucket`] at a constant address. A single-element load is a pure
-/// addressing mode (no instruction emitted); a multi-element load materializes into a
-/// fresh register range via [`Instr::LoadN`].
+/// Lowers a [`LoadBucket`]. A single-element load is a pure addressing mode (no
+/// instruction emitted); a multi-element load materializes into a fresh register range
+/// via [`Instr::LoadN`].
 fn lower_load<F: PrimeField>(cg: &mut CodeGen<'_, F>, lb: &LoadBucket) -> Result<Src> {
     let size = get_size_from_size_option(&lb.context.size);
-    let idx = const_index_from_location_rule(&lb.src)?;
+    let addr = addr_from_location_rule(cg, &lb.src)?;
     match &lb.address_type {
-        AddressType::Signal => materialize(cg, Src::Signal(Addr::Const(idx)), size),
-        AddressType::Variable => materialize(cg, Src::Var(Addr::Const(idx)), size),
+        AddressType::Signal => materialize(cg, Src::Signal(addr), size),
+        AddressType::Variable => materialize(cg, Src::Var(addr), size),
         AddressType::SubcmpSignal { .. } => {
             bail!("not yet lowered: subcomponent signal load (Task 8)")
         }
@@ -116,17 +114,17 @@ fn lower_compute<F: PrimeField>(cg: &mut CodeGen<'_, F>, cb: &ComputeBucket) -> 
             if size == 1 {
                 lower_binary(cg, BinOp::Eq, cb)
             } else {
-                // EqN operates directly on addressing modes rather than materialized
-                // registers, so it deliberately isn't wired up through this generic
-                // path yet — left for the task that actually needs array equality.
-                bail!("not yet lowered: EqN (array equality of size {size}, Task 3)")
+                lower_eqn(cg, size, cb)
             }
         }
         PrefixSub => lower_unary_neg(cg, cb),
         BoolNot => bail!("not yet lowered: BoolNot"),
         Complement => bail!("not yet lowered: Complement"),
+        // Address-domain-only operators: they only ever appear inside an address
+        // sub-tree, evaluated by `codegen::index::eval_index`, never here.
         ToAddress | MulAddress | AddAddress => bail!(
-            "not yet lowered: {} (index evaluation, Task 3)",
+            "unexpected {} in expression position, expected an address sub-tree \
+             (see codegen::index)",
             cb.op.to_string()
         ),
         op => lower_binary(cg, map_binop(op)?, cb),
@@ -204,4 +202,52 @@ fn lower_unary_neg<F: PrimeField>(cg: &mut CodeGen<'_, F>, cb: &ComputeBucket) -
     let dst = cg.alloc_freg()?;
     cg.instrs.push(Instr::Neg { dst, a });
     Ok(Src::Reg(dst))
+}
+
+/// Lowers an `Eq(size > 1)` [`ComputeBucket`] (array equality, `a === b`/`a == b` on
+/// arrays) to [`Instr::EqN`], which reads `n` consecutive slots from each operand's
+/// starting address directly — see [`lower_eqn_operand`] for how each operand resolves to
+/// that starting address (see [`lower_binary`] for the register-freeing discipline).
+fn lower_eqn<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    size: usize,
+    cb: &ComputeBucket,
+) -> Result<Src> {
+    if cb.stack.len() != 2 {
+        bail!("EqN expects 2 operands, found {}", cb.stack.len());
+    }
+    let n = u32::try_from(size)?;
+    let mark = cg.regs.mark();
+    let a = lower_eqn_operand(cg, &cb.stack[0], size)?;
+    let b = lower_eqn_operand(cg, &cb.stack[1], size)?;
+    cg.regs.free_to(mark);
+    let dst = cg.alloc_freg()?;
+    cg.instrs.push(Instr::EqN { dst, a, b, n });
+    Ok(Src::Reg(dst))
+}
+
+/// Resolves one `EqN` operand to the addressing mode its `n` consecutive elements start
+/// at. A plain array `Load` of the expected size resolves straight to its address (no
+/// register copy — `EqN` itself walks `n` slots from there); anything else falls back to
+/// [`lower_expr`], which materializes a multi-element result into a contiguous register
+/// block via [`Instr::LoadN`] (still `n` consecutive slots, just register-backed).
+fn lower_eqn_operand<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    inst: &Instruction,
+    size: usize,
+) -> Result<Src> {
+    if let Instruction::Load(lb) = inst {
+        let load_size = get_size_from_size_option(&lb.context.size);
+        if load_size == size {
+            let addr = addr_from_location_rule(cg, &lb.src)?;
+            return Ok(match &lb.address_type {
+                AddressType::Signal => Src::Signal(addr),
+                AddressType::Variable => Src::Var(addr),
+                AddressType::SubcmpSignal { .. } => {
+                    bail!("not yet lowered: subcomponent signal load (Task 8)")
+                }
+            });
+        }
+    }
+    lower_expr(cg, inst)
 }
