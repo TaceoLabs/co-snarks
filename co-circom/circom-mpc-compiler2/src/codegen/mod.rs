@@ -184,12 +184,14 @@ pub(crate) struct CodeGen<'c, F> {
     pub(crate) regs: RegAlloc,
     /// Integer-register allocator for the body currently being lowered.
     pub(crate) iregs: RegAlloc,
-    /// Variable-binding environment for the body currently being lowered.
-    ///
-    /// Unused until Task 4 (every variable access this task arrives as a constant,
-    /// component-relative address already, same as signals — see [`expr`]).
-    #[allow(dead_code)]
+    /// Variable-binding environment for the body currently being lowered (see
+    /// [`env::Binding`]).
     pub(crate) env: Env,
+    /// The last constant value stored to each variable slot, tracked while lowering the
+    /// body currently in progress — the compile-time-known "value before the loop" a
+    /// conforming loop's induction variable needs (see `stmt::detect_conforming`'s docs
+    /// for the exact tracking/invalidation rules).
+    pub(crate) last_const_store: HashMap<usize, u32>,
 }
 
 impl<'c, F: PrimeField> CodeGen<'c, F> {
@@ -204,7 +206,8 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             instrs: Vec::new(),
             regs: RegAlloc::default(),
             iregs: RegAlloc::default(),
-            env: Env,
+            env: Env::default(),
+            last_const_store: HashMap::new(),
         }
     }
 
@@ -213,7 +216,8 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
         self.instrs.clear();
         self.regs = RegAlloc::default();
         self.iregs = RegAlloc::default();
-        self.env = Env;
+        self.env = Env::default();
+        self.last_const_store.clear();
     }
 
     /// Allocates a fresh field register, checked against the ISA's `u16` register-index
@@ -238,6 +242,20 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
     pub(crate) fn alloc_ireg(&mut self) -> Result<u8> {
         u8::try_from(self.iregs.alloc())
             .map_err(|_| eyre!("template/function body exceeds 255 integer registers"))
+    }
+
+    /// Backpatches a previously emitted jump's placeholder target now that it's known —
+    /// the "add a `patch(idx, target)` helper" the loop-lowering brief asks for: a loop's
+    /// head emits `Instr::JmpIfZero` with a placeholder target (`u32::MAX`) before the
+    /// body's length (hence the loop's exit index) is known; once the whole loop has been
+    /// lowered, this fixes it up. `idx` must index an already-emitted
+    /// [`Instr::Jmp`]/[`Instr::JmpIfZero`] in [`Self::instrs`] — anything else is a codegen
+    /// bug, not a user-triggerable error, so this panics rather than returning `Result`.
+    pub(crate) fn patch(&mut self, idx: usize, target: u32) {
+        match &mut self.instrs[idx] {
+            Instr::Jmp { target: t } | Instr::JmpIfZero { target: t, .. } => *t = target,
+            other => unreachable!("CodeGen::patch called on non-jump instruction {other:?}"),
+        }
     }
 
     /// Lowers one template body into a [`TemplateCode`], resetting per-body state

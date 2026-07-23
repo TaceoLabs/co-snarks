@@ -9,14 +9,16 @@
 //! expression, e.g. a signal-valued array index, into an index).
 //!
 //! [`eval_index`] walks this sub-tree and folds it as far as possible at compile time,
-//! producing an [`IndexExpr`]: fully constant, affine in a single integer register (loop
-//! variable, once Task 4 binds one), or fully dynamic (computed at runtime into a fresh
-//! integer register). [`IndexExpr::to_addr`] converts the result to the [`Addr`] the ISA
-//! understands.
+//! producing an [`IndexExpr`]: fully constant, affine in a single integer register (a
+//! promoted loop variable — see [`ireg_binding`]), or fully dynamic (computed at runtime
+//! into a fresh integer register). [`IndexExpr::to_addr`] converts the result to the
+//! [`Addr`] the ISA understands.
+use super::env::Binding;
 use super::{CodeGen, expr};
 use ark_ff::PrimeField;
 use circom_compiler::intermediate_representation::ir_interface::{
-    ComputeBucket, Instruction, LoadBucket, OperatorType, ValueBucket, ValueType,
+    AddressType, ComputeBucket, Instruction, LoadBucket, LocationRule, OperatorType, ValueBucket,
+    ValueType,
 };
 use circom_mpc_vm2::isa::{Addr, ISrc, Instr};
 use eyre::{Result, bail, eyre};
@@ -26,11 +28,10 @@ use eyre::{Result, bail, eyre};
 pub(crate) enum IndexExpr {
     /// Fully known at compile time.
     Const(usize),
-    /// `iregs[ireg] * stride + offset` — affine in a single integer register. Only ever
-    /// produced by [`eval_index`] once Task 4 binds a loop variable to an [`IReg`
-    /// binding](crate::codegen::env) (see [`ireg_binding`]); today this variant is only
-    /// reachable by folding two already-affine/const results together, which itself is
-    /// not reachable until Task 4 either.
+    /// `iregs[ireg] * stride + offset` — affine in a single integer register. Produced
+    /// directly by [`eval_to_address`] when the operand is a promoted loop variable (see
+    /// [`ireg_binding`]), or by folding two already-affine/const results together (see
+    /// [`try_fold_const`]).
     Affine {
         /// Integer register holding the (loop) variable's value.
         ireg: u8,
@@ -177,14 +178,37 @@ fn eval_to_address<F: PrimeField>(
 }
 
 /// Resolves whether `lb` (the operand of a `ToAddress`) is a `Load` of a variable already
-/// bound to an integer register.
-///
-/// Always `None` until Task 4 gives [`Env`](crate::codegen::env::Env) a real binding
-/// table: nothing is `IReg`-bound yet, so `ToAddress` always takes the dynamic
-/// (`ToIndex`) path in [`eval_to_address`]. This stub keeps that future integration to a
-/// one-line change instead of restructuring `eval_index`.
-fn ireg_binding<F: PrimeField>(_cg: &CodeGen<'_, F>, _lb: &LoadBucket) -> Option<u8> {
-    None
+/// bound to an integer register: its address must resolve (via [`static_const_slot`]) to
+/// a statically-known variable slot, and that slot must currently carry an
+/// [`Binding::IReg`](crate::codegen::env::Binding::IReg) — the mirror a conforming loop's
+/// induction variable maintains (see [`crate::codegen::stmt::lower_loop`]).
+fn ireg_binding<F: PrimeField>(cg: &CodeGen<'_, F>, lb: &LoadBucket) -> Option<u8> {
+    if !matches!(lb.address_type, AddressType::Variable) {
+        return None;
+    }
+    let LocationRule::Indexed { location, .. } = &lb.src else {
+        return None;
+    };
+    let slot = static_const_slot(location)?;
+    match cg.env.get(slot) {
+        Some(Binding::IReg { ireg }) => Some(ireg),
+        _ => None,
+    }
+}
+
+/// Resolves an address sub-tree to a statically-known variable slot *without* evaluating
+/// it through [`eval_index`] (which may emit code for the non-trivial cases): only a bare
+/// `Value(U32)` leaf — the shape a plain scalar variable's own address always takes —
+/// counts; anything else (an `AddAddress`/`MulAddress`/`ToAddress` node, always present
+/// for genuine array element addressing, since arrays occupy their own disjoint slot
+/// range) returns `None`. Shared by loop conformance detection
+/// ([`crate::codegen::stmt::lower_loop`]) and [`ireg_binding`], both of which need this
+/// *before* any code is emitted for the instruction being inspected.
+pub(super) fn static_const_slot(loc: &Instruction) -> Option<usize> {
+    match loc {
+        Instruction::Value(vb) if vb.parse_as == ValueType::U32 => Some(vb.value),
+        _ => None,
+    }
 }
 
 /// The two address-domain binary operators [`fold`] handles.

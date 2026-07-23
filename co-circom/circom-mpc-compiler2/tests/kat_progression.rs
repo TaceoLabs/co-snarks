@@ -3,6 +3,7 @@ mod common;
 use ark_bn254::{Bn254, Fr};
 use circom_mpc_compiler2::{CoCircomCompiler, CompilerConfig, SimplificationLevel};
 use circom_mpc_vm2::api::PlainWitnessExtension;
+use circom_mpc_vm2::isa::Instr;
 use circom_mpc_vm2::program::VMConfig;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -169,4 +170,153 @@ fn dynamic_index_end_to_end() {
 #[test]
 fn array_equals_kat() {
     common::assert_kats("array_equals", CompilerConfig::default());
+}
+
+/// The real-KAT milestone test for Task 4 (rolled loops, induction-variable promotion):
+/// `BinSum(4, 3)` (circomlib's `binsum.circom`, `component main = BinSum(4,3);`) has two
+/// top-level loops — a nested ascending pair (`for(k) for(j)` summing weighted bits into
+/// `lin`) and a second ascending loop (`for(k)` decomposing `lin` back into `out` bits) —
+/// no branches, no subcomponents (its one dependency, `nbits(...)`, is a `function` used
+/// only to compute the *template parameter* `nout` at monomorphization time, so it never
+/// appears as a runtime `Call` bucket; confirmed empirically — every other candidate from
+/// the brief's own list, `binsub_test`/`aliascheck_test`/`constants_test`/the comparator
+/// family, instantiates at least one subcomponent *somewhere* in its template graph and
+/// so still bails on `CreateCmp`, Task 8). Both loops match `detect_conforming`'s pattern
+/// (see `inspect_binsum_takes_the_affine_path` below, which confirms this on the same
+/// circuit): this is a real circuit exercising the conforming/`Affine` path end to end,
+/// not just the purpose-built fixtures below.
+#[test]
+fn binsum_test_kat() {
+    common::assert_kats("binsum_test", CompilerConfig::default());
+}
+
+/// White-box companion to [`binsum_test_kat`]: confirms the KAT circuit actually takes
+/// the conforming (`Affine`) path — an `Addr::Affine` operand and at least one
+/// `Instr::ISet` (the induction variable's mirror register being initialized) must appear
+/// in the compiled template — rather than merely happening to produce the right answer
+/// via the (always-correct) fallback path.
+#[test]
+fn inspect_binsum_takes_the_affine_path() {
+    let program = common::compile("binsum_test", CompilerConfig::default());
+    let instrs = &program.templates[program.main.0 as usize].instrs;
+    assert!(
+        instrs.iter().any(|i| matches!(i, Instr::ISet { .. })),
+        "a conforming loop's induction variable must be mirrored via ISet"
+    );
+    assert!(
+        instrs.iter().any(instr_uses_affine),
+        "an index-position read of a promoted induction variable must resolve to \
+         Addr::Affine"
+    );
+}
+
+/// Returns whether `instr` reads or writes through an [`Addr::Affine`] operand (a
+/// `Debug`-string check is enough here — this is diagnostic test code, not codegen).
+fn instr_uses_affine(instr: &Instr) -> bool {
+    format!("{instr:?}").contains("Affine")
+}
+
+/// The Affine-path milestone test the brief asks for explicitly (`tests/circuits/
+/// loop_ascending.circom`, a purpose-built fixture since `binsum_test`'s real KAT above
+/// exercises the same path but bundled with a lot of unrelated bit arithmetic): a plain
+/// ascending `for` loop indexing an array on both sides (`out[i] <== a[i] + 1`) must
+/// compile to `Addr::Affine` addressing and produce the correct witness.
+#[test]
+fn loop_ascending_takes_the_affine_path() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_ascending.circom", config).unwrap(),
+    );
+
+    let instrs = &program.templates[program.main.0 as usize].instrs;
+    assert!(
+        instrs.iter().any(instr_uses_affine),
+        "a[i]/out[i] inside a conforming loop must resolve to Addr::Affine"
+    );
+
+    let mut inputs = BTreeMap::new();
+    for k in 0..5 {
+        inputs.insert(format!("a[{k}]"), Fr::from(10 + k as u64));
+    }
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    assert_eq!(
+        finalized.get_output("out"),
+        Some((0..5).map(|k| Fr::from(11 + k as u64)).collect())
+    );
+}
+
+/// The fallback-correctness milestone test the brief asks for explicitly (`tests/
+/// circuits/loop_descending.circom`): a descending `for` loop is non-conforming by
+/// design (see the circuit's own doc comment and `detect_conforming`'s docs) — its
+/// induction variable stays a plain `FieldSlot`, and `a[i]`/`out[i]` fall through the
+/// ordinary `ToAddress`/`Instr::ToIndex`/`Dynamic` path. This asserts both that no
+/// `Instr::ISet` appears (confirming the fallback path was actually taken, not just
+/// "happened to produce the right answer") and that the witness is still correct.
+#[test]
+fn loop_descending_stays_correct_via_fallback() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_descending.circom", config).unwrap(),
+    );
+
+    let instrs = &program.templates[program.main.0 as usize].instrs;
+    assert!(
+        !instrs.iter().any(|i| matches!(i, Instr::ISet { .. })),
+        "a descending loop must never promote its induction variable"
+    );
+
+    let mut inputs = BTreeMap::new();
+    for k in 0..5 {
+        inputs.insert(format!("a[{k}]"), Fr::from(20 + k as u64));
+    }
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    assert_eq!(
+        finalized.get_output("out"),
+        Some((0..5).map(|k| Fr::from(21 + k as u64)).collect())
+    );
+}
+
+/// The nested-loop `ireg`-scoping regression test (`tests/circuits/loop_nested.circom`):
+/// the outer loop's `out[i] <== sum` write happens *after* the inner `j` loop has
+/// allocated and released its own persistent mirror register, so a wrong scoping
+/// discipline (the outer's `ireg` clobbered or prematurely freed) would show up as a
+/// wrong witness here, even though every individual constraint still type-checks (see
+/// `codegen::stmt::lower_loop`'s module docs, "Where the persistent integer register
+/// lives").
+#[test]
+fn loop_nested_ireg_scoping_end_to_end() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_nested.circom", config).unwrap(),
+    );
+
+    let mut inputs = BTreeMap::new();
+    let mut expected = Vec::new();
+    for i in 0..3u64 {
+        let mut sum = 0u64;
+        for j in 0..4u64 {
+            let v = i * 4 + j + 1;
+            inputs.insert(format!("a[{}]", i * 4 + j), Fr::from(v));
+            sum += v;
+        }
+        expected.push(Fr::from(sum));
+    }
+
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    assert_eq!(finalized.get_output("out"), Some(expected));
 }
