@@ -54,6 +54,38 @@ pub fn single_template_program(
     }
 }
 
+/// Like [`single_template_program`], but also installs a function table and appends
+/// each function's name to the debug names table (indices `1..`, right after the
+/// template's own name at index `0` — set `FunctionCode::name_id` accordingly).
+#[allow(clippy::too_many_arguments)]
+pub fn program_with_functions(
+    template_instrs: Vec<Instr>,
+    num_field_regs: u16,
+    num_int_regs: u8,
+    num_vars: u32,
+    input_signals: u32,
+    output_signals: u32,
+    total_signals: usize,
+    functions: Vec<FunctionCode>,
+    function_names: Vec<&str>,
+) -> CompiledProgram<Fr> {
+    let mut program = single_template_program(
+        template_instrs,
+        num_field_regs,
+        num_int_regs,
+        num_vars,
+        input_signals,
+        output_signals,
+        total_signals,
+    );
+    program.functions = functions;
+    program
+        .debug
+        .names
+        .extend(function_names.into_iter().map(str::to_string));
+    program
+}
+
 /// Runs main with the given flat inputs (constants table = `[0]`), returns the full
 /// signal RAM.
 pub fn run_plain(program: &CompiledProgram<Fr>, inputs: Vec<Fr>) -> Vec<Fr> {
