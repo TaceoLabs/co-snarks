@@ -340,7 +340,18 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                                 .clone(),
                         );
                     }
-                    let rv = self.driver.bin_many(*op, &av, &bv)?;
+                    // Div guard, vectorized: mirrors the scalar `Bin` guard above — under
+                    // a shared (possibly untaken) branch, replace every divisor with 1
+                    // before dividing, so a literal zero divisor in the untaken branch
+                    // never errors.
+                    let rv = if matches!(op, BinOp::Div) && pred.is_shared() {
+                        let ones = vec![self.driver.public_one(); n];
+                        let cond = pred.cond().expect("is_shared implies cond is Some").clone();
+                        let guarded_b = self.driver.cmux_many(&cond, &bv, &ones)?;
+                        self.driver.bin_many(*op, &av, &guarded_b)?
+                    } else {
+                        self.driver.bin_many(*op, &av, &bv)?
+                    };
                     for (k, v) in rv.into_iter().enumerate() {
                         frame.regs[*dst as usize + k] = v;
                     }

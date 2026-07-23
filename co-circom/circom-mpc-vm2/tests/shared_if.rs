@@ -288,6 +288,66 @@ fn shared_div_guard() {
     assert!(signals[1].shared);
 }
 
+// signal layout (component-relative addresses; global index = comp.offset(1) + addr):
+// [0]=1, [1..3]=out (2 elements, addr 0..2), [3]=cond (addr 2, shared), [4..6]=a (addr
+// 3..5, public dividends). out[0..2] = a[0..2] / b[0..2] inside the *else* branch of a
+// shared if,
+// vectorized via `BinN`, where the divisors are the literal constants [0, 3] — one of
+// them is zero. Without the guard the vectorized `bin_many` call would bypass the
+// scalar `Bin` guard and error (or panic) on the field division; with the guard the
+// divisors are replaced by 1 whenever the branch's effective predicate is false, so
+// the division never actually happens on the zero divisor.
+#[test]
+fn shared_div_guard_binn() {
+    let program = common::single_template_program(
+        vec![
+            /* 0 */
+            Instr::SharedIf {
+                cond: Src::Signal(Addr::Const(2)),
+                else_target: 2,
+            },
+            /* 1 */ Instr::SharedElse { end_target: 5 },
+            /* 2 */
+            Instr::BinN {
+                op: BinOp::Div,
+                dst: 0,
+                a: Src::Signal(Addr::Const(3)),
+                b: Src::Const(0),
+                n: 2,
+            },
+            /* 3 */
+            Instr::StoreN {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: 0,
+                n: 2,
+            },
+            /* 4 */ Instr::SharedEnd,
+            /* 5 */ Instr::Return,
+        ],
+        2,
+        0,
+        0,
+        3,
+        2,
+        6,
+    );
+    let consts = vec![Fr::from(0u64), Fr::from(3u64)];
+
+    // cond = true, so the truthy region's effective predicate is true and the *else*
+    // region (containing the vectorized divide-by-the-literal-[0, 3]) has effective
+    // predicate false — exactly the "shared-false branch" the guard must protect.
+    let signals = common::run_taint_with_consts(
+        &program,
+        consts,
+        vec![common::shared(1), common::public(5), common::public(7)],
+    );
+    // Must not error; the discarded division results never reach `out`.
+    assert_eq!(signals[1].val, Fr::from(0u64));
+    assert!(signals[1].shared);
+    assert_eq!(signals[2].val, Fr::from(0u64));
+    assert!(signals[2].shared);
+}
+
 // signal layout: [0]=1, [1]=cond (component-relative addr 0; no outputs in this
 // program). Documents current (old-VM-matching) semantics: `Assert` is NOT predicated
 // by shared ifs — it inspects the literal computed value regardless of which branch's
