@@ -6,5 +6,7 @@
 //! implementing [`VmDriver`](driver::VmDriver).
 pub mod driver;
 pub mod drivers;
+#[doc(hidden)]
+pub mod exec;
 pub mod isa;
 pub mod program;
