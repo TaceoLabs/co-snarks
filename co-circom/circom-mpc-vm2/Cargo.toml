@@ -1,0 +1,26 @@
+[package]
+name = "circom-mpc-vm2"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
+readme.workspace = true
+
+[dependencies]
+ark-ff.workspace = true
+ark-serialize.workspace = true
+bincode.workspace = true
+co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
+eyre.workspace = true
+mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+num-bigint.workspace = true
+num-traits.workspace = true
+serde.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+ark-bn254.workspace = true

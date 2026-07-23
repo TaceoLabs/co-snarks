@@ -972,6 +972,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "circom-mpc-vm2"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ff 0.5.0",
+ "ark-serialize 0.5.0",
+ "bincode",
+ "co-circom-types",
+ "eyre",
+ "mpc-core",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "serde",
+ "tracing",
+]
+
+[[package]]
 name = "circom_algebra"
 version = "2.2.2"
 source = "git+https://github.com/TaceoLabs/circom?rev=53c1ccd0c74f12665c5aeb89592360f42c3d1226#53c1ccd0c74f12665c5aeb89592360f42c3d1226"

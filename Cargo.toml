@@ -2,6 +2,7 @@
 members = [
     "co-circom/circom-mpc-compiler",
     "co-circom/circom-mpc-vm",
+    "co-circom/circom-mpc-vm2",
     "co-circom/co-circom-types",
     "co-circom/co-circom",
     "co-circom/co-groth16",
