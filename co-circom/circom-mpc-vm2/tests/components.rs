@@ -541,3 +541,155 @@ fn mapped_addressing() {
     // sub offset = main offset(1) + base(4) = 5; in2 sits at sub_offset + 3 = 8.
     assert_eq!(signals[8], Fr::from(5u64));
 }
+
+// `CreateCmp { count: 2, .. }`, then two rolled loops (not the manually-unrolled
+// per-index `ISrc::Const` calls used by `array_of_components`/`mapped_addressing`)
+// drive `InputSub`/`OutputSub` with `cmp: ISrc::Reg(0)` — the subcomponent index comes
+// from the loop's integer register, not a compile-time constant.
+//
+// main signal layout (component-relative): addr0=out, addr1..3=a[2]; subcomponents at
+// base=4, jump=2 (Square blocks: addr4=out/addr5=in for #0, addr6=out/addr7=in for #1).
+#[test]
+fn input_output_sub_indexed_by_loop_ireg() {
+    let square = square_template(1);
+    let main = TemplateCode {
+        instrs: vec![
+            /* 0 */
+            Instr::CreateCmp {
+                templ: TemplId(1),
+                count: 2,
+                base: 4,
+                jump: 2,
+            },
+            // Loop 1: feed a[i] into subcomponent i's input.
+            /* 1 */
+            Instr::Mov {
+                dst: Dst::Reg(1),
+                src: Src::Const(0),
+            }, // i_f = 0
+            /* 2 */ Instr::ISet { dst: 0, val: 0 }, // i = 0
+            /* 3 */
+            Instr::Bin {
+                op: BinOp::Lt,
+                dst: 2,
+                a: Src::Reg(1),
+                b: Src::Const(1),
+            }, // i_f < n(=2)
+            /* 4 */
+            Instr::JmpIfZero {
+                cond: Src::Reg(2),
+                target: 10,
+            },
+            /* 5 */
+            Instr::Mov {
+                dst: Dst::Reg(3),
+                src: Src::Signal(Addr::Affine {
+                    ireg: 0,
+                    stride: 1,
+                    offset: 1,
+                }),
+            }, // r3 = a[i]
+            /* 6 */
+            Instr::InputSub {
+                cmp: ISrc::Reg(0),
+                addr: Addr::Const(1),
+                mapped: None,
+                src: 3,
+                n: 1,
+            },
+            /* 7 */
+            Instr::IAdd {
+                dst: 0,
+                a: ISrc::Reg(0),
+                b: ISrc::Const(1),
+            },
+            /* 8 */
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 1,
+                a: Src::Reg(1),
+                b: Src::Const(2),
+            }, // i_f += 1
+            /* 9 */ Instr::Jmp { target: 3 },
+            // Loop 2: sum subcomponent i's output into acc.
+            /* 10 */
+            Instr::Mov {
+                dst: Dst::Reg(0),
+                src: Src::Const(0),
+            }, // acc = 0
+            /* 11 */
+            Instr::Mov {
+                dst: Dst::Reg(1),
+                src: Src::Const(0),
+            }, // i_f = 0
+            /* 12 */ Instr::ISet { dst: 0, val: 0 }, // i = 0
+            /* 13 */
+            Instr::Bin {
+                op: BinOp::Lt,
+                dst: 2,
+                a: Src::Reg(1),
+                b: Src::Const(1),
+            }, // i_f < n(=2)
+            /* 14 */
+            Instr::JmpIfZero {
+                cond: Src::Reg(2),
+                target: 20,
+            },
+            /* 15 */
+            Instr::OutputSub {
+                cmp: ISrc::Reg(0),
+                addr: Addr::Const(0),
+                mapped: None,
+                dst: 3,
+                n: 1,
+            },
+            /* 16 */
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 0,
+                a: Src::Reg(0),
+                b: Src::Reg(3),
+            }, // acc += out_i
+            /* 17 */
+            Instr::IAdd {
+                dst: 0,
+                a: ISrc::Reg(0),
+                b: ISrc::Const(1),
+            },
+            /* 18 */
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 1,
+                a: Src::Reg(1),
+                b: Src::Const(2),
+            }, // i_f += 1
+            /* 19 */ Instr::Jmp { target: 13 },
+            /* 20 */
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: Src::Reg(0),
+            },
+            /* 21 */ Instr::Return,
+        ],
+        num_field_regs: 4,
+        num_int_regs: 1,
+        num_vars: 0,
+        input_signals: 2,
+        output_signals: 1,
+        sub_components: 2,
+        mappings: vec![],
+        name_id: 0,
+        symbol_id: 0,
+    };
+    let program = multi_template_program(vec![main, square], 9, 2, 1, vec!["Main", "Square"]);
+    // consts: c0 = 0, c1 = n(=2), c2 = 1
+    let signals = common::run_plain_with_consts(
+        &program,
+        vec![Fr::from(0u64), Fr::from(2u64), Fr::from(1u64)],
+        vec![Fr::from(3u64), Fr::from(5u64)],
+    );
+    // sub0 offset = 1 + 4 = 5 (out), sub1 offset = 1 + 4 + 2 = 7 (out).
+    assert_eq!(signals[5], Fr::from(9u64)); // Square(3).out
+    assert_eq!(signals[7], Fr::from(25u64)); // Square(5).out
+    assert_eq!(signals[1], Fr::from(34u64)); // 9 + 25
+}

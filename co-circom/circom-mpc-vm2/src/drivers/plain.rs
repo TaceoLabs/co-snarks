@@ -17,19 +17,6 @@ fn negative_one<F: PrimeField>() -> F {
     F::from(modulus / BigUint::from(2u64) + BigUint::one())
 }
 
-/// Shifts `z` so that signed comparisons can be done with plain field-element `Ord`.
-/// See [`negative_one`].
-#[inline(always)]
-fn signed_shift<F: PrimeField>(z: &F) -> F {
-    *z - negative_one::<F>()
-}
-
-/// Whether the raw field element `x` lies in the "negative" half `[(p+1)/2, p)`.
-#[inline(always)]
-fn is_negative<F: PrimeField>(x: &F) -> bool {
-    *x >= negative_one::<F>()
-}
-
 /// Converts a field element into a [`BigUint`].
 fn to_biguint<F: PrimeField>(f: &F) -> BigUint {
     (*f).into()
@@ -45,9 +32,38 @@ fn to_usize<F: PrimeField>(f: &F) -> Result<usize> {
 }
 
 /// Local plain-field driver. Do not use with sensitive data — nothing is protected.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct PlainDriver<F: PrimeField> {
-    _marker: std::marker::PhantomData<F>,
+    /// Cached `(p + 1) / 2` boundary used by [`Self::signed_shift`]/[`Self::is_negative`].
+    negative_one: F,
+}
+
+impl<F: PrimeField> Default for PlainDriver<F> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<F: PrimeField> PlainDriver<F> {
+    /// Creates a new [`PlainDriver`], precomputing the signed-comparison boundary once.
+    pub fn new() -> Self {
+        Self {
+            negative_one: negative_one::<F>(),
+        }
+    }
+
+    /// Shifts `z` so that signed comparisons can be done with plain field-element `Ord`.
+    /// See [`negative_one`].
+    #[inline(always)]
+    fn signed_shift(&self, z: &F) -> F {
+        *z - self.negative_one
+    }
+
+    /// Whether the raw field element `x` lies in the "negative" half `[(p+1)/2, p)`.
+    #[inline(always)]
+    fn is_negative(&self, x: &F) -> bool {
+        *x >= self.negative_one
+    }
 }
 
 impl<F: PrimeField> VmDriver<F> for PlainDriver<F> {
@@ -95,7 +111,7 @@ impl<F: PrimeField> VmDriver<F> for PlainDriver<F> {
         let sqrt = a
             .sqrt()
             .ok_or_else(|| eyre!("cannot compute sqrt for {a}"))?;
-        if is_negative(&sqrt) {
+        if self.is_negative(&sqrt) {
             Ok(-sqrt)
         } else {
             Ok(sqrt)
@@ -107,32 +123,32 @@ impl<F: PrimeField> VmDriver<F> for PlainDriver<F> {
     }
 
     fn lt(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        let lhs = signed_shift(a);
-        let rhs = signed_shift(b);
+        let lhs = self.signed_shift(a);
+        let rhs = self.signed_shift(b);
         let result = if lhs < rhs { F::one() } else { F::zero() };
         tracing::trace!("{a}<{b} -> {result}");
         Ok(result)
     }
 
     fn le(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        let lhs = signed_shift(a);
-        let rhs = signed_shift(b);
+        let lhs = self.signed_shift(a);
+        let rhs = self.signed_shift(b);
         let result = if lhs <= rhs { F::one() } else { F::zero() };
         tracing::trace!("{a}<={b} -> {result}");
         Ok(result)
     }
 
     fn gt(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        let lhs = signed_shift(a);
-        let rhs = signed_shift(b);
+        let lhs = self.signed_shift(a);
+        let rhs = self.signed_shift(b);
         let result = if lhs > rhs { F::one() } else { F::zero() };
         tracing::trace!("{a}>{b} -> {result}");
         Ok(result)
     }
 
     fn ge(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        let lhs = signed_shift(a);
-        let rhs = signed_shift(b);
+        let lhs = self.signed_shift(a);
+        let rhs = self.signed_shift(b);
         let result = if lhs >= rhs { F::one() } else { F::zero() };
         tracing::trace!("{a}>={b} -> {result}");
         Ok(result)

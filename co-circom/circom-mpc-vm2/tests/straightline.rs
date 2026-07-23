@@ -366,3 +366,184 @@ fn log_smoke_test_does_not_crash() {
     let signals = common::run_plain_with_consts(&program, vec![Fr::from(5u64)], vec![]);
     assert_eq!(signals[0], Fr::from(1u64));
 }
+
+// No signal inputs at all: vars[0..4] are populated from constants, then a rolled loop
+// reads them back via `Src::Var(Addr::Affine{..})` (loop-variable-dependent var
+// addressing) and sums them. signal layout: [0]=1, [1]=out.
+#[test]
+fn rolled_loop_sums_vars() {
+    // consts: c0..c3 = the array values, c4 = 0, c5 = n(=4), c6 = 1
+    let program = common::single_template_program(
+        vec![
+            /* 0 */
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(0)),
+                src: Src::Const(0),
+            }, // vars[0] = 10
+            /* 1 */
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(1)),
+                src: Src::Const(1),
+            }, // vars[1] = 20
+            /* 2 */
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(2)),
+                src: Src::Const(2),
+            }, // vars[2] = 30
+            /* 3 */
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(3)),
+                src: Src::Const(3),
+            }, // vars[3] = 40
+            /* 4 */
+            Instr::Mov {
+                dst: Dst::Reg(0),
+                src: Src::Const(4),
+            }, // acc = 0
+            /* 5 */
+            Instr::Mov {
+                dst: Dst::Reg(1),
+                src: Src::Const(4),
+            }, // i_f = 0
+            /* 6 */ Instr::ISet { dst: 0, val: 0 }, // i = 0
+            /* 7 */
+            Instr::Bin {
+                op: BinOp::Lt,
+                dst: 2,
+                a: Src::Reg(1),
+                b: Src::Const(5),
+            }, // i_f < n
+            /* 8 */
+            Instr::JmpIfZero {
+                cond: Src::Reg(2),
+                target: 13,
+            },
+            /* 9 */
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 0,
+                a: Src::Reg(0),
+                b: Src::Var(Addr::Affine {
+                    ireg: 0,
+                    stride: 1,
+                    offset: 0,
+                }),
+            }, // acc += vars[i]
+            /* 10 */
+            Instr::IAdd {
+                dst: 0,
+                a: ISrc::Reg(0),
+                b: ISrc::Const(1),
+            },
+            /* 11 */
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 1,
+                a: Src::Reg(1),
+                b: Src::Const(6),
+            }, // i_f += 1
+            /* 12 */ Instr::Jmp { target: 7 },
+            /* 13 */
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: Src::Reg(0),
+            },
+            /* 14 */ Instr::Return,
+        ],
+        3,
+        1,
+        4,
+        0,
+        1,
+        2,
+    );
+    let consts = vec![
+        Fr::from(10u64),
+        Fr::from(20u64),
+        Fr::from(30u64),
+        Fr::from(40u64),
+        Fr::from(0u64),
+        Fr::from(4u64),
+        Fr::from(1u64),
+    ];
+    let signals = common::run_plain_with_consts(&program, consts, vec![]);
+    assert_eq!(signals[1], Fr::from(100u64));
+}
+
+// `Mov` with both operands registers (`Reg -> Reg`), not just the register-from-signal
+// or signal-from-register shapes exercised elsewhere.
+// signal layout: [0]=1, [1]=out, [2]=a.
+#[test]
+fn mov_reg_to_reg() {
+    let program = common::single_template_program(
+        vec![
+            Instr::Mov {
+                dst: Dst::Reg(0),
+                src: Src::Signal(Addr::Const(1)),
+            }, // r0 = a
+            Instr::Mov {
+                dst: Dst::Reg(1),
+                src: Src::Reg(0),
+            }, // r1 = r0 (Reg -> Reg)
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: Src::Reg(1),
+            }, // out = r1
+            Instr::Return,
+        ],
+        2,
+        0,
+        0,
+        1,
+        1,
+        3,
+    );
+    let signals = common::run_plain(&program, vec![Fr::from(9u64)]);
+    assert_eq!(signals[1], Fr::from(9u64));
+}
+
+// `LoadN` sourced from `Var` slots (not `Signal`), round-tripped through 3 output
+// signals. signal layout: [0]=1, [1..4]=out[3], [4..7]=in[3].
+#[test]
+fn loadn_from_var_round_trip() {
+    let program = common::single_template_program(
+        vec![
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(0)),
+                src: Src::Signal(Addr::Const(3)),
+            }, // vars[0] = in[0]
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(1)),
+                src: Src::Signal(Addr::Const(4)),
+            }, // vars[1] = in[1]
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(2)),
+                src: Src::Signal(Addr::Const(5)),
+            }, // vars[2] = in[2]
+            Instr::LoadN {
+                dst: 0,
+                src: Src::Var(Addr::Const(0)),
+                n: 3,
+            },
+            Instr::StoreN {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: 0,
+                n: 3,
+            },
+            Instr::Return,
+        ],
+        3,
+        0,
+        3,
+        3,
+        3,
+        7,
+    );
+    let signals = common::run_plain(
+        &program,
+        vec![Fr::from(11u64), Fr::from(22u64), Fr::from(33u64)],
+    );
+    assert_eq!(signals[1], Fr::from(11u64));
+    assert_eq!(signals[2], Fr::from(22u64));
+    assert_eq!(signals[3], Fr::from(33u64));
+}

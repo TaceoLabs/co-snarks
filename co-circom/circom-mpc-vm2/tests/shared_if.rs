@@ -4,7 +4,7 @@ use ark_bn254::Fr;
 use circom_mpc_vm2::drivers::taint::TaintDriver;
 use circom_mpc_vm2::exec::Machine;
 use circom_mpc_vm2::isa::*;
-use circom_mpc_vm2::program::VMConfig;
+use circom_mpc_vm2::program::{FunctionCode, VMConfig};
 
 // signal layout: [0]=1, [1]=out, [2]=cond (component-relative: out=addr0, cond=addr1)
 //
@@ -390,4 +390,97 @@ fn assert_inside_shared_false_branch() {
     machine.signals[info.offset] = common::shared(1);
     let err = machine.run_main().unwrap_err();
     assert!(err.to_string().contains("99"), "error message was: {err}");
+}
+
+// `f(x) = x + 100`, called from inside a caller-side `SharedIf` on a *tainted* cond,
+// where `f`'s own `Ret` is unconditional (no `SharedIf` inside `f` at all). The callee
+// still sees the caller's shared predication (threaded through by reference — see
+// `Machine::run_function`), so its `Ret` must take the accumulating path and return
+// `cond * f(x)`, not the raw `f(x)` (that would be the fast path firing incorrectly).
+// The caller then stores that into `out` (pre-set to 999) under the same predicate, so
+// the final value must equal `cond*f(x) + (1-cond)*999` — i.e. `f(x)` when cond=1, and
+// the untouched pre-existing 999 when cond=0 — and `out` must be tainted shared in both
+// cases (the predicate itself is shared).
+//
+// signal layout: [0]=1, [1]=out, [2]=cond, [3]=x.
+#[test]
+fn callfn_inside_shared_if_merges_with_pre_existing_value() {
+    let f = FunctionCode {
+        instrs: vec![
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 0,
+                a: Src::Var(Addr::Const(0)),
+                b: Src::Const(1), // consts[1] = 100
+            },
+            Instr::Ret {
+                src: RetSrc::Reg(0),
+                n: 1,
+            },
+        ],
+        num_field_regs: 1,
+        num_int_regs: 0,
+        num_vars: 1,
+        num_params: 1,
+        name_id: 1,
+    };
+    let program = common::program_with_functions(
+        vec![
+            /* 0 */
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: Src::Const(0), // out = 999 (pre-existing value)
+            },
+            /* 1 */
+            Instr::Mov {
+                dst: Dst::Reg(0),
+                src: Src::Signal(Addr::Const(2)), // r0 = x
+            },
+            /* 2 */
+            Instr::SharedIf {
+                cond: Src::Signal(Addr::Const(1)), // cond
+                else_target: 6,
+            },
+            /* 3 */
+            Instr::CallFn {
+                fn_id: FnId(0),
+                args_start: 0,
+                args_n: 1,
+                ret: 1,
+                ret_n: 1,
+            }, // r1 = f(x), merged with caller's shared cond internally
+            /* 4 */
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: Src::Reg(1), // out = r1, predicated by the still-active SharedIf
+            },
+            /* 5 */ Instr::SharedElse { end_target: 6 },
+            /* 6 */ Instr::SharedEnd,
+            /* 7 */ Instr::Return,
+        ],
+        2,
+        0,
+        0,
+        2,
+        1,
+        4,
+        vec![f],
+        vec!["f"],
+    );
+    let consts = vec![Fr::from(999u64), Fr::from(100u64)];
+
+    // cond shared(1): result = f(x) = x + 100.
+    let signals = common::run_taint_with_consts(
+        &program,
+        consts.clone(),
+        vec![common::shared(1), common::public(7)],
+    );
+    assert_eq!(signals[1].val, Fr::from(107u64));
+    assert!(signals[1].shared);
+
+    // cond shared(0): result = the pre-existing 999, not f(x).
+    let signals =
+        common::run_taint_with_consts(&program, consts, vec![common::shared(0), common::public(7)]);
+    assert_eq!(signals[1].val, Fr::from(999u64));
+    assert!(signals[1].shared);
 }

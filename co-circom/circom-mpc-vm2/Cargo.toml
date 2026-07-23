@@ -13,7 +13,6 @@ readme.workspace = true
 [dependencies]
 ark-ff.workspace = true
 ark-serialize.workspace = true
-bincode.workspace = true
 co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
 eyre.workspace = true
 mpc-core = { version = "0.10.0", path = "../../mpc-core" }
@@ -24,3 +23,4 @@ tracing.workspace = true
 
 [dev-dependencies]
 ark-bn254.workspace = true
+bincode.workspace = true

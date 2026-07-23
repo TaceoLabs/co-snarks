@@ -2,13 +2,13 @@
 //! Register-based MPC-VM for the circom witness extension.
 //!
 //! This crate is the successor of [`circom-mpc-vm`](https://docs.rs/circom-mpc-vm), which
-//! interprets the same circom-derived control flow as a tree-walking recursive
-//! evaluator over named signals/variables. `circom-mpc-vm2` instead compiles that
-//! control flow ahead of time down to a flat, three-address instruction stream
-//! ([`isa::Instr`]) operating on integer-indexed registers and signal RAM — the same
-//! shift from "interpret the AST" to "run a small ISA" that motivates most bytecode-VM
-//! rewrites, aimed at removing the recursive evaluator's per-node dispatch and name
-//! lookups from the hot path.
+//! interprets the same circom-derived control flow as a stack-based bytecode VM: a
+//! linear opcode list executed by pushing/popping field- and index-valued stacks.
+//! `circom-mpc-vm2` instead compiles that control flow ahead of time down to a flat,
+//! three-address instruction stream ([`isa::Instr`]) operating on integer-indexed
+//! registers and signal RAM — the same shift from "stack machine" to "register machine"
+//! that motivates most bytecode-VM rewrites, aimed at removing the stack push/pop
+//! traffic and opcode dispatch overhead from the hot path.
 //!
 //! The compilation side of that split — circom AST/R1CS in, [`program::CompiledProgram`]
 //! out — lives in the (forthcoming) `circom-mpc-compiler2` crate, mirroring how

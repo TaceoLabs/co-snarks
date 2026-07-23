@@ -280,15 +280,10 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
 
     /// Execute one template activation to completion (until `Return`).
     fn run_component(&mut self, comp: &mut ComponentInst) -> Result<()> {
-        let (mut frame, name) = {
-            let code = &self.program.templates[comp.templ.0 as usize];
-            (
-                Frame::for_template(code),
-                self.program.debug.names[code.symbol_id as usize].clone(),
-            )
-        };
         let program = self.program;
         let code = &program.templates[comp.templ.0 as usize];
+        let name: &str = &program.debug.names[code.symbol_id as usize];
+        let mut frame = Frame::for_template(code);
         let instrs_len = code.instrs.len();
         // Fresh per component activation, matching the old per-`Component` `if_stack`;
         // threaded by reference through any function calls made from here (old
@@ -306,7 +301,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 &mut frame,
                 &mut pred,
                 offset,
-                &name,
+                name,
                 &mut kind,
                 inst,
                 Some(&mut *comp),
@@ -340,14 +335,11 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         pred: &mut Predication<C::VmType>,
         comp_offset: usize,
     ) -> Result<Vec<C::VmType>> {
-        let (mut frame, name, num_params) = {
-            let code = &self.program.functions[fn_id.0 as usize];
-            (
-                Frame::for_function(code),
-                self.program.debug.names[code.name_id as usize].clone(),
-                code.num_params as usize,
-            )
-        };
+        let program = self.program;
+        let code = &program.functions[fn_id.0 as usize];
+        let name: &str = &program.debug.names[code.name_id as usize];
+        let num_params = code.num_params as usize;
+        let mut frame = Frame::for_function(code);
         if args.len() != num_params {
             bail!(
                 "function {name} called with {} argument(s), expected {num_params}",
@@ -357,8 +349,6 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         for (i, v) in args.into_iter().enumerate() {
             frame.vars[i] = v;
         }
-        let program = self.program;
-        let code = &program.functions[fn_id.0 as usize];
         let instrs_len = code.instrs.len();
         let mut ret_acc: Vec<(C::VmType, Vec<C::VmType>)> = Vec::new();
         let mut ip: usize = 0;
@@ -376,7 +366,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             let mut kind = StepCtx::Function {
                 ret_acc: &mut ret_acc,
             };
-            match self.step(&mut frame, pred, comp_offset, &name, &mut kind, inst, None)? {
+            match self.step(&mut frame, pred, comp_offset, name, &mut kind, inst, None)? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
                 Flow::ReturnFn(vals) => return Ok(vals),
@@ -407,10 +397,10 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
 
     /// Execute one instruction, shared between template and function bodies (see
     /// module docs). `name` is the enclosing template/function's name, used in error
-    /// messages. `sub` is the enclosing component's subcomponent tree — `Some` when
-    /// called from `run_component` (template body), `None` when called from
-    /// `run_function` (a function body can never touch subcomponents). Returns the
-    /// [`Flow`] the caller's dispatch loop should act on.
+    /// messages. `comp` is the CURRENT component being executed (holding its own
+    /// subcomponent tree) — `Some` when called from `run_component` (template body),
+    /// `None` when called from `run_function` (a function body can never touch
+    /// subcomponents). Returns the [`Flow`] the caller's dispatch loop should act on.
     #[allow(clippy::too_many_arguments)]
     fn step(
         &mut self,
@@ -420,7 +410,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         name: &str,
         kind: &mut StepCtx<C::VmType>,
         inst: &Instr,
-        sub: Option<&mut ComponentInst>,
+        comp: Option<&mut ComponentInst>,
     ) -> Result<Flow<C::VmType>> {
         Ok(match inst {
             Instr::Bin { op, dst, a, b } => {
@@ -456,11 +446,9 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 // mirrors old circom-mpc-vm/src/mpc_vm.rs:663-679.
                 let mut result = self.driver.public_one();
                 for k in 0..*n as usize {
-                    let av = read_n::<F, C>(frame, &self.signals, &self.consts, comp_offset, a, k)?
-                        .clone();
-                    let bv = read_n::<F, C>(frame, &self.signals, &self.consts, comp_offset, b, k)?
-                        .clone();
-                    let cmp = self.driver.eq(&av, &bv)?;
+                    let av = read_n::<F, C>(frame, &self.signals, &self.consts, comp_offset, a, k)?;
+                    let bv = read_n::<F, C>(frame, &self.signals, &self.consts, comp_offset, b, k)?;
+                    let cmp = self.driver.eq(av, bv)?;
                     result = self.driver.bool_and(&cmp, &result)?;
                 }
                 frame.regs[*dst as usize] = result;
@@ -679,7 +667,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 }
                 StepCtx::Template => {
                     // mirrors old mpc_vm.rs:462-486 (`MpcOpCode::CreateCmp`).
-                    let comp = sub.expect("StepCtx::Template always supplies a ComponentInst");
+                    let comp = comp.expect("StepCtx::Template always supplies a ComponentInst");
                     let program = self.program;
                     let tcode = &program.templates[templ.0 as usize];
                     let input_signals = tcode.input_signals;
@@ -717,7 +705,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                     if pred.is_shared() {
                         bail!("cannot provide subcomponent inputs inside a shared if in {name}");
                     }
-                    let comp = sub.expect("StepCtx::Template always supplies a ComponentInst");
+                    let comp = comp.expect("StepCtx::Template always supplies a ComponentInst");
                     let idx = iread(frame, cmp);
                     if idx >= comp.sub.len() {
                         bail!(
@@ -760,7 +748,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 StepCtx::Template => {
                     // mirrors old mpc_vm.rs:487-498 (`MpcOpCode::OutputSubComp`) — not
                     // gated on predication, matching the old behavior.
-                    let comp = sub.expect("StepCtx::Template always supplies a ComponentInst");
+                    let comp = comp.expect("StepCtx::Template always supplies a ComponentInst");
                     let idx = iread(frame, cmp);
                     if idx >= comp.sub.len() {
                         bail!(
@@ -905,11 +893,13 @@ fn write_dst<F: PrimeField, C: VmDriver<F>>(
         Dst::Reg(r) => frame.regs[*r as usize + k] = val,
         Dst::Var(a) => {
             let idx = resolve_at(&frame.iregs, a, k);
-            frame.vars[idx] = predicated_merge(driver, pred, frame.vars[idx].clone(), val)?;
+            let merged = predicated_merge(driver, pred, &frame.vars[idx], val)?;
+            frame.vars[idx] = merged;
         }
         Dst::Signal(a) => {
             let idx = comp_offset + resolve_at(&frame.iregs, a, k);
-            signals[idx] = predicated_merge(driver, pred, signals[idx].clone(), val)?;
+            let merged = predicated_merge(driver, pred, &signals[idx], val)?;
+            signals[idx] = merged;
         }
     }
     Ok(())
@@ -921,11 +911,11 @@ fn write_dst<F: PrimeField, C: VmDriver<F>>(
 fn predicated_merge<F: PrimeField, C: VmDriver<F>>(
     driver: &mut C,
     pred: &Predication<C::VmType>,
-    old: C::VmType,
+    old: &C::VmType,
     new: C::VmType,
 ) -> Result<C::VmType> {
     match pred.cond() {
-        Some(cond) => driver.cmux(cond, &new, &old),
+        Some(cond) => driver.cmux(cond, &new, old),
         None => Ok(new),
     }
 }
