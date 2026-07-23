@@ -4,5 +4,7 @@
 //! Programs are produced by `circom-mpc-compiler2` (or hand-assembled for tests) and
 //! executed by a [`WitnessExtension`](api::WitnessExtension) instantiated with a driver
 //! implementing [`VmDriver`](driver::VmDriver).
+pub mod driver;
+pub mod drivers;
 pub mod isa;
 pub mod program;
