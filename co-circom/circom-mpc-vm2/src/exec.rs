@@ -2,9 +2,10 @@
 //!
 //! [`Machine`] owns the signal RAM and the constant table for one witness extension and
 //! drives the register-VM dispatch loop over a [`CompiledProgram`]. This module
-//! currently implements the straight-line, integer-unit, and jump instruction subset;
-//! shared-if predication, function calls, and subcomponents are added by later tasks
-//! (instructions outside this task's subset produce a "not yet implemented" error).
+//! currently implements the straight-line, integer-unit, jump, and shared-if
+//! instruction subset (see [`Predication`]); function calls and subcomponents are
+//! added by later tasks (instructions outside this task's subset produce a "not yet
+//! implemented" error).
 use crate::driver::{VmDriver, apply_bin};
 use crate::isa::*;
 use crate::program::{CompiledProgram, TemplateCode, VMConfig};
@@ -43,6 +44,136 @@ pub struct ComponentInst {
     pub provided_inputs: u32,
     /// Child component instances, indexed as created by `CreateCmp`.
     pub sub: Vec<ComponentInst>,
+}
+
+/// One level of the [`Predication`] stack.
+enum PredLevel<T> {
+    /// A public-condition `if`: the executor takes a real jump, no cmux needed.
+    Public,
+    /// A shared-condition `if`: both branches execute, stores are cmux'd.
+    Shared {
+        /// `acc` of the enclosing shared level at push time (`public_one` if none).
+        outer_acc: T,
+        /// Combined condition: `and(outer_acc, cur)`, resp. `and(outer_acc, !cur)`
+        /// after [`Predication::toggle`].
+        acc: T,
+        /// This level's raw (un-combined) condition.
+        cur: T,
+        /// The `cached` value to restore when this level is popped.
+        prev_cached: Option<T>,
+    },
+}
+
+/// Runtime predication state for shared ifs. Lives per component run and is shared by
+/// nested function frames (matches the old per-`Component` `if_stack`; Task 6 threads
+/// the same instance through function calls).
+pub struct Predication<T: Clone> {
+    /// The stack of active `if` levels, outermost first.
+    levels: Vec<PredLevel<T>>,
+    /// Number of [`PredLevel::Shared`] levels currently on the stack — kept in sync
+    /// with `levels` so [`Predication::is_shared`] is O(1).
+    shared_depth: usize,
+    /// Combined condition of the innermost shared level (already accumulates all
+    /// outer shared levels). `None` ⇔ no shared level is active.
+    cached: Option<T>,
+}
+
+impl<T: Clone> Predication<T> {
+    /// A fresh predication state: no active levels, no shared condition.
+    pub fn new() -> Self {
+        Self {
+            levels: Vec::new(),
+            shared_depth: 0,
+            cached: None,
+        }
+    }
+
+    /// Push a shared-if level for `cond`, combining it with the enclosing shared
+    /// level's accumulated condition (or `public_one` if none is active). Mirrors old
+    /// `IfCtxStack::push_shared` (`circom-mpc-vm/src/mpc_vm.rs:166-185`).
+    pub fn push_shared<F, C>(&mut self, driver: &mut C, cond: T) -> Result<()>
+    where
+        F: PrimeField,
+        C: VmDriver<F, VmType = T>,
+    {
+        let outer_acc = self.cached.clone().unwrap_or_else(|| driver.public_one());
+        let acc = driver.bool_and(&outer_acc, &cond)?;
+        let prev_cached = self.cached.take();
+        self.cached = Some(acc.clone());
+        self.levels.push(PredLevel::Shared {
+            outer_acc,
+            acc,
+            cur: cond,
+            prev_cached,
+        });
+        self.shared_depth += 1;
+        Ok(())
+    }
+
+    /// Push a public-if level: no predication state, the executor performs a real
+    /// jump instead.
+    pub fn push_public(&mut self) {
+        self.levels.push(PredLevel::Public);
+    }
+
+    /// Toggle the condition of the top level (which must be [`PredLevel::Shared`]) to
+    /// enter its else branch. Mirrors old `IfCtxStack::toggle_last_shared`
+    /// (`circom-mpc-vm/src/mpc_vm.rs:187-200`) — the new compiler only emits
+    /// `SharedElse` when the top level is the matching shared one, so operating on the
+    /// top of the stack (rather than searching for the innermost shared level) is
+    /// correct here.
+    pub fn toggle<F, C>(&mut self, driver: &mut C) -> Result<()>
+    where
+        F: PrimeField,
+        C: VmDriver<F, VmType = T>,
+    {
+        match self.levels.last_mut() {
+            Some(PredLevel::Shared {
+                outer_acc,
+                acc,
+                cur,
+                ..
+            }) => {
+                let ncur = driver.bool_not(cur)?;
+                let nacc = driver.bool_and(outer_acc, &ncur)?;
+                *cur = ncur;
+                *acc = nacc.clone();
+                self.cached = Some(nacc);
+                Ok(())
+            }
+            _ => bail!("Predication::toggle called with no shared level on top"),
+        }
+    }
+
+    /// Pop the innermost level, restoring `cached` to the value it held before the
+    /// matching push (a no-op for `cached` when the popped level is `Public`).
+    pub fn pop(&mut self) {
+        if let Some(PredLevel::Shared { prev_cached, .. }) = self.levels.pop() {
+            self.cached = prev_cached;
+            self.shared_depth -= 1;
+        }
+    }
+
+    /// Whether the innermost level is [`PredLevel::Public`].
+    pub fn top_is_public(&self) -> bool {
+        matches!(self.levels.last(), Some(PredLevel::Public))
+    }
+
+    /// The combined condition of the innermost shared level, if any (O(1)).
+    pub fn cond(&self) -> Option<&T> {
+        self.cached.as_ref()
+    }
+
+    /// Whether any shared level is currently active (O(1)).
+    pub fn is_shared(&self) -> bool {
+        self.shared_depth > 0
+    }
+}
+
+impl<T: Clone> Default for Predication<T> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// The whole VM state during one witness extension.
@@ -100,6 +231,9 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
     fn run_component(&mut self, comp: &mut ComponentInst) -> Result<()> {
         let code = &self.program.templates[comp.templ.0 as usize];
         let mut frame = Frame::for_template(code);
+        // Fresh per component activation, matching the old per-`Component` `if_stack`;
+        // Task 6 threads this same instance through any function calls made from here.
+        let mut pred: Predication<C::VmType> = Predication::new();
         let mut ip: usize = 0;
         loop {
             let inst = &code.instrs[ip];
@@ -108,7 +242,18 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                     let r = {
                         let a = read::<F, C>(&frame, &self.signals, &self.consts, comp.offset, a)?;
                         let b = read::<F, C>(&frame, &self.signals, &self.consts, comp.offset, b)?;
-                        apply_bin(self.driver, *op, a, b)?
+                        // Div guard: mirrors old mpc_vm.rs:614-622. Under a shared (possibly
+                        // untaken) branch, a literal zero divisor must not error — replace it
+                        // with 1 before dividing; the store that follows is still cmux'd
+                        // against the old value, so the untaken branch's result is discarded.
+                        if matches!(op, BinOp::Div) && pred.is_shared() {
+                            let one = self.driver.public_one();
+                            let cond = pred.cond().expect("is_shared implies cond is Some").clone();
+                            let b = self.driver.cmux(&cond, b, &one)?;
+                            self.driver.div(a, &b)?
+                        } else {
+                            apply_bin(self.driver, *op, a, b)?
+                        }
                     };
                     frame.regs[*dst as usize] = r;
                 }
@@ -138,7 +283,16 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 Instr::Mov { dst, src } => {
                     let v = read::<F, C>(&frame, &self.signals, &self.consts, comp.offset, src)?
                         .clone();
-                    write_dst(&mut frame, &mut self.signals, comp.offset, dst, 0, v);
+                    write_dst::<F, C>(
+                        self.driver,
+                        &pred,
+                        &mut frame,
+                        &mut self.signals,
+                        comp.offset,
+                        dst,
+                        0,
+                        v,
+                    )?;
                 }
                 Instr::LoadN { dst, src, n } => {
                     // Consecutive reads from the source address; scatter into regs[dst..dst+n].
@@ -156,10 +310,19 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                     }
                 }
                 Instr::StoreN { dst, src, n } => {
-                    // Consecutive predicated writes (predication lands in Task 5).
+                    // Consecutive predicated writes.
                     for k in 0..*n as usize {
                         let v = frame.regs[*src as usize + k].clone();
-                        write_dst(&mut frame, &mut self.signals, comp.offset, dst, k, v);
+                        write_dst::<F, C>(
+                            self.driver,
+                            &pred,
+                            &mut frame,
+                            &mut self.signals,
+                            comp.offset,
+                            dst,
+                            k,
+                            v,
+                        )?;
                     }
                 }
                 Instr::BinN { op, dst, a, b, n } => {
@@ -206,6 +369,32 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                         continue;
                     }
                 }
+                Instr::SharedIf { cond, else_target } => {
+                    // mirrors old mpc_vm.rs:562-576 (`MpcOpCode::If`).
+                    let c = read::<F, C>(&frame, &self.signals, &self.consts, comp.offset, cond)?
+                        .clone();
+                    if self.driver.is_shared(&c)? {
+                        pred.push_shared(self.driver, c)?;
+                    } else {
+                        pred.push_public();
+                        if self.driver.is_zero(&c, false)? {
+                            ip = *else_target as usize;
+                            continue;
+                        }
+                    }
+                }
+                Instr::SharedElse { end_target } => {
+                    // mirrors old mpc_vm.rs:577-592 (`MpcOpCode::EndTruthyBranch`): a public
+                    // level jumps past the else branch straight to `SharedEnd` (still
+                    // executing the pop); a shared level falls into the else branch with its
+                    // condition toggled.
+                    if pred.top_is_public() {
+                        ip = *end_target as usize;
+                        continue;
+                    }
+                    pred.toggle(self.driver)?;
+                }
+                Instr::SharedEnd => pred.pop(), // mirrors old mpc_vm.rs:593-598 (`EndFalsyBranch`).
                 Instr::Return => break,
                 Instr::Assert { cond, line } => {
                     let c = read::<F, C>(&frame, &self.signals, &self.consts, comp.offset, cond)?
@@ -304,25 +493,45 @@ fn read_n<'v, F: PrimeField, C: VmDriver<F>>(
 
 /// Write a value to a `Reg`/`Var`/`Signal` destination, offset by `k` (used by
 /// `LoadN`/`StoreN` for element-wise writes; `k = 0` for a scalar `Mov`). This is the
-/// single write path for `Dst` — Task 5 adds predication for the `Var`/`Signal` arms.
-fn write_dst<T: Clone>(
-    frame: &mut Frame<T>,
-    signals: &mut [T],
+/// single write path for `Dst`: `Var`/`Signal` writes are predicated by `pred` (cmux'd
+/// against the current value); `Reg` writes never are (temporaries are branch-local).
+#[allow(clippy::too_many_arguments)]
+fn write_dst<F: PrimeField, C: VmDriver<F>>(
+    driver: &mut C,
+    pred: &Predication<C::VmType>,
+    frame: &mut Frame<C::VmType>,
+    signals: &mut [C::VmType],
     comp_offset: usize,
     dst: &Dst,
     k: usize,
-    val: T,
-) {
+    val: C::VmType,
+) -> Result<()> {
     match dst {
         Dst::Reg(r) => frame.regs[*r as usize + k] = val,
         Dst::Var(a) => {
             let idx = resolve_at(&frame.iregs, a, k);
-            frame.vars[idx] = val;
+            frame.vars[idx] = predicated_merge(driver, pred, frame.vars[idx].clone(), val)?;
         }
         Dst::Signal(a) => {
             let idx = comp_offset + resolve_at(&frame.iregs, a, k);
-            signals[idx] = val;
+            signals[idx] = predicated_merge(driver, pred, signals[idx].clone(), val)?;
         }
+    }
+    Ok(())
+}
+
+/// cmux `new` against `old` under the innermost shared-if condition, if any; otherwise
+/// just `new`. Mirrors old `mpc_vm.rs:375-415` (`StoreSignals`/`StoreVars`): note the
+/// new value comes first in the `cmux` call.
+fn predicated_merge<F: PrimeField, C: VmDriver<F>>(
+    driver: &mut C,
+    pred: &Predication<C::VmType>,
+    old: C::VmType,
+    new: C::VmType,
+) -> Result<C::VmType> {
+    match pred.cond() {
+        Some(cond) => driver.cmux(cond, &new, &old),
+        None => Ok(new),
     }
 }
 

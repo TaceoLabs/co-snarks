@@ -3,6 +3,7 @@
 
 use ark_bn254::Fr;
 use circom_mpc_vm2::drivers::plain::PlainDriver;
+use circom_mpc_vm2::drivers::taint::{Taint, TaintDriver};
 use circom_mpc_vm2::exec::Machine;
 use circom_mpc_vm2::isa::*;
 use circom_mpc_vm2::program::*;
@@ -78,4 +79,41 @@ pub fn run_plain_with_consts(
     }
     machine.run_main().expect("run_main");
     machine.signals
+}
+
+/// Runs main with a [`TaintDriver`], the given constants table, and the given
+/// (value, shared) input pairs; returns the full signal RAM as [`Taint`] values.
+pub fn run_taint_with_consts(
+    program: &CompiledProgram<Fr>,
+    consts: Vec<Fr>,
+    inputs: Vec<Taint<Fr>>,
+) -> Vec<Taint<Fr>> {
+    let mut program = program.clone();
+    program.constants = consts;
+    let mut driver = TaintDriver::<Fr>::default();
+    let config = VMConfig::default();
+    let mut machine = Machine::new(&program, &mut driver, config).expect("Machine::new");
+    if let Some(info) = program.main_input_list.first() {
+        for (i, v) in inputs.into_iter().enumerate() {
+            machine.signals[info.offset + i] = v;
+        }
+    }
+    machine.run_main().expect("run_main");
+    machine.signals
+}
+
+/// Convenience constructor for a shared (secret) taint value.
+pub fn shared(v: u64) -> Taint<Fr> {
+    Taint {
+        val: Fr::from(v),
+        shared: true,
+    }
+}
+
+/// Convenience constructor for a public taint value.
+pub fn public(v: u64) -> Taint<Fr> {
+    Taint {
+        val: Fr::from(v),
+        shared: false,
+    }
 }
