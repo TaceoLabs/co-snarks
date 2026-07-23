@@ -86,6 +86,136 @@ pub fn program_with_functions(
     program
 }
 
+/// A two-named-input multiplier program (`out <== a * b`), with `output_mapping =
+/// {"out": (1, 1)}` — the program used by the `api` integration tests.
+///
+/// Signal layout: `[0]=1, [1]=out, [2]=a, [3]=b`.
+pub fn multiplier_program() -> CompiledProgram<Fr> {
+    let mut program = CompiledProgram {
+        templates: vec![TemplateCode {
+            instrs: vec![
+                Instr::Bin {
+                    op: BinOp::Mul,
+                    dst: 0,
+                    a: Src::Signal(Addr::Const(1)),
+                    b: Src::Signal(Addr::Const(2)),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Reg(0),
+                },
+                Instr::Return,
+            ],
+            num_field_regs: 1,
+            num_int_regs: 0,
+            num_vars: 0,
+            input_signals: 2,
+            output_signals: 1,
+            sub_components: 0,
+            mappings: vec![],
+            name_id: 0,
+            symbol_id: 0,
+        }],
+        functions: vec![],
+        constants: vec![],
+        strings: vec![],
+        main: TemplId(0),
+        total_signals: 4,
+        main_inputs: 2,
+        main_outputs: 1,
+        main_input_list: vec![
+            InputInfo {
+                name: "a".to_string(),
+                offset: 2,
+                size: 1,
+            },
+            InputInfo {
+                name: "b".to_string(),
+                offset: 3,
+                size: 1,
+            },
+        ],
+        output_mapping: HashMap::new(),
+        signal_to_witness: vec![0, 1, 2, 3],
+        public_inputs: vec![],
+        debug: DebugInfo {
+            names: vec!["Test".to_string()],
+        },
+    };
+    program.output_mapping.insert("out".to_string(), (1, 1));
+    program
+}
+
+/// A single-array-input program computing `out = in[0] + in[1] + ... + in[n-1]`, with
+/// `output_mapping = {"out": (1, 1)}` and constants already installed — ready to run
+/// through the `api` module directly (no `run_plain_with_consts` needed). The array
+/// input is named `"in"` (old naming convention: consumed as `in[0]..in[n-1]`).
+pub fn sum_program(n: u64) -> CompiledProgram<Fr> {
+    // regs: r0 = acc, r1 = i (field copy), r2 = cond scratch
+    // iregs: i0 = i (address copy)
+    // signals: [0]=1, [1]=out, [2..2+n]=in[i]
+    let instrs = vec![
+        /* 0 */
+        Instr::Mov {
+            dst: Dst::Reg(0),
+            src: Src::Const(0),
+        }, // acc = 0
+        /* 1 */
+        Instr::Mov {
+            dst: Dst::Reg(1),
+            src: Src::Const(0),
+        }, // i_f = 0
+        /* 2 */ Instr::ISet { dst: 0, val: 0 }, // i = 0
+        /* 3 */
+        Instr::Bin {
+            op: BinOp::Lt,
+            dst: 2,
+            a: Src::Reg(1),
+            b: Src::Const(1),
+        }, // i_f < n
+        /* 4 */
+        Instr::JmpIfZero {
+            cond: Src::Reg(2),
+            target: 9,
+        },
+        /* 5 */
+        Instr::Bin {
+            op: BinOp::Add,
+            dst: 0,
+            a: Src::Reg(0),
+            b: Src::Signal(Addr::Affine {
+                ireg: 0,
+                stride: 1,
+                offset: 1,
+            }),
+        },
+        /* 6 */
+        Instr::IAdd {
+            dst: 0,
+            a: ISrc::Reg(0),
+            b: ISrc::Const(1),
+        },
+        /* 7 */
+        Instr::Bin {
+            op: BinOp::Add,
+            dst: 1,
+            a: Src::Reg(1),
+            b: Src::Const(2),
+        }, // i_f += 1
+        /* 8 */ Instr::Jmp { target: 3 },
+        /* 9 */
+        Instr::Mov {
+            dst: Dst::Signal(Addr::Const(0)),
+            src: Src::Reg(0),
+        },
+        /*10 */ Instr::Return,
+    ];
+    let mut program = single_template_program(instrs, 3, 1, 0, n as u32, 1, (n + 2) as usize);
+    program.constants = vec![Fr::from(0u64), Fr::from(n), Fr::from(1u64)];
+    program.output_mapping.insert("out".to_string(), (1, 1));
+    program
+}
+
 /// Runs main with the given flat inputs (constants table = `[0]`), returns the full
 /// signal RAM.
 pub fn run_plain(program: &CompiledProgram<Fr>, inputs: Vec<Fr>) -> Vec<Fr> {
