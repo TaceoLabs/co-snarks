@@ -274,14 +274,16 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
 
     /// Execute one template activation to completion (until `Return`).
     fn run_component(&mut self, comp: &mut ComponentInst) -> Result<()> {
-        let (mut frame, name, instrs_len) = {
+        let (mut frame, name) = {
             let code = &self.program.templates[comp.templ.0 as usize];
             (
                 Frame::for_template(code),
                 self.program.debug.names[code.symbol_id as usize].clone(),
-                code.instrs.len(),
             )
         };
+        let program = self.program;
+        let code = &program.templates[comp.templ.0 as usize];
+        let instrs_len = code.instrs.len();
         // Fresh per component activation, matching the old per-`Component` `if_stack`;
         // threaded by reference through any function calls made from here (old
         // behavior: a shared-if context spans calls).
@@ -292,8 +294,8 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             if ip >= instrs_len {
                 bail!("template {name} ran off the end of its body without a Return");
             }
-            let inst = self.program.templates[comp.templ.0 as usize].instrs[ip].clone();
-            match self.step(&mut frame, &mut pred, comp.offset, &name, &mut kind, &inst)? {
+            let inst = &code.instrs[ip];
+            match self.step(&mut frame, &mut pred, comp.offset, &name, &mut kind, inst)? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
                 Flow::ReturnTempl => break,
@@ -323,12 +325,11 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         pred: &mut Predication<C::VmType>,
         comp_offset: usize,
     ) -> Result<Vec<C::VmType>> {
-        let (mut frame, name, instrs_len, num_params) = {
+        let (mut frame, name, num_params) = {
             let code = &self.program.functions[fn_id.0 as usize];
             (
                 Frame::for_function(code),
                 self.program.debug.names[code.name_id as usize].clone(),
-                code.instrs.len(),
                 code.num_params as usize,
             )
         };
@@ -341,6 +342,9 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         for (i, v) in args.into_iter().enumerate() {
             frame.vars[i] = v;
         }
+        let program = self.program;
+        let code = &program.functions[fn_id.0 as usize];
+        let instrs_len = code.instrs.len();
         let mut ret_acc: Vec<(C::VmType, Vec<C::VmType>)> = Vec::new();
         let mut ip: usize = 0;
         loop {
@@ -353,11 +357,11 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 }
                 bail!("function {name} ended without returning");
             }
-            let inst = self.program.functions[fn_id.0 as usize].instrs[ip].clone();
+            let inst = &code.instrs[ip];
             let mut kind = StepCtx::Function {
                 ret_acc: &mut ret_acc,
             };
-            match self.step(&mut frame, pred, comp_offset, &name, &mut kind, &inst)? {
+            match self.step(&mut frame, pred, comp_offset, &name, &mut kind, inst)? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
                 Flow::ReturnFn(vals) => return Ok(vals),
