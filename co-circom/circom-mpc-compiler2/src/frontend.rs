@@ -118,8 +118,6 @@ where
 
 /// Sums up the size of a [`SizeOption`] (a single value, or a set of alternative sizes
 /// for a run-time-conditional access).
-// Unused until the codegen lowering (Task 2+) consumes it.
-#[allow(dead_code)]
 pub(crate) fn get_size_from_size_option(size_option: &SizeOption) -> usize {
     match size_option {
         SizeOption::Single(v) => *v,
