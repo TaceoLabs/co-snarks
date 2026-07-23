@@ -3,15 +3,21 @@
 //! [`Machine`] owns the signal RAM and the constant table for one witness extension and
 //! drives the register-VM dispatch loop over a [`CompiledProgram`]. This module
 //! implements the straight-line, integer-unit, jump, shared-if (see [`Predication`]),
-//! and function-call instruction subset; subcomponents are added by a later task
-//! (instructions outside this task's subset produce a "not yet implemented" error).
+//! function-call, and subcomponent (`CreateCmp`/`InputSub`/`OutputSub`) instruction
+//! subsets — the full template/function instruction set.
 //!
 //! Template and function bodies share one instruction-dispatch implementation
 //! (`step`): `run_component` and [`run_function`](Machine::run_function) each drive a
 //! loop that calls `step` and acts on the returned `Flow`. `step` takes a `StepCtx`
 //! telling it which of the two it is executing, since a few instructions are only
 //! valid in one (`Return`/`CreateCmp`/`InputSub`/`OutputSub` are template-only, `Ret`
-//! is function-only).
+//! is function-only). Subcomponents are owned by the parent's `ComponentInst` (not by
+//! `Machine`), so `step` additionally takes an `Option<&mut ComponentInst>`: `Some` in
+//! a template body, `None` in a function body (which can never reference
+//! subcomponents — those three instructions bail immediately there). This lets `step`
+//! recurse into `run_component` for a freshly-created or newly-completed subcomponent
+//! without fighting the borrow checker, since the subcomponent is reachable through a
+//! parameter rather than through `self`.
 use crate::driver::{VmDriver, apply_bin};
 use crate::isa::*;
 use crate::program::{CompiledProgram, FunctionCode, TemplateCode, VMConfig};
@@ -55,8 +61,8 @@ pub struct ComponentInst {
     pub templ: TemplId,
     /// Signal-RAM offset of this instance (absolute).
     pub offset: usize,
-    /// Number of input values received so far (drives run-on-last-input for
-    /// subcomponents; unused until `InputSub` is implemented).
+    /// Number of input values received so far (drives run-on-last-input: the
+    /// subcomponent is run once this reaches its template's `input_signals`).
     pub provided_inputs: u32,
     /// Child component instances, indexed as created by `CreateCmp`.
     pub sub: Vec<ComponentInst>,
@@ -295,7 +301,16 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 bail!("template {name} ran off the end of its body without a Return");
             }
             let inst = &code.instrs[ip];
-            match self.step(&mut frame, &mut pred, comp.offset, &name, &mut kind, inst)? {
+            let offset = comp.offset;
+            match self.step(
+                &mut frame,
+                &mut pred,
+                offset,
+                &name,
+                &mut kind,
+                inst,
+                Some(&mut *comp),
+            )? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
                 Flow::ReturnTempl => break,
@@ -361,7 +376,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             let mut kind = StepCtx::Function {
                 ret_acc: &mut ret_acc,
             };
-            match self.step(&mut frame, pred, comp_offset, &name, &mut kind, inst)? {
+            match self.step(&mut frame, pred, comp_offset, &name, &mut kind, inst, None)? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
                 Flow::ReturnFn(vals) => return Ok(vals),
@@ -392,7 +407,11 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
 
     /// Execute one instruction, shared between template and function bodies (see
     /// module docs). `name` is the enclosing template/function's name, used in error
-    /// messages. Returns the [`Flow`] the caller's dispatch loop should act on.
+    /// messages. `sub` is the enclosing component's subcomponent tree — `Some` when
+    /// called from `run_component` (template body), `None` when called from
+    /// `run_function` (a function body can never touch subcomponents). Returns the
+    /// [`Flow`] the caller's dispatch loop should act on.
+    #[allow(clippy::too_many_arguments)]
     fn step(
         &mut self,
         frame: &mut Frame<C::VmType>,
@@ -401,6 +420,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         name: &str,
         kind: &mut StepCtx<C::VmType>,
         inst: &Instr,
+        sub: Option<&mut ComponentInst>,
     ) -> Result<Flow<C::VmType>> {
         Ok(match inst {
             Instr::Bin { op, dst, a, b } => {
@@ -648,14 +668,121 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 }
                 Flow::Continue
             }
-            Instr::CreateCmp { .. } | Instr::InputSub { .. } | Instr::OutputSub { .. } => {
-                match kind {
-                    StepCtx::Function { .. } => {
-                        bail!("{inst} is template-only, cannot appear inside function {name}")
-                    }
-                    StepCtx::Template => bail!("not yet implemented: {inst}"),
+            Instr::CreateCmp {
+                templ,
+                count,
+                base,
+                jump,
+            } => match kind {
+                StepCtx::Function { .. } => {
+                    bail!("{inst} is template-only, cannot appear inside function {name}")
                 }
-            }
+                StepCtx::Template => {
+                    // mirrors old mpc_vm.rs:462-486 (`MpcOpCode::CreateCmp`).
+                    let comp = sub.expect("StepCtx::Template always supplies a ComponentInst");
+                    let program = self.program;
+                    let tcode = &program.templates[templ.0 as usize];
+                    let input_signals = tcode.input_signals;
+                    let sub_capacity = tcode.sub_components as usize;
+                    for i in 0..*count as usize {
+                        let offset = comp.offset + *base as usize + i * *jump as usize;
+                        let mut new_sub = ComponentInst {
+                            templ: *templ,
+                            offset,
+                            provided_inputs: 0,
+                            sub: Vec::with_capacity(sub_capacity),
+                        };
+                        // mirrors old mpc_vm.rs:480-485: a zero-input subcomponent has
+                        // nothing left to wait for, so it runs immediately at creation.
+                        if input_signals == 0 {
+                            self.run_component(&mut new_sub)?;
+                        }
+                        comp.sub.push(new_sub);
+                    }
+                    Flow::Continue
+                }
+            },
+            Instr::InputSub {
+                cmp,
+                addr,
+                mapped,
+                src,
+                n,
+            } => match kind {
+                StepCtx::Function { .. } => {
+                    bail!("{inst} is template-only, cannot appear inside function {name}")
+                }
+                StepCtx::Template => {
+                    // mirrors old mpc_vm.rs:500-503: was an `assert!`, now a proper error.
+                    if pred.is_shared() {
+                        bail!("cannot provide subcomponent inputs inside a shared if in {name}");
+                    }
+                    let comp = sub.expect("StepCtx::Template always supplies a ComponentInst");
+                    let idx = iread(frame, cmp);
+                    if idx >= comp.sub.len() {
+                        bail!(
+                            "InputSub: subcomponent index {idx} out of range \
+                             ({} subcomponent(s)) in {name}",
+                            comp.sub.len()
+                        );
+                    }
+                    // mirrors old mpc_vm.rs:499-552 (minus the TACEO_PRECOMPUTATION
+                    // branch, out of scope for this task).
+                    let program = self.program;
+                    let sub_code = &program.templates[comp.sub[idx].templ.0 as usize];
+                    let mut a = resolve(&frame.iregs, addr);
+                    if let Some(m) = mapped {
+                        a += sub_code.mappings[*m as usize] as usize;
+                    }
+                    let input_signals = sub_code.input_signals;
+                    let sub_offset = comp.sub[idx].offset;
+                    let n = *n as usize;
+                    for k in 0..n {
+                        self.signals[sub_offset + a + k] = frame.regs[*src as usize + k].clone();
+                    }
+                    comp.sub[idx].provided_inputs += n as u32;
+                    if comp.sub[idx].provided_inputs == input_signals {
+                        self.run_component(&mut comp.sub[idx])?;
+                    }
+                    Flow::Continue
+                }
+            },
+            Instr::OutputSub {
+                cmp,
+                addr,
+                mapped,
+                dst,
+                n,
+            } => match kind {
+                StepCtx::Function { .. } => {
+                    bail!("{inst} is template-only, cannot appear inside function {name}")
+                }
+                StepCtx::Template => {
+                    // mirrors old mpc_vm.rs:487-498 (`MpcOpCode::OutputSubComp`) — not
+                    // gated on predication, matching the old behavior.
+                    let comp = sub.expect("StepCtx::Template always supplies a ComponentInst");
+                    let idx = iread(frame, cmp);
+                    if idx >= comp.sub.len() {
+                        bail!(
+                            "OutputSub: subcomponent index {idx} out of range \
+                             ({} subcomponent(s)) in {name}",
+                            comp.sub.len()
+                        );
+                    }
+                    let program = self.program;
+                    let sub_code = &program.templates[comp.sub[idx].templ.0 as usize];
+                    let mut a = resolve(&frame.iregs, addr);
+                    if let Some(m) = mapped {
+                        a += sub_code.mappings[*m as usize] as usize;
+                    }
+                    let sub_offset = comp.sub[idx].offset;
+                    let n = *n as usize;
+                    for k in 0..n {
+                        frame.regs[*dst as usize + k] = self.signals[sub_offset + a + k].clone();
+                    }
+                    Flow::Continue
+                }
+            },
             Instr::Assert { cond, line } => {
                 let c =
                     read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?.clone();
