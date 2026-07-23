@@ -22,13 +22,18 @@ pub(crate) enum Binding {
     /// path): an integer register mirrors the variable's field slot for the loop's whole
     /// extent. The field slot stays authoritative — value-position reads still load it —
     /// only index-position reads resolve to [`Addr::Affine`](circom_mpc_vm2::isa::Addr::Affine)
-    /// via this register (see [`crate::codegen::index::eval_index`]'s `ireg_binding`).
+    /// via this register (see [`crate::codegen::index::eval_index`]'s
+    /// `folded_index_binding`).
     IReg {
         /// The integer register mirroring the variable's field slot.
         ireg: u8,
     },
-    /// Unrolled iteration (Task 5): the variable's value is a compile-time constant.
-    #[allow(dead_code)] // constructed starting Task 5
+    /// Unrolled iteration ([`crate::codegen::stmt::lower_loop`]'s unrolling path): the
+    /// variable's value is a compile-time constant for the iteration currently being
+    /// lowered. Both index-position reads (fold straight to
+    /// [`Addr::Const`](circom_mpc_vm2::isa::Addr::Const)) and value-position reads (fold
+    /// to a field constant — see [`crate::codegen::expr::lower_load`]) consult this,
+    /// unlike [`Binding::IReg`], whose value-position reads still load the field slot.
     ConstUsize(usize),
 }
 

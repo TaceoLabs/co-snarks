@@ -5,6 +5,7 @@
 //! [`ComputeBucket`], or as the right-hand side of a [`StoreBucket`]
 //! ([`crate::codegen::stmt`] handles the statement-level buckets that consume these
 //! values).
+use super::env::Binding;
 use super::{CodeGen, index, instr_kind_name};
 use crate::frontend::get_size_from_size_option;
 use ark_ff::PrimeField;
@@ -73,8 +74,23 @@ pub(super) fn addr_from_location_rule<F: PrimeField>(
 /// Lowers a [`LoadBucket`]. A single-element load is a pure addressing mode (no
 /// instruction emitted); a multi-element load materializes into a fresh register range
 /// via [`Instr::LoadN`].
+///
+/// A scalar variable load whose slot is currently bound to
+/// [`Binding::ConstUsize`](crate::codegen::env::Binding::ConstUsize) — an unrolled
+/// iteration's induction variable (see [`crate::codegen::stmt::lower_loop`]'s unrolling
+/// path) — is a value-position read, so (unlike the mirrored-`ireg` rolled-loop case,
+/// which only folds *index*-position reads — see [`index::folded_index_binding`]) it folds
+/// straight to a field constant here, skipping the address computation and any load
+/// instruction entirely.
 fn lower_load<F: PrimeField>(cg: &mut CodeGen<'_, F>, lb: &LoadBucket) -> Result<Src> {
     let size = get_size_from_size_option(&lb.context.size);
+    if size == 1
+        && matches!(lb.address_type, AddressType::Variable)
+        && let Some(v) = const_value_binding(cg, &lb.src)
+    {
+        let id = cg.const_id(F::from(v as u64))?;
+        return Ok(Src::Const(id));
+    }
     let addr = addr_from_location_rule(cg, &lb.src)?;
     match &lb.address_type {
         AddressType::Signal => materialize(cg, Src::Signal(addr), size),
@@ -82,6 +98,22 @@ fn lower_load<F: PrimeField>(cg: &mut CodeGen<'_, F>, lb: &LoadBucket) -> Result
         AddressType::SubcmpSignal { .. } => {
             bail!("not yet lowered: subcomponent signal load (Task 8)")
         }
+    }
+}
+
+/// Resolves whether `loc` is a plain scalar variable load whose slot is currently bound to
+/// [`Binding::ConstUsize`]: if so, its value is already known at compile time. Only a bare
+/// `Value(U32)` address (via [`index::static_const_slot`]) counts — an array element's
+/// address is never a single constant slot, so this can't misfire on `a[k]` for some
+/// unrelated bound variable `k`.
+fn const_value_binding<F: PrimeField>(cg: &CodeGen<'_, F>, loc: &LocationRule) -> Option<usize> {
+    let LocationRule::Indexed { location, .. } = loc else {
+        return None;
+    };
+    let slot = index::static_const_slot(location)?;
+    match cg.env.get(slot) {
+        Some(Binding::ConstUsize(v)) => Some(v),
+        _ => None,
     }
 }
 

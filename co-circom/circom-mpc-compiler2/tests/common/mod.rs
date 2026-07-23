@@ -79,3 +79,13 @@ pub fn assert_kats(name: &str, config: CompilerConfig) {
     }
     assert!(i > 0, "no KATs found for {name}");
 }
+
+/// Variant of [`assert_kats`] that starts from [`CompilerConfig::default`] and lets the
+/// caller mutate it before compiling — for config-sweep tests (e.g. running the same KAT
+/// under different [`circom_mpc_compiler2::UnrollConfig::threshold`] values) that don't
+/// need to build a whole custom [`CompilerConfig`] by hand.
+pub fn assert_kats_with(name: &str, f: impl FnOnce(&mut CompilerConfig)) {
+    let mut config = CompilerConfig::default();
+    f(&mut config);
+    assert_kats(name, config);
+}

@@ -71,6 +71,11 @@ pub(crate) fn compile<F: PrimeField>(
                 .map_err(|_| eyre!("cannot parse field constant {s:?}"))
         })
         .collect::<Result<Vec<_>>>()?;
+    // Seed the reverse lookup `const_id` (unrolled-loop lowering, Task 5) uses to avoid
+    // re-adding a value the circuit's own constant table already tables.
+    for (i, c) in cg.constants.iter().enumerate() {
+        cg.const_ids.insert(*c, u32::try_from(i)?);
+    }
     let strings = circuit.c_producer.get_string_table().clone();
 
     // Function bodies are skeleton-only until Task 7: rather than silently emitting an
@@ -176,6 +181,12 @@ pub(crate) struct CodeGen<'c, F> {
     pub(crate) names: NameInterner,
     /// The circuit's field-constant table, parsed once up front.
     pub(crate) constants: Vec<F>,
+    /// Reverse lookup for [`Self::const_id`]: the id already assigned to a field value
+    /// that's been interned into [`Self::constants`], so a repeated value (e.g. the same
+    /// unrolled-loop induction-variable constant appearing in two different loops) reuses
+    /// its existing id instead of growing the table. Seeded from [`Self::constants`]
+    /// once, in [`compile`], then only grows via [`Self::const_id`].
+    pub(crate) const_ids: HashMap<F, u32>,
     /// The compiler configuration.
     pub(crate) config: &'c CompilerConfig,
     /// The instruction stream of the body currently being lowered.
@@ -202,6 +213,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             fn_ids: HashMap::new(),
             names: NameInterner::default(),
             constants: Vec::new(),
+            const_ids: HashMap::new(),
             config,
             instrs: Vec::new(),
             regs: RegAlloc::default(),
@@ -233,6 +245,22 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
     pub(crate) fn alloc_freg_n(&mut self, n: u32) -> Result<u16> {
         u16::try_from(self.regs.alloc_n(n))
             .map_err(|_| eyre!("template/function body exceeds 65535 field registers"))
+    }
+
+    /// Interns `v` into [`Self::constants`], returning its existing id (via
+    /// [`Self::const_ids`]) if this exact value has been seen before, or appending a new
+    /// entry otherwise. Used by unrolled-loop lowering ([`stmt::lower_loop`]'s unrolling
+    /// path) to turn a compile-time-known induction-variable value into a field constant
+    /// on demand, without duplicating an already-tabled value.
+    pub(crate) fn const_id(&mut self, v: F) -> Result<u32> {
+        if let Some(&id) = self.const_ids.get(&v) {
+            return Ok(id);
+        }
+        let id = u32::try_from(self.constants.len())
+            .map_err(|_| eyre!("constant table exceeds u32::MAX entries"))?;
+        self.constants.push(v);
+        self.const_ids.insert(v, id);
+        Ok(id)
     }
 
     /// Allocates a fresh integer register, checked against the ISA's `u8` register-index

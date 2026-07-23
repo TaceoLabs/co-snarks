@@ -9,10 +9,11 @@
 //! expression, e.g. a signal-valued array index, into an index).
 //!
 //! [`eval_index`] walks this sub-tree and folds it as far as possible at compile time,
-//! producing an [`IndexExpr`]: fully constant, affine in a single integer register (a
-//! promoted loop variable — see [`ireg_binding`]), or fully dynamic (computed at runtime
-//! into a fresh integer register). [`IndexExpr::to_addr`] converts the result to the
-//! [`Addr`] the ISA understands.
+//! producing an [`IndexExpr`]: fully constant (either a literal or an unrolled loop
+//! iteration's induction variable — see [`folded_index_binding`]), affine in a single
+//! integer register (a promoted rolled-loop variable — also [`folded_index_binding`]), or
+//! fully dynamic (computed at runtime into a fresh integer register).
+//! [`IndexExpr::to_addr`] converts the result to the [`Addr`] the ISA understands.
 use super::env::Binding;
 use super::{CodeGen, expr};
 use ark_ff::PrimeField;
@@ -29,9 +30,9 @@ pub(crate) enum IndexExpr {
     /// Fully known at compile time.
     Const(usize),
     /// `iregs[ireg] * stride + offset` — affine in a single integer register. Produced
-    /// directly by [`eval_to_address`] when the operand is a promoted loop variable (see
-    /// [`ireg_binding`]), or by folding two already-affine/const results together (see
-    /// [`try_fold_const`]).
+    /// directly by [`eval_to_address`] when the operand is a promoted rolled-loop
+    /// variable (see [`folded_index_binding`]), or by folding two already-affine/const
+    /// results together (see [`try_fold_const`]).
     Affine {
         /// Integer register holding the (loop) variable's value.
         ireg: u8,
@@ -144,14 +145,14 @@ fn eval_operands<F: PrimeField>(
 
 /// Evaluates a `ToAddress` node: converts its single field-valued operand into an index.
 ///
-/// If the operand is a `Load` of a variable already bound to an integer register (a loop
-/// variable — [`ireg_binding`], Task 4), the result is affine in that register with unit
-/// stride and no runtime conversion. Otherwise the operand is lowered as an ordinary field
-/// expression and converted at runtime via [`Instr::ToIndex`] into a fresh integer
-/// register (the same `mark`/`free_to` discipline as any other field-register temporary —
-/// only the *field* register used to feed `ToIndex` is freed here; the *integer* register
-/// receiving the result is scoped to the enclosing statement, see
-/// [`crate::codegen::stmt::lower_stmt`]).
+/// If the operand is a `Load` of a variable already bound to something index position can
+/// fold directly — [`folded_index_binding`] — the result is that folded form (`Affine` for
+/// a mirrored loop variable, `Const` for an unrolled iteration's induction variable) with
+/// no runtime conversion. Otherwise the operand is lowered as an ordinary field expression
+/// and converted at runtime via [`Instr::ToIndex`] into a fresh integer register (the same
+/// `mark`/`free_to` discipline as any other field-register temporary — only the *field*
+/// register used to feed `ToIndex` is freed here; the *integer* register receiving the
+/// result is scoped to the enclosing statement, see [`crate::codegen::stmt::lower_stmt`]).
 fn eval_to_address<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     cb: &ComputeBucket,
@@ -161,13 +162,9 @@ fn eval_to_address<F: PrimeField>(
     }
     let operand = cb.stack[0].as_ref();
     if let Instruction::Load(lb) = operand
-        && let Some(ireg) = ireg_binding(cg, lb)
+        && let Some(idx) = folded_index_binding(cg, lb)
     {
-        return Ok(IndexExpr::Affine {
-            ireg,
-            stride: 1,
-            offset: 0,
-        });
+        return Ok(idx);
     }
     let freg_mark = cg.regs.mark();
     let src = expr::lower_expr(cg, operand)?;
@@ -178,11 +175,14 @@ fn eval_to_address<F: PrimeField>(
 }
 
 /// Resolves whether `lb` (the operand of a `ToAddress`) is a `Load` of a variable already
-/// bound to an integer register: its address must resolve (via [`static_const_slot`]) to
-/// a statically-known variable slot, and that slot must currently carry an
+/// bound to something index position can fold directly, without any runtime conversion:
+/// its address must resolve (via [`static_const_slot`]) to a statically-known variable
+/// slot, and that slot must currently carry either
 /// [`Binding::IReg`](crate::codegen::env::Binding::IReg) — the mirror a conforming loop's
-/// induction variable maintains (see [`crate::codegen::stmt::lower_loop`]).
-fn ireg_binding<F: PrimeField>(cg: &CodeGen<'_, F>, lb: &LoadBucket) -> Option<u8> {
+/// induction variable maintains (see [`crate::codegen::stmt::lower_loop`]) — which folds
+/// to `Affine`, or [`Binding::ConstUsize`](crate::codegen::env::Binding::ConstUsize) — an
+/// unrolled iteration's induction variable — which folds to `Const`.
+fn folded_index_binding<F: PrimeField>(cg: &CodeGen<'_, F>, lb: &LoadBucket) -> Option<IndexExpr> {
     if !matches!(lb.address_type, AddressType::Variable) {
         return None;
     }
@@ -191,7 +191,12 @@ fn ireg_binding<F: PrimeField>(cg: &CodeGen<'_, F>, lb: &LoadBucket) -> Option<u
     };
     let slot = static_const_slot(location)?;
     match cg.env.get(slot) {
-        Some(Binding::IReg { ireg }) => Some(ireg),
+        Some(Binding::IReg { ireg }) => Some(IndexExpr::Affine {
+            ireg,
+            stride: 1,
+            offset: 0,
+        }),
+        Some(Binding::ConstUsize(v)) => Some(IndexExpr::Const(v)),
         _ => None,
     }
 }
@@ -202,8 +207,8 @@ fn ireg_binding<F: PrimeField>(cg: &CodeGen<'_, F>, lb: &LoadBucket) -> Option<u
 /// counts; anything else (an `AddAddress`/`MulAddress`/`ToAddress` node, always present
 /// for genuine array element addressing, since arrays occupy their own disjoint slot
 /// range) returns `None`. Shared by loop conformance detection
-/// ([`crate::codegen::stmt::lower_loop`]) and [`ireg_binding`], both of which need this
-/// *before* any code is emitted for the instruction being inspected.
+/// ([`crate::codegen::stmt::lower_loop`]) and [`folded_index_binding`], both of which need
+/// this *before* any code is emitted for the instruction being inspected.
 pub(super) fn static_const_slot(loc: &Instruction) -> Option<usize> {
     match loc {
         Instruction::Value(vb) if vb.parse_as == ValueType::U32 => Some(vb.value),
