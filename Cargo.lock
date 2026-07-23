@@ -954,6 +954,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "circom-mpc-compiler2"
+version = "0.1.0"
+dependencies = [
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.5.0",
+ "circom-mpc-vm2",
+ "compiler",
+ "constraint_generation",
+ "eyre",
+ "itertools 0.14.0",
+ "parser",
+ "program_structure",
+ "serde",
+ "serde_json",
+ "taceo-circom-types",
+ "tracing",
+ "type_analysis",
+]
+
+[[package]]
 name = "circom-mpc-vm"
 version = "0.9.0"
 dependencies = [
