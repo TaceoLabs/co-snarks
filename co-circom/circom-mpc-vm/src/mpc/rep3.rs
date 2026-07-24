@@ -671,9 +671,8 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             .iter()
             .any(|x| matches!(x, Rep3VmType::Arithmetic(_)))
         {
-            let inputs_len = inputs.len();
             let poseidon = Poseidon2::<_, T, 5>::default();
-            let mut precomp = poseidon.precompute_rep3(inputs_len, self.net0, &mut self.state0)?;
+            let mut precomp = poseidon.precompute_rep3(1, self.net0, &mut self.state0)?;
 
             // We promote all inputs to arithmetic shares here
             let mut iter = inputs.into_iter();
