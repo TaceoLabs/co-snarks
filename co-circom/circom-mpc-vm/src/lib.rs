@@ -24,7 +24,7 @@ mod stack;
 /// Defines the types for the MPC-VM, including [template declaration](types::TemplateDecl) and [function declarations](types::FunDecl).
 pub mod types;
 
-pub use accelerator::ComponentAcceleratorOutput;
+pub use accelerator::{ComponentAcceleratorOutput, MpcAcceleratorConfig};
 pub use mpc::batched_rep3::BatchedRep3VmType;
 pub use mpc::rep3::Rep3VmType;
 pub use mpc::shamir::ShamirVmType;

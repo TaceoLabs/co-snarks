@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use ark_ff::PrimeField;
 use eyre::bail;
+use serde::{Deserialize, Serialize};
 
 use crate::mpc::VmCircomWitnessExtension;
 
@@ -40,23 +41,27 @@ type AcceleratorComponent<F, C> = Box<
         + Send,
 >;
 
-#[derive(Debug, Clone)]
+/// Selects which predefined witness-extension accelerators are registered.
+///
+/// [`Default`] enables every accelerator. [`Self::from_env`] applies the
+/// `CIRCOM_MPC_ACCELERATOR_*` environment-variable overrides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MpcAcceleratorConfig {
     /// Whether to use the pre-defined SQRT accelerator
     /// Default: true
-    pub(crate) sqrt: bool,
+    pub sqrt: bool,
     /// Whether to use the pre-defined NUM2BITS accelerator
     /// Default: true
-    pub(crate) num2bits: bool,
+    pub num2bits: bool,
     /// Whether to use the pre-defined ADDBITS accelerator
     /// Default: true
-    pub(crate) addbits: bool,
+    pub addbits: bool,
     /// Whether to use the pre-defined ISZERO accelerator
     /// Default: true
-    pub(crate) iszero: bool,
+    pub iszero: bool,
     /// Whether to use the pre-defined POSEIDON2 accelerator
     /// Default: true
-    pub(crate) poseidon2: bool,
+    pub poseidon2: bool,
 }
 
 impl Default for MpcAcceleratorConfig {
@@ -87,6 +92,18 @@ fn map_env_string_to_bool(value: &str) -> bool {
 }
 
 impl MpcAcceleratorConfig {
+    fn from_lookup(mut lookup: impl FnMut(&str) -> Option<String>) -> Self {
+        let enabled =
+            |value: Option<String>| value.as_deref().map(map_env_string_to_bool).unwrap_or(true);
+        Self {
+            sqrt: enabled(lookup("CIRCOM_MPC_ACCELERATOR_SQRT")),
+            num2bits: enabled(lookup("CIRCOM_MPC_ACCELERATOR_NUM2BITS")),
+            addbits: enabled(lookup("CIRCOM_MPC_ACCELERATOR_ADDBITS")),
+            iszero: enabled(lookup("CIRCOM_MPC_ACCELERATOR_ISZERO")),
+            poseidon2: enabled(lookup("CIRCOM_MPC_ACCELERATOR_POSEIDON2")),
+        }
+    }
+
     /// Constructs an MpcAcceleratorConfig from the environment variables
     ///
     /// If a variable is not set, it defaults to true
@@ -101,23 +118,26 @@ impl MpcAcceleratorConfig {
     ///
     /// Possible values for the boolean variables are: "1", "true", "on", "0", "false", "off"
     pub fn from_env() -> Self {
-        Self {
-            sqrt: std::env::var("CIRCOM_MPC_ACCELERATOR_SQRT")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-            num2bits: std::env::var("CIRCOM_MPC_ACCELERATOR_NUM2BITS")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-            addbits: std::env::var("CIRCOM_MPC_ACCELERATOR_ADDBITS")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-            iszero: std::env::var("CIRCOM_MPC_ACCELERATOR_ISZERO")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-            poseidon2: std::env::var("CIRCOM_MPC_ACCELERATOR_POSEIDON2")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-        }
+        Self::from_lookup(|name| std::env::var(name).ok())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn config_lookup_reads_values_without_mutating_process_environment() {
+        let config = MpcAcceleratorConfig::from_lookup(|name| match name {
+            "CIRCOM_MPC_ACCELERATOR_SQRT" => Some("off".into()),
+            "CIRCOM_MPC_ACCELERATOR_POSEIDON2" => Some("1".into()),
+            _ => None,
+        });
+        assert!(!config.sqrt);
+        assert!(config.num2bits);
+        assert!(config.addbits);
+        assert!(config.iszero);
+        assert!(config.poseidon2);
     }
 }
 

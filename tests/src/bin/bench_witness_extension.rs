@@ -10,7 +10,7 @@
 //! 3. Rep3/local 3-party wall time (median of [`REP3_REPS`] runs), for the subset of
 //!    circuits the new pipeline's Rep3 KATs actually cover (`REP3_CIRCUITS`).
 //! 4. For the Poseidon-family circuits, an extra pair of rows with the `Poseidon2`
-//!    accelerator forced off via `CIRCOM_MPC_ACCELERATOR_POSEIDON2=0`.
+//!    accelerator disabled explicitly in each VM's configuration.
 //!
 //! # What's inside the timed region (symmetric across pipelines)
 //!
@@ -32,14 +32,11 @@
 //! rep3 test harness structure exactly — every party independently compiles), so Rep3
 //! wall time does include one parse per party, for both pipelines, symmetrically.
 //!
-//! # Accelerator env vars
+//! # Accelerator configuration
 //!
-//! `MpcAcceleratorConfig::from_env` is re-read on every VM/driver construction, so the
-//! `CIRCOM_MPC_ACCELERATOR_POSEIDON2` env var is set immediately before the "no-accel"
-//! measurement block for a Poseidon circuit (covering all reps in that block) and removed
-//! immediately after — never left set across circuits, and never mutated concurrently
-//! with other measurements (the whole binary is single-threaded except for the Rep3
-//! per-circuit thread group, which is always joined before the next circuit starts).
+//! Each witness extension receives its accelerator configuration through `VMConfig`.
+//! The no-accelerator rows clone the normal configuration and disable only Poseidon2,
+//! avoiding process-global environment mutation even while Rep3 parties run concurrently.
 //!
 //! # Usage
 //!
@@ -317,7 +314,12 @@ fn timed_reps(reps: usize, mut f: impl FnMut(usize) -> Duration) -> Measurement 
 // Plain
 // ---------------------------------------------------------------------------
 
-fn bench_plain_old(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
+fn bench_plain_old(
+    name: &str,
+    input: &[Fr],
+    expected: &[Fr],
+    vm_config: &VMConfigOld,
+) -> Measurement {
     let path = circuit_path(name);
     let parsed = CoCircomCompiler::<Bn254>::parse(path, old_config())
         .unwrap_or_else(|e| panic!("old parse failed for {name}: {e}"));
@@ -325,7 +327,7 @@ fn bench_plain_old(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
         let p = parsed.clone();
         let inp = input.to_vec();
         let start = Instant::now();
-        let vm = p.to_plain_vm(VMConfigOld::default());
+        let vm = p.to_plain_vm(vm_config.clone());
         let witness = vm.run_with_flat(inp, 0).unwrap().into_shared_witness();
         let elapsed = start.elapsed();
         if i == 0 {
@@ -337,7 +339,12 @@ fn bench_plain_old(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
     })
 }
 
-fn bench_plain_new(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
+fn bench_plain_new(
+    name: &str,
+    input: &[Fr],
+    expected: &[Fr],
+    vm_config: &VMConfig2,
+) -> Measurement {
     let path = circuit_path(name);
     let parsed = CoCircomCompiler2::<Bn254>::parse(path, new_config())
         .unwrap_or_else(|e| panic!("new parse failed for {name}: {e}"));
@@ -346,7 +353,7 @@ fn bench_plain_new(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
         let p = Arc::clone(&arc);
         let inp = input.to_vec();
         let start = Instant::now();
-        let vm = PlainWitnessExtension2::new_plain(p, VMConfig2::default());
+        let vm = PlainWitnessExtension2::new_plain(p, vm_config.clone());
         let witness = vm.run_with_flat(inp, 0).unwrap().into_shared_witness();
         let elapsed = start.elapsed();
         if i == 0 {
@@ -386,7 +393,12 @@ fn bench_compile_new(name: &str) -> Measurement {
 // Rep3 / local
 // ---------------------------------------------------------------------------
 
-fn bench_rep3_old(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
+fn bench_rep3_old(
+    name: &str,
+    input: &[Fr],
+    expected: &[Fr],
+    vm_config: &VMConfigOld,
+) -> Measurement {
     let path = circuit_path(name);
     timed_reps(REP3_REPS, |i| {
         let mut rng = thread_rng();
@@ -394,17 +406,17 @@ fn bench_rep3_old(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
         let nets0 = LocalNetwork::new_3_parties();
         let nets1 = LocalNetwork::new_3_parties();
         let config = old_config();
+        let vm_config = vm_config.clone();
 
         let start = Instant::now();
         let mut threads = vec![];
         for (net0, net1, inp) in izip!(nets0, nets1, inputs) {
             let file = path.clone();
             let cfg = config.clone();
+            let vm_config = vm_config.clone();
             threads.push(std::thread::spawn(move || {
                 let circuit = CoCircomCompiler::<Bn254>::parse(file, cfg).unwrap();
-                let we =
-                    Rep3WitnessExtensionOld::new(&net0, &net1, &circuit, VMConfigOld::default())
-                        .unwrap();
+                let we = Rep3WitnessExtensionOld::new(&net0, &net1, &circuit, vm_config).unwrap();
                 we.run_with_flat(inp.into_iter().map(Rep3VmTypeOld::Arithmetic).collect(), 0)
                     .unwrap()
                     .into_shared_witness()
@@ -422,7 +434,7 @@ fn bench_rep3_old(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
     })
 }
 
-fn bench_rep3_new(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
+fn bench_rep3_new(name: &str, input: &[Fr], expected: &[Fr], vm_config: &VMConfig2) -> Measurement {
     let path = circuit_path(name);
     timed_reps(REP3_REPS, |i| {
         let mut rng = thread_rng();
@@ -430,21 +442,19 @@ fn bench_rep3_new(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
         let nets0 = LocalNetwork::new_3_parties();
         let nets1 = LocalNetwork::new_3_parties();
         let config = new_config();
+        let vm_config = vm_config.clone();
 
         let start = Instant::now();
         let mut threads = vec![];
         for (net0, net1, inp) in izip!(nets0, nets1, inputs) {
             let file = path.clone();
             let cfg = config.clone();
+            let vm_config = vm_config.clone();
             threads.push(std::thread::spawn(move || {
                 let circuit = CoCircomCompiler2::<Bn254>::parse(file, cfg).unwrap();
-                let we = Rep3WitnessExtension2::new_rep3(
-                    &net0,
-                    &net1,
-                    Arc::new(circuit),
-                    VMConfig2::default(),
-                )
-                .unwrap();
+                let we =
+                    Rep3WitnessExtension2::new_rep3(&net0, &net1, Arc::new(circuit), vm_config)
+                        .unwrap();
                 we.run_with_flat(inp.into_iter().map(Rep3VmType2::Arithmetic).collect(), 0)
                     .unwrap()
                     .into_shared_witness()
@@ -460,47 +470,6 @@ fn bench_rep3_new(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
         }
         elapsed
     })
-}
-
-// ---------------------------------------------------------------------------
-// Accelerator env-var control
-// ---------------------------------------------------------------------------
-
-const POSEIDON2_ACCEL_VAR: &str = "CIRCOM_MPC_ACCELERATOR_POSEIDON2";
-
-/// Disables the Poseidon2 accelerator for the duration of `f` by setting
-/// `CIRCOM_MPC_ACCELERATOR_POSEIDON2=0`, then restores its previous value. Never left
-/// changed across circuits; never runs concurrently with anything else touching this var (the
-/// binary is single-threaded outside of Rep3 per-circuit thread groups, which are always
-/// joined before this returns).
-fn with_poseidon2_accel_off<T>(f: impl FnOnce() -> T) -> T {
-    struct RestoreEnv(Option<std::ffi::OsString>);
-
-    impl Drop for RestoreEnv {
-        fn drop(&mut self) {
-            // SAFETY: the caller guarantees this benchmark is not concurrently mutating
-            // or reading accelerator environment variables; Drop also runs on unwind.
-            unsafe {
-                match self.0.take() {
-                    Some(previous) => std::env::set_var(POSEIDON2_ACCEL_VAR, previous),
-                    None => std::env::remove_var(POSEIDON2_ACCEL_VAR),
-                }
-            }
-        }
-    }
-
-    // SAFETY: no other thread reads/writes this process's env vars concurrently at this
-    // point — the only other env-var access in this binary (`MpcAcceleratorConfig::from_env`)
-    // happens inside VM/driver construction calls made by `f` itself (or by prior/later
-    // calls on this same thread), and any Rep3 worker threads spawned by `f` are always
-    // joined before `f` returns, so the set/remove below strictly bracket all reads of it.
-    let restore = RestoreEnv(std::env::var_os(POSEIDON2_ACCEL_VAR));
-    unsafe {
-        std::env::set_var(POSEIDON2_ACCEL_VAR, "0");
-    }
-    let result = f();
-    drop(restore);
-    result
 }
 
 // ---------------------------------------------------------------------------
@@ -578,11 +547,13 @@ fn write_row(out: &mut String, row: &Row) {
 /// benchmark for that circuit.
 fn bench_one(name: &str, do_rep3: bool) -> Option<Row> {
     let (input, witness) = load_kat0(name)?;
+    let old_vm_config = VMConfigOld::default();
+    let new_vm_config = VMConfig2::default();
 
     eprintln!("[{name}] plain (old)...");
-    let old_plain = bench_plain_old(name, &input, &witness);
+    let old_plain = bench_plain_old(name, &input, &witness, &old_vm_config);
     eprintln!("[{name}] plain (new)...");
-    let new_plain = bench_plain_new(name, &input, &witness);
+    let new_plain = bench_plain_new(name, &input, &witness, &new_vm_config);
 
     eprintln!("[{name}] compile (old)...");
     let old_compile = bench_compile_old(name);
@@ -591,9 +562,9 @@ fn bench_one(name: &str, do_rep3: bool) -> Option<Row> {
 
     let rep3 = if do_rep3 {
         eprintln!("[{name}] rep3 (old)...");
-        let o = bench_rep3_old(name, &input, &witness);
+        let o = bench_rep3_old(name, &input, &witness, &old_vm_config);
         eprintln!("[{name}] rep3 (new)...");
-        let n = bench_rep3_new(name, &input, &witness);
+        let n = bench_rep3_new(name, &input, &witness, &new_vm_config);
         Some((o, n))
     } else {
         None
@@ -689,14 +660,18 @@ fn main() {
             eprintln!("[{name}] (no-accel) plain (old)...");
             let (input, witness) =
                 load_kat0(name).expect("already loaded successfully above for the main row");
-            let old_plain_na = with_poseidon2_accel_off(|| bench_plain_old(name, &input, &witness));
+            let mut old_vm_config = VMConfigOld::default();
+            old_vm_config.accelerator.poseidon2 = false;
+            let mut new_vm_config = VMConfig2::default();
+            new_vm_config.accelerator.poseidon2 = false;
+            let old_plain_na = bench_plain_old(name, &input, &witness, &old_vm_config);
             eprintln!("[{name}] (no-accel) plain (new)...");
-            let new_plain_na = with_poseidon2_accel_off(|| bench_plain_new(name, &input, &witness));
+            let new_plain_na = bench_plain_new(name, &input, &witness, &new_vm_config);
             let rep3_na = if do_rep3 {
                 eprintln!("[{name}] (no-accel) rep3 (old)...");
-                let o = with_poseidon2_accel_off(|| bench_rep3_old(name, &input, &witness));
+                let o = bench_rep3_old(name, &input, &witness, &old_vm_config);
                 eprintln!("[{name}] (no-accel) rep3 (new)...");
-                let n = with_poseidon2_accel_off(|| bench_rep3_new(name, &input, &witness));
+                let n = bench_rep3_new(name, &input, &witness, &new_vm_config);
                 Some((o, n))
             } else {
                 None
@@ -936,32 +911,5 @@ plain_and_compile_regression, ratio 0.333"
         let mut s = String::new();
         write_column_summary(&mut s, "Rep3/local", &[]);
         assert_eq!(s, "- Rep3/local: no rows have this measurement.\n");
-    }
-
-    #[test]
-    fn accelerator_override_restores_the_previous_environment_value() {
-        struct RestoreOriginal(Option<std::ffi::OsString>);
-        impl Drop for RestoreOriginal {
-            fn drop(&mut self) {
-                // SAFETY: serialized by ENV_LOCK within this test binary.
-                unsafe {
-                    match self.0.take() {
-                        Some(value) => std::env::set_var(POSEIDON2_ACCEL_VAR, value),
-                        None => std::env::remove_var(POSEIDON2_ACCEL_VAR),
-                    }
-                }
-            }
-        }
-
-        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _restore_original = RestoreOriginal(std::env::var_os(POSEIDON2_ACCEL_VAR));
-        // SAFETY: serialized by ENV_LOCK within this test binary.
-        unsafe {
-            std::env::set_var(POSEIDON2_ACCEL_VAR, "previous");
-        }
-        let observed = with_poseidon2_accel_off(|| std::env::var(POSEIDON2_ACCEL_VAR).unwrap());
-        assert_eq!(observed, "0");
-        assert_eq!(std::env::var(POSEIDON2_ACCEL_VAR).unwrap(), "previous");
     }
 }

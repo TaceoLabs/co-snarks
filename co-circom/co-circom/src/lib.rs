@@ -52,6 +52,13 @@ pub fn to_legacy_vm_config(config: &VMConfig) -> legacy::VMConfig {
     legacy::VMConfig {
         allow_leaky_logs: config.allow_leaky_logs,
         a2b_type: config.a2b_type,
+        accelerator: circom_mpc_vm::MpcAcceleratorConfig {
+            sqrt: config.accelerator.sqrt,
+            num2bits: config.accelerator.num2bits,
+            addbits: config.accelerator.addbits,
+            iszero: config.accelerator.iszero,
+            poseidon2: config.accelerator.poseidon2,
+        },
     }
 }
 pub use circom_types::{

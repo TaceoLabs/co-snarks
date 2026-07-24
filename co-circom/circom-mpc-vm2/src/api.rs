@@ -1,9 +1,7 @@
 //! The supported public API of the crate: [`WitnessExtension`], driven to completion via
 //! [`WitnessExtension::run`]/[`WitnessExtension::run_with_flat`] into a
 //! [`FinalizedWitnessExtension`].
-use crate::accel::{
-    ComponentAcceleratorOutput, MpcAccelerator, MpcAcceleratorConfig, TemplateInfo,
-};
+use crate::accel::{ComponentAcceleratorOutput, MpcAccelerator, TemplateInfo};
 use crate::driver::VmDriver;
 use crate::drivers::plain::PlainDriver;
 use crate::drivers::rep3::Rep3Driver;
@@ -34,20 +32,22 @@ pub type PlainWitnessExtension<F> = WitnessExtension<F, PlainDriver<F>>;
 impl<F: PrimeField, C: VmDriver<F>> WitnessExtension<F, C> {
     /// Creates a new witness extension for `program`, driven by `driver`.
     ///
-    /// The accelerator registry defaults to [`MpcAcceleratorConfig::from_env`]'s
-    /// predefined set (`sqrt_0`/`Num2Bits`/`AddBits`/`IsZero`/`Poseidon2`, each gated by
-    /// its own `CIRCOM_MPC_ACCELERATOR_*` variable) — use
+    /// The accelerator registry uses [`VMConfig::accelerator`]'s predefined set
+    /// (`sqrt_0`/`Num2Bits`/`AddBits`/`IsZero`/`Poseidon2`). [`VMConfig::default`]
+    /// initializes that field from the `CIRCOM_MPC_ACCELERATOR_*` environment variables,
+    /// while callers can override it directly without mutating process-global state. Use
     /// [`WitnessExtension::register_accelerator_component`]/
     /// [`WitnessExtension::register_accelerator_function`] to add to it. Registrations
     /// are matched against `program`'s templates/functions lazily, once, at the start
     /// of [`WitnessExtension::run`]/[`WitnessExtension::run_with_flat`] — so register
     /// everything you need before calling either.
     pub fn new(program: Arc<CompiledProgram<F>>, driver: C, config: VMConfig) -> Self {
+        let accelerator = MpcAccelerator::from_config(config.accelerator);
         Self {
             program,
             driver,
             config,
-            accelerator: MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+            accelerator,
         }
     }
 

@@ -99,9 +99,10 @@
 //! precomputed randomness) that replace a whole component/function body instead of
 //! interpreting its lowered instructions. [`accel::MpcAccelerator::from_config`] builds
 //! the predefined set (`sqrt_0`, `Num2Bits`, `AddBits`, `IsZero`, `Poseidon2`), each
-//! individually gated by its own `CIRCOM_MPC_ACCELERATOR_*` environment variable via
-//! [`accel::MpcAcceleratorConfig::from_env`] (the default an [`api::WitnessExtension::new`]
-//! is constructed with); add custom ones with
+//! controlled by [`program::VMConfig::accelerator`]. [`program::VMConfig::default`]
+//! initializes it from the `CIRCOM_MPC_ACCELERATOR_*` environment variables, and callers
+//! can override the typed config directly before constructing a witness extension. Add
+//! custom accelerators with
 //! [`api::WitnessExtension::register_accelerator_component`]/
 //! [`api::WitnessExtension::register_accelerator_function`] before the first
 //! [`api::WitnessExtension::run`]/[`api::WitnessExtension::run_with_flat`] call.

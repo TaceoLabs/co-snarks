@@ -24,7 +24,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 /// The mpc-vm configuration
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VMConfig {
     /// Allow leaking of secret values in logs
     #[serde(default)]
@@ -32,6 +32,19 @@ pub struct VMConfig {
     /// Define the implementation of the arithmetic/binary conversions.
     #[serde(default)]
     pub a2b_type: A2BType,
+    /// Predefined witness-extension accelerators to enable.
+    #[serde(default)]
+    pub accelerator: MpcAcceleratorConfig,
+}
+
+impl Default for VMConfig {
+    fn default() -> Self {
+        Self {
+            allow_leaky_logs: false,
+            a2b_type: A2BType::default(),
+            accelerator: MpcAcceleratorConfig::from_env(),
+        }
+    }
 }
 
 impl VMConfig {
@@ -1159,7 +1172,7 @@ impl<F: PrimeField> PlainWitnessExtension<F> {
                 parser.fun_decls.clone(),
                 parser.templ_decls.clone(),
                 parser.string_table.clone(),
-                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+                MpcAccelerator::from_config(config.accelerator),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
@@ -1193,7 +1206,7 @@ impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
                 parser.fun_decls.clone(),
                 parser.templ_decls.clone(),
                 parser.string_table.clone(),
-                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+                MpcAccelerator::from_config(config.accelerator),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
@@ -1231,7 +1244,7 @@ impl<'a, F: PrimeField, N: Network> Rep3WitnessExtension<'a, F, N> {
                 parser.fun_decls.clone(),
                 parser.templ_decls.clone(),
                 parser.string_table.clone(),
-                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+                MpcAccelerator::from_config(config.accelerator),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
@@ -1273,7 +1286,7 @@ impl<'a, F: PrimeField, N: Network> BatchedRep3WitnessExtension<'a, F, N> {
                 parser.fun_decls.clone(),
                 parser.templ_decls.clone(),
                 parser.string_table.clone(),
-                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+                MpcAccelerator::from_config(config.accelerator),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
@@ -1313,7 +1326,7 @@ impl<'a, F: PrimeField, N: Network> ShamirWitnessExtension<'a, F, N> {
                 parser.fun_decls.clone(),
                 parser.templ_decls.clone(),
                 parser.string_table.clone(),
-                MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
+                MpcAccelerator::from_config(config.accelerator),
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,

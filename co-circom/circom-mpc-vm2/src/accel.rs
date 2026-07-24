@@ -18,6 +18,7 @@ use crate::isa::{FnId, TemplId};
 use crate::program::CompiledProgram;
 use ark_ff::PrimeField;
 use eyre::{Result, bail};
+use serde::{Deserialize, Serialize};
 
 /// Output of a component accelerator: the component's output-signal values plus any
 /// intermediate signal values the rest of the witness extension still needs (e.g.
@@ -360,7 +361,7 @@ impl<F: PrimeField, C: VmDriver<F>> MpcAccelerator<F, C> {
 /// Every field defaults to `true` (both [`Default`] and [`MpcAcceleratorConfig::from_env`]'s
 /// fallback for an unset/unrecognized variable). Mirrors old
 /// `circom-mpc-vm::accelerator::MpcAcceleratorConfig`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct MpcAcceleratorConfig {
     /// Whether to register the predefined `sqrt_0` function accelerator.
     pub sqrt: bool,
@@ -405,6 +406,18 @@ fn map_env_string_to_bool(value: &str) -> bool {
 }
 
 impl MpcAcceleratorConfig {
+    fn from_lookup(mut lookup: impl FnMut(&str) -> Option<String>) -> Self {
+        let enabled =
+            |value: Option<String>| value.as_deref().map(map_env_string_to_bool).unwrap_or(true);
+        Self {
+            sqrt: enabled(lookup("CIRCOM_MPC_ACCELERATOR_SQRT")),
+            num2bits: enabled(lookup("CIRCOM_MPC_ACCELERATOR_NUM2BITS")),
+            addbits: enabled(lookup("CIRCOM_MPC_ACCELERATOR_ADDBITS")),
+            iszero: enabled(lookup("CIRCOM_MPC_ACCELERATOR_ISZERO")),
+            poseidon2: enabled(lookup("CIRCOM_MPC_ACCELERATOR_POSEIDON2")),
+        }
+    }
+
     /// Constructs an [`MpcAcceleratorConfig`] from the environment.
     ///
     /// If a variable is not set, it defaults to `true`. The variables are of the form
@@ -412,23 +425,7 @@ impl MpcAcceleratorConfig {
     /// `ADDBITS`, `ISZERO`, `POSEIDON2`. Possible values for the boolean variables are
     /// `"1"`, `"true"`, `"on"`, `"0"`, `"false"`, `"off"` (case-insensitive).
     pub fn from_env() -> Self {
-        Self {
-            sqrt: std::env::var("CIRCOM_MPC_ACCELERATOR_SQRT")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-            num2bits: std::env::var("CIRCOM_MPC_ACCELERATOR_NUM2BITS")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-            addbits: std::env::var("CIRCOM_MPC_ACCELERATOR_ADDBITS")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-            iszero: std::env::var("CIRCOM_MPC_ACCELERATOR_ISZERO")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-            poseidon2: std::env::var("CIRCOM_MPC_ACCELERATOR_POSEIDON2")
-                .map(|x| map_env_string_to_bool(&x))
-                .unwrap_or(true),
-        }
+        Self::from_lookup(|name| std::env::var(name).ok())
     }
 }
 
@@ -465,25 +462,14 @@ mod tests {
         assert!(cfg.poseidon2);
     }
 
-    // SAFETY (both `unsafe` blocks below): test-only mutation of process-global env
-    // vars, scoped to the `CIRCOM_MPC_ACCELERATOR_*` names this module owns — no other
-    // test in this crate reads or writes them, so concurrent test execution cannot
-    // race on these particular keys.
     #[test]
-    fn from_env_reads_configured_vars_and_defaults_unset_ones_to_true() {
-        unsafe {
-            std::env::set_var("CIRCOM_MPC_ACCELERATOR_SQRT", "0");
-            std::env::set_var("CIRCOM_MPC_ACCELERATOR_NUM2BITS", "false");
-            std::env::set_var("CIRCOM_MPC_ACCELERATOR_ADDBITS", "on");
-            std::env::remove_var("CIRCOM_MPC_ACCELERATOR_ISZERO");
-            std::env::remove_var("CIRCOM_MPC_ACCELERATOR_POSEIDON2");
-        }
-        let cfg = MpcAcceleratorConfig::from_env();
-        unsafe {
-            std::env::remove_var("CIRCOM_MPC_ACCELERATOR_SQRT");
-            std::env::remove_var("CIRCOM_MPC_ACCELERATOR_NUM2BITS");
-            std::env::remove_var("CIRCOM_MPC_ACCELERATOR_ADDBITS");
-        }
+    fn config_lookup_reads_values_and_defaults_missing_ones_to_true() {
+        let cfg = MpcAcceleratorConfig::from_lookup(|name| match name {
+            "CIRCOM_MPC_ACCELERATOR_SQRT" => Some("0".into()),
+            "CIRCOM_MPC_ACCELERATOR_NUM2BITS" => Some("false".into()),
+            "CIRCOM_MPC_ACCELERATOR_ADDBITS" => Some("on".into()),
+            _ => None,
+        });
         assert!(!cfg.sqrt);
         assert!(!cfg.num2bits);
         assert!(cfg.addbits);

@@ -1,4 +1,5 @@
 //! The compiled program artifact produced by circom-mpc-compiler2.
+use crate::accel::MpcAcceleratorConfig;
 use crate::isa::{Instr, TemplId};
 use ark_ff::PrimeField;
 use mpc_core::protocols::rep3::conversion::A2BType;
@@ -122,7 +123,7 @@ impl<F: PrimeField> CompiledProgram<F> {
 }
 
 /// The VM configuration (parity with the old crate's `VMConfig`).
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VMConfig {
     /// Allow leaking of secret values in logs.
     #[serde(default)]
@@ -130,6 +131,19 @@ pub struct VMConfig {
     /// Implementation choice for arithmetic/binary conversions (Rep3).
     #[serde(default)]
     pub a2b_type: A2BType,
+    /// Predefined witness-extension accelerators to enable.
+    #[serde(default)]
+    pub accelerator: MpcAcceleratorConfig,
+}
+
+impl Default for VMConfig {
+    fn default() -> Self {
+        Self {
+            allow_leaky_logs: false,
+            a2b_type: A2BType::default(),
+            accelerator: MpcAcceleratorConfig::from_env(),
+        }
+    }
 }
 
 impl VMConfig {

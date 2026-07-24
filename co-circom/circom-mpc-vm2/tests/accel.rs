@@ -351,6 +351,22 @@ fn num2bits_program(bits: u32) -> CompiledProgram<Fr> {
     program
 }
 
+#[test]
+fn witness_extension_uses_explicit_accelerator_config() {
+    let program = Arc::new(num2bits_program(4));
+    let mut config = VMConfig::default();
+    config.accelerator.num2bits = false;
+
+    let finalized = PlainWitnessExtension::new_plain(program, config)
+        .run_with_flat(vec![Fr::from(11u64)], 0)
+        .expect("run without Num2Bits accelerator");
+    assert_eq!(
+        finalized.get_output("out"),
+        Some(vec![Fr::from(0u64); 4]),
+        "the bare Return body must run when the typed config disables Num2Bits"
+    );
+}
+
 /// The predefined `Num2Bits` component accelerator, exercised end-to-end through
 /// [`Rep3WitnessExtension`] over a genuinely shared input: the opened result must equal
 /// the plain bit decomposition (LSB first), i.e. [`VmDriver::num2bits`]'s Rep3 port is
