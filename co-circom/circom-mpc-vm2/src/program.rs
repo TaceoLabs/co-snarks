@@ -20,6 +20,8 @@ pub struct TemplateCode {
     pub input_signals: u32,
     /// Number of output signals.
     pub output_signals: u32,
+    /// Number of intermediate (neither input nor output) signals owned by the template.
+    pub intermediate_signals: u32,
     /// Number of subcomponents (capacity hint).
     pub sub_components: u32,
     /// io-map offsets for mapped subcomponent access (old `TemplateDecl::mappings`).
@@ -164,6 +166,7 @@ mod tests {
                 num_vars: 0,
                 input_signals: 2,
                 output_signals: 1,
+                intermediate_signals: 0,
                 sub_components: 0,
                 mappings: vec![],
                 name_id: 0,

@@ -333,6 +333,13 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                     result.output.len()
                 );
             }
+            let intermediate_signals = code.intermediate_signals as usize;
+            if result.intermediate.len() > intermediate_signals {
+                bail!(
+                    "accelerator for component {name} returned {} intermediate signal(s), but the template has only {intermediate_signals} slot(s)",
+                    result.intermediate.len()
+                );
+            }
             self.signals[comp.offset..comp.offset + output_signals]
                 .clone_from_slice(&result.output);
             let intermediate_end = intermediate_start + result.intermediate.len();
@@ -645,6 +652,11 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 let c =
                     read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?.clone();
                 if self.driver.is_shared(&c)? {
+                    // Circom conditions use zero/non-zero truthiness. Protocol cmux and
+                    // boolean-composition primitives require an actual bit, so normalize
+                    // a shared field value before it enters the predication stack.
+                    let zero = self.driver.public_zero();
+                    let c = self.driver.neq(&c, &zero)?;
                     pred.push_shared(self.driver, c)?;
                     Flow::Continue
                 } else {

@@ -262,16 +262,16 @@ fn loop_ascending_takes_the_affine_path() {
 }
 
 /// The fallback-correctness milestone test the brief asks for explicitly (`tests/
-/// circuits/loop_descending.circom`): a descending `for` loop is non-conforming by
-/// design (see the circuit's own doc comment and `detect_conforming`'s docs) — its
-/// induction variable stays a plain `FieldSlot`, and `a[i]`/`out[i]` fall through the
-/// ordinary `ToAddress`/`Instr::ToIndex`/`Dynamic` path. This asserts both that no
-/// `Instr::ISet` appears (confirming the fallback path was actually taken, not just
-/// "happened to produce the right answer") and that the witness is still correct.
+/// circuits/loop_descending.circom`): with ordinary unrolling disabled, a descending
+/// `for` loop takes the rolled fallback because the ISA has no integer-register subtract.
+/// Its induction variable stays a plain `FieldSlot`, and `a[i]`/`out[i]` use the ordinary
+/// dynamic-address path. This asserts both that no `Instr::ISet` appears and that the
+/// witness is still correct.
 #[test]
 fn loop_descending_stays_correct_via_fallback() {
     let config = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
+        unroll: UnrollConfig { threshold: 0 },
         ..Default::default()
     };
     let program = Arc::new(
@@ -510,6 +510,52 @@ fn elementwise_mul_binn_fusion_end_to_end() {
             "{name}"
         );
     }
+}
+
+#[test]
+fn binn_fusion_preserves_loop_carried_dependencies() {
+    let run = |threshold| {
+        let config = CompilerConfig {
+            simplification: SimplificationLevel::O0,
+            unroll: UnrollConfig { threshold },
+            ..Default::default()
+        };
+        let program = Arc::new(
+            CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_carried_product.circom", config)
+                .unwrap(),
+        );
+        let has_binn = program
+            .templates
+            .iter()
+            .flat_map(|t| &t.instrs)
+            .any(|i| matches!(i, Instr::BinN { .. }));
+        let mut inputs = BTreeMap::from([("x".to_string(), Fr::from(3u64))]);
+        for (i, value) in [2u64, 3, 4, 5].into_iter().enumerate() {
+            inputs.insert(format!("factors[{i}]"), Fr::from(value));
+        }
+        let out = PlainWitnessExtension::new_plain(program, VMConfig::default())
+            .run(inputs, 0)
+            .unwrap()
+            .get_output("out")
+            .unwrap();
+        (has_binn, out)
+    };
+
+    let (rolled_has_binn, rolled) = run(0);
+    let (unrolled_has_binn, unrolled) = run(usize::MAX);
+    assert!(!rolled_has_binn);
+    assert!(
+        !unrolled_has_binn,
+        "the overlapping source/destination ranges carry values between iterations"
+    );
+    assert_eq!(unrolled, rolled);
+    assert_eq!(
+        unrolled,
+        [3u64, 6, 18, 72, 360]
+            .into_iter()
+            .map(Fr::from)
+            .collect::<Vec<_>>()
+    );
 }
 
 /// Non-unit loop-step end-to-end fixture (Task 7 of the rep3-accel-bench plan):
@@ -802,6 +848,60 @@ fn branch_if_else_shared_condition_takes_predicated_merge_path() {
              jump that would only taint whichever arm's store the runtime value happens \
              to run"
         );
+    }
+}
+
+#[test]
+fn descending_loop_inside_shared_branch_has_fixed_control_flow() {
+    use circom_mpc_vm2::drivers::taint::{Taint, TaintDriver};
+    use circom_mpc_vm2::exec::Machine;
+
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse(
+            "tests/circuits/shared_branch_descending_loop.circom",
+            CompilerConfig {
+                simplification: SimplificationLevel::O0,
+                unroll: UnrollConfig { threshold: 0 },
+                ..Default::default()
+            },
+        )
+        .unwrap(),
+    );
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::JmpIfZero { .. })),
+        0,
+        "a loop in a potentially shared arm must use a fixed unrolled schedule"
+    );
+
+    let cond_offset = program
+        .main_input_list
+        .iter()
+        .find(|info| info.name == "cond")
+        .unwrap()
+        .offset;
+    let a_info = program
+        .main_input_list
+        .iter()
+        .find(|info| info.name == "a")
+        .unwrap();
+    let out_offset = program.output_mapping["out"].0;
+
+    for (cond, expected) in [(0u64, 0u64), (2, 10)] {
+        let mut driver = TaintDriver::<Fr>::default();
+        let mut machine = Machine::new(&program, &mut driver, VMConfig::default()).unwrap();
+        machine.signals[cond_offset] = Taint {
+            val: Fr::from(cond),
+            shared: true,
+        };
+        for (i, value) in [1u64, 2, 3, 4].into_iter().enumerate() {
+            machine.signals[a_info.offset + i] = Taint {
+                val: Fr::from(value),
+                shared: false,
+            };
+        }
+        machine.run_main().unwrap();
+        assert_eq!(machine.signals[out_offset].val, Fr::from(expected));
+        assert!(machine.signals[out_offset].shared);
     }
 }
 

@@ -92,6 +92,12 @@ fn shared_if_merges_stores() {
     assert_eq!(signals[1].val, Fr::from(3u64));
     assert!(signals[1].shared);
 
+    // Circom treats every non-zero condition as true. The shared path must normalize
+    // that field value to a bit before composing predicates or calling cmux.
+    let signals = common::run_taint_with_consts(&program, consts.clone(), vec![common::shared(2)]);
+    assert_eq!(signals[1].val, Fr::from(3u64));
+    assert!(signals[1].shared);
+
     let signals = common::run_taint_with_consts(&program, consts, vec![common::shared(0)]);
     assert_eq!(signals[1].val, Fr::from(5u64));
     assert!(signals[1].shared);

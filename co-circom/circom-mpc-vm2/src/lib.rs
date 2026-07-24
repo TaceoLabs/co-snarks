@@ -155,6 +155,7 @@
 //!     num_vars: 0,
 //!     input_signals: 2,
 //!     output_signals: 1,
+//!     intermediate_signals: 0,
 //!     sub_components: 0,
 //!     mappings: vec![],
 //!     name_id: 0,

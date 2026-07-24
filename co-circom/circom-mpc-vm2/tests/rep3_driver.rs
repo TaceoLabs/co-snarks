@@ -738,7 +738,9 @@ fn rep3_bin_many_mul_round_count_matches_single_scalar_mul() {
 /// through an actual VM program rather than a direct driver call — must not use more
 /// network messages than a single scalar `cmux`. Both bottom out in exactly one
 /// reshare round (`arithmetic::cmux_vec` vs. `mul`'s reshare), so batching 8 predicated
-/// stores into one costs no more than 1.
+/// stores into one costs no more than one normalized shared predicate plus one scalar
+/// cmux. SharedIf first converts Circom's zero/non-zero condition into a bit, so the
+/// baseline includes that same fixed normalization cost.
 ///
 /// Signal layout (component-relative addresses; global index = comp.offset(1) + addr):
 /// `[0]=1, [1..9]=out (8 elements, addr 0..8), [9]=cond (addr 8), [10..18]=a (addr
@@ -795,9 +797,13 @@ fn rep3_predicated_storen_round_count_matches_single_scalar_cmux() {
             let cond_vm = Rep3VmType::Arithmetic(single_cond);
             let truthy_vm = Rep3VmType::Arithmetic(single_truthy);
             let falsy_vm = Rep3VmType::Public(Fr::from(0u64));
+            let zero_vm = Rep3VmType::Public(Fr::from(0u64));
+            let cond_vm = driver
+                .neq(&cond_vm, &zero_vm)
+                .expect("normalize shared condition");
             driver
                 .cmux(&cond_vm, &truthy_vm, &falsy_vm)
-                .expect("scalar cmux");
+                .expect("normalized scalar cmux");
             let scalar_msgs = net0.message_count() - start;
 
             let mut machine =
@@ -843,7 +849,7 @@ fn rep3_predicated_storen_round_count_matches_single_scalar_cmux() {
         assert!(
             batched_msgs <= scalar_msgs,
             "party {party}: predicated StoreN{{n:{n}}} used {batched_msgs} messages, \
-             more than a single scalar cmux's {scalar_msgs}"
+             more than one normalized scalar cmux's {scalar_msgs}"
         );
     }
 }

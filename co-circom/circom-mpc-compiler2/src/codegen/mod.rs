@@ -214,6 +214,10 @@ pub(crate) struct CodeGen<'c, F> {
     /// conforming loop's induction variable needs (see `stmt::detect_conforming`'s docs
     /// for the exact tracking/invalidation rules).
     pub(crate) last_const_store: HashMap<usize, u32>,
+    /// Number of branch arms currently being lowered. A runtime branch may be shared,
+    /// so loops nested in one must have a compile-time-fixed schedule rather than emit a
+    /// jump whose condition can become predicated/shared.
+    pub(crate) branch_depth: usize,
     /// Memoizes [`stmt::estimate_unrolled_body`]'s result (one iteration's instruction
     /// count) per *lexical* loop, keyed by the [`LoopBucket`](circom_compiler::
     /// intermediate_representation::ir_interface::LoopBucket)'s own address (`lb as *const
@@ -300,6 +304,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             iregs: RegAlloc::default(),
             env: Env::default(),
             last_const_store: HashMap::new(),
+            branch_depth: 0,
             unroll_estimate_cache: HashMap::new(),
             unroll_estimate_nesting: 0,
         }
@@ -312,6 +317,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
         self.iregs = RegAlloc::default();
         self.env = Env::default();
         self.last_const_store.clear();
+        self.branch_depth = 0;
         self.unroll_estimate_cache.clear();
         self.unroll_estimate_nesting = 0;
     }
@@ -408,6 +414,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             num_vars: u32::try_from(templ.var_stack_depth)?,
             input_signals: u32::try_from(templ.number_of_inputs)?,
             output_signals: u32::try_from(templ.number_of_outputs)?,
+            intermediate_signals: u32::try_from(templ.number_of_intermediates)?,
             sub_components: u32::try_from(templ.number_of_components)?,
             mappings,
             name_id: self.names.intern(&templ.name),

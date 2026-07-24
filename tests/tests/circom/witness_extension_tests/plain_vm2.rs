@@ -133,17 +133,14 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
     let mut inputs: Vec<serde_json::Value> = Vec::new();
     let mut i = 0;
     loop {
-        if fs::metadata(format!(
-            "../test_vectors/WitnessExtension/kats/{fn_name}/witness{i}.wtns"
-        ))
-        .is_err()
-        {
-            break;
+        let witness_path =
+            format!("../test_vectors/WitnessExtension/kats/{fn_name}/witness{i}.wtns");
+        match fs::metadata(&witness_path) {
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound && i > 0 => break,
+            Err(error) => panic!("cannot read KAT witness {witness_path}: {error}"),
         }
-        let witness = File::open(format!(
-            "../test_vectors/WitnessExtension/kats/{fn_name}/witness{i}.wtns"
-        ))
-        .unwrap();
+        let witness = File::open(witness_path).unwrap();
         let should_witness = Witness::<ark_bn254::Fr>::from_reader(witness).unwrap();
         witnesses.push(should_witness);
         let input_file = File::open(format!(
@@ -154,7 +151,6 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
         inputs.push(json_str);
         i += 1;
     }
-    println!("i: {i}");
     TestInputs { inputs, witnesses }
 }
 
@@ -180,7 +176,8 @@ witness_extension_test_plain2!(escalarmul_test);
 witness_extension_test_plain2!(escalarmul_test_min);
 witness_extension_test_plain2!(escalarmulany_test);
 witness_extension_test_plain2!(escalarmulfix_test);
-witness_extension_test_plain2!(escalarmulw4table);
+// `escalarmulw4table` has no KAT directory; it is intentionally not registered as a
+// generated KAT test because an empty case set must never count as passing coverage.
 witness_extension_test_plain2!(escalarmulw4table_test);
 witness_extension_test_plain2!(escalarmulw4table_test3);
 witness_extension_test_plain2!(functions);
@@ -198,7 +195,8 @@ witness_extension_test_plain2!(montgomery2edwards);
 witness_extension_test_plain2!(montgomeryadd);
 witness_extension_test_plain2!(montgomerydouble);
 witness_extension_test_plain2!(multiplier16);
-witness_extension_test_plain2!(multiplier2);
+// `multiplier2` has no KAT directory; compiler2 covers it with the purpose-built
+// straight-line tests in `circom-mpc-compiler2/tests/kat_progression.rs` instead.
 witness_extension_test_plain2!(mux1_1);
 witness_extension_test_plain2!(mux2_1);
 witness_extension_test_plain2!(mux3_1);

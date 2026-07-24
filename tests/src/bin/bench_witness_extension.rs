@@ -469,23 +469,37 @@ fn bench_rep3_new(name: &str, input: &[Fr], expected: &[Fr]) -> Measurement {
 const POSEIDON2_ACCEL_VAR: &str = "CIRCOM_MPC_ACCELERATOR_POSEIDON2";
 
 /// Disables the Poseidon2 accelerator for the duration of `f` by setting
-/// `CIRCOM_MPC_ACCELERATOR_POSEIDON2=0`, then removes the var again. Never left set
-/// across circuits; never runs concurrently with anything else touching this var (the
+/// `CIRCOM_MPC_ACCELERATOR_POSEIDON2=0`, then restores its previous value. Never left
+/// changed across circuits; never runs concurrently with anything else touching this var (the
 /// binary is single-threaded outside of Rep3 per-circuit thread groups, which are always
 /// joined before this returns).
 fn with_poseidon2_accel_off<T>(f: impl FnOnce() -> T) -> T {
+    struct RestoreEnv(Option<std::ffi::OsString>);
+
+    impl Drop for RestoreEnv {
+        fn drop(&mut self) {
+            // SAFETY: the caller guarantees this benchmark is not concurrently mutating
+            // or reading accelerator environment variables; Drop also runs on unwind.
+            unsafe {
+                match self.0.take() {
+                    Some(previous) => std::env::set_var(POSEIDON2_ACCEL_VAR, previous),
+                    None => std::env::remove_var(POSEIDON2_ACCEL_VAR),
+                }
+            }
+        }
+    }
+
     // SAFETY: no other thread reads/writes this process's env vars concurrently at this
     // point — the only other env-var access in this binary (`MpcAcceleratorConfig::from_env`)
     // happens inside VM/driver construction calls made by `f` itself (or by prior/later
     // calls on this same thread), and any Rep3 worker threads spawned by `f` are always
     // joined before `f` returns, so the set/remove below strictly bracket all reads of it.
+    let restore = RestoreEnv(std::env::var_os(POSEIDON2_ACCEL_VAR));
     unsafe {
         std::env::set_var(POSEIDON2_ACCEL_VAR, "0");
     }
     let result = f();
-    unsafe {
-        std::env::remove_var(POSEIDON2_ACCEL_VAR);
-    }
+    drop(restore);
     result
 }
 
@@ -922,5 +936,32 @@ plain_and_compile_regression, ratio 0.333"
         let mut s = String::new();
         write_column_summary(&mut s, "Rep3/local", &[]);
         assert_eq!(s, "- Rep3/local: no rows have this measurement.\n");
+    }
+
+    #[test]
+    fn accelerator_override_restores_the_previous_environment_value() {
+        struct RestoreOriginal(Option<std::ffi::OsString>);
+        impl Drop for RestoreOriginal {
+            fn drop(&mut self) {
+                // SAFETY: serialized by ENV_LOCK within this test binary.
+                unsafe {
+                    match self.0.take() {
+                        Some(value) => std::env::set_var(POSEIDON2_ACCEL_VAR, value),
+                        None => std::env::remove_var(POSEIDON2_ACCEL_VAR),
+                    }
+                }
+            }
+        }
+
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _restore_original = RestoreOriginal(std::env::var_os(POSEIDON2_ACCEL_VAR));
+        // SAFETY: serialized by ENV_LOCK within this test binary.
+        unsafe {
+            std::env::set_var(POSEIDON2_ACCEL_VAR, "previous");
+        }
+        let observed = with_poseidon2_accel_off(|| std::env::var(POSEIDON2_ACCEL_VAR).unwrap());
+        assert_eq!(observed, "0");
+        assert_eq!(std::env::var(POSEIDON2_ACCEL_VAR).unwrap(), "previous");
     }
 }

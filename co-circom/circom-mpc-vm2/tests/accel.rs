@@ -4,8 +4,10 @@
 mod common;
 
 use ark_bn254::Fr;
-use circom_mpc_vm2::accel::{MpcAccelerator, MpcAcceleratorConfig, TemplateInfo};
-use circom_mpc_vm2::api::Rep3WitnessExtension;
+use circom_mpc_vm2::accel::{
+    ComponentAcceleratorOutput, MpcAccelerator, MpcAcceleratorConfig, TemplateInfo,
+};
+use circom_mpc_vm2::api::{PlainWitnessExtension, Rep3WitnessExtension};
 use circom_mpc_vm2::driver::VmDriver;
 use circom_mpc_vm2::drivers::plain::PlainDriver;
 use circom_mpc_vm2::drivers::rep3::Rep3VmType;
@@ -135,6 +137,7 @@ fn sentinel_component_program(
         num_vars: 0,
         input_signals,
         output_signals,
+        intermediate_signals: 1,
         sub_components: 0,
         mappings: vec![],
         name_id: 0,
@@ -203,6 +206,33 @@ fn component_accelerator_writes_outputs_and_intermediates_body_skipped() {
         machine.signals[3],
         Fr::from(107u64),
         "intermediate must be the accelerator's input+100"
+    );
+}
+
+#[test]
+fn component_accelerator_rejects_wrong_intermediate_count() {
+    let program = Arc::new(sentinel_component_program("Custom", 1, 1));
+    let mut witness_extension = PlainWitnessExtension::new_plain(program, VMConfig::default());
+    witness_extension.register_accelerator_component(
+        "Custom",
+        |_| true,
+        |driver, _args, _outputs| {
+            Ok(ComponentAcceleratorOutput {
+                output: vec![driver.public_zero()],
+                intermediate: vec![driver.public_zero(), driver.public_zero()],
+            })
+        },
+    );
+
+    let error = witness_extension
+        .run_with_flat(vec![Fr::from(1u64)], 0)
+        .err()
+        .expect("wrong intermediate count must be rejected");
+    assert!(
+        error
+            .to_string()
+            .contains("returned 2 intermediate signal(s), but the template has only 1 slot(s)"),
+        "{error:?}"
     );
 }
 
@@ -287,6 +317,7 @@ fn num2bits_program(bits: u32) -> CompiledProgram<Fr> {
         num_vars: 0,
         input_signals: 1,
         output_signals: bits,
+        intermediate_signals: 0,
         sub_components: 0,
         mappings: vec![],
         name_id: 0,
@@ -384,6 +415,7 @@ fn sentinel_component_program_with_intermediate(
         num_vars: 0,
         input_signals,
         output_signals,
+        intermediate_signals: u32::try_from(intermediate_signals).unwrap(),
         sub_components: 0,
         mappings: vec![],
         name_id: 0,
@@ -546,6 +578,7 @@ fn addbits_program(bitlen: u32) -> CompiledProgram<Fr> {
         num_vars: 0,
         input_signals: 2 * bitlen,
         output_signals: bitlen,
+        intermediate_signals: 1,
         sub_components: 0,
         mappings: vec![],
         name_id: 0,

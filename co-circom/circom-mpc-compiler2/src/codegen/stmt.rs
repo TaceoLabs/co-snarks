@@ -26,7 +26,7 @@
 //! [`emit_loop_head`]/[`finish_loop`], the two paths' only shared code). What differs is
 //! how the *loop variable* is addressed inside the body:
 //!
-//! - **Conforming** ([`detect_conforming`]): when the loop is a simple ascending counter
+//! - **Conforming** ([`detect_conforming`]): when the loop is a simple counted counter
 //!   used only as an array index, its variable is *promoted* — mirrored into a
 //!   persistent integer register for the loop's extent ([`lower_conforming_loop`]). The
 //!   field var slot stays authoritative (value-position reads, e.g. `sum += i`, still
@@ -45,23 +45,19 @@
 //!
 //! ### Conformance detection is deliberately conservative
 //!
-//! [`detect_conforming`] only accepts the exact shape the brief specifies:
-//! `continue_condition` is `Lesser(Load(Variable, k), rhs)` where `rhs` is a **constant**
+//! [`detect_conforming`] accepts ascending (`<`/`<=` plus a constant add) and descending
+//! (`>`/`>=` plus a constant subtract) counters whose bound is a **constant**
 //! (the brief allows "loop-invariant" more broadly — any expression with no loads of
 //! vars stored inside the body — but circom monomorphizes template parameters into
 //! literal constants before this crate ever sees the IR, so every KAT loop bound is
 //! already a `Value`; restricting to constants keeps the detector simple without losing
 //! any real coverage, confirmed by this task's KAT/end-to-end tests all exercising the
-//! `Affine` path), the body's *last* top-level statement is `Store(Variable k, Add(Load(
-//! Variable, k), Value(c)))` for a constant `c`, and `k` is written nowhere else in the
+//! `Affine` path), the body's *last* top-level statement updates the same variable by a
+//! constant step, and `k` is written nowhere else in the
 //! body (including recursively inside nested loop bodies — see
-//! [`instruction_writes_slot`]). Anything else — most importantly, **descending loops**
-//! (`Sub`-stepped) — takes the fallback path *by design*: the ISA has no `ISub`, only
-//! `IAdd`/`IMul` (see `circom_mpc_vm2::isa::Instr`), so there is no mirror-update
-//! instruction to emit for a decrement. Promoting descending loops would need either a
-//! new ISA op or synthesizing the decrement as `IAdd` with a wrapped/negated constant —
-//! deliberately left out of scope here; a real ISA change is a Plan-1-level decision, not
-//! a codegen-only one.
+//! [`instruction_writes_slot`]). Descending loops can be statically unrolled but still use
+//! the ordinary fallback when they must remain rolled, because the integer ISA has no
+//! decrement instruction.
 //!
 //! ### Where the persistent integer register lives
 //!
@@ -94,14 +90,20 @@
 //! folding for the *next* iteration already encodes).
 //!
 //! This only pays off when the unrolled code is small enough: [`try_unroll_loop`] computes
-//! the trip count `T` ([`trip_count`]: `ceil((bound - init) / step)`, the brief's formula
-//! for a `Lesser` condition), estimates one iteration's instruction count by lowering it
+//! the trip count `T` ([`trip_count`], accounting for direction and inclusive bounds),
+//! estimates one iteration's instruction count by lowering it
 //! once into a scratch buffer ([`estimate_unrolled_body`]), and only commits to unrolling
 //! if `estimate * T <= config.unroll.threshold` — otherwise it defers to
 //! [`lower_conforming_loop`]'s rolled/mirror-promoted form, which is always correct
 //! regardless of size. `threshold: 0` disables unrolling outright (skipping the estimation
 //! lowering); `threshold: usize::MAX` unrolls wherever the bound is statically known,
 //! however large the body.
+//!
+//! A loop nested in a branch is special: the branch condition may be shared, so emitting
+//! a data-dependent jump would either leak the condition or attempt to branch on a share.
+//! Such loops are therefore required to have a statically known finite trip count and are
+//! force-unrolled regardless of the ordinary size threshold. Unsupported data-dependent
+//! branch-local loops fail during compilation rather than later during MPC execution.
 //!
 //! Nesting composes for free: re-lowering the body calls [`lower_stmt`] on each statement
 //! exactly as the rolled path does, so a conforming loop nested inside an unrolling outer
@@ -652,9 +654,7 @@ fn lower_branch<F: PrimeField>(cg: &mut CodeGen<'_, F>, bb: &BranchBucket) -> Re
     cg.regs.free_to(cond_mark);
 
     let pre_branch_const_store = cg.last_const_store.clone();
-    for inst in bb.if_branch.iter() {
-        lower_stmt(cg, inst)?;
-    }
+    lower_branch_arm(cg, &bb.if_branch)?;
 
     if bb.else_branch.is_empty() {
         // Else-less elision (see the doc comment above): `else_target` points straight at
@@ -674,9 +674,7 @@ fn lower_branch<F: PrimeField>(cg: &mut CodeGen<'_, F>, bb: &BranchBucket) -> Re
         // tracking state the truthy arm did, not from whatever the truthy arm's own
         // stores left behind.
         cg.last_const_store = pre_branch_const_store;
-        for inst in bb.else_branch.iter() {
-            lower_stmt(cg, inst)?;
-        }
+        lower_branch_arm(cg, &bb.else_branch)?;
 
         let end_target = u32::try_from(cg.instrs.len())?;
         cg.patch(else_idx, end_target);
@@ -687,6 +685,16 @@ fn lower_branch<F: PrimeField>(cg: &mut CodeGen<'_, F>, bb: &BranchBucket) -> Re
     // one tracked can be trusted afterwards.
     cg.last_const_store.clear();
     Ok(())
+}
+
+fn lower_branch_arm<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    arm: &[Box<Instruction>],
+) -> Result<()> {
+    cg.branch_depth += 1;
+    let result = arm.iter().try_for_each(|inst| lower_stmt(cg, inst));
+    cg.branch_depth -= 1;
+    result
 }
 
 /// Resolves a [`StoreBucket`]'s (or a [`CallBucket`]'s result's) destination to a [`Dst`],
@@ -772,20 +780,28 @@ struct ConformingLoop {
     slot: usize,
     /// The variable's value immediately before the loop.
     init: u32,
-    /// The constant added to the variable each iteration.
+    /// The constant step magnitude applied to the variable each iteration.
     step: u32,
-    /// The loop's constant upper bound — the `Lesser` condition's rhs — when its concrete
-    /// value fits `u32`. Used only by [`trip_count`] to decide whether to unroll;
+    /// Whether the counter increases toward the bound or decreases toward it.
+    direction: LoopDirection,
+    /// Whether equality with the bound still executes one iteration (`<=`/`>=`).
+    inclusive: bool,
+    /// The loop's constant bound — the comparison's rhs — when its concrete value fits
+    /// `u32`. Used only by [`trip_count`] to decide whether to unroll;
     /// conformance itself (mirror-`ireg` promotion, [`lower_conforming_loop`]) only needs
     /// the rhs to *be* a constant, not its value, so `None` here still takes the
     /// rolled/mirror path, just never the unrolled one.
     bound: Option<u32>,
 }
 
-/// Detects whether `lb` matches the conservative conforming-loop pattern (see
-/// [`lower_loop`]'s module docs for the full rationale); returns `None` — take the
-/// fallback path — for anything else, including descending (`Sub`-stepped) loops, which
-/// are non-conforming *by design* (no `ISub` in the ISA).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LoopDirection {
+    Ascending,
+    Descending,
+}
+
+/// Detects whether `lb` matches the conservative statically-counted loop pattern (see
+/// [`lower_loop`]'s module docs for the full rationale); returns `None` for anything else.
 fn detect_conforming<F: PrimeField>(
     cg: &CodeGen<'_, F>,
     lb: &LoopBucket,
@@ -796,7 +812,14 @@ fn detect_conforming<F: PrimeField>(
     let Instruction::Compute(cond_cb) = lb.continue_condition.as_ref() else {
         return None;
     };
-    if cond_cb.op != OperatorType::Lesser || cond_cb.stack.len() != 2 {
+    let (direction, inclusive) = match cond_cb.op {
+        OperatorType::Lesser => (LoopDirection::Ascending, false),
+        OperatorType::LesserEq => (LoopDirection::Ascending, true),
+        OperatorType::Greater => (LoopDirection::Descending, false),
+        OperatorType::GreaterEq => (LoopDirection::Descending, true),
+        _ => return None,
+    };
+    if cond_cb.stack.len() != 2 {
         return None;
     }
     let Instruction::Load(cond_load) = cond_cb.stack[0].as_ref() else {
@@ -840,13 +863,11 @@ fn detect_conforming<F: PrimeField>(
     let Instruction::Compute(inc_cb) = inc_sb.src.as_ref() else {
         return None;
     };
-    // `Sub`-stepped (descending) loops are non-conforming by design: the ISA has no
-    // `ISub`, only `IAdd`/`IMul` (see `circom_mpc_vm2::isa::Instr`), so there is no
-    // mirror-update instruction available for a decrement. This is a deliberate ISA-level
-    // gap, not an oversight — promoting descending loops would need a real ISA change
-    // (Plan-1-level decision), not a codegen-only fix, so `op != Add` simply falls
-    // through to the fallback path below.
-    if inc_cb.op != OperatorType::Add || inc_cb.stack.len() != 2 {
+    let expected_step_op = match direction {
+        LoopDirection::Ascending => OperatorType::Add,
+        LoopDirection::Descending => OperatorType::Sub,
+    };
+    if inc_cb.op != expected_step_op || inc_cb.stack.len() != 2 {
         return None;
     }
     let Instruction::Load(inc_load) = inc_cb.stack[0].as_ref() else {
@@ -892,6 +913,8 @@ fn detect_conforming<F: PrimeField>(
         slot,
         init,
         step,
+        direction,
+        inclusive,
         bound,
     })
 }
@@ -941,6 +964,9 @@ pub(crate) fn lower_loop<F: PrimeField>(cg: &mut CodeGen<'_, F>, lb: &LoopBucket
     cg.last_const_store.clear();
     let result = match conforming {
         Some(info) => lower_conforming_or_unrolled(cg, lb, info),
+        None if cg.branch_depth > 0 => bail!(
+            "loop inside a potentially shared branch must be a statically counted ascending or descending loop"
+        ),
         None => lower_fallback_loop(cg, lb),
     };
     cg.last_const_store.clear();
@@ -955,31 +981,63 @@ fn lower_conforming_or_unrolled<F: PrimeField>(
     lb: &LoopBucket,
     info: ConformingLoop,
 ) -> Result<()> {
-    if try_unroll_loop(cg, lb, &info)? {
+    let must_have_fixed_schedule = cg.branch_depth > 0;
+    if try_unroll_loop(cg, lb, &info, must_have_fixed_schedule)? {
         return Ok(());
+    }
+    if must_have_fixed_schedule {
+        bail!(
+            "loop inside a potentially shared branch must have a statically known finite trip count"
+        );
+    }
+    if info.direction == LoopDirection::Descending {
+        return lower_fallback_loop(cg, lb);
     }
     lower_conforming_loop(cg, lb, info)
 }
 
-/// The trip count `T = ceil((bound - init) / step)` of a conforming loop's `Lesser`
-/// condition (see [`detect_conforming`]): `None` when the bound isn't statically known, or
-/// when `step == 0` and the loop actually runs (an infinite loop already — not this
-/// function's problem to make finite, and dividing by a zero step would panic).
+/// The finite trip count of a conforming ascending/descending loop (see
+/// [`detect_conforming`]): `None` when the bound isn't statically known, or when
+/// `step == 0` and the loop actually runs.
 ///
-/// A loop whose bound is already `<= init` never executes regardless of `step` (checked
-/// first, so a `step == 0` loop that simply never runs still gets a trip count of `0`
-/// rather than bailing out on the (moot) division).
+/// Strict and inclusive comparisons are handled separately so `<`/`>` use ceiling
+/// division while `<=`/`>=` include the iteration exactly on the bound.
 fn trip_count(info: &ConformingLoop) -> Option<usize> {
     let bound = info.bound?;
-    if bound <= info.init {
-        return Some(0);
-    }
     if info.step == 0 {
-        return None;
+        let executes = match info.direction {
+            LoopDirection::Ascending => info.init < bound || (info.inclusive && info.init == bound),
+            LoopDirection::Descending => {
+                info.init > bound || (info.inclusive && info.init == bound)
+            }
+        };
+        return if executes { None } else { Some(0) };
     }
-    let diff = (bound - info.init) as usize;
     let step = info.step as usize;
-    Some(diff.div_ceil(step))
+    match info.direction {
+        LoopDirection::Ascending => {
+            if info.init > bound || (!info.inclusive && info.init == bound) {
+                return Some(0);
+            }
+            let diff = (bound - info.init) as usize;
+            Some(if info.inclusive {
+                diff / step + 1
+            } else {
+                diff.div_ceil(step)
+            })
+        }
+        LoopDirection::Descending => {
+            if info.init < bound || (!info.inclusive && info.init == bound) {
+                return Some(0);
+            }
+            let diff = (info.init - bound) as usize;
+            Some(if info.inclusive {
+                diff / step + 1
+            } else {
+                diff.div_ceil(step)
+            })
+        }
+    }
 }
 
 // Test-only instrumentation for `estimate_unrolled_body`: counts every *actual* call
@@ -1101,7 +1159,7 @@ fn estimate_unrolled_body<F: PrimeField>(
 /// condition/jump at all — only if `estimate * T <= threshold`.
 ///
 /// A single trailing `Mov` re-synchronizes the induction variable's actual field slot to
-/// its final value (`init + T * step` — exactly what the rolled loop would leave behind:
+/// its final value (`init +/- T * step` — exactly what the rolled loop would leave behind:
 /// the first value that fails the condition) once unrolling completes with `T > 0`, so any
 /// code after the loop that reads the variable's real runtime value (as opposed to an
 /// index-position fold, which only ever happens *inside* the loop body while `slot` is
@@ -1111,15 +1169,16 @@ fn try_unroll_loop<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     lb: &LoopBucket,
     info: &ConformingLoop,
+    force: bool,
 ) -> Result<bool> {
-    if cg.config.unroll.threshold == 0 {
+    if cg.config.unroll.threshold == 0 && !force {
         return Ok(false);
     }
     let Some(trip_count) = trip_count(info) else {
         return Ok(false);
     };
 
-    if trip_count > 0 {
+    if trip_count > 0 && !force {
         // Memoized per lexical loop, keyed by `lb`'s own address — *not* `lb.message_id`,
         // which is per-*template*, not per-loop (see `CodeGen::unroll_estimate_cache`'s
         // doc comment for how that was confirmed and why the address is sound instead): a
@@ -1154,7 +1213,10 @@ fn try_unroll_loop<F: PrimeField>(
     let last_idx = lb.body.len() - 1;
     let unrolled_start = cg.instrs.len();
     for i in 0..trip_count {
-        let value = info.init as usize + i * info.step as usize;
+        let value = match info.direction {
+            LoopDirection::Ascending => info.init as usize + i * info.step as usize,
+            LoopDirection::Descending => info.init as usize - i * info.step as usize,
+        };
         let previous_binding = cg.env.bind(info.slot, Binding::ConstUsize(value));
         for inst in &lb.body[..last_idx] {
             lower_stmt(cg, inst)?;
@@ -1180,8 +1242,17 @@ fn try_unroll_loop<F: PrimeField>(
         // (`tests/kat_progression.rs`, circuit `tests/circuits/loop_final_value.circom`)
         // is still a real end-to-end correctness check of the same source-level scenario —
         // it just wouldn't fail if this `Mov` were deleted.
-        let final_value = info.init as usize + trip_count * info.step as usize;
-        let const_id = cg.const_id(F::from(final_value as u64))?;
+        let delta = i64::try_from(trip_count * info.step as usize)?;
+        let final_value = match info.direction {
+            LoopDirection::Ascending => i64::from(info.init) + delta,
+            LoopDirection::Descending => i64::from(info.init) - delta,
+        };
+        let final_value = if final_value >= 0 {
+            F::from(final_value as u64)
+        } else {
+            -F::from(final_value.unsigned_abs())
+        };
+        let const_id = cg.const_id(final_value)?;
         cg.instrs.push(Instr::Mov {
             dst: Dst::Var(Addr::Const(u32::try_from(info.slot)?)),
             src: Src::Const(const_id),
@@ -1369,7 +1440,36 @@ fn fusable_run_len(body: &[Instr], idx: usize) -> usize {
             store_dst: step.store_dst.next(),
         };
     }
+    // Scalar pairs execute in order, so an earlier destination write may feed a later
+    // source read. `BinN` gathers the whole source range before `StoreN` writes anything,
+    // which would break that loop-carried dependency. Exact in-place ranges are safe
+    // (each element only reads the slot it then overwrites); conservatively reject every
+    // other overlap.
+    if ranges_overlap(first.a, first.store_dst, len)
+        || ranges_overlap(first.b, first.store_dst, len)
+    {
+        return 0;
+    }
     len
+}
+
+fn ranges_overlap(a: OperandKey, b: OperandKey, len: usize) -> bool {
+    fn split(key: OperandKey) -> (u8, i64) {
+        match key {
+            OperandKey::Reg(v) => (0, v),
+            OperandKey::Const(v) => (1, v),
+            OperandKey::Var(v) => (2, v),
+            OperandKey::Signal(v) => (3, v),
+        }
+    }
+
+    let (a_space, a_start) = split(a);
+    let (b_space, b_start) = split(b);
+    if a_space != b_space || a_start == b_start {
+        return false;
+    }
+    let len = i64::try_from(len).expect("instruction vector length fits i64");
+    a_start < b_start + len && b_start < a_start + len
 }
 
 /// Minimum run length (in original scalar `Bin`s) worth fusing into one `BinN` — below
@@ -1732,11 +1832,11 @@ mod tests {
     /// conforming-shaped loop over that same `slot`, with `slot` never having been given a
     /// tracked value before the branch at all. Correct behavior: the falsy arm starts from
     /// the pre-branch snapshot (no entry for `slot`), so the loop's own `detect_conforming`
-    /// finds no `init` and falls back to the ordinary (non-promoted) lowering — no
-    /// `Instr::ISet` mirror-register initialization anywhere in the output. Without part 1,
+    /// finds no `init`; because a potentially shared branch may only contain fixed-schedule
+    /// loops, lowering then rejects it. Without part 1,
     /// the falsy arm would instead see the truthy arm's leftover `slot -> 42` entry still
     /// sitting in `last_const_store`, wrongly detect the loop as conforming with that value
-    /// as `init`, and emit an `Instr::ISet` for it.
+    /// as `init` and silently treat it as a statically counted loop.
     #[test]
     fn branch_falsy_arm_does_not_inherit_truthy_arm_const_store_for_its_own_loop() {
         // `threshold: 0` forces the rolled/mirror-promoted path whenever the loop is
@@ -1766,14 +1866,13 @@ mod tests {
             vec![Instruction::Loop(loop_in_else)],
         );
 
-        lower_stmt(&mut cg, &branch_inst).unwrap();
-
+        let error = lower_stmt(&mut cg, &branch_inst).unwrap_err();
         assert!(
-            !cg.instrs.iter().any(|i| matches!(i, Instr::ISet { .. })),
+            error
+                .to_string()
+                .contains("loop inside a potentially shared branch"),
             "the falsy arm's loop must not inherit the truthy arm's const store to the \
-             same slot and be wrongly promoted to the conforming (mirror-register) form; \
-             expected the non-conforming fallback lowering (no Instr::ISet), got: {:?}",
-            cg.instrs
+             same slot and be wrongly accepted as a fixed-schedule loop: {error:?}"
         );
     }
 
@@ -1810,7 +1909,7 @@ mod tests {
         assert_eq!(info.step, 1);
         assert_eq!(info.bound, Some(5));
 
-        let unrolled = try_unroll_loop(&mut cg, &lb, &info).unwrap();
+        let unrolled = try_unroll_loop(&mut cg, &lb, &info, false).unwrap();
         assert!(
             unrolled,
             "a trivial, small loop must unroll at threshold: usize::MAX"
@@ -1877,6 +1976,19 @@ mod tests {
             slot: 0,
             init,
             step,
+            direction: LoopDirection::Ascending,
+            inclusive: false,
+            bound,
+        }
+    }
+
+    fn descending(init: u32, bound: Option<u32>, step: u32, inclusive: bool) -> ConformingLoop {
+        ConformingLoop {
+            slot: 0,
+            init,
+            step,
+            direction: LoopDirection::Descending,
+            inclusive,
             bound,
         }
     }
@@ -1915,6 +2027,14 @@ mod tests {
     #[test]
     fn trip_count_nonzero_init() {
         assert_eq!(trip_count(&conforming(2, Some(10), 4)), Some(2));
+    }
+
+    #[test]
+    fn trip_count_descending_strict_and_inclusive() {
+        assert_eq!(trip_count(&descending(4, Some(0), 1, false)), Some(4));
+        assert_eq!(trip_count(&descending(4, Some(0), 1, true)), Some(5));
+        assert_eq!(trip_count(&descending(0, Some(0), 1, false)), Some(0));
+        assert_eq!(trip_count(&descending(0, Some(0), 1, true)), Some(1));
     }
 
     /// Compiles a 3-deep-nested-loop fixture with `threshold: usize::MAX` (forcing every

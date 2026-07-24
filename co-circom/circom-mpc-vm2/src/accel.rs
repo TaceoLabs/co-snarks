@@ -54,6 +54,8 @@ pub struct TemplateInfo<'a> {
     pub input_signals: u32,
     /// Number of output signals.
     pub output_signals: u32,
+    /// Number of intermediate signal slots available to an accelerator.
+    pub intermediate_signals: u32,
 }
 
 type CanHandleFn = Box<dyn Fn(&TemplateInfo) -> bool + Send>;
@@ -311,6 +313,7 @@ impl<F: PrimeField, C: VmDriver<F>> MpcAccelerator<F, C> {
                     component_name,
                     input_signals: code.input_signals,
                     output_signals: code.output_signals,
+                    intermediate_signals: code.intermediate_signals,
                 };
                 self.components
                     .iter()
