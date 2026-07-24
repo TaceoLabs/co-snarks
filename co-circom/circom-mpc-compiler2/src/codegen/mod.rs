@@ -449,7 +449,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             num_int_regs,
             num_vars: u32::try_from(fun.max_number_of_vars)?,
             num_params,
-            name_id: self.names.intern(&fun.name),
+            name_id: self.names.intern(&fun.header),
         })
     }
 }
