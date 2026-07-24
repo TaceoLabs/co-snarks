@@ -3,7 +3,7 @@ use circom_mpc_compiler2::CoCircomCompiler as CoCircomCompiler2;
 use circom_mpc_compiler2::CompilerConfig;
 use circom_mpc_vm2::api::Rep3WitnessExtension;
 use circom_mpc_vm2::drivers::rep3::Rep3VmType;
-use circom_mpc_vm2::program::VMConfig;
+use circom_mpc_vm2::program::{InputInfo, VMConfig};
 use circom_types::Witness;
 use itertools::izip;
 use mpc_core::protocols::rep3::{self};
@@ -31,7 +31,7 @@ fn install_tracing() {
 }
 
 pub struct TestInputs {
-    inputs: Vec<Vec<ark_bn254::Fr>>,
+    inputs: Vec<serde_json::Value>,
     witnesses: Vec<Witness<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>>>,
 }
 
@@ -42,10 +42,57 @@ fn read_field_element(s: &str) -> ark_bn254::Fr {
         ark_bn254::Fr::from_str(s).unwrap()
     }
 }
+
+/// Recursively flattens a KAT input field's JSON value (a string, or an array nested to
+/// any depth) into `out`, row-major (outermost array dimension varies slowest) -- the
+/// natural read order for a circom array signal serialized to JSON. Kept in sync with
+/// `plain_vm2.rs`'s copy (this file doesn't share helpers with it -- see that file's
+/// `flatten_field` for the same doc comment).
+fn flatten_field(v: &serde_json::Value, out: &mut Vec<ark_bn254::Fr>) {
+    match v {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                flatten_field(item, out);
+            }
+        }
+        serde_json::Value::String(s) => out.push(read_field_element(s)),
+        other => panic!("unexpected JSON value in KAT input: {other:?}"),
+    }
+}
+
+/// Builds the flat `Vec<Fr>` [`rep3::share_field_elements`] expects from a KAT
+/// `input<i>.json`. See `plain_vm2.rs`'s `build_flat_input` for the full rationale (this
+/// file doesn't share helpers with it, so the doc lives there): a single-key JSON object
+/// is already pre-flattened in `main_input_list` order; a multi-key one (e.g.
+/// `chacha20`'s `key`/`nonce`/`counter`/`in`) is reassembled by looking each signal name
+/// up in `main_input_list`, which is offset-ordered.
+fn build_flat_input(json: &serde_json::Value, main_input_list: &[InputInfo]) -> Vec<ark_bn254::Fr> {
+    let obj = json.as_object().expect("KAT input JSON must be an object");
+    let mut out = Vec::new();
+    if obj.len() == 1 {
+        flatten_field(obj.values().next().unwrap(), &mut out);
+    } else {
+        for info in main_input_list {
+            let field = obj
+                .get(&info.name)
+                .unwrap_or_else(|| panic!("KAT input JSON missing field {:?}", info.name));
+            let before = out.len();
+            flatten_field(field, &mut out);
+            assert_eq!(
+                out.len() - before,
+                info.size,
+                "field {:?} flattened to the wrong number of field elements",
+                info.name
+            );
+        }
+    }
+    out
+}
+
 pub fn from_test_name(fn_name: &str) -> TestInputs {
     let mut witnesses: Vec<Witness<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>>> =
         Vec::new();
-    let mut inputs: Vec<Vec<ark_bn254::Fr>> = Vec::new();
+    let mut inputs: Vec<serde_json::Value> = Vec::new();
     let mut i = 0;
     loop {
         if fs::metadata(format!(
@@ -66,15 +113,7 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
         ))
         .unwrap();
         let json_str: serde_json::Value = serde_json::from_reader(input_file).unwrap();
-        let input = json_str
-            .get("in")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|s| read_field_element(s.as_str().unwrap()))
-            .collect::<Vec<_>>();
-        inputs.push(input);
+        inputs.push(json_str);
         i += 1
     }
     if inputs.is_empty() {
@@ -131,6 +170,27 @@ macro_rules! run_test {
     }};
 }
 
+/// Compiles `circuit_file` once (outside the 3-party threads `run_test!` spawns) purely
+/// to read off [`CompiledProgram::main_input_list`], then builds the flat `Vec<Fr>`
+/// `run_test!` shares across parties (see `build_flat_input`'s docs). Secret-sharing
+/// (`rep3::share_field_elements`) needs the plain flat vector *before* any party's own
+/// compile happens, so unlike `plain_vm2.rs` (one compile per case) this necessarily
+/// compiles twice -- once here, once (per party) inside `run_test!` -- both from the same
+/// `config`, so both agree on the layout.
+fn probe_and_flatten(
+    circuit_file: &str,
+    config: &CompilerConfig,
+    json: &serde_json::Value,
+) -> Vec<ark_bn254::Fr> {
+    let mut probe_config = config.clone();
+    probe_config.simplification = circom_mpc_compiler2::SimplificationLevel::O2(usize::MAX);
+    probe_config
+        .link_library
+        .push("../test_vectors/WitnessExtension/tests/libs/".into());
+    let probe = CoCircomCompiler2::<Bn254>::parse(circuit_file.to_owned(), probe_config).unwrap();
+    build_flat_input(json, &probe.main_input_list)
+}
+
 macro_rules! witness_extension_test_rep3_vm2 {
     ($name: ident) => {
         mod $name {
@@ -138,12 +198,17 @@ macro_rules! witness_extension_test_rep3_vm2 {
             fn inner(config: CompilerConfig) {
                 let inp: TestInputs = from_test_name(stringify!($name));
                 for i in 0..inp.inputs.len() {
+                    let file = format!(
+                        "../test_vectors/WitnessExtension/tests/{}.circom",
+                        stringify!($name),
+                    );
+                    let flat_input = probe_and_flatten(&file, &config, &inp.inputs[i]);
                     let is_witness = run_test!(
                         format!(
                             "../test_vectors/WitnessExtension/tests/{}.circom",
                             stringify!($name),
                         ),
-                        &inp.inputs[i],
+                        &flat_input,
                         config.clone()
                     );
                     assert_eq!(is_witness, inp.witnesses[i].values);
@@ -169,12 +234,17 @@ macro_rules! witness_extension_test_rep3_vm2_ignored {
             fn inner(config: CompilerConfig) {
                 let inp: TestInputs = from_test_name(stringify!($name));
                 for i in 0..inp.inputs.len() {
+                    let file = format!(
+                        "../test_vectors/WitnessExtension/tests/{}.circom",
+                        stringify!($name),
+                    );
+                    let flat_input = probe_and_flatten(&file, &config, &inp.inputs[i]);
                     let is_witness = run_test!(
                         format!(
                             "../test_vectors/WitnessExtension/tests/{}.circom",
                             stringify!($name),
                         ),
-                        &inp.inputs[i],
+                        &flat_input,
                         config.clone()
                     );
                     assert_eq!(is_witness, inp.witnesses[i].values);

@@ -2,7 +2,7 @@ use ark_bn254::Bn254;
 use circom_mpc_compiler2::CoCircomCompiler as CoCircomCompiler2;
 use circom_mpc_compiler2::CompilerConfig;
 use circom_mpc_vm2::api::PlainWitnessExtension;
-use circom_mpc_vm2::program::VMConfig;
+use circom_mpc_vm2::program::{InputInfo, VMConfig};
 use circom_types::Witness;
 use co_circom_types::SharedWitness;
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use std::{
 };
 
 pub struct TestInputs {
-    inputs: Vec<Vec<ark_bn254::Fr>>,
+    inputs: Vec<serde_json::Value>,
     witnesses: Vec<Witness<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>>>,
 }
 
@@ -27,6 +27,57 @@ fn read_field_element(s: &str) -> ark_bn254::Fr {
     } else {
         ark_bn254::Fr::from_str(s).unwrap()
     }
+}
+
+/// Recursively flattens a KAT input field's JSON value (a string, or an array nested to
+/// any depth) into `out`, row-major (outermost array dimension varies slowest) -- the
+/// natural read order for a circom array signal serialized to JSON.
+fn flatten_field(v: &serde_json::Value, out: &mut Vec<ark_bn254::Fr>) {
+    match v {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                flatten_field(item, out);
+            }
+        }
+        serde_json::Value::String(s) => out.push(read_field_element(s)),
+        other => panic!("unexpected JSON value in KAT input: {other:?}"),
+    }
+}
+
+/// Builds the flat `Vec<Fr>` `PlainWitnessExtension::run_with_flat` expects from a KAT
+/// `input<i>.json`.
+///
+/// Every KAT this suite ran before Task 7 wraps its whole input under a single top-level
+/// key (conventionally `"in"`, regardless of the circuit's own signal names) whose value
+/// is already the correct flat concatenation for [`CompiledProgram::main_input_list`]'s
+/// order -- `flatten_field` still recurses through it in case of nesting, but no
+/// name-based reassembly is needed. A KAT whose JSON instead has one top-level key per
+/// *actual* signal name (as `chacha20`'s does: `key`/`nonce`/`counter`/`in`) carries no
+/// such pre-assembled order, and that order is not alphabetical, JSON-source, or
+/// declaration order here (confirmed empirically for `chacha20`) -- so this looks each
+/// name up in `main_input_list` (already offset-ordered) and concatenates in that order
+/// instead.
+fn build_flat_input(json: &serde_json::Value, main_input_list: &[InputInfo]) -> Vec<ark_bn254::Fr> {
+    let obj = json.as_object().expect("KAT input JSON must be an object");
+    let mut out = Vec::new();
+    if obj.len() == 1 {
+        flatten_field(obj.values().next().unwrap(), &mut out);
+    } else {
+        for info in main_input_list {
+            let field = obj
+                .get(&info.name)
+                .unwrap_or_else(|| panic!("KAT input JSON missing field {:?}", info.name));
+            let before = out.len();
+            flatten_field(field, &mut out);
+            assert_eq!(
+                out.len() - before,
+                info.size,
+                "field {:?} flattened to the wrong number of field elements",
+                info.name
+            );
+        }
+    }
+    out
 }
 
 macro_rules! witness_extension_test_plain2 {
@@ -52,9 +103,10 @@ macro_rules! witness_extension_test_plain2 {
                     )
                     .unwrap();
 
+                    let flat_input = build_flat_input(&inp.inputs[i], &parsed.main_input_list);
                     let is_witness =
                         PlainWitnessExtension::new_plain(Arc::new(parsed), VMConfig::default())
-                            .run_with_flat(inp.inputs[i].to_owned(), 0)
+                            .run_with_flat(flat_input, 0)
                             .unwrap()
                             .into_shared_witness();
 
@@ -78,7 +130,7 @@ macro_rules! witness_extension_test_plain2 {
 pub fn from_test_name(fn_name: &str) -> TestInputs {
     let mut witnesses: Vec<Witness<ark_ff::Fp<ark_ff::MontBackend<ark_bn254::FrConfig, 4>, 4>>> =
         Vec::new();
-    let mut inputs: Vec<Vec<ark_bn254::Fr>> = Vec::new();
+    let mut inputs: Vec<serde_json::Value> = Vec::new();
     let mut i = 0;
     loop {
         if fs::metadata(format!(
@@ -99,15 +151,7 @@ pub fn from_test_name(fn_name: &str) -> TestInputs {
         ))
         .unwrap();
         let json_str: serde_json::Value = serde_json::from_reader(input_file).unwrap();
-        let input = json_str
-            .get("in")
-            .unwrap()
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|s| read_field_element(s.as_str().unwrap()))
-            .collect::<Vec<_>>();
-        inputs.push(input);
+        inputs.push(json_str);
         i += 1;
     }
     println!("i: {i}");
@@ -121,6 +165,10 @@ witness_extension_test_plain2!(babycheck_test);
 witness_extension_test_plain2!(babypbk_test);
 witness_extension_test_plain2!(binsub_test);
 witness_extension_test_plain2!(binsum_test);
+// Bonus coverage beyond the old plain-VM suite's parity set (see `build_flat_input`'s
+// docs above): the old suite never ran `chacha20` at all -- it has a KAT dir, but its
+// `input0.json` needs the multi-key reassembly `build_flat_input` added for Task 7.
+witness_extension_test_plain2!(chacha20);
 witness_extension_test_plain2!(constants_test);
 witness_extension_test_plain2!(control_flow);
 witness_extension_test_plain2!(eddsa_test);
