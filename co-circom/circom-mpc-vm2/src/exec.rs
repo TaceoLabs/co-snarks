@@ -675,20 +675,18 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 Flow::Continue
             }
             Instr::StoreN { dst, src, n } => {
-                // Consecutive predicated writes, batched through one `cmux_many` call
-                // (see `write_dst_n`) instead of `n` scalar `cmux`s.
-                let vals: Vec<_> = (0..*n as usize)
-                    .map(|k| frame.regs[*src as usize + k].clone())
-                    .collect();
-                write_dst_n::<F, C>(
+                // The unpredicated path clones directly between contiguous slices,
+                // without allocating value/index/old-destination vectors. Shared
+                // destinations join the pending branch-write batch.
+                write_dst_n(
                     &*pred,
                     pending,
                     frame,
                     &mut self.signals,
                     comp_offset,
                     dst,
-                    vals,
-                )?;
+                    *src as usize..*src as usize + *n as usize,
+                );
                 Flow::Continue
             }
             Instr::BinN { op, dst, a, b, n } => {
@@ -1155,43 +1153,61 @@ fn write_dst<F: PrimeField, C: VmDriver<F>>(
 /// `StoreN`). Shared `Var`/`Signal` writes join the same pending batch as scalar `Mov`s;
 /// unpredicated writes update their destination directly. `Reg` writes are always
 /// immediate because temporaries are branch-local.
-fn write_dst_n<F: PrimeField, C: VmDriver<F>>(
-    pred: &Predication<C::VmType>,
-    pending: &mut PendingWrites<C::VmType>,
-    frame: &mut Frame<C::VmType>,
-    signals: &mut [C::VmType],
+fn write_dst_n<T: Clone>(
+    pred: &Predication<T>,
+    pending: &mut PendingWrites<T>,
+    frame: &mut Frame<T>,
+    signals: &mut [T],
     comp_offset: usize,
     dst: &Dst,
-    vals: Vec<C::VmType>,
-) -> Result<()> {
+    src: std::ops::Range<usize>,
+) {
+    let n = src.len();
+    if n == 0 {
+        return;
+    }
+    let src = src.start;
     match dst {
         Dst::Reg(r) => {
-            for (k, v) in vals.into_iter().enumerate() {
-                frame.regs[*r as usize + k] = v;
+            // `StoreN` is normally a register-to-memory operation, but `Dst::Reg` is
+            // legal. Preserve memmove semantics without allocating a temporary when
+            // its source and destination ranges overlap.
+            let dst = *r as usize;
+            if dst > src && dst < src + n {
+                for k in (0..n).rev() {
+                    frame.regs[dst + k] = frame.regs[src + k].clone();
+                }
+            } else if dst != src {
+                for k in 0..n {
+                    frame.regs[dst + k] = frame.regs[src + k].clone();
+                }
             }
         }
         Dst::Var(a) => {
-            for (k, value) in vals.into_iter().enumerate() {
-                let idx = resolve_at(&frame.iregs, a, k);
-                if pred.is_shared() {
+            let dst = resolve(&frame.iregs, a);
+            if pred.is_shared() {
+                for k in 0..n {
+                    let value = frame.regs[src + k].clone();
+                    let idx = dst + k;
                     pending.write_var(&mut frame.vars, idx, value);
-                } else {
-                    frame.vars[idx] = value;
                 }
+            } else {
+                frame.vars[dst..dst + n].clone_from_slice(&frame.regs[src..src + n]);
             }
         }
         Dst::Signal(a) => {
-            for (k, value) in vals.into_iter().enumerate() {
-                let idx = comp_offset + resolve_at(&frame.iregs, a, k);
-                if pred.is_shared() {
+            let dst = comp_offset + resolve(&frame.iregs, a);
+            if pred.is_shared() {
+                for k in 0..n {
+                    let value = frame.regs[src + k].clone();
+                    let idx = dst + k;
                     pending.write_signal(signals, idx, value);
-                } else {
-                    signals[idx] = value;
                 }
+            } else {
+                signals[dst..dst + n].clone_from_slice(&frame.regs[src..src + n]);
             }
         }
     }
-    Ok(())
 }
 
 /// Read an [`ISrc`] against the integer registers.

@@ -225,6 +225,45 @@ fn loadn_storen_round_trip() {
     assert_eq!(signals[3], Fr::from(33u64));
 }
 
+#[test]
+fn storen_overlapping_register_ranges_have_memmove_semantics() {
+    let mut program = common::single_template_program(
+        vec![
+            Instr::LoadN {
+                dst: 0,
+                src: Src::Const(0),
+                n: 4,
+            },
+            // Shift the first three values right by one. A forward element-wise copy
+            // would overwrite its own source and produce [10, 10, 10, 10].
+            Instr::StoreN {
+                dst: Dst::Reg(1),
+                src: 0,
+                n: 3,
+            },
+            Instr::StoreN {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: 1,
+                n: 3,
+            },
+            Instr::Return,
+        ],
+        4,
+        0,
+        0,
+        0,
+        3,
+        4,
+    );
+    program.constants = [10u64, 20, 30, 40].map(Fr::from).to_vec();
+
+    let signals = common::run_plain_with_consts(&program, program.constants.clone(), vec![]);
+    assert_eq!(
+        signals[1..4],
+        [Fr::from(10u64), Fr::from(20u64), Fr::from(30u64)]
+    );
+}
+
 // signal layout: [0]=1, [1..5]=out[4], [5..9]=a[4], [9..13]=b[4]
 // (component-relative: out base = 0, a base = 4, b base = 8)
 #[test]
