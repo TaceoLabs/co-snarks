@@ -3,10 +3,8 @@
 #![warn(missing_docs)]
 
 use ark_ff::PrimeField;
-use circom_mpc_vm::{
-    Rep3VmType, ShamirVmType,
-    mpc_vm::{Rep3WitnessExtension, ShamirWitnessExtension},
-};
+use circom_mpc_vm::{ShamirVmType, mpc_vm::ShamirWitnessExtension};
+use circom_mpc_vm2::{api::Rep3WitnessExtension, drivers::rep3::Rep3VmType};
 use co_circom_types::{CompressedRep3SharedWitness, Rep3InputType, ShamirInputType, SharedWitness};
 use color_eyre::eyre::{self, Context};
 use mpc_core::protocols::{
@@ -14,12 +12,48 @@ use mpc_core::protocols::{
     shamir::{ShamirPreprocessing, ShamirState},
 };
 use mpc_net::Network;
+use std::sync::Arc;
 
 pub use ark_bls12_381::Bls12_381;
 pub use ark_bn254::Bn254;
 pub use ark_ec::pairing::Pairing;
-pub use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig, SimplificationLevel};
-pub use circom_mpc_vm::{mpc_vm::VMConfig, types::CoCircomCompilerParsed};
+pub use circom_mpc_compiler2::{CoCircomCompiler, CompilerConfig, SimplificationLevel};
+pub use circom_mpc_vm2::program::{CompiledProgram, VMConfig};
+
+/// Types of the legacy (stack-based) pipeline, still used for the Shamir witness extension,
+/// which the new register-based VM does not implement.
+pub mod legacy {
+    pub use circom_mpc_compiler::{CoCircomCompiler, CompilerConfig, SimplificationLevel};
+    pub use circom_mpc_vm::{mpc_vm::VMConfig, types::CoCircomCompilerParsed};
+}
+
+/// Maps a (new-pipeline) [`CompilerConfig`] onto the legacy compiler's config.
+///
+/// The new pipeline's [`UnrollConfig`](circom_mpc_compiler2::UnrollConfig) has no legacy
+/// equivalent and is dropped.
+pub fn to_legacy_compiler_config(config: &CompilerConfig) -> legacy::CompilerConfig {
+    legacy::CompilerConfig {
+        version: config.version.clone(),
+        allow_leaky_loops: config.allow_leaky_loops,
+        link_library: config.link_library.clone(),
+        simplification: match config.simplification {
+            SimplificationLevel::O0 => legacy::SimplificationLevel::O0,
+            SimplificationLevel::O1 => legacy::SimplificationLevel::O1,
+            SimplificationLevel::O2(rounds) => legacy::SimplificationLevel::O2(rounds),
+        },
+        verbose: config.verbose,
+        inspect: config.inspect,
+        debug: config.debug,
+    }
+}
+
+/// Maps a (new-pipeline) [`VMConfig`] onto the legacy VM's config.
+pub fn to_legacy_vm_config(config: &VMConfig) -> legacy::VMConfig {
+    legacy::VMConfig {
+        allow_leaky_logs: config.allow_leaky_logs,
+        a2b_type: config.a2b_type,
+    }
+}
 pub use circom_types::{
     CheckElement, R1CS, Witness,
     groth16::{
@@ -114,16 +148,16 @@ pub fn translate_witness<F: PrimeField, N: Network>(
     Ok(shamir_witness_share)
 }
 
-/// Generate a REP3 shared witness
+/// Generate a REP3 shared witness (runs on the register-based `circom-mpc-vm2` pipeline)
 pub fn generate_witness_rep3<F: PrimeField, N: Network>(
-    circuit: &CoCircomCompilerParsed<F>,
+    circuit: Arc<CompiledProgram<F>>,
     input: Rep3SharedInput<F>,
     config: VMConfig,
     net0: &N,
     net1: &N,
 ) -> eyre::Result<Rep3SharedWitness<F>> {
     // init MPC protocol
-    let rep3_vm = Rep3WitnessExtension::new(net0, net1, circuit, config)
+    let rep3_vm = Rep3WitnessExtension::new_rep3(net0, net1, circuit, config)
         .context("while constructing MPC VM")?;
 
     let num_public_inputs = input
@@ -143,11 +177,12 @@ pub fn generate_witness_rep3<F: PrimeField, N: Network>(
     Ok(witness_share.into_shared_witness())
 }
 
-/// Generate a Shamir shared witness
+/// Generate a Shamir shared witness (runs on the legacy stack-based pipeline — the new VM
+/// has no Shamir driver)
 pub fn generate_witness_shamir<F: PrimeField, N: Network>(
-    circuit: &CoCircomCompilerParsed<F>,
+    circuit: &legacy::CoCircomCompilerParsed<F>,
     input: ShamirSharedInput<F>,
-    config: VMConfig,
+    config: legacy::VMConfig,
     net: &N,
     num_parties: usize,
     threshold: usize,

@@ -869,12 +869,14 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     let [net0, net1] =
         TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
 
-    // parse circuit file & put through our compiler
-    let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
-        .context("while parsing circuit file")?;
-
     match protocol {
         MPCProtocol::REP3 => {
+            // parse circuit file & put through the register-based compiler
+            let circuit = std::sync::Arc::new(
+                CoCircomCompiler::<P>::parse(circuit, config.compiler)
+                    .context("while parsing circuit file")?,
+            );
+
             // parse input shares
             let input_share_file =
                 BufReader::new(File::open(&input).context("while opening input share file")?);
@@ -885,7 +887,7 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
             tracing::info!("Starting witness generation...");
             let start = Instant::now();
             let result_witness_share =
-                co_circom::generate_witness_rep3(&circuit, input_share, config.vm, &net0, &net1)?;
+                co_circom::generate_witness_rep3(circuit, input_share, config.vm, &net0, &net1)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Generate witness took {duration_ms} ms");
 
@@ -897,6 +899,14 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
             tracing::info!("Witness successfully written to {}", out.display());
         }
         MPCProtocol::SHAMIR => {
+            // parse circuit file & put through the legacy compiler (the new VM has no
+            // Shamir driver)
+            let circuit = co_circom::legacy::CoCircomCompiler::<P>::parse(
+                circuit,
+                co_circom::to_legacy_compiler_config(&config.compiler),
+            )
+            .context("while parsing circuit file")?;
+
             // parse input shares
             let input_share_file =
                 BufReader::new(File::open(&input).context("while opening input share file")?);
@@ -907,8 +917,14 @@ fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
             tracing::info!("Starting witness generation...");
             let start = Instant::now();
             // TODO we are not creating any randomness here
-            let result_witness_share =
-                co_circom::generate_witness_shamir(&circuit, input_share, config.vm, &net0, n, t)?;
+            let result_witness_share = co_circom::generate_witness_shamir(
+                &circuit,
+                input_share,
+                co_circom::to_legacy_vm_config(&config.vm),
+                &net0,
+                n,
+                t,
+            )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Generate witness took {duration_ms} ms");
 
