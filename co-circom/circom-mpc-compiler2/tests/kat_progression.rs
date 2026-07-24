@@ -201,7 +201,10 @@ fn binsum_test_kat() {
 #[test]
 fn inspect_binsum_takes_the_affine_path() {
     let config = CompilerConfig {
-        unroll: UnrollConfig { threshold: 0 },
+        unroll: UnrollConfig {
+            threshold: 0,
+            ..Default::default()
+        },
         ..CompilerConfig::default()
     };
     let program = common::compile("binsum_test", config);
@@ -235,7 +238,10 @@ fn instr_uses_affine(instr: &Instr) -> bool {
 fn loop_ascending_takes_the_affine_path() {
     let config = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
-        unroll: UnrollConfig { threshold: 0 },
+        unroll: UnrollConfig {
+            threshold: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let program = Arc::new(
@@ -271,7 +277,10 @@ fn loop_ascending_takes_the_affine_path() {
 fn loop_descending_stays_correct_via_fallback() {
     let config = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
-        unroll: UnrollConfig { threshold: 0 },
+        unroll: UnrollConfig {
+            threshold: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let program = Arc::new(
@@ -310,7 +319,10 @@ fn loop_descending_stays_correct_via_fallback() {
 fn loop_nested_ireg_scoping_end_to_end() {
     let config = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
-        unroll: UnrollConfig { threshold: 0 },
+        unroll: UnrollConfig {
+            threshold: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let program = Arc::new(
@@ -382,7 +394,10 @@ fn binsum_test_unrolling_matches_rolled_kat() {
     let rolled = common::compile(
         "binsum_test",
         CompilerConfig {
-            unroll: UnrollConfig { threshold: 0 },
+            unroll: UnrollConfig {
+                threshold: 0,
+                ..Default::default()
+            },
             ..Default::default()
         },
     );
@@ -391,6 +406,7 @@ fn binsum_test_unrolling_matches_rolled_kat() {
         CompilerConfig {
             unroll: UnrollConfig {
                 threshold: usize::MAX,
+                ..Default::default()
             },
             ..Default::default()
         },
@@ -421,7 +437,10 @@ fn binsum_test_default_config_unrolls() {
     let rolled_program = common::compile(
         "binsum_test",
         CompilerConfig {
-            unroll: UnrollConfig { threshold: 0 },
+            unroll: UnrollConfig {
+                threshold: 0,
+                ..Default::default()
+            },
             ..Default::default()
         },
     );
@@ -443,13 +462,17 @@ fn binsum_test_default_config_unrolls() {
 fn elementwise_mul_binn_fusion_end_to_end() {
     let rolled = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
-        unroll: UnrollConfig { threshold: 0 },
+        unroll: UnrollConfig {
+            threshold: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let unrolled = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
         unroll: UnrollConfig {
             threshold: usize::MAX,
+            ..Default::default()
         },
         ..Default::default()
     };
@@ -512,12 +535,88 @@ fn elementwise_mul_binn_fusion_end_to_end() {
     }
 }
 
+/// An elementwise loop whose scalar expansion exceeds the ordinary unroll threshold
+/// must still lower to one vector operation, provided it fits the separately configurable
+/// vectorization cap. Lowering the cap below the trip count must retain the rolled-loop
+/// fallback rather than expanding oversized bytecode.
+#[test]
+fn large_elementwise_loop_vectorizes_with_configurable_cap() {
+    let vectorized_config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let capped_config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        unroll: UnrollConfig {
+            threshold: 4096,
+            max_vectorized_loop_size: 2048,
+        },
+        ..Default::default()
+    };
+
+    let vectorized = CoCircomCompiler::<Bn254>::parse(
+        "tests/circuits/elementwise_mul_large.circom",
+        vectorized_config,
+    )
+    .unwrap();
+    let capped = CoCircomCompiler::<Bn254>::parse(
+        "tests/circuits/elementwise_mul_large.circom",
+        capped_config,
+    )
+    .unwrap();
+
+    assert_eq!(
+        binn_instrs(&vectorized),
+        vec![4096],
+        "the default vectorization cap must preserve Rep3 batching beyond the ordinary bytecode budget"
+    );
+    assert!(
+        vectorized.templates[vectorized.main.0 as usize]
+            .instrs
+            .iter()
+            .all(|instr| !matches!(instr, Instr::Jmp { .. } | Instr::JmpIfZero { .. })),
+        "the compact vectorized form must not retain loop control flow"
+    );
+    assert!(
+        binn_instrs(&capped).is_empty(),
+        "a trip count above max_vectorized_loop_size must remain rolled"
+    );
+    assert!(
+        capped.templates[capped.main.0 as usize]
+            .instrs
+            .iter()
+            .any(|instr| matches!(instr, Instr::Jmp { .. })),
+        "the capped compile must use the rolled-loop fallback"
+    );
+
+    let inputs: Vec<_> = (0..4096u64)
+        .map(|i| Fr::from(i + 2))
+        .chain((0..4096u64).map(|i| Fr::from(i + 3)))
+        .collect();
+    let expected: Vec<_> = (0..4096u64)
+        .map(|i| Fr::from(i + 2) * Fr::from(i + 3))
+        .collect();
+    for (name, program) in [("vectorized", vectorized), ("capped", capped)] {
+        let finalized = PlainWitnessExtension::new_plain(Arc::new(program), VMConfig::default())
+            .run_with_flat(inputs.clone(), 0)
+            .unwrap();
+        assert_eq!(
+            finalized.get_output("out"),
+            Some(expected.clone()),
+            "{name}"
+        );
+    }
+}
+
 #[test]
 fn binn_fusion_preserves_loop_carried_dependencies() {
     let run = |threshold| {
         let config = CompilerConfig {
             simplification: SimplificationLevel::O0,
-            unroll: UnrollConfig { threshold },
+            unroll: UnrollConfig {
+                threshold,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let program = Arc::new(
@@ -558,6 +657,34 @@ fn binn_fusion_preserves_loop_carried_dependencies() {
     );
 }
 
+#[test]
+fn over_budget_vectorization_rolls_back_on_loop_carried_dependency() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O0,
+        unroll: UnrollConfig {
+            threshold: 1,
+            max_vectorized_loop_size: usize::MAX,
+        },
+        ..Default::default()
+    };
+    let program =
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_carried_product.circom", config)
+            .unwrap();
+    let instrs = &program.templates[program.main.0 as usize].instrs;
+    assert!(
+        instrs
+            .iter()
+            .all(|instr| !matches!(instr, Instr::BinN { .. })),
+        "overlapping source/destination ranges must reject vectorization"
+    );
+    assert!(
+        instrs
+            .iter()
+            .any(|instr| matches!(instr, Instr::Jmp { .. })),
+        "a rejected speculative vectorization must roll back to the compact loop"
+    );
+}
+
 /// Non-unit loop-step end-to-end fixture (Task 7 of the rep3-accel-bench plan):
 /// `tests/circuits/loop_step_gather.circom`'s `for (i = 0; i < 10; i += 3)` is the first
 /// fixture in this suite whose induction variable does not increment by exactly `1` per
@@ -576,7 +703,10 @@ fn loop_step_gather_non_unit_step_both_thresholds() {
     for threshold in [0, usize::MAX] {
         let config = CompilerConfig {
             simplification: SimplificationLevel::O2(usize::MAX),
-            unroll: UnrollConfig { threshold },
+            unroll: UnrollConfig {
+                threshold,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let program = Arc::new(
@@ -614,7 +744,10 @@ fn winner_binn_fusion_matches_rolled_kat() {
     let rolled = common::compile(
         "winner",
         CompilerConfig {
-            unroll: UnrollConfig { threshold: 0 },
+            unroll: UnrollConfig {
+                threshold: 0,
+                ..Default::default()
+            },
             ..Default::default()
         },
     );
@@ -623,6 +756,7 @@ fn winner_binn_fusion_matches_rolled_kat() {
         CompilerConfig {
             unroll: UnrollConfig {
                 threshold: usize::MAX,
+                ..Default::default()
             },
             ..Default::default()
         },
@@ -662,7 +796,10 @@ fn loop_final_value_post_loop_read_both_thresholds() {
     for threshold in [0, usize::MAX] {
         let config = CompilerConfig {
             simplification: SimplificationLevel::O2(usize::MAX),
-            unroll: UnrollConfig { threshold },
+            unroll: UnrollConfig {
+                threshold,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let program = Arc::new(
@@ -709,7 +846,10 @@ fn loop_final_value_post_loop_read_both_thresholds() {
 fn loop_nested_mixed_unroll_inner_only() {
     let config = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
-        unroll: UnrollConfig { threshold: 16 },
+        unroll: UnrollConfig {
+            threshold: 16,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let program = Arc::new(
@@ -866,7 +1006,10 @@ fn descending_loop_inside_shared_branch_has_fixed_control_flow() {
             "tests/circuits/shared_branch_descending_loop.circom",
             CompilerConfig {
                 simplification: SimplificationLevel::O0,
-                unroll: UnrollConfig { threshold: 0 },
+                unroll: UnrollConfig {
+                    threshold: 0,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
         )
@@ -986,7 +1129,10 @@ fn loop_with_branch_composes_rolled_and_unrolled() {
     for threshold in [0, usize::MAX] {
         let config = CompilerConfig {
             simplification: SimplificationLevel::O2(usize::MAX),
-            unroll: UnrollConfig { threshold },
+            unroll: UnrollConfig {
+                threshold,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let program = Arc::new(
@@ -1266,7 +1412,10 @@ fn func_loop_and_branch_end_to_end() {
     for threshold in [0, usize::MAX] {
         let config = CompilerConfig {
             simplification: SimplificationLevel::O2(usize::MAX),
-            unroll: UnrollConfig { threshold },
+            unroll: UnrollConfig {
+                threshold,
+                ..Default::default()
+            },
             ..Default::default()
         };
         let program = Arc::new(
@@ -1561,7 +1710,10 @@ fn misc_component_kats() {
 fn component_array_uses_isrc_reg_for_loop_indexed_cmp() {
     let config = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
-        unroll: UnrollConfig { threshold: 0 },
+        unroll: UnrollConfig {
+            threshold: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let program = Arc::new(

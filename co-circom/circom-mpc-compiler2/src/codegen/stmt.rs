@@ -95,9 +95,12 @@
 //! once into a scratch buffer ([`estimate_unrolled_body`]), and only commits to unrolling
 //! if `estimate * T <= config.unroll.threshold` — otherwise it defers to
 //! [`lower_conforming_loop`]'s rolled/mirror-promoted form, which is always correct
-//! regardless of size. `threshold: 0` disables unrolling outright (skipping the estimation
-//! lowering); `threshold: usize::MAX` unrolls wherever the bound is statically known,
-//! however large the body.
+//! regardless of size. The exception is an over-budget dependency-free elementwise loop:
+//! when `T <= config.unroll.max_vectorized_loop_size`, codegen may expand it
+//! speculatively and retain it only if the entire body compacts to `BinN`/`StoreN` pairs;
+//! otherwise the expansion is rolled back. `threshold: 0` disables both ordinary
+//! unrolling and this vectorization bypass; `threshold: usize::MAX` unrolls wherever the
+//! bound is statically known, however large the body.
 //!
 //! A loop nested in a branch is special: the branch condition may be shared, so emitting
 //! a data-dependent jump would either leak the condition or attempt to branch on a share.
@@ -1186,6 +1189,7 @@ fn try_unroll_loop<F: PrimeField>(
         return Ok(false);
     };
 
+    let mut require_full_vectorization = false;
     if trip_count > 0 && !force {
         // Memoized per lexical loop, keyed by `lb`'s own address — *not* `lb.message_id`,
         // which is per-*template*, not per-loop (see `CodeGen::unroll_estimate_cache`'s
@@ -1210,16 +1214,36 @@ fn try_unroll_loop<F: PrimeField>(
         } else {
             estimate_unrolled_body(cg, lb, info.slot, info.init as usize)?
         };
-        let fits = estimate
-            .checked_mul(trip_count)
-            .is_some_and(|total| total <= cg.config.unroll.threshold);
+        let total = estimate.checked_mul(trip_count);
+        let fits = total.is_some_and(|total| total <= cg.config.unroll.threshold);
         if !fits {
-            return Ok(false);
+            // A dependency-free elementwise body lowers to one `(Bin, Mov)` pair per
+            // iteration. It is worth expanding beyond the ordinary bytecode budget if
+            // (and only if) the complete region then compacts to vector instructions.
+            // The configurable trip-count cap bounds both this speculative work and the
+            // contiguous register block needed by `BinN`; the ISA's u16 register-file
+            // width is an additional hard ceiling.
+            let available_regs = (u16::MAX as usize).saturating_sub(cg.regs.mark() as usize);
+            let can_try_vectorization = estimate == 2
+                && trip_count >= MIN_FUSABLE_RUN
+                && trip_count <= cg.config.unroll.max_vectorized_loop_size
+                && trip_count <= available_regs;
+            if !can_try_vectorization {
+                return Ok(false);
+            }
+            require_full_vectorization = true;
         }
     }
 
     let last_idx = lb.body.len() - 1;
     let unrolled_start = cg.instrs.len();
+    let rollback = require_full_vectorization.then(|| {
+        (
+            cg.regs.clone(),
+            cg.iregs.clone(),
+            cg.last_const_store.clone(),
+        )
+    });
     for i in 0..trip_count {
         let value = match info.direction {
             LoopDirection::Ascending => info.init as usize + i * info.step as usize,
@@ -1233,6 +1257,16 @@ fn try_unroll_loop<F: PrimeField>(
     }
 
     fuse_unrolled_binn(cg, unrolled_start)?;
+
+    if require_full_vectorization && !is_fully_vectorized(&cg.instrs[unrolled_start..]) {
+        cg.instrs.truncate(unrolled_start);
+        let (regs, iregs, last_const_store) =
+            rollback.expect("vectorization rollback state was captured");
+        cg.regs = regs;
+        cg.iregs = iregs;
+        cg.last_const_store = last_const_store;
+        return Ok(false);
+    }
 
     if trip_count > 0 {
         // Load-bearing: without this, any post-loop *value-position* read of the
@@ -1481,11 +1515,23 @@ fn ranges_overlap(a: OperandKey, b: OperandKey, len: usize) -> bool {
     a_start < b_start + len && b_start < a_start + len
 }
 
-/// Minimum run length (in original scalar `Bin`s) worth fusing into one `BinN` — below
-/// this a fused `BinN` + `StoreN` (2 instructions plus a freshly allocated register block)
-/// isn't obviously a win over the `2 * n` scalar instructions it replaces, per the task
-/// brief's threshold.
-const MIN_FUSABLE_RUN: usize = 4;
+/// Minimum run length (in original scalar `Bin` instructions) worth fusing into one
+/// `BinN`. Two scalar instructions would tie the vector form at `n = 1`; from `n = 2`
+/// onward it is smaller bytecode and, more importantly, lets MPC drivers collapse
+/// independent protocol operations into one communication round.
+const MIN_FUSABLE_RUN: usize = 2;
+
+/// Whether a speculative over-budget expansion compacted completely to vector compute/
+/// store pairs. Accepting any leftover scalar/control-flow instruction here would defeat
+/// the bytecode cap this bypass is meant to preserve, so partial fusion falls back to the
+/// ordinary rolled loop.
+fn is_fully_vectorized(instrs: &[Instr]) -> bool {
+    !instrs.is_empty()
+        && instrs.len().is_multiple_of(2)
+        && instrs.chunks_exact(2).all(|pair| {
+            matches!(pair[0], Instr::BinN { .. }) && matches!(pair[1], Instr::StoreN { .. })
+        })
+}
 
 /// The actual fold: scans `body` for maximal fusable runs (see [`fusable_run_len`]) of at
 /// least [`MIN_FUSABLE_RUN`] `(Bin, Mov)` pairs, replacing each with one `Instr::BinN`
@@ -1633,7 +1679,10 @@ mod tests {
 
     fn cg_with_threshold(threshold: usize) -> CodeGen<'static, ark_bn254::Fr> {
         let config: &'static CompilerConfig = Box::leak(Box::new(CompilerConfig {
-            unroll: crate::UnrollConfig { threshold },
+            unroll: crate::UnrollConfig {
+                threshold,
+                ..Default::default()
+            },
             ..CompilerConfig::default()
         }));
         CodeGen::new(config)
@@ -2055,6 +2104,7 @@ mod tests {
             simplification: crate::SimplificationLevel::O2(usize::MAX),
             unroll: crate::UnrollConfig {
                 threshold: usize::MAX,
+                ..Default::default()
             },
             ..CompilerConfig::default()
         };

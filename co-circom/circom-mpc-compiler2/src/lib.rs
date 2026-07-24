@@ -48,8 +48,11 @@
 //!      constant trip count is either unrolled (each iteration's body emitted
 //!      separately, letting its indices fold to constants) or compiled to a rolled form
 //!      with its induction variable mirrored into an integer register for affine
-//!      addressing, depending on [`UnrollConfig`] (below). Loops that don't match the
-//!      conservative "simple ascending counter" shape always take the rolled path.
+//!      addressing, depending on [`UnrollConfig`] (below). Dependency-free elementwise
+//!      loops may exceed the ordinary unroll budget when their entire expansion compacts
+//!      to vector instructions, subject to a separate configurable trip-count cap. Loops
+//!      that don't match the conservative "simple ascending counter" shape always take
+//!      the rolled path.
 //!    - **Register allocation** (`codegen::regalloc`): field and integer registers are
 //!      handed out by a bump-pointer allocator with stack-discipline freeing (registers
 //!      are freed back to a mark, never individually), which is enough because
@@ -110,8 +113,10 @@ pub enum SimplificationLevel {
 /// Controls loop unrolling during codegen: for a conforming loop with a statically-known
 /// trip count `T` (see `codegen::stmt`'s "Unrolling" module docs), unrolling is only
 /// committed to if one iteration's estimated instruction count times `T` doesn't exceed
-/// [`Self::threshold`] — otherwise the loop compiles to its ordinary rolled/
-/// mirror-promoted form instead, which is always correct regardless of size.
+/// [`Self::threshold`]. A dependency-free elementwise loop may bypass that budget when
+/// it compacts completely to vector instructions and fits
+/// [`Self::max_vectorized_loop_size`]; every other oversized loop compiles to its
+/// ordinary rolled/mirror-promoted form.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct UnrollConfig {
     /// The instruction-count budget (`estimated_body_instrs * trip_count`) a loop must
@@ -122,16 +127,30 @@ pub struct UnrollConfig {
     /// statically known, however large the resulting body.
     #[serde(default = "default_unroll_threshold")]
     pub threshold: usize,
+    /// Maximum trip count for a dependency-free elementwise loop that may bypass the
+    /// ordinary instruction budget when its fully expanded body compacts entirely to
+    /// vector instructions. This bounds the compiler's temporary expansion work and
+    /// the VM register block reserved by `BinN`.
+    ///
+    /// `0` disables the bypass. The ordinary [`Self::threshold`] remains authoritative
+    /// for every loop that cannot be completely vectorized.
+    #[serde(default = "default_max_vectorized_loop_size")]
+    pub max_vectorized_loop_size: usize,
 }
 
 fn default_unroll_threshold() -> usize {
     4096
 }
 
+fn default_max_vectorized_loop_size() -> usize {
+    16_384
+}
+
 impl Default for UnrollConfig {
     fn default() -> Self {
         Self {
             threshold: default_unroll_threshold(),
+            max_vectorized_loop_size: default_max_vectorized_loop_size(),
         }
     }
 }
