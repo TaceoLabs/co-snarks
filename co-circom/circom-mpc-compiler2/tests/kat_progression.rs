@@ -1002,11 +1002,13 @@ fn bitonic_sort_kat() {
     common::assert_kats("bitonic_sort", CompilerConfig::default());
 }
 
-/// A single non-array subcomponent (`component c = BabyAdd(); c.x1 <== ...; out <==
-/// c.xout;`) — the simplest possible `CreateCmp`/`InputSub`/`OutputSub` shape (`count: 1`),
-/// confirming the mechanism works even without array/loop-indexed addressing.
+/// `babypbk_test` instantiates `BabyPbk()` (baby-jubjub public-key derivation from a
+/// private key), which wires up two non-array subcomponents of its own (`Num2Bits`,
+/// `EscalarMulFix`) — real `count: 1` `CreateCmp`/`InputSub`/`OutputSub` coverage, just not
+/// of `BabyAdd` itself despite this test's former name; real `BabyAdd` coverage is
+/// [`babyadd_tester_kat`] above.
 #[test]
-fn babyadd_test_kat() {
+fn babypbk_test_kat() {
     common::assert_kats("babypbk_test", CompilerConfig::default());
 }
 
@@ -1058,10 +1060,11 @@ fn greatereqthan_kat() {
     common::assert_kats("greatereqthan", CompilerConfig::default());
 }
 
-/// The `Mux1`/`Mux2`/`Mux3` family: each multiplexes an array of subcomponent-free
-/// signals directly (no sub-templates of their own beyond the multiplexer arithmetic),
-/// but `mux3_1`'s `MultiMux3` internally instantiates a `component mux[n]` array — real
-/// component-array coverage alongside `bitonic_sort`.
+/// The `Mux1`/`Mux2`/`Mux3` family: `mux3_1` wires `Num2Bits` and `Constants` into `Mux3`,
+/// which in turn instantiates a single (non-array, `count: 1`) `MultiMux3(1)` subcomponent
+/// — `MultiMux3` itself has no subcomponents of its own at all, just plain signal-array
+/// arithmetic (`c[n][8]`/`s[3]`/`out[n]`); real component-*array* coverage is
+/// `bitonic_sort_kat` above, not this family.
 #[test]
 fn mux1_1_kat() {
     common::assert_kats("mux1_1", CompilerConfig::default());
@@ -1408,4 +1411,68 @@ fn shared_control_flow_kat() {
 #[test]
 fn shared_control_flow_arrays_kat() {
     common::assert_kats("shared_control_flow_arrays", CompilerConfig::default());
+}
+
+/// Regression test for the per-statement field-register leak fixed in
+/// `codegen::stmt::lower_stmt`: it used to rewind only `cg.iregs`, never `cg.regs`, on
+/// every top-level statement, so a statement's top-level result register (e.g. a
+/// `StoreBucket`'s materialized source) stayed permanently allocated for the rest of the
+/// enclosing body instead of being freed once the one instruction consuming it was
+/// emitted — `num_field_regs` grew with the body's *length*, not its (small, constant)
+/// maximum expression width. `tests/circuits/many_sequential_stores.circom` is 21
+/// sequential `var x_{i} = x_{i-1} + 1;` statements (plus the final `out <== x20;`), each
+/// a trivially small expression (depth 1): pre-fix this reserved on the order of one
+/// field register per statement (>20); post-fix it stays small and constant regardless of
+/// how many more such statements are added.
+#[test]
+fn many_sequential_stores_bounds_field_regs() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..CompilerConfig::default()
+    };
+    let program = std::sync::Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/many_sequential_stores.circom", config)
+            .unwrap(),
+    );
+    let num_field_regs = program.templates[program.main.0 as usize].num_field_regs;
+    assert!(
+        num_field_regs < 16,
+        "expected num_field_regs to stay small (bounded by expression width, not body \
+         length) for 21 sequential single-op statements, got {num_field_regs}"
+    );
+
+    let inputs = BTreeMap::from([("a".to_string(), Fr::from(1u64))]);
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    // x0 = 1, x1..x20 each add 1 twenty times -> out = 1 + 20 = 21.
+    assert_eq!(finalized.get_output("out"), Some(vec![Fr::from(21u64)]));
+}
+
+/// Re-asserts the same fix's effect on a real, large compiled circuit end to end:
+/// `sha256_2_test` (`test_vectors/WitnessExtension/tests/sha256_2_test.circom`, via
+/// `common::compile`, which threads in `link_library` for its `sha256compression`
+/// dependency) was the fix's other measured before/after case, alongside `chacha20` (see
+/// this commit's message for both numbers). Measured post-fix (this task, `--release`):
+/// the largest `num_field_regs` of any template in the compiled program is **1024**
+/// (`main`'s own template needs only a handful — the blowup was in `Sha256compression`'s
+/// body) — pre-fix the same circuit at `unroll.threshold: usize::MAX` reached **42,752**.
+/// `< 1200` leaves headroom above the measured value for incidental future codegen
+/// changes without masking a regression back toward the old, unbounded-with-body-length
+/// behavior.
+#[test]
+fn sha256_2_test_bounds_field_regs() {
+    let program = std::sync::Arc::new(common::compile("sha256_2_test", CompilerConfig::default()));
+    let max_num_field_regs = program
+        .templates
+        .iter()
+        .map(|t| t.num_field_regs)
+        .max()
+        .expect("sha256_2_test compiles to at least one template");
+    assert!(
+        max_num_field_regs < 1200,
+        "expected every template's num_field_regs to stay well below the pre-fix, \
+         body-length-scaled blowup (42,752 at unroll.threshold: usize::MAX) for \
+         sha256_2_test, got {max_num_field_regs}"
+    );
 }

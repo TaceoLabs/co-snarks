@@ -155,10 +155,29 @@ use eyre::{Result, bail, eyre};
 ///
 /// A [`LoopBucket`]'s persistent mirror register relies on this same discipline to
 /// survive for the loop's whole extent — see [`lower_loop`]'s module-level doc comment.
+///
+/// Field-register scope: mirrors the integer-register discipline above, one level up.
+/// Sub-expression lowering already frees an operand's own registers back to a per-
+/// expression mark before allocating its result (see [`expr::lower_binary`]), which keeps
+/// a *single expression*'s frame bounded by its depth — but the *top-level* result
+/// register that expression hands back (e.g. a `StoreBucket`'s materialized source, or a
+/// `Call`'s arg/ret block) is only ever consumed by the one instruction that follows in
+/// this same statement, never read again afterwards. Without rewinding here too, every
+/// statement's top-level result register would stay permanently allocated, so
+/// `num_field_regs` would grow with the body's *length* instead of its maximum
+/// expression width. `mark`/`free_to` wrap `lower_stmt_inner` as one unit, so nested
+/// `lower_stmt` recursion (branch arms, loop bodies, the unroll re-lowering/estimation
+/// passes) composes LIFO exactly like the `iregs` pair does — an inner statement's
+/// `free_to` never reaches below its own `mark`, so it can't release any register an
+/// outer, still-in-progress statement is holding onto (e.g. [`lower_conforming_loop`]'s
+/// persistent mirror `ireg`, which lives in `iregs` anyway and is untouched by this pair;
+/// no analogous persistent *field* register exists anywhere in this module).
 pub(crate) fn lower_stmt<F: PrimeField>(cg: &mut CodeGen<'_, F>, inst: &Instruction) -> Result<()> {
     let ireg_mark = cg.iregs.mark();
+    let reg_mark = cg.regs.mark();
     let result = lower_stmt_inner(cg, inst);
     cg.iregs.free_to(ireg_mark);
+    cg.regs.free_to(reg_mark);
     result
 }
 
