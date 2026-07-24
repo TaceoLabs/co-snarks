@@ -101,6 +101,24 @@ pub struct CompiledProgram<F: PrimeField> {
     pub debug: DebugInfo,
 }
 
+impl<F: PrimeField> CompiledProgram<F> {
+    /// Returns the main component's input names and sizes (old
+    /// `CoCircomCompilerParsed::inputs`, `circom-mpc-vm/src/types.rs:199-205`), derived
+    /// from [`Self::main_input_list`].
+    pub fn inputs(&self) -> Vec<(String, usize)> {
+        self.main_input_list
+            .iter()
+            .map(|input| (input.name.clone(), input.size))
+            .collect()
+    }
+
+    /// Returns the main component's public input names (old
+    /// `CoCircomCompilerParsed::public_inputs`, `circom-mpc-vm/src/types.rs:207-210`).
+    pub fn public_inputs(&self) -> &[String] {
+        &self.public_inputs
+    }
+}
+
 /// The VM configuration (parity with the old crate's `VMConfig`).
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct VMConfig {
@@ -175,5 +193,41 @@ mod tests {
         assert_eq!(de.templates[0].instrs, program.templates[0].instrs);
         assert_eq!(de.constants, program.constants);
         assert_eq!(de.total_signals, 4);
+    }
+
+    #[test]
+    fn inputs_and_public_inputs_accessors() {
+        let program = CompiledProgram::<ark_bn254::Fr> {
+            templates: vec![],
+            functions: vec![],
+            constants: vec![],
+            strings: vec![],
+            main: TemplId(0),
+            total_signals: 0,
+            main_inputs: 2,
+            main_outputs: 0,
+            main_input_list: vec![
+                InputInfo {
+                    name: "a".into(),
+                    offset: 1,
+                    size: 1,
+                },
+                InputInfo {
+                    name: "b".into(),
+                    offset: 2,
+                    size: 3,
+                },
+            ],
+            output_mapping: Default::default(),
+            signal_to_witness: vec![],
+            public_inputs: vec!["a".into()],
+            debug: DebugInfo::default(),
+        };
+
+        assert_eq!(
+            program.inputs(),
+            vec![("a".to_string(), 1), ("b".to_string(), 3)]
+        );
+        assert_eq!(program.public_inputs(), &["a".to_string()]);
     }
 }
