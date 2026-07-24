@@ -139,7 +139,7 @@ use circom_compiler::intermediate_representation::ir_interface::{
     LocationRule, LogBucket, LogBucketArg, LoopBucket, OperatorType, ReturnBucket, ReturnType,
     StoreBucket, ValueBucket, ValueType,
 };
-use circom_mpc_vm2::isa::{Addr, Dst, ISrc, Instr, RetSrc, Src};
+use circom_mpc_vm2::isa::{Addr, BinOp, Dst, ISrc, Instr, RetSrc, Src};
 use eyre::{Result, bail, eyre};
 
 /// Lowers one top-level body instruction, appending to [`CodeGen::instrs`].
@@ -1152,6 +1152,7 @@ fn try_unroll_loop<F: PrimeField>(
     }
 
     let last_idx = lb.body.len() - 1;
+    let unrolled_start = cg.instrs.len();
     for i in 0..trip_count {
         let value = info.init as usize + i * info.step as usize;
         let previous_binding = cg.env.bind(info.slot, Binding::ConstUsize(value));
@@ -1160,6 +1161,8 @@ fn try_unroll_loop<F: PrimeField>(
         }
         cg.env.restore(info.slot, previous_binding);
     }
+
+    fuse_unrolled_binn(cg, unrolled_start)?;
 
     if trip_count > 0 {
         // Load-bearing: without this, any post-loop *value-position* read of the
@@ -1186,6 +1189,235 @@ fn try_unroll_loop<F: PrimeField>(
     }
 
     Ok(true)
+}
+
+// ## BinN fusion
+//
+// A single-statement unrolled iteration like `out[i] <== a[i] * b[i]` lowers to exactly
+// two instructions (`Instr::Bin` computing the product into a scratch register,
+// immediately followed by `Instr::Mov` storing it) — *not* a run of consecutive `Bin`s,
+// because `RegAlloc`'s stack discipline (`CodeGen::regs`, freed back to its per-statement
+// mark by every `lower_stmt` call) hands every iteration's `Bin` the exact same scratch
+// register. What *does* repeat, verbatim except for the operands' addresses advancing by
+// one element per iteration, is the two-instruction `(Bin, Mov)` pair itself. Fusion
+// therefore matches runs of these pairs — not bare `Bin`s — and folds a qualifying run of
+// `n >= 4` into one `Instr::BinN` (writing into a freshly allocated `n`-register block,
+// since the vectorized result needs somewhere to live all at once, unlike the reused
+// scalar register) followed by one `Instr::StoreN`.
+//
+// Matching is conservative and purely mechanical: every `Bin` in the run must share the
+// same op and reuse the very same scratch register (exactly what the unmodified
+// per-iteration lowering already produces); every `Mov` must forward that exact register;
+// and each of the `Bin`'s two source operands plus the `Mov`'s destination must advance by
+// *exactly one* address unit per step, matching `circom_mpc_vm2::exec`'s `read_n`/
+// `resolve_at` (`BinN`/`StoreN` only ever address `base..base+n`, unit stride — see
+// `exec.rs`). Only `Addr::Const` addressing is recognized (an unrolled iteration's own
+// array indices always fold there; `Affine`/`Dynamic` addressing, if seen, simply fails to
+// match rather than being fused incorrectly). Any non-matching element ends the run in
+// place; nothing about a non-fused instruction changes.
+//
+// Fusion runs once, after every iteration of the unrolled body has been emitted (so it
+// sees the *whole* range at once, not just one candidate window) and before the trailing
+// resync `Mov` (which isn't part of the range and must never be touched). It is skipped
+// entirely (option (1) from the task brief, chosen for simplicity and safety over
+// remapping targets) whenever the emitted range contains *any* target-carrying instruction
+// (`Jmp`/`JmpIfZero`/`SharedIf`/`SharedElse`) — compaction shrinks the instruction stream,
+// which would invalidate an absolute target landing inside the compacted range (a nested
+// rolled loop's own back-edge, or a nested `Branch`'s `SharedIf`/`SharedElse` targets, for
+// instance). Forward references from *outside* the range are unaffected either way: they
+// are all patched lazily, using `CodeGen::instrs.len()` read *after* this function returns
+// (see `CodeGen::patch`/`finish_loop`), so they automatically see the post-fusion length.
+// Elementwise arithmetic loops — the whole payoff case — essentially never contain
+// branches, so this conservative skip costs nothing in practice.
+
+/// Runs the BinN-fusion peephole (see the module docs above) over
+/// `cg.instrs[unrolled_start..]` — the instructions [`try_unroll_loop`] just emitted for
+/// one loop's unrolled body, and *only* those (the caller must not have appended anything
+/// else yet).
+fn fuse_unrolled_binn<F: PrimeField>(cg: &mut CodeGen<'_, F>, unrolled_start: usize) -> Result<()> {
+    if cg.instrs[unrolled_start..].iter().any(|i| {
+        matches!(
+            i,
+            Instr::Jmp { .. }
+                | Instr::JmpIfZero { .. }
+                | Instr::SharedIf { .. }
+                | Instr::SharedElse { .. }
+        )
+    }) {
+        return Ok(());
+    }
+
+    let body: Vec<Instr> = cg.instrs.drain(unrolled_start..).collect();
+    let fused = fuse_binn_pass(cg, body)?;
+    cg.instrs.extend(fused);
+    Ok(())
+}
+
+/// A key identifying one operand's address space plus its offset within that space, used
+/// to check whether a sequence of operands advances by exactly one unit per step (the
+/// only stride `BinN`/`StoreN` support — see the module docs above). Two operands compare
+/// equal only if both the space *and* the offset match; comparing keys from different
+/// address spaces is always `false`, never a false match.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OperandKey {
+    Reg(i64),
+    Const(i64),
+    Var(i64),
+    Signal(i64),
+}
+
+impl OperandKey {
+    /// The key one unit past `self` in the same address space (what the *next* element's
+    /// operand must equal for the run to keep advancing).
+    fn next(self) -> Self {
+        match self {
+            OperandKey::Reg(v) => OperandKey::Reg(v + 1),
+            OperandKey::Const(v) => OperandKey::Const(v + 1),
+            OperandKey::Var(v) => OperandKey::Var(v + 1),
+            OperandKey::Signal(v) => OperandKey::Signal(v + 1),
+        }
+    }
+}
+
+/// The [`OperandKey`] of a [`Src`] read operand, or `None` for addressing modes fusion
+/// doesn't recognize (`Affine`/`Dynamic` — see the module docs above).
+fn src_operand_key(src: &Src) -> Option<OperandKey> {
+    match src {
+        Src::Reg(r) => Some(OperandKey::Reg(*r as i64)),
+        Src::Const(c) => Some(OperandKey::Const(*c as i64)),
+        Src::Var(Addr::Const(c)) => Some(OperandKey::Var(*c as i64)),
+        Src::Signal(Addr::Const(c)) => Some(OperandKey::Signal(*c as i64)),
+        Src::Var(_) | Src::Signal(_) => None,
+    }
+}
+
+/// The [`OperandKey`] of a [`Dst`] write operand, or `None` for addressing modes fusion
+/// doesn't recognize. Deliberately shares `OperandKey`'s variants with `src_operand_key`
+/// (rather than a separate enum) so a `Dst::Signal(Addr::Const(c))` and a
+/// `Src::Signal(Addr::Const(c))` at the same `c` compare equal — irrelevant to fusion
+/// itself (a `Bin`'s sources and a `Mov`'s destination are never compared against each
+/// other), but keeping one enum for both is simpler than two structurally-identical ones.
+fn dst_operand_key(dst: &Dst) -> Option<OperandKey> {
+    match dst {
+        Dst::Reg(r) => Some(OperandKey::Reg(*r as i64)),
+        Dst::Var(Addr::Const(c)) => Some(OperandKey::Var(*c as i64)),
+        Dst::Signal(Addr::Const(c)) => Some(OperandKey::Signal(*c as i64)),
+        Dst::Var(_) | Dst::Signal(_) => None,
+    }
+}
+
+/// One matched element of a fusable run: the position (`Bin` at `idx`, `Mov` at `idx+1`)
+/// plus the three operand keys that must advance by one per step across the run.
+struct FusableStep {
+    a: OperandKey,
+    b: OperandKey,
+    store_dst: OperandKey,
+}
+
+/// If `body[idx]`/`body[idx + 1]` form one element of a fusable `(Bin, Mov)` run — a `Bin`
+/// whose result is used by nothing but the immediately following `Mov` — returns its op and
+/// operand keys. `None` for anything else (including a `Bin` followed by anything other
+/// than a same-register `Mov`, or operands in an addressing mode fusion doesn't recognize).
+fn fusable_step(body: &[Instr], idx: usize) -> Option<(BinOp, u16, FusableStep)> {
+    let Instr::Bin { op, dst, a, b } = body.get(idx)? else {
+        return None;
+    };
+    let Instr::Mov {
+        dst: store_dst,
+        src: Src::Reg(src_reg),
+    } = body.get(idx + 1)?
+    else {
+        return None;
+    };
+    if src_reg != dst {
+        return None;
+    }
+    let a = src_operand_key(a)?;
+    let b = src_operand_key(b)?;
+    let store_dst = dst_operand_key(store_dst)?;
+    Some((*op, *dst, FusableStep { a, b, store_dst }))
+}
+
+/// The length (in `(Bin, Mov)` pairs) of the maximal fusable run starting at `idx`: `1` if
+/// `body[idx]`/`body[idx+1]` form a valid element on their own (see [`fusable_step`]) but
+/// the next pair doesn't continue it (wrong op, different scratch register, or any operand
+/// key not advancing by exactly one), up to `body.len()`; `0` if `idx` isn't the start of a
+/// fusable element at all.
+fn fusable_run_len(body: &[Instr], idx: usize) -> usize {
+    let Some((op0, reg0, first)) = fusable_step(body, idx) else {
+        return 0;
+    };
+    let mut len = 1;
+    let mut expect = FusableStep {
+        a: first.a.next(),
+        b: first.b.next(),
+        store_dst: first.store_dst.next(),
+    };
+    while let Some((op, reg, step)) = fusable_step(body, idx + 2 * len) {
+        if op != op0
+            || reg != reg0
+            || step.a != expect.a
+            || step.b != expect.b
+            || step.store_dst != expect.store_dst
+        {
+            break;
+        }
+        len += 1;
+        expect = FusableStep {
+            a: step.a.next(),
+            b: step.b.next(),
+            store_dst: step.store_dst.next(),
+        };
+    }
+    len
+}
+
+/// Minimum run length (in original scalar `Bin`s) worth fusing into one `BinN` — below
+/// this a fused `BinN` + `StoreN` (2 instructions plus a freshly allocated register block)
+/// isn't obviously a win over the `2 * n` scalar instructions it replaces, per the task
+/// brief's threshold.
+const MIN_FUSABLE_RUN: usize = 4;
+
+/// The actual fold: scans `body` for maximal fusable runs (see [`fusable_run_len`]) of at
+/// least [`MIN_FUSABLE_RUN`] `(Bin, Mov)` pairs, replacing each with one `Instr::BinN`
+/// (into a freshly allocated `n`-register block — `cg.regs` is exactly where the unrolled
+/// loop's own iterations just freed their scratch register back to, so this reuses that
+/// same space rather than growing the frame beyond what the un-fused body already needed)
+/// followed by one `Instr::StoreN`; everything else (non-matching instructions, and runs
+/// shorter than the threshold) is copied through unchanged.
+fn fuse_binn_pass<F: PrimeField>(cg: &mut CodeGen<'_, F>, body: Vec<Instr>) -> Result<Vec<Instr>> {
+    let mut out = Vec::with_capacity(body.len());
+    let mut i = 0;
+    while i < body.len() {
+        let run_len = fusable_run_len(&body, i);
+        if run_len >= MIN_FUSABLE_RUN {
+            let Instr::Bin { op, a, b, .. } = &body[i] else {
+                unreachable!("fusable_run_len only returns > 0 when body[i] is a Bin")
+            };
+            let Instr::Mov { dst, .. } = &body[i + 1] else {
+                unreachable!("fusable_run_len only returns > 0 when body[i + 1] is a Mov")
+            };
+            let n = u32::try_from(run_len)?;
+            let fused_dst = cg.alloc_freg_n(n)?;
+            out.push(Instr::BinN {
+                op: *op,
+                dst: fused_dst,
+                a: *a,
+                b: *b,
+                n,
+            });
+            out.push(Instr::StoreN {
+                dst: *dst,
+                src: fused_dst,
+                n,
+            });
+            i += 2 * run_len;
+        } else {
+            out.push(body[i].clone());
+            i += 1;
+        }
+    }
+    Ok(out)
 }
 
 /// Emits the loop head shared by both the conforming and fallback paths: the

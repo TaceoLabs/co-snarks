@@ -349,6 +349,22 @@ fn jmp_count(program: &CompiledProgram<Fr>) -> usize {
         .count()
 }
 
+/// Every `Instr::BinN` across every template, paired with its `n` — used by the BinN-
+/// fusion tests below both to confirm fusion engaged (a nonempty result with some `n >=
+/// 4`) and to confirm it was correctly skipped (an empty result, e.g. for an unrolled
+/// body containing a branch — see `codegen::stmt`'s BinN-fusion module docs).
+fn binn_instrs(program: &CompiledProgram<Fr>) -> Vec<u32> {
+    program
+        .templates
+        .iter()
+        .flat_map(|t| t.instrs.iter())
+        .filter_map(|i| match i {
+            Instr::BinN { n, .. } => Some(*n),
+            _ => None,
+        })
+        .collect()
+}
+
 /// The Task 5 milestone test: `binsum_test` (already the proven componentless,
 /// loop-heavy KAT — see [`binsum_test_kat`] above) run twice, once with unrolling
 /// disabled entirely (`threshold: 0`) and once forced wherever statically possible
@@ -412,6 +428,127 @@ fn binsum_test_default_config_unrolls() {
     assert!(
         jmp_count(&default_program) < jmp_count(&rolled_program),
         "binsum_test must unroll at least partially under the default unroll threshold"
+    );
+}
+
+/// The Task 5 BinN-fusion milestone test (`tests/circuits/elementwise_mul.circom`, a
+/// purpose-written `out[i] <== a[i] * b[i]` loop over 8 elements — no KAT directory of
+/// its own, same rationale as `mul2_straight_line_end_to_end`/`array_copy_end_to_end`
+/// above): at `unroll.threshold: usize::MAX` the unrolled body's 16 `Bin`/`Mov`
+/// instructions must collapse into one `BinN{n: 8}` + one `StoreN` (fewer total
+/// instructions than the `threshold: 0` compile, which never unrolls and so never fuses
+/// either), and both thresholds must still agree on the hand-computed witness — fusion
+/// is a codegen-only optimization, never a semantic one.
+#[test]
+fn elementwise_mul_binn_fusion_end_to_end() {
+    let rolled = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        unroll: UnrollConfig { threshold: 0 },
+        ..Default::default()
+    };
+    let unrolled = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        unroll: UnrollConfig {
+            threshold: usize::MAX,
+        },
+        ..Default::default()
+    };
+
+    let rolled_program =
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/elementwise_mul.circom", rolled).unwrap();
+    let unrolled_program =
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/elementwise_mul.circom", unrolled)
+            .unwrap();
+
+    assert!(
+        binn_instrs(&rolled_program).is_empty(),
+        "a rolled body must never fuse into BinN"
+    );
+    assert_eq!(
+        binn_instrs(&unrolled_program),
+        vec![8],
+        "the fully-unrolled body must fuse its 8-iteration run into one BinN{{n: 8}}"
+    );
+
+    let rolled_len: usize = rolled_program
+        .templates
+        .iter()
+        .map(|t| t.instrs.len())
+        .sum();
+    let unrolled_len: usize = unrolled_program
+        .templates
+        .iter()
+        .map(|t| t.instrs.len())
+        .sum();
+    assert!(
+        unrolled_len < rolled_len,
+        "fusion must leave the fully-unrolled program with fewer total instructions than \
+         the rolled one (rolled={rolled_len}, unrolled={unrolled_len})"
+    );
+
+    let a_vals: Vec<u64> = (0..8u64).map(|i| 10 + i).collect();
+    let b_vals: Vec<u64> = (0..8u64).map(|i| 20 + i).collect();
+    let expected: Vec<Fr> = a_vals
+        .iter()
+        .zip(&b_vals)
+        .map(|(a, b)| Fr::from(a * b))
+        .collect();
+    for (name, program) in [("rolled", rolled_program), ("unrolled", unrolled_program)] {
+        let mut inputs = BTreeMap::new();
+        for (i, v) in a_vals.iter().enumerate() {
+            inputs.insert(format!("a[{i}]"), Fr::from(*v));
+        }
+        for (i, v) in b_vals.iter().enumerate() {
+            inputs.insert(format!("b[{i}]"), Fr::from(*v));
+        }
+        let finalized = PlainWitnessExtension::new_plain(Arc::new(program), VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+        assert_eq!(
+            finalized.get_output("out"),
+            Some(expected.clone()),
+            "{name}"
+        );
+    }
+}
+
+/// The Task 5 BinN-fusion real-KAT test: `winner` (`test_vectors/WitnessExtension/tests/
+/// winner.circom`, already a proven KAT — see `winner_kat` above) happens to contain an
+/// unrolled elementwise loop (inside its `UniqueHighestValWithId` library component) that
+/// fuses into a `BinN{n: 4}` at `unroll.threshold: usize::MAX` — a real circuit's fused
+/// path exercised end to end, run through [`common::assert_kats_with`] at both `0`
+/// (rolled — must never fuse) and `usize::MAX` (fused) against the same ground-truth
+/// witnesses `winner_kat` already checks.
+#[test]
+fn winner_binn_fusion_matches_rolled_kat() {
+    common::assert_kats_with("winner", |cfg| cfg.unroll.threshold = 0);
+    common::assert_kats_with("winner", |cfg| cfg.unroll.threshold = usize::MAX);
+
+    let rolled = common::compile(
+        "winner",
+        CompilerConfig {
+            unroll: UnrollConfig { threshold: 0 },
+            ..Default::default()
+        },
+    );
+    let unrolled = common::compile(
+        "winner",
+        CompilerConfig {
+            unroll: UnrollConfig {
+                threshold: usize::MAX,
+            },
+            ..Default::default()
+        },
+    );
+
+    assert!(
+        binn_instrs(&rolled).is_empty(),
+        "a rolled body must never fuse into BinN"
+    );
+    assert!(
+        binn_instrs(&unrolled).iter().any(|&n| n >= 4),
+        "winner's fully-unrolled compile must contain a fused BinN with n >= 4, got {:?}",
+        binn_instrs(&unrolled)
     );
 }
 
@@ -674,6 +811,15 @@ fn branch_no_else_end_to_end() {
 /// `Branch` lowers once per re-lowered iteration inside `try_unroll_loop`); both must
 /// agree on the same correct witness, confirming loops and branches compose through
 /// ordinary recursion with no special-casing needed on either side.
+///
+/// Also the Task 5 BinN-fusion negative test: at `usize::MAX`, the loop's body — each
+/// iteration a `SharedIf`/`Bin`/`Mov`/`SharedElse`/`Bin`/`Mov`/`SharedEnd` run —
+/// contains `SharedIf`/`SharedElse` throughout, so fusion must skip the whole unrolled
+/// range outright (see `codegen::stmt`'s BinN-fusion module docs, option (1)):
+/// `binn_instrs` must be empty at *both* thresholds. That the witness above still comes
+/// out correct at `usize::MAX` is exactly "targets intact, correct results" — a
+/// corrupted `SharedIf`/`SharedElse` target from an incorrectly-attempted fusion would
+/// show up as a wrong `out[i]` (or a panic) here, not just as extra instructions.
 #[test]
 fn loop_with_branch_composes_rolled_and_unrolled() {
     for threshold in [0, usize::MAX] {
@@ -685,6 +831,12 @@ fn loop_with_branch_composes_rolled_and_unrolled() {
         let program = Arc::new(
             CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_with_branch.circom", config)
                 .unwrap(),
+        );
+
+        assert!(
+            binn_instrs(&program).is_empty(),
+            "threshold={threshold}: a branch-containing unrolled loop must never fuse into \
+             BinN (fusion must skip the whole range — see the BinN-fusion module docs)"
         );
 
         let mut inputs = BTreeMap::new();
