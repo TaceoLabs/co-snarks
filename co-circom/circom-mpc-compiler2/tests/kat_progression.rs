@@ -415,6 +415,59 @@ fn binsum_test_default_config_unrolls() {
     );
 }
 
+/// The highest-risk unrolling scenario's end-to-end correctness check
+/// (`tests/circuits/loop_final_value.circom`): a loop that unrolls, followed by a
+/// *value-position* read of its induction variable after the loop has finished (`final_i
+/// <== i;`). Unrolling skips the loop's own real increment store outright and only ever
+/// binds `i` to a compile-time `ConstUsize` *inside* the loop body (see `codegen::stmt`'s
+/// "Unrolling" module docs), so if this crate ever got the post-loop value wrong, it
+/// would show up here. Run at both `unroll.threshold: 0` (rolled/mirror-promoted path) and
+/// `usize::MAX` (fully unrolled): both must agree that `final_i == 5`.
+///
+/// This does *not*, however, actually exercise `try_unroll_loop`'s trailing resync `Mov`:
+/// circom's own front end resolves a conforming loop's induction variable to a literal
+/// constant at any point after the loop where its value is provably known (which, for a
+/// literal-bounded ascending counter, is always) — confirmed empirically, this circuit
+/// compiles `final_i <== i;` straight to a constant `Mov`, at both thresholds, with no
+/// runtime `Load` of the variable at all, so this test would still pass even with the
+/// resync `Mov` deleted. The real regression test for that is a white-box, hand-built-IR
+/// unit test that bypasses circom's front end entirely:
+/// `codegen::stmt::tests::try_unroll_loop_resyncs_slot_to_final_value_for_post_loop_reads`.
+#[test]
+fn loop_final_value_post_loop_read_both_thresholds() {
+    for threshold in [0, usize::MAX] {
+        let config = CompilerConfig {
+            simplification: SimplificationLevel::O2(usize::MAX),
+            unroll: UnrollConfig { threshold },
+            ..Default::default()
+        };
+        let program = Arc::new(
+            CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_final_value.circom", config)
+                .unwrap(),
+        );
+
+        let mut inputs = BTreeMap::new();
+        for k in 0..5u64 {
+            inputs.insert(format!("in[{k}]"), Fr::from(10 + k));
+        }
+        let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+
+        assert_eq!(
+            finalized.get_output("final_i"),
+            Some(vec![Fr::from(5u64)]),
+            "post-loop read of the induction variable must see its final value \
+             (threshold={threshold})"
+        );
+        assert_eq!(
+            finalized.get_output("acc_out"),
+            Some(vec![Fr::from(10 + 11 + 12 + 13 + 14u64)]),
+            "loop body itself must still be correct (threshold={threshold})"
+        );
+    }
+}
+
 /// The mixed-mode milestone test: an inner conforming loop unrolls while its outer
 /// conforming loop stays rolled, both decisions made independently per the same size
 /// heuristic against the same [`CompilerConfig::unroll`] threshold (see `codegen::stmt`'s

@@ -39,12 +39,19 @@ pub enum SimplificationLevel {
     O2(usize),
 }
 
-/// Controls loop unrolling during codegen (Task 2+). Not yet consumed by this task.
+/// Controls loop unrolling during codegen: for a conforming loop with a statically-known
+/// trip count `T` (see `codegen::stmt`'s "Unrolling" module docs), unrolling is only
+/// committed to if one iteration's estimated instruction count times `T` doesn't exceed
+/// [`Self::threshold`] — otherwise the loop compiles to its ordinary rolled/
+/// mirror-promoted form instead, which is always correct regardless of size.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct UnrollConfig {
-    /// Maximum number of statically-known loop iterations to unroll.
+    /// The instruction-count budget (`estimated_body_instrs * trip_count`) a loop must
+    /// fit under to be unrolled.
     ///
-    /// `0` disables unrolling; `usize::MAX` forces unrolling wherever statically possible.
+    /// `0` disables unrolling outright (every loop stays rolled, and the estimation pass
+    /// itself is skipped); `usize::MAX` forces unrolling wherever the loop's trip count is
+    /// statically known, however large the resulting body.
     #[serde(default = "default_unroll_threshold")]
     pub threshold: usize,
 }

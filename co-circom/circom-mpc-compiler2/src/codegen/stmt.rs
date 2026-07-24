@@ -490,6 +490,30 @@ fn trip_count(info: &ConformingLoop) -> Option<usize> {
     Some(diff.div_ceil(step))
 }
 
+// Test-only instrumentation for `estimate_unrolled_body`: counts every *actual* call
+// (i.e. every cache miss against `CodeGen::unroll_estimate_cache`), so a test can assert
+// the memoization is actually being hit rather than merely trusting that it is — see
+// `tests::nested_unroll_estimation_is_memoized_per_lexical_loop` below.
+#[cfg(test)]
+thread_local! {
+    static ESTIMATE_UNROLLED_BODY_CALLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn record_estimate_unrolled_body_call() {
+    ESTIMATE_UNROLLED_BODY_CALLS.with(|c| c.set(c.get() + 1));
+}
+
+#[cfg(test)]
+fn reset_estimate_unrolled_body_calls() {
+    ESTIMATE_UNROLLED_BODY_CALLS.with(|c| c.set(0));
+}
+
+#[cfg(test)]
+fn estimate_unrolled_body_calls() -> usize {
+    ESTIMATE_UNROLLED_BODY_CALLS.with(|c| c.get())
+}
+
 /// Estimates how many instructions one iteration of `lb`'s body — excluding its trailing
 /// increment statement, which unrolling never lowers (see [`try_unroll_loop`]) — lowers to
 /// when the induction variable at `slot` is bound to [`Binding::ConstUsize`], by lowering
@@ -507,17 +531,43 @@ fn trip_count(info: &ConformingLoop) -> Option<usize> {
 /// be inflated by register traffic that's about to be discarded, bloating the real frame
 /// size) and [`CodeGen::last_const_store`] are cloned and restored; the `slot` binding is
 /// restored via the usual [`Env::bind`]/[`Env::restore`] pair (mirroring
-/// [`try_unroll_loop`]'s own per-iteration discipline). Interning into
-/// [`CodeGen::names`]/[`CodeGen::constants`] (the latter via [`CodeGen::const_id`]) is
-/// deliberately *not* rolled back — both are value-to-id caches keyed so a repeat lookup
-/// (which the real lowering that follows will make anyway) returns the same id, so
-/// interning early here is redundant, not a leak.
+/// [`try_unroll_loop`]'s own per-iteration discipline).
+///
+/// Interning into [`CodeGen::names`]/[`CodeGen::constants`] (the latter via
+/// [`CodeGen::const_id`]) is deliberately *not* rolled back. When the estimate leads to a
+/// committed unroll, this is genuinely redundant: the real per-iteration lowering that
+/// follows looks up the very same values and gets back the same ids via
+/// [`CodeGen::const_ids`]. But when the estimate is instead *rejected* (`estimate * T >
+/// threshold`, so the caller falls back to [`lower_conforming_loop`] instead), nothing
+/// looks those values up again — the constants interned during this throwaway pass are
+/// left behind as unreferenced entries in [`CodeGen::constants`] for the rest of
+/// compilation. This is harmless (no emitted instruction ever indexes an entry that
+/// nothing ever interned a reference to) but is a real, permanent side effect of a
+/// rejected estimate, not merely a redundant no-op; rolling it back would need
+/// `Self::names`/`Self::constants`/`Self::const_ids` cloned and restored exactly like
+/// `regs`/`iregs` above, which this deliberately skips as not worth the extra clone for a
+/// handful of dead table entries.
+///
+/// Cached at most once per *lexical* loop per compilation whenever it runs at nesting `0`
+/// — see [`CodeGen::unroll_estimate_cache`]/[`CodeGen::unroll_estimate_nesting`], which
+/// together memoize this function's result so a nested loop's enclosing loop(s) iterating
+/// (for real) doesn't re-run it from scratch every time; a call nested inside an
+/// ancestor's *own* estimation pass (nesting `> 0`) is never cached and always recomputed,
+/// since that's precisely the context whose binding kinds might not match what the
+/// ancestor(s) really, finally commit to. `#[cfg(test)]` builds additionally count every
+/// call (cached or not) via [`estimate_unrolled_body_calls`], so a test can observe the
+/// cache actually being hit.
 fn estimate_unrolled_body<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     lb: &LoopBucket,
     slot: usize,
     sample: usize,
 ) -> Result<usize> {
+    #[cfg(test)]
+    record_estimate_unrolled_body_call();
+
+    cg.unroll_estimate_nesting += 1;
+
     let saved_instrs = std::mem::take(&mut cg.instrs);
     let saved_regs = cg.regs.clone();
     let saved_iregs = cg.iregs.clone();
@@ -536,6 +586,7 @@ fn estimate_unrolled_body<F: PrimeField>(
     cg.regs = saved_regs;
     cg.iregs = saved_iregs;
     cg.last_const_store = saved_last_const_store;
+    cg.unroll_estimate_nesting -= 1;
 
     result?;
     Ok(estimate)
@@ -545,10 +596,12 @@ fn estimate_unrolled_body<F: PrimeField>(
 /// defers to the rolled/mirror-promoted path, skipping the estimation lowering entirely
 /// (per the brief). Otherwise, if `T`, the loop's trip count ([`trip_count`]), can't be
 /// determined, also defers. Otherwise, estimates one iteration's instruction count
-/// ([`estimate_unrolled_body`]) and unrolls — re-lowering the body `T` times with `slot`
-/// bound to [`Binding::ConstUsize`] for that iteration's concrete value, skipping the
-/// trailing increment statement and emitting no condition/jump at all — only if
-/// `estimate * T <= threshold`.
+/// ([`estimate_unrolled_body`], via [`CodeGen::unroll_estimate_cache`]/[`CodeGen::
+/// unroll_estimate_nesting`] — see there for why memoizing it per lexical loop, gated on
+/// nesting, is sound) and unrolls — re-lowering the
+/// body `T` times with `slot` bound to [`Binding::ConstUsize`] for that iteration's
+/// concrete value, skipping the trailing increment statement and emitting no
+/// condition/jump at all — only if `estimate * T <= threshold`.
 ///
 /// A single trailing `Mov` re-synchronizes the induction variable's actual field slot to
 /// its final value (`init + T * step` — exactly what the rolled loop would leave behind:
@@ -570,7 +623,29 @@ fn try_unroll_loop<F: PrimeField>(
     };
 
     if trip_count > 0 {
-        let estimate = estimate_unrolled_body(cg, lb, info.slot, info.init as usize)?;
+        // Memoized per lexical loop, keyed by `lb`'s own address — *not* `lb.message_id`,
+        // which is per-*template*, not per-loop (see `CodeGen::unroll_estimate_cache`'s
+        // doc comment for how that was confirmed and why the address is sound instead): a
+        // loop nested inside another one that iterates `N` times would otherwise redo
+        // this (a full lowering-and-discard pass, itself recursing into any loops nested
+        // inside *this* one) on every single one of those `N` re-lowerings, even though
+        // it always produces the same number *as long as* every enclosing loop's binding
+        // kind (`ConstUsize` vs `IReg`) is the same as it'll be in the real, committed
+        // lowering — which is exactly what `CodeGen::unroll_estimate_nesting` gates (see
+        // its doc comment): only read from / written to while nesting is `0`.
+        let estimate = if cg.unroll_estimate_nesting == 0 {
+            let loop_id = std::ptr::from_ref(lb) as usize;
+            match cg.unroll_estimate_cache.get(&loop_id) {
+                Some(&cached) => cached,
+                None => {
+                    let estimate = estimate_unrolled_body(cg, lb, info.slot, info.init as usize)?;
+                    cg.unroll_estimate_cache.insert(loop_id, estimate);
+                    estimate
+                }
+            }
+        } else {
+            estimate_unrolled_body(cg, lb, info.slot, info.init as usize)?
+        };
         let fits = estimate
             .checked_mul(trip_count)
             .is_some_and(|total| total <= cg.config.unroll.threshold);
@@ -590,6 +665,21 @@ fn try_unroll_loop<F: PrimeField>(
     }
 
     if trip_count > 0 {
+        // Load-bearing: without this, any post-loop *value-position* read of the
+        // induction variable (e.g. `final_i <== i;` after the loop) would see whatever
+        // `ConstUsize` binding the last unrolled iteration happened to leave in `Env` —
+        // which only ever affects lowering, never the variable's real field slot — so
+        // reading the slot directly, as ordinary code after the loop does, would
+        // otherwise still hold its pre-loop value. This is the highest-risk unrolling
+        // scenario end to end. The regression test that actually exercises this is
+        // `tests::try_unroll_loop_resyncs_slot_to_final_value_for_post_loop_reads` (below,
+        // white-box/hand-built-IR — see its own doc comment for why: circom's front end
+        // always folds a real `.circom` source's post-loop induction-variable read into a
+        // literal before this crate's codegen ever sees it, so no `.circom` fixture can
+        // reach this code path). `loop_final_value_post_loop_read_both_thresholds`
+        // (`tests/kat_progression.rs`, circuit `tests/circuits/loop_final_value.circom`)
+        // is still a real end-to-end correctness check of the same source-level scenario —
+        // it just wouldn't fail if this `Mov` were deleted.
         let final_value = info.init as usize + trip_count * info.step as usize;
         let const_id = cg.const_id(F::from(final_value as u64))?;
         cg.instrs.push(Instr::Mov {
@@ -694,10 +784,180 @@ fn lower_fallback_loop<F: PrimeField>(cg: &mut CodeGen<'_, F>, lb: &LoopBucket) 
 mod tests {
     use super::*;
     use crate::CompilerConfig;
+    use circom_compiler::intermediate_representation::ir_interface::{
+        ComputeBucket, InstrContext, LoadBucket, SizeOption,
+    };
 
     fn cg() -> CodeGen<'static, ark_bn254::Fr> {
         let config: &'static CompilerConfig = Box::leak(Box::new(CompilerConfig::default()));
         CodeGen::new(config)
+    }
+
+    fn cg_with_threshold(threshold: usize) -> CodeGen<'static, ark_bn254::Fr> {
+        let config: &'static CompilerConfig = Box::leak(Box::new(CompilerConfig {
+            unroll: crate::UnrollConfig { threshold },
+            ..CompilerConfig::default()
+        }));
+        CodeGen::new(config)
+    }
+
+    /// An address-domain leaf: a raw `usize` slot number (`static_const_slot`'s only
+    /// recognized shape — see `codegen::index`), *not* a constant-table index.
+    fn addr_slot(slot: usize) -> Instruction {
+        Instruction::Value(ValueBucket {
+            line: 0,
+            message_id: 0,
+            parse_as: ValueType::U32,
+            op_aux_no: 0,
+            value: slot,
+        })
+    }
+
+    /// A field-constant leaf: `const_idx` indexes into `CodeGen::constants` (see
+    /// `const_as_u32`) — the caller must have already populated that table.
+    fn field_const(const_idx: usize) -> Instruction {
+        Instruction::Value(ValueBucket {
+            line: 0,
+            message_id: 0,
+            parse_as: ValueType::BigInt,
+            op_aux_no: 0,
+            value: const_idx,
+        })
+    }
+
+    /// `Load(Variable, slot)` — a value-position read of variable `slot`.
+    fn load_var(slot: usize) -> Instruction {
+        Instruction::Load(LoadBucket {
+            line: 0,
+            message_id: 0,
+            address_type: AddressType::Variable,
+            src: LocationRule::Indexed {
+                location: Box::new(addr_slot(slot)),
+                template_header: None,
+            },
+            context: InstrContext {
+                size: SizeOption::Single(1),
+            },
+        })
+    }
+
+    /// `Store(Variable, slot) <- src` — a plain scalar variable store.
+    fn store_var(slot: usize, src: Instruction) -> Instruction {
+        Instruction::Store(StoreBucket {
+            line: 0,
+            message_id: 0,
+            context: InstrContext {
+                size: SizeOption::Single(1),
+            },
+            src_context: InstrContext {
+                size: SizeOption::Single(1),
+            },
+            dest_is_output: false,
+            dest_address_type: AddressType::Variable,
+            src_address_type: None,
+            dest: LocationRule::Indexed {
+                location: Box::new(addr_slot(slot)),
+                template_header: None,
+            },
+            src: Box::new(src),
+        })
+    }
+
+    /// A hand-built [`LoopBucket`] matching [`detect_conforming`]'s exact shape: `slot <
+    /// bound_const_idx` (a `Lesser` condition), body ending in `slot = slot + step_const_idx`.
+    /// The brief-mandated increment is the body's *only* statement — this test is about
+    /// [`try_unroll_loop`]'s own resync `Mov`, not about the non-increment body work
+    /// [`estimate_unrolled_body`] already covers elsewhere.
+    fn synthetic_loop(slot: usize, bound_const_idx: usize, step_const_idx: usize) -> LoopBucket {
+        LoopBucket {
+            line: 0,
+            message_id: 0,
+            continue_condition: Box::new(Instruction::Compute(ComputeBucket {
+                line: 0,
+                message_id: 0,
+                op: OperatorType::Lesser,
+                op_aux_no: 0,
+                stack: vec![
+                    Box::new(load_var(slot)),
+                    Box::new(field_const(bound_const_idx)),
+                ],
+            })),
+            body: vec![Box::new(store_var(
+                slot,
+                Instruction::Compute(ComputeBucket {
+                    line: 0,
+                    message_id: 0,
+                    op: OperatorType::Add,
+                    op_aux_no: 0,
+                    stack: vec![
+                        Box::new(load_var(slot)),
+                        Box::new(field_const(step_const_idx)),
+                    ],
+                }),
+            ))],
+        }
+    }
+
+    /// The regression test for the trailing resync `Mov` in [`try_unroll_loop`] — the
+    /// "highest-risk unrolling scenario": a post-loop *value-position* read of the
+    /// induction variable, after the loop has unrolled.
+    ///
+    /// This is a white-box, hand-built-IR test rather than an end-to-end `.circom`
+    /// fixture, because circom's own front end always resolves a conforming loop's
+    /// induction variable to a literal compile-time constant at any point after the loop
+    /// where its value is provably known — which, for a plain ascending counter with a
+    /// literal bound, is *always* true, regardless of what the loop body does with
+    /// signals, regardless of `SimplificationLevel`, and regardless of this crate's own
+    /// `unroll.threshold`. Confirmed empirically: `tests/circuits/loop_final_value.circom`
+    /// (see `loop_final_value_post_loop_read_both_thresholds`,
+    /// `tests/kat_progression.rs`) compiles `final_i <== i;` straight to `Mov { dst:
+    /// Signal(..), src: Const(..) }` — a literal, not a `Load` of the variable — at *both*
+    /// `threshold: 0` and `threshold: usize::MAX` alike, so that test alone would still
+    /// pass even if this crate's resync `Mov` were deleted entirely (it does not exercise
+    /// this code path). This test drives [`try_unroll_loop`] directly with a synthetic
+    /// `LoopBucket`, bypassing circom's front end, so it actually observes the `Mov`.
+    #[test]
+    fn try_unroll_loop_resyncs_slot_to_final_value_for_post_loop_reads() {
+        let mut cg = cg_with_threshold(usize::MAX);
+        // constants[0] = step (1), constants[1] = bound (5); `init` is tracked separately
+        // via `last_const_store` (a plain `u32`, not constant-table-indexed).
+        cg.constants = vec![ark_bn254::Fr::from(1u64), ark_bn254::Fr::from(5u64)];
+        let slot = 0;
+        cg.last_const_store.insert(slot, 0);
+
+        let lb = synthetic_loop(slot, 1, 0);
+        let info = detect_conforming(&cg, &lb).expect("synthetic loop must be conforming");
+        assert_eq!(info.init, 0);
+        assert_eq!(info.step, 1);
+        assert_eq!(info.bound, Some(5));
+
+        let unrolled = try_unroll_loop(&mut cg, &lb, &info).unwrap();
+        assert!(
+            unrolled,
+            "a trivial, small loop must unroll at threshold: usize::MAX"
+        );
+
+        // trip_count = ceil((5 - 0) / 1) = 5; final_value = init + trip_count * step = 5 —
+        // exactly what a post-loop read of the induction variable (e.g. `final_i <== i;`)
+        // must see.
+        let Some(Instr::Mov {
+            dst: Dst::Var(Addr::Const(dst_slot)),
+            src: Src::Const(const_id),
+        }) = cg.instrs.last()
+        else {
+            panic!(
+                "expected a trailing resync Mov as the last emitted instruction, got: \
+                 {:?}",
+                cg.instrs
+            );
+        };
+        assert_eq!(*dst_slot as usize, slot);
+        assert_eq!(
+            cg.constants[*const_id as usize],
+            ark_bn254::Fr::from(5u64),
+            "the resync Mov must write the loop's real post-loop value (5), not the last \
+             ConstUsize binding the unrolled iterations happened to use (4)"
+        );
     }
 
     #[test]
@@ -776,5 +1036,53 @@ mod tests {
     #[test]
     fn trip_count_nonzero_init() {
         assert_eq!(trip_count(&conforming(2, Some(10), 4)), Some(2));
+    }
+
+    /// Compiles a 3-deep-nested-loop fixture with `threshold: usize::MAX` (forcing every
+    /// level to unroll wherever its own size fits) and returns how many times
+    /// [`estimate_unrolled_body`] actually ran (see [`estimate_unrolled_body_calls`]).
+    fn count_estimate_calls_for(path: &str) -> usize {
+        reset_estimate_unrolled_body_calls();
+        let config = CompilerConfig {
+            simplification: crate::SimplificationLevel::O2(usize::MAX),
+            unroll: crate::UnrollConfig {
+                threshold: usize::MAX,
+            },
+            ..CompilerConfig::default()
+        };
+        crate::CoCircomCompiler::<ark_bn254::Bn254>::parse(path, config).unwrap();
+        estimate_unrolled_body_calls()
+    }
+
+    /// The regression test for `CodeGen::unroll_estimate_cache`/
+    /// `CodeGen::unroll_estimate_nesting`: the reported bug was that each *outer*-loop
+    /// iteration redid a nested loop's full size estimation from scratch, an overhead that
+    /// grows with the *outer* loop's own trip count (and compounds with nesting depth).
+    /// `tests/circuits/loop_triple_nested.circom` (outer trip count 2) and
+    /// `tests/circuits/loop_triple_nested_wide_outer.circom` (identical middle/inner
+    /// loops, outer trip count 6) isolate exactly that variable: if the outer loop's own
+    /// trip count still mattered, the wide-outer fixture would trigger more
+    /// [`estimate_unrolled_body`] calls than the narrow one. Asserting they're *equal*
+    /// (not just "both small") directly demonstrates the fix, rather than trusting a
+    /// single magic number tied to this specific circuit shape.
+    #[test]
+    fn nested_unroll_estimation_does_not_scale_with_outer_trip_count() {
+        let narrow = count_estimate_calls_for("tests/circuits/loop_triple_nested.circom");
+        let wide = count_estimate_calls_for("tests/circuits/loop_triple_nested_wide_outer.circom");
+
+        assert_eq!(
+            narrow, wide,
+            "estimate_unrolled_body call count must not depend on the outer loop's own \
+             trip count (narrow outer trip count 2: {narrow} calls; wide outer trip count \
+             6: {wide} calls) — a difference means CodeGen::unroll_estimate_cache isn't \
+             being hit across the outer loop's real iterations"
+        );
+        // Loose sanity bound: bounded by the middle/inner loops' own (small, fixed) trip
+        // counts, not by anything that could grow unboundedly with nesting depth.
+        assert!(
+            narrow <= 10,
+            "expected a small, bounded number of estimation passes for a 3-deep nest with \
+             trip counts 2/2/2, got {narrow}"
+        );
     }
 }

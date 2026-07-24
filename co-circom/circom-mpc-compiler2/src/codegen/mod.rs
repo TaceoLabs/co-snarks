@@ -203,6 +203,75 @@ pub(crate) struct CodeGen<'c, F> {
     /// conforming loop's induction variable needs (see `stmt::detect_conforming`'s docs
     /// for the exact tracking/invalidation rules).
     pub(crate) last_const_store: HashMap<usize, u32>,
+    /// Memoizes [`stmt::estimate_unrolled_body`]'s result (one iteration's instruction
+    /// count) per *lexical* loop, keyed by the [`LoopBucket`](circom_compiler::
+    /// intermediate_representation::ir_interface::LoopBucket)'s own address (`lb as *const
+    /// LoopBucket as usize`) rather than its `message_id`.
+    ///
+    /// `message_id` looks tempting (it reads like a per-AST-node id) but isn't one:
+    /// tracing `circom`'s own translator (`circuit_design::build::build_template_instances`
+    /// / `intermediate_representation::translate::State`) shows it's assigned once per
+    /// *template instantiation* and copied verbatim onto every bucket produced while
+    /// translating that template's body — confirmed empirically (a debug probe on
+    /// `tests/circuits/loop_triple_nested.circom`'s three nested loops printed
+    /// `message_id=0` for all three). Keying on it alone would collide every lexical loop
+    /// within the same template into one cache slot, so whichever loop's estimate is
+    /// computed (or overwritten) last would silently clobber the entry for every other
+    /// loop in that template — the exact per-context-differing-size hazard this cache
+    /// needs to rule out, just from a different cause than an enclosing loop's bindings.
+    /// A `LoopBucket`'s address is unique per AST node and stable for as long as the
+    /// template/function body owning it is being lowered (the IR tree is an owned,
+    /// immutable structure for that entire pass; nothing relocates it), which is exactly
+    /// this cache's lifetime — reset alongside everything else in [`Self::reset_body`], so
+    /// distinct templates/functions never share entries even if their addresses were ever
+    /// reused by the allocator afterwards.
+    ///
+    /// Why caching the estimate at all is exact, not just a fast-path heuristic: a nested
+    /// loop's own conformance (`stmt::detect_conforming`) can only recognize a bound/step/
+    /// init that are already compile-time constants embedded directly in the IR (a `Value`
+    /// bucket, or a preceding `Store` of one — never a `Load` of anything, let alone an
+    /// enclosing loop's induction variable), so every input to
+    /// [`stmt::estimate_unrolled_body`] for a given lexical loop is fixed by the source
+    /// text alone — re-deriving it under a different outer-loop iteration (a different
+    /// [`env::Binding::ConstUsize`] for some *other* slot) always reproduces the identical
+    /// count. Caching it here turns what would otherwise be a full re-lowering-and-discard
+    /// pass, repeated once per *enclosing* iteration (see [`stmt::try_unroll_loop`]'s doc
+    /// comment — this is what made nested unrolling's estimation cost blow up with nesting
+    /// depth), into a single lowering pass per lexical loop, however many times its
+    /// enclosing loop(s) iterate.
+    ///
+    /// Only ever consulted/populated while [`Self::unroll_estimate_nesting`] is `0` — see
+    /// that field for why a cache entry written *while nested inside* an ancestor's own
+    /// throwaway size-estimation pass can't be trusted for reuse in that ancestor's real,
+    /// committed lowering.
+    pub(crate) unroll_estimate_cache: HashMap<usize, usize>,
+    /// How many [`stmt::estimate_unrolled_body`] calls are currently on the stack (`0`
+    /// outside of any of them). Gates [`Self::unroll_estimate_cache`]: a loop's estimate is
+    /// only read from or written to the cache while this is `0`, i.e. while the *current*
+    /// invocation is part of real, committed lowering — never while it's part of some
+    /// ancestor loop's own throwaway single-sample size assessment.
+    ///
+    /// Why this matters: [`stmt::estimate_unrolled_body`] temporarily binds its loop's own
+    /// slot to [`env::Binding::ConstUsize`] for the duration of its single sample —
+    /// *regardless* of what that loop's real, final decision turns out to be. If it later
+    /// decides *not* to unroll, its real body lowering instead binds the slot to
+    /// [`env::Binding::IReg`] (see [`stmt::lower_conforming_loop`]) — a different address
+    /// folding for any nested loop whose body combines *two or more* enclosing induction
+    /// variables in one address expression (e.g. `a[i][j][k]` in a 3-deep nest): `Const ∘
+    /// Const` and `Affine ∘ Const` both fold with zero added instructions
+    /// (`codegen::index`'s `try_fold_const`), but `Affine ∘ Affine` doesn't fold at all and
+    /// must materialize both operands with real `IMul`/`IAdd` instructions. A cache entry
+    /// for such a nested loop, first written while two-or-more ancestors were *all*
+    /// momentarily `ConstUsize` (inside their own nested self-assessments), would
+    /// under-count its real cost if reused later once those same ancestors have for-real
+    /// settled on staying rolled (`IReg`) — this field's gating rules that out entirely: an
+    /// ancestor's own self-assessment always runs at nesting `> 0` (never touches the
+    /// cache), so the only entries ever cached are ones computed — and later only ever
+    /// reused — under nesting `0`, where every enclosing loop's binding kind is whatever it
+    /// has *finally, actually* committed to, consistently, every single time (an ancestor's
+    /// unroll/roll decision is itself deterministic given the same lexical loop and
+    /// [`CompilerConfig`], so it never differs between separate nesting-`0` invocations).
+    pub(crate) unroll_estimate_nesting: usize,
 }
 
 impl<'c, F: PrimeField> CodeGen<'c, F> {
@@ -220,6 +289,8 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             iregs: RegAlloc::default(),
             env: Env::default(),
             last_const_store: HashMap::new(),
+            unroll_estimate_cache: HashMap::new(),
+            unroll_estimate_nesting: 0,
         }
     }
 
@@ -230,6 +301,8 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
         self.iregs = RegAlloc::default();
         self.env = Env::default();
         self.last_const_store.clear();
+        self.unroll_estimate_cache.clear();
+        self.unroll_estimate_nesting = 0;
     }
 
     /// Allocates a fresh field register, checked against the ISA's `u16` register-index
