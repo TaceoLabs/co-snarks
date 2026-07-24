@@ -24,6 +24,7 @@ use crate::isa::*;
 use crate::program::{CompiledProgram, FunctionCode, TemplateCode, VMConfig};
 use ark_ff::PrimeField;
 use eyre::{Result, bail};
+use std::collections::HashSet;
 
 /// Per-activation register frame.
 pub struct Frame<T> {
@@ -33,6 +34,91 @@ pub struct Frame<T> {
     pub iregs: Vec<usize>,
     /// Local variable slots.
     pub vars: Vec<T>,
+}
+
+/// A `Var`/`Signal` slot whose speculative value must be merged before leaving the
+/// current straight-line predicated region.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+enum WriteLoc {
+    Var(usize),
+    Signal(usize),
+}
+
+/// Lazily records the value preceding the first write to every destination in a
+/// straight-line shared branch region. Writes update the live frame/signal RAM
+/// immediately, so read-after-write observes the branch-local value. At a control or
+/// side-effect boundary all dirty destinations are merged in one `cmux_many` call.
+struct PendingWrites<T> {
+    entries: Vec<(WriteLoc, T)>,
+    dirty: HashSet<WriteLoc>,
+}
+
+impl<T: Clone> PendingWrites<T> {
+    fn new() -> Self {
+        Self {
+            entries: Vec::new(),
+            dirty: HashSet::new(),
+        }
+    }
+
+    fn write_var(&mut self, vars: &mut [T], idx: usize, value: T) {
+        let loc = WriteLoc::Var(idx);
+        if self.dirty.insert(loc) {
+            self.entries.push((loc, vars[idx].clone()));
+        }
+        vars[idx] = value;
+    }
+
+    fn write_signal(&mut self, signals: &mut [T], idx: usize, value: T) {
+        let loc = WriteLoc::Signal(idx);
+        if self.dirty.insert(loc) {
+            self.entries.push((loc, signals[idx].clone()));
+        }
+        signals[idx] = value;
+    }
+
+    fn flush<F, C>(
+        &mut self,
+        driver: &mut C,
+        pred: &Predication<T>,
+        frame: &mut Frame<T>,
+        signals: &mut [T],
+    ) -> Result<()>
+    where
+        F: PrimeField,
+        C: VmDriver<F, VmType = T>,
+    {
+        if self.entries.is_empty() {
+            return Ok(());
+        }
+        let cond = pred
+            .cond()
+            .expect("pending writes only exist under a shared predicate");
+        let entries = std::mem::take(&mut self.entries);
+        self.dirty.clear();
+
+        let mut locations = Vec::with_capacity(entries.len());
+        let mut old = Vec::with_capacity(entries.len());
+        let mut new = Vec::with_capacity(entries.len());
+        for (loc, previous) in entries {
+            let current = match loc {
+                WriteLoc::Var(idx) => frame.vars[idx].clone(),
+                WriteLoc::Signal(idx) => signals[idx].clone(),
+            };
+            locations.push(loc);
+            old.push(previous);
+            new.push(current);
+        }
+
+        let merged = driver.cmux_many(cond, &new, &old)?;
+        for (loc, value) in locations.into_iter().zip(merged) {
+            match loc {
+                WriteLoc::Var(idx) => frame.vars[idx] = value,
+                WriteLoc::Signal(idx) => signals[idx] = value,
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<T: Default + Clone> Frame<T> {
@@ -354,6 +440,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         // threaded by reference through any function calls made from here (old
         // behavior: a shared-if context spans calls).
         let mut pred: Predication<C::VmType> = Predication::new();
+        let mut pending = PendingWrites::new();
         let mut kind = StepCtx::Template;
         let mut ip: usize = 0;
         loop {
@@ -365,6 +452,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             match self.step(
                 &mut frame,
                 &mut pred,
+                &mut pending,
                 offset,
                 name,
                 &mut kind,
@@ -423,12 +511,14 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         }
         let instrs_len = code.instrs.len();
         let mut ret_acc: Vec<(C::VmType, Vec<C::VmType>)> = Vec::new();
+        let mut pending = PendingWrites::new();
         let mut ip: usize = 0;
         loop {
             if ip >= instrs_len {
                 // Falling off the end: a non-empty accumulator means every Ret so far
                 // was under a shared predicate (old `ReturnSharedIfFun` trailer); an
                 // empty one means the body never returned at all.
+                pending.flush::<F, C>(self.driver, pred, &mut frame, &mut self.signals)?;
                 if !ret_acc.is_empty() {
                     let vals = self.merge_ret_acc(ret_acc)?;
                     return Ok(self.resize_ret(vals, ret_n));
@@ -439,7 +529,16 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             let mut kind = StepCtx::Function {
                 ret_acc: &mut ret_acc,
             };
-            match self.step(&mut frame, pred, comp_offset, name, &mut kind, inst, None)? {
+            match self.step(
+                &mut frame,
+                pred,
+                &mut pending,
+                comp_offset,
+                name,
+                &mut kind,
+                inst,
+                None,
+            )? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
                 Flow::ReturnFn(vals) => return Ok(self.resize_ret(vals, ret_n)),
@@ -500,12 +599,16 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         &mut self,
         frame: &mut Frame<C::VmType>,
         pred: &mut Predication<C::VmType>,
+        pending: &mut PendingWrites<C::VmType>,
         comp_offset: usize,
         name: &str,
         kind: &mut StepCtx<C::VmType>,
         inst: &Instr,
         comp: Option<&mut ComponentInst>,
     ) -> Result<Flow<C::VmType>> {
+        if is_write_barrier(inst) {
+            pending.flush::<F, C>(self.driver, pred, frame, &mut self.signals)?;
+        }
         Ok(match inst {
             Instr::Bin { op, dst, a, b } => {
                 let r = {
@@ -551,8 +654,8 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             Instr::Mov { dst, src } => {
                 let v = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, src)?.clone();
                 write_dst::<F, C>(
-                    self.driver,
                     &*pred,
+                    pending,
                     frame,
                     &mut self.signals,
                     comp_offset,
@@ -578,8 +681,8 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                     .map(|k| frame.regs[*src as usize + k].clone())
                     .collect();
                 write_dst_n::<F, C>(
-                    self.driver,
                     &*pred,
+                    pending,
                     frame,
                     &mut self.signals,
                     comp_offset,
@@ -985,14 +1088,41 @@ fn read_ret<T: Clone>(frame: &Frame<T>, src: &RetSrc, k: usize) -> T {
     }
 }
 
+/// Instructions that can change the active predicate, transfer execution to another
+/// activation, or externally observe state. Speculative branch writes must be merged
+/// before any of these boundaries. Arithmetic, loads, stores, and integer-address
+/// calculations deliberately remain barrier-free so an entire straight-line region
+/// shares one batched merge.
+fn is_write_barrier(inst: &Instr) -> bool {
+    matches!(
+        inst,
+        Instr::Jmp { .. }
+            | Instr::JmpIfZero { .. }
+            | Instr::SharedIf { .. }
+            | Instr::SharedIfBit { .. }
+            | Instr::SharedElse { .. }
+            | Instr::SharedEnd
+            | Instr::Return
+            | Instr::Ret { .. }
+            | Instr::CallFn { .. }
+            | Instr::CreateCmp { .. }
+            | Instr::InputSub { .. }
+            | Instr::OutputSub { .. }
+            | Instr::Assert { .. }
+            | Instr::Log { .. }
+            | Instr::LogStr { .. }
+            | Instr::LogFlush { .. }
+    )
+}
+
 /// Write a value to a scalar `Reg`/`Var`/`Signal` destination (used by `Mov`; see
 /// `write_dst_n` for the element-wise `LoadN`/`StoreN` counterpart). Together the two
-/// are the single write path for `Dst`: `Var`/`Signal` writes are predicated by `pred`
-/// (cmux'd against the current value); `Reg` writes never are (temporaries are
-/// branch-local).
+/// are the single write path for `Dst`: shared-predicated `Var`/`Signal` writes are
+/// recorded in `pending` and merged at the next barrier; `Reg` writes never are
+/// predicated because temporaries are branch-local.
 fn write_dst<F: PrimeField, C: VmDriver<F>>(
-    driver: &mut C,
     pred: &Predication<C::VmType>,
+    pending: &mut PendingWrites<C::VmType>,
     frame: &mut Frame<C::VmType>,
     signals: &mut [C::VmType],
     comp_offset: usize,
@@ -1003,43 +1133,31 @@ fn write_dst<F: PrimeField, C: VmDriver<F>>(
         Dst::Reg(r) => frame.regs[*r as usize] = val,
         Dst::Var(a) => {
             let idx = resolve(&frame.iregs, a);
-            let merged = predicated_merge(driver, pred, &frame.vars[idx], val)?;
-            frame.vars[idx] = merged;
+            if pred.is_shared() {
+                pending.write_var(&mut frame.vars, idx, val);
+            } else {
+                frame.vars[idx] = val;
+            }
         }
         Dst::Signal(a) => {
             let idx = comp_offset + resolve(&frame.iregs, a);
-            let merged = predicated_merge(driver, pred, &signals[idx], val)?;
-            signals[idx] = merged;
+            if pred.is_shared() {
+                pending.write_signal(signals, idx, val);
+            } else {
+                signals[idx] = val;
+            }
         }
     }
     Ok(())
 }
 
-/// cmux `new` against `old` under the innermost shared-if condition, if any; otherwise
-/// just `new`. Mirrors old `mpc_vm.rs:375-415` (`StoreSignals`/`StoreVars`): note the
-/// new value comes first in the `cmux` call.
-fn predicated_merge<F: PrimeField, C: VmDriver<F>>(
-    driver: &mut C,
-    pred: &Predication<C::VmType>,
-    old: &C::VmType,
-    new: C::VmType,
-) -> Result<C::VmType> {
-    match pred.cond() {
-        Some(cond) => driver.cmux(cond, &new, old),
-        None => Ok(new),
-    }
-}
-
 /// Write `n` consecutive values to a `Dst`, starting at its base address (used by
-/// `StoreN`). The batched counterpart of `write_dst`/`predicated_merge`: `Var`/`Signal`
-/// writes are still predicated by `pred`, but merged against the old values through one
-/// `cmux_many` call rather than `n` scalar `cmux`s — this is the other half of the
-/// single-choke-point property (`write_dst` for scalar writes, `write_dst_n` for the
-/// element-wise ones; every `Var`/`Signal` mutation in the VM goes through one of the
-/// two). `Reg` writes are never predicated (temporaries are branch-local).
+/// `StoreN`). Shared `Var`/`Signal` writes join the same pending batch as scalar `Mov`s;
+/// unpredicated writes update their destination directly. `Reg` writes are always
+/// immediate because temporaries are branch-local.
 fn write_dst_n<F: PrimeField, C: VmDriver<F>>(
-    driver: &mut C,
     pred: &Predication<C::VmType>,
+    pending: &mut PendingWrites<C::VmType>,
     frame: &mut Frame<C::VmType>,
     signals: &mut [C::VmType],
     comp_offset: usize,
@@ -1053,42 +1171,27 @@ fn write_dst_n<F: PrimeField, C: VmDriver<F>>(
             }
         }
         Dst::Var(a) => {
-            let idxs: Vec<usize> = (0..vals.len())
-                .map(|k| resolve_at(&frame.iregs, a, k))
-                .collect();
-            let olds: Vec<_> = idxs.iter().map(|&i| frame.vars[i].clone()).collect();
-            let merged = predicated_merge_many(driver, pred, &olds, vals)?;
-            for (i, v) in idxs.into_iter().zip(merged) {
-                frame.vars[i] = v;
+            for (k, value) in vals.into_iter().enumerate() {
+                let idx = resolve_at(&frame.iregs, a, k);
+                if pred.is_shared() {
+                    pending.write_var(&mut frame.vars, idx, value);
+                } else {
+                    frame.vars[idx] = value;
+                }
             }
         }
         Dst::Signal(a) => {
-            let idxs: Vec<usize> = (0..vals.len())
-                .map(|k| comp_offset + resolve_at(&frame.iregs, a, k))
-                .collect();
-            let olds: Vec<_> = idxs.iter().map(|&i| signals[i].clone()).collect();
-            let merged = predicated_merge_many(driver, pred, &olds, vals)?;
-            for (i, v) in idxs.into_iter().zip(merged) {
-                signals[i] = v;
+            for (k, value) in vals.into_iter().enumerate() {
+                let idx = comp_offset + resolve_at(&frame.iregs, a, k);
+                if pred.is_shared() {
+                    pending.write_signal(signals, idx, value);
+                } else {
+                    signals[idx] = value;
+                }
             }
         }
     }
     Ok(())
-}
-
-/// Batched counterpart of `predicated_merge`: cmux `new` against `old`, elementwise,
-/// under the innermost shared-if condition, if any; otherwise just `new`. Same
-/// new-then-old argument order as `predicated_merge`.
-fn predicated_merge_many<F: PrimeField, C: VmDriver<F>>(
-    driver: &mut C,
-    pred: &Predication<C::VmType>,
-    old: &[C::VmType],
-    new: Vec<C::VmType>,
-) -> Result<Vec<C::VmType>> {
-    match pred.cond() {
-        Some(cond) => driver.cmux_many(cond, &new, old),
-        None => Ok(new),
-    }
 }
 
 /// Read an [`ISrc`] against the integer registers.

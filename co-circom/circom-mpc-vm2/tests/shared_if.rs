@@ -103,6 +103,52 @@ fn shared_if_merges_stores() {
     assert!(signals[1].shared);
 }
 
+// Scalar branch writes are speculative until the branch boundary. A later expression
+// in the same arm must see the new branch-local variable value, while a false condition
+// must still restore both destinations to their values from before the arm.
+#[test]
+fn shared_if_pending_writes_preserve_read_after_write() {
+    let program = common::single_template_program(
+        vec![
+            Instr::SharedIfBit {
+                cond: Src::Signal(Addr::Const(1)),
+                else_target: 4,
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(0)),
+                src: Src::Const(0),
+            },
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 0,
+                a: Src::Var(Addr::Const(0)),
+                b: Src::Const(1),
+            },
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: Src::Reg(0),
+            },
+            Instr::SharedEnd,
+            Instr::Return,
+        ],
+        1,
+        0,
+        1,
+        1,
+        1,
+        3,
+    );
+    let consts = vec![Fr::from(7u64), Fr::from(5u64)];
+
+    let signals = common::run_taint_with_consts(&program, consts.clone(), vec![common::shared(1)]);
+    assert_eq!(signals[1].val, Fr::from(12u64));
+    assert!(signals[1].shared);
+
+    let signals = common::run_taint_with_consts(&program, consts, vec![common::shared(0)]);
+    assert_eq!(signals[1].val, Fr::from(0u64));
+    assert!(signals[1].shared);
+}
+
 // signal layout: [0]=1, [1]=out, [2]=cond1, [3]=cond2.
 // out = cond1 ? (cond2 ? 11 : 22) : (cond2 ? 33 : 44), two nested shared ifs.
 #[test]

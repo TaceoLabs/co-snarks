@@ -897,9 +897,10 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
 
     /// Batched cmux with a single (possibly shared) condition. A public condition
     /// resolves the whole vector to `truthy`/`falsy` directly (no communication,
-    /// matching the scalar impl above). A shared condition promotes any public operands
-    /// to trivial shares and runs one [`arithmetic::cmux_vec`] reshare round for the
-    /// whole vector, instead of one round per element.
+    /// matching the scalar impl above). With a shared condition, public/public operand
+    /// pairs retain the scalar implementation's communication-free arithmetic; only
+    /// pairs containing a share are promoted and sent through one
+    /// [`arithmetic::cmux_vec`] reshare round.
     fn cmux_many(
         &mut self,
         cond: &Self::VmType,
@@ -917,22 +918,41 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
                 }
             }
             Rep3VmType::Arithmetic(cond) => {
-                let truthy_shares = truthy
-                    .iter()
-                    .map(|t| self.to_share(t))
-                    .collect::<Result<Vec<_>>>()?;
-                let falsy_shares = falsy
-                    .iter()
-                    .map(|f| self.to_share(f))
-                    .collect::<Result<Vec<_>>>()?;
-                let res = arithmetic::cmux_vec(
-                    *cond,
-                    &truthy_shares,
-                    &falsy_shares,
-                    self.net0,
-                    &mut self.state0,
-                )?;
-                Ok(res.into_iter().map(Rep3VmType::Arithmetic).collect())
+                let shared_cond = Rep3VmType::Arithmetic(*cond);
+                let mut result = vec![None; truthy.len()];
+                let mut shared_indices = Vec::new();
+                let mut truthy_shares = Vec::new();
+                let mut falsy_shares = Vec::new();
+
+                for (idx, (truthy, falsy)) in truthy.iter().zip(falsy).enumerate() {
+                    if matches!(truthy, Rep3VmType::Public(_))
+                        && matches!(falsy, Rep3VmType::Public(_))
+                    {
+                        result[idx] = Some(self.cmux(&shared_cond, truthy, falsy)?);
+                    } else {
+                        shared_indices.push(idx);
+                        truthy_shares.push(self.to_share(truthy)?);
+                        falsy_shares.push(self.to_share(falsy)?);
+                    }
+                }
+
+                if !shared_indices.is_empty() {
+                    let shared_results = arithmetic::cmux_vec(
+                        *cond,
+                        &truthy_shares,
+                        &falsy_shares,
+                        self.net0,
+                        &mut self.state0,
+                    )?;
+                    for (idx, value) in shared_indices.into_iter().zip(shared_results) {
+                        result[idx] = Some(Rep3VmType::Arithmetic(value));
+                    }
+                }
+
+                Ok(result
+                    .into_iter()
+                    .map(|value| value.expect("every cmux_many output is populated"))
+                    .collect())
             }
         }
     }

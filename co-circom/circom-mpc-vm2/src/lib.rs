@@ -49,10 +49,10 @@
 //!   compiled to [`isa::Instr::SharedIf`]/[`isa::Instr::SharedIfBit`]/
 //!   [`isa::Instr::SharedElse`]/[`isa::Instr::SharedEnd`]:
 //!   a public condition still short-circuits to one branch, but a shared condition
-//!   pushes a predication level, runs both arms, and merges writes to `var`/`signal`
-//!   destinations via [`driver::VmDriver::cmux`] — register (`Reg`) writes are never
-//!   predicated, since registers are branch-local temporaries that don't outlive the
-//!   branch.
+//!   pushes a predication level and runs both arms. Each straight-line region records
+//!   dirty `var`/`signal` destinations and merges them together through
+//!   [`driver::VmDriver::cmux_many`] at the next control boundary; register (`Reg`)
+//!   writes are never predicated, since registers are branch-local temporaries.
 //!
 //! Programs are produced by `circom-mpc-compiler2` (or hand-assembled, as below) and
 //! executed by a [`api::WitnessExtension`] instantiated with a driver implementing

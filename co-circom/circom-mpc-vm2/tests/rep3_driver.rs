@@ -350,6 +350,96 @@ fn rep3_shared_if_bit_skips_condition_normalization_messages() {
     }
 }
 
+/// Eight scalar `Mov`s in one shared arm must be merged by one vectorized cmux round,
+/// rather than paying one Rep3 reshare round per destination. `SharedIfBit` removes
+/// condition-normalization traffic, so the VM's message count can be compared directly
+/// with one scalar cmux using the same shared condition.
+#[test]
+fn rep3_scalar_predicated_writes_share_one_cmux_round() {
+    let n = 8usize;
+    let program = common::single_template_program(
+        std::iter::once(Instr::SharedIfBit {
+            cond: Src::Signal(Addr::Const(n as u32)),
+            else_target: (n + 1) as u32,
+        })
+        .chain((0..n).map(|i| Instr::Mov {
+            dst: Dst::Signal(Addr::Const(i as u32)),
+            src: Src::Signal(Addr::Const((n + 1 + i) as u32)),
+        }))
+        .chain([Instr::SharedEnd, Instr::Return])
+        .collect(),
+        0,
+        0,
+        0,
+        (n + 1) as u32,
+        n as u32,
+        2 * n + 2,
+    );
+
+    let mut rng = rand::thread_rng();
+    let cond_shares = rep3::share_field_elements(&[Fr::from(1u64)], &mut rng);
+    let values: Vec<_> = (0..n as u64).map(|i| Fr::from(i + 10)).collect();
+    let value_shares = rep3::share_field_elements(&values, &mut rng);
+
+    let body = |program: CompiledProgram<Fr>,
+                cond: Rep3PrimeFieldShare<Fr>,
+                values: Vec<Rep3PrimeFieldShare<Fr>>| {
+        move |net0: &CountingNetwork, net1: &CountingNetwork| -> (usize, usize, usize, Vec<Fr>) {
+            let mut driver = Rep3Driver::new(net0, net1, A2BType::default()).expect("driver");
+            let cond_vm = Rep3VmType::Arithmetic(cond);
+            let truthy = Rep3VmType::Arithmetic(values[0]);
+            let falsy = Rep3VmType::Public(Fr::from(0u64));
+
+            let start = net0.message_count();
+            driver
+                .cmux(&cond_vm, &truthy, &falsy)
+                .expect("scalar cmux baseline");
+            let scalar_msgs = net0.message_count() - start;
+
+            let public_truthy = vec![Rep3VmType::Public(Fr::from(3u64)); n];
+            let public_falsy = vec![Rep3VmType::Public(Fr::from(4u64)); n];
+            let start = net0.message_count();
+            driver
+                .cmux_many(&cond_vm, &public_truthy, &public_falsy)
+                .expect("all-public cmux_many");
+            let public_msgs = net0.message_count() - start;
+
+            let mut machine = Machine::new(&program, &mut driver, VMConfig::default()).unwrap();
+            let input_offset = program.main_input_list[0].offset;
+            machine.signals[input_offset] = cond_vm;
+            for (i, value) in values.into_iter().enumerate() {
+                machine.signals[input_offset + 1 + i] = Rep3VmType::Arithmetic(value);
+            }
+            let start = net0.message_count();
+            machine.run_main().unwrap();
+            let batched_msgs = net0.message_count() - start;
+            let opened = machine.signals[1..=n]
+                .iter()
+                .map(|v| machine.driver.open(v).expect("open output"))
+                .collect();
+            (scalar_msgs, batched_msgs, public_msgs, opened)
+        }
+    };
+
+    let results = run_3_parties_counting(
+        body(program.clone(), cond_shares[0][0], value_shares[0].clone()),
+        body(program.clone(), cond_shares[1][0], value_shares[1].clone()),
+        body(program, cond_shares[2][0], value_shares[2].clone()),
+    );
+    for (party, (scalar_msgs, batched_msgs, public_msgs, opened)) in results.into_iter().enumerate()
+    {
+        assert_eq!(opened, values, "party {party}: output values");
+        assert_eq!(
+            batched_msgs, scalar_msgs,
+            "party {party}: {n} scalar predicated writes must cost one scalar cmux"
+        );
+        assert_eq!(
+            public_msgs, 0,
+            "party {party}: public operands under a shared condition need no communication"
+        );
+    }
+}
+
 /// (a)/(b): `bin_many` batched correctness AND order preservation, in one pass.
 /// Interleaved public/shared operand shapes on both sides — `a` is
 /// `[pub, shared, pub, shared]`, `b` is `[shared, shared, pub, pub]`, exactly the
