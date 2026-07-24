@@ -5,8 +5,9 @@
 //! `(Arithmetic, Public)`/`(Arithmetic, Arithmetic)` operand pairs, delegating the
 //! all-public case to an embedded [`PlainDriver`] and every other case to the
 //! corresponding `mpc_core::protocols::rep3` gadget.
-use crate::driver::VmDriver;
+use crate::driver::{VmDriver, apply_bin};
 use crate::drivers::plain::PlainDriver;
+use crate::isa::BinOp;
 use crate::program::VMConfig;
 use ark_ff::PrimeField;
 use co_circom_types::Rep3InputType;
@@ -114,6 +115,123 @@ impl<'a, F: PrimeField, N: Network> Rep3Driver<'a, F, N> {
     #[inline(always)]
     fn shifted(&self, z: Rep3PrimeFieldShare<F>) -> Rep3PrimeFieldShare<F> {
         arithmetic::sub_shared_by_public(z, self.negative_one, self.id)
+    }
+
+    /// Shared batching core for `Mul`/`BoolAnd` (the latter delegates to `mul` for every
+    /// non-public∘public shape, see [`VmDriver::bool_and`]'s scalar impl above).
+    /// Partitions `a`/`b` element-wise by operand shape: public∘public runs `pp`
+    /// (the exact scalar semantics for whichever op is batching); mixed public∘shared
+    /// multiplies locally via `mul_public` (no communication); shared∘shared batches
+    /// through a single [`arithmetic::mul_vec`] reshare round covering the whole group,
+    /// regardless of how many elements it contains. Results are written back at their
+    /// original indices, so output order matches the input order exactly.
+    fn mul_like(
+        &mut self,
+        a: &[Rep3VmType<F>],
+        b: &[Rep3VmType<F>],
+        pp: impl Fn(&mut PlainDriver<F>, &F, &F) -> Result<F>,
+    ) -> Result<Vec<Rep3VmType<F>>> {
+        debug_assert_eq!(a.len(), b.len());
+        let mut result = vec![Rep3VmType::default(); a.len()];
+        let mut ss_idx = Vec::new();
+        let mut ss_a = Vec::new();
+        let mut ss_b = Vec::new();
+        for (i, (x, y)) in a.iter().zip(b).enumerate() {
+            match (x, y) {
+                (Rep3VmType::Public(x), Rep3VmType::Public(y)) => {
+                    result[i] = pp(&mut self.plain, x, y)?.into();
+                }
+                (Rep3VmType::Public(x), Rep3VmType::Arithmetic(y))
+                | (Rep3VmType::Arithmetic(y), Rep3VmType::Public(x)) => {
+                    result[i] = arithmetic::mul_public(*y, *x).into();
+                }
+                (Rep3VmType::Arithmetic(x), Rep3VmType::Arithmetic(y)) => {
+                    ss_idx.push(i);
+                    ss_a.push(*x);
+                    ss_b.push(*y);
+                }
+            }
+        }
+        if !ss_idx.is_empty() {
+            let muls = arithmetic::mul_vec(&ss_a, &ss_b, self.net0, &mut self.state0)?;
+            for (idx, m) in ss_idx.into_iter().zip(muls) {
+                result[idx] = m.into();
+            }
+        }
+        Ok(result)
+    }
+
+    /// Shared batching core for `Eq`/`Neq`: public∘public runs the plain scalar op;
+    /// mixed public∘shared batches through [`arithmetic::eq_public_many`]; shared∘shared
+    /// batches through [`arithmetic::eq_many`] — each a single communication round for
+    /// its whole group. `Neq` reuses the same grouping and negates the (opened-free)
+    /// result share (`1 - eq`), mirroring the scalar `neq`/`neq_public` impls above.
+    /// Results are written back at their original indices.
+    fn eq_like(
+        &mut self,
+        a: &[Rep3VmType<F>],
+        b: &[Rep3VmType<F>],
+        negate: bool,
+    ) -> Result<Vec<Rep3VmType<F>>> {
+        debug_assert_eq!(a.len(), b.len());
+        let mut result = vec![Rep3VmType::default(); a.len()];
+        let mut mixed_idx = Vec::new();
+        let mut mixed_shared = Vec::new();
+        let mut mixed_public = Vec::new();
+        let mut ss_idx = Vec::new();
+        let mut ss_a = Vec::new();
+        let mut ss_b = Vec::new();
+        for (i, (x, y)) in a.iter().zip(b).enumerate() {
+            match (x, y) {
+                (Rep3VmType::Public(x), Rep3VmType::Public(y)) => {
+                    let r = if negate {
+                        self.plain.neq(x, y)?
+                    } else {
+                        self.plain.eq(x, y)?
+                    };
+                    result[i] = r.into();
+                }
+                (Rep3VmType::Public(p), Rep3VmType::Arithmetic(s))
+                | (Rep3VmType::Arithmetic(s), Rep3VmType::Public(p)) => {
+                    mixed_idx.push(i);
+                    mixed_shared.push(*s);
+                    mixed_public.push(*p);
+                }
+                (Rep3VmType::Arithmetic(x), Rep3VmType::Arithmetic(y)) => {
+                    ss_idx.push(i);
+                    ss_a.push(*x);
+                    ss_b.push(*y);
+                }
+            }
+        }
+        if !mixed_idx.is_empty() {
+            let mut eqs = arithmetic::eq_public_many(
+                &mixed_shared,
+                &mixed_public,
+                self.net0,
+                &mut self.state0,
+            )?;
+            if negate {
+                for e in eqs.iter_mut() {
+                    *e = arithmetic::sub_public_by_shared(F::one(), *e, self.id);
+                }
+            }
+            for (idx, e) in mixed_idx.into_iter().zip(eqs) {
+                result[idx] = e.into();
+            }
+        }
+        if !ss_idx.is_empty() {
+            let mut eqs = arithmetic::eq_many(&ss_a, &ss_b, self.net0, &mut self.state0)?;
+            if negate {
+                for e in eqs.iter_mut() {
+                    *e = arithmetic::sub_public_by_shared(F::one(), *e, self.id);
+                }
+            }
+            for (idx, e) in ss_idx.into_iter().zip(eqs) {
+                result[idx] = e.into();
+            }
+        }
+        Ok(result)
     }
 }
 
@@ -629,6 +747,74 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
                 mul.double_in_place();
                 mul -= sqrt;
                 Ok(mul.into())
+            }
+        }
+    }
+
+    /// Batches communication per op-kind: `Mul`/`BoolAnd` via a shared multiplication
+    /// batching helper (one `mul_vec` reshare round for the shared∘shared group) and
+    /// `Eq`/`Neq` via a shared equality batching helper (one `eq_many`/`eq_public_many`
+    /// round per relevant group). Every other op has no vectorized primitive in
+    /// mpc-core's Rep3 module and falls back to the scalar loop (the trait default),
+    /// applied element-wise here.
+    fn bin_many(
+        &mut self,
+        op: BinOp,
+        a: &[Self::VmType],
+        b: &[Self::VmType],
+    ) -> Result<Vec<Self::VmType>> {
+        debug_assert_eq!(a.len(), b.len());
+        match op {
+            BinOp::Mul => self.mul_like(a, b, |plain, x, y| plain.mul(x, y)),
+            BinOp::BoolAnd => self.mul_like(a, b, |plain, x, y| plain.bool_and(x, y)),
+            BinOp::Eq => self.eq_like(a, b, false),
+            BinOp::Neq => self.eq_like(a, b, true),
+            _ => a
+                .iter()
+                .zip(b)
+                .map(|(x, y)| apply_bin(self, op, x, y))
+                .collect(),
+        }
+    }
+
+    /// Batched cmux with a single (possibly shared) condition. A public condition
+    /// resolves the whole vector to `truthy`/`falsy` directly (no communication,
+    /// matching the scalar impl above). A shared condition promotes any public operands
+    /// to trivial shares and runs one [`arithmetic::cmux_vec`] reshare round for the
+    /// whole vector, instead of one round per element.
+    fn cmux_many(
+        &mut self,
+        cond: &Self::VmType,
+        truthy: &[Self::VmType],
+        falsy: &[Self::VmType],
+    ) -> Result<Vec<Self::VmType>> {
+        debug_assert_eq!(truthy.len(), falsy.len());
+        match cond {
+            Rep3VmType::Public(cond) => {
+                assert!(cond.is_one() || cond.is_zero());
+                if cond.is_one() {
+                    Ok(truthy.to_vec())
+                } else {
+                    Ok(falsy.to_vec())
+                }
+            }
+            Rep3VmType::Arithmetic(cond) => {
+                let truthy_shares = truthy
+                    .iter()
+                    .map(|t| self.to_share(t))
+                    .collect::<Result<Vec<_>>>()?;
+                let falsy_shares = falsy
+                    .iter()
+                    .map(|f| self.to_share(f))
+                    .collect::<Result<Vec<_>>>()?;
+                let res = arithmetic::cmux_vec(
+                    *cond,
+                    &truthy_shares,
+                    &falsy_shares,
+                    self.net0,
+                    &mut self.state0,
+                )?;
+                Ok(res.into_iter().map(Rep3VmType::Arithmetic).collect())
             }
         }
     }
