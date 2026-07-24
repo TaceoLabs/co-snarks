@@ -136,8 +136,8 @@ use crate::frontend::get_size_from_size_option;
 use ark_ff::PrimeField;
 use circom_compiler::intermediate_representation::ir_interface::{
     AddressType, AssertBucket, BranchBucket, CallBucket, CreateCmpBucket, Instruction,
-    LocationRule, LoopBucket, OperatorType, ReturnBucket, ReturnType, StoreBucket, ValueBucket,
-    ValueType,
+    LocationRule, LogBucket, LogBucketArg, LoopBucket, OperatorType, ReturnBucket, ReturnType,
+    StoreBucket, ValueBucket, ValueType,
 };
 use circom_mpc_vm2::isa::{Addr, Dst, ISrc, Instr, RetSrc, Src};
 use eyre::{Result, bail, eyre};
@@ -166,11 +166,7 @@ fn lower_stmt_inner<F: PrimeField>(cg: &mut CodeGen<'_, F>, inst: &Instruction) 
     match inst {
         Instruction::Store(sb) => lower_store(cg, sb),
         Instruction::Assert(ab) => lower_assert(cg, ab),
-        // Mirrors the old compiler: with debug instructions disabled, logs are dropped
-        // outright rather than lowered (`circom-mpc-compiler/src/lib.rs:596-611`) — so
-        // only bail when they'd actually need to produce code.
-        Instruction::Log(_) if !cg.config.debug => Ok(()),
-        Instruction::Log(_) => bail!("not yet lowered: Log"),
+        Instruction::Log(lb) => lower_log(cg, lb),
         Instruction::Branch(bb) => lower_branch(cg, bb),
         Instruction::Loop(lb) => lower_loop(cg, lb),
         Instruction::CreateCmp(cb) => lower_create_cmp(cg, cb),
@@ -297,6 +293,41 @@ fn lower_assert<F: PrimeField>(cg: &mut CodeGen<'_, F>, ab: &AssertBucket) -> Re
     cg.instrs.push(Instr::Assert {
         cond,
         line: u32::try_from(ab.line)?,
+    });
+    Ok(())
+}
+
+/// Lowers a [`LogBucket`] (old `handle_log_bucket`, `circom-mpc-compiler/src/lib.rs:
+/// 596-611`): dropped outright when `debug` is off, exactly like [`lower_assert`] — old's
+/// own `handle_log_bucket` never even reaches its `for` loop over `argsprint` in that case,
+/// so this crate mirrors that by returning early rather than lowering (and then discarding)
+/// every argument. When `debug` is on, each [`LogBucketArg`] lowers independently — a
+/// `LogExp` as an ordinary expression, immediately followed by [`Instr::Log`] to append its
+/// value to the runtime log buffer; a `LogStr` needs no expression lowering at all, just
+/// [`Instr::LogStr`] with its string-table index straight through (the table itself is
+/// already threaded into [`circom_mpc_vm2::program::CompiledProgram::strings`] by
+/// `codegen::mod`'s `c_producer.get_string_table()` — see that module) — before a single
+/// trailing [`Instr::LogFlush`] flushes the accumulated buffer, tagged with the bucket's
+/// source line.
+fn lower_log<F: PrimeField>(cg: &mut CodeGen<'_, F>, lb: &LogBucket) -> Result<()> {
+    if !cg.config.debug {
+        return Ok(());
+    }
+    for arg in &lb.argsprint {
+        match arg {
+            LogBucketArg::LogExp(exp) => {
+                let src = expr::lower_expr(cg, exp)?;
+                cg.instrs.push(Instr::Log { src });
+            }
+            LogBucketArg::LogStr(idx) => {
+                cg.instrs.push(Instr::LogStr {
+                    id: u32::try_from(*idx)?,
+                });
+            }
+        }
+    }
+    cg.instrs.push(Instr::LogFlush {
+        line: u32::try_from(lb.line)?,
     });
     Ok(())
 }

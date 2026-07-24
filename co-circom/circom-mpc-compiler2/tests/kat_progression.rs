@@ -1287,3 +1287,125 @@ fn component_array_uses_isrc_reg_for_loop_indexed_cmp() {
         Some((0..3u64).map(|k| Fr::from((10 + k) * (k + 1))).collect())
     );
 }
+
+/// The Task 9 milestone test, ported from the old stack-based compiler's own
+/// `test_release_build_creates_no_assert_and_logs` (`circom-mpc-compiler/src/lib.rs:
+/// 809-865`), adapted to the new register ISA: a debug build of `log_and_asserts.circom`
+/// (`log(...)` plus `assert(...)`, both inside `Multiplier2`'s single template) must
+/// contain `Instr::Assert`/`Instr::Log`/`Instr::LogFlush` (this circuit's one `log` call
+/// takes a string-literal argument followed by an expression, so `Instr::LogStr` and
+/// `Instr::Log` both appear); a release build (`CompilerConfig::release()`, `debug:
+/// false`) must contain none of the four log/assert instruction kinds at all.
+#[test]
+fn debug_release_build_parity_for_log_and_asserts() {
+    let debug_config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..CompilerConfig::default()
+    };
+    let release_config = CompilerConfig::release();
+
+    let debug = CoCircomCompiler::<Bn254>::parse(
+        "../../test_vectors/WitnessExtension/tests/log_and_asserts.circom".to_owned(),
+        debug_config,
+    )
+    .expect("debug config compiles");
+    let release = CoCircomCompiler::<Bn254>::parse(
+        "../../test_vectors/WitnessExtension/tests/log_and_asserts.circom".to_owned(),
+        release_config,
+    )
+    .expect("release config compiles");
+
+    assert!(debug.functions.is_empty());
+    assert_eq!(debug.templates.len(), 1);
+    let debug_instrs = &debug.templates[debug.main.0 as usize].instrs;
+    assert!(
+        debug_instrs
+            .iter()
+            .any(|i| matches!(i, Instr::Assert { .. })),
+        "debug build must contain Instr::Assert"
+    );
+    assert!(
+        debug_instrs.iter().any(|i| matches!(i, Instr::Log { .. })),
+        "debug build must contain Instr::Log"
+    );
+    assert!(
+        debug_instrs
+            .iter()
+            .any(|i| matches!(i, Instr::LogStr { .. })),
+        "debug build must contain Instr::LogStr"
+    );
+    assert!(
+        debug_instrs
+            .iter()
+            .any(|i| matches!(i, Instr::LogFlush { .. })),
+        "debug build must contain Instr::LogFlush"
+    );
+
+    assert!(release.functions.is_empty());
+    assert_eq!(release.templates.len(), 1);
+    let release_instrs = &release.templates[release.main.0 as usize].instrs;
+    assert!(
+        !release_instrs
+            .iter()
+            .any(|i| matches!(i, Instr::Assert { .. })),
+        "release build must not contain Instr::Assert"
+    );
+    assert!(
+        !release_instrs
+            .iter()
+            .any(|i| matches!(i, Instr::Log { .. })),
+        "release build must not contain Instr::Log"
+    );
+    assert!(
+        !release_instrs
+            .iter()
+            .any(|i| matches!(i, Instr::LogStr { .. })),
+        "release build must not contain Instr::LogStr"
+    );
+    assert!(
+        !release_instrs
+            .iter()
+            .any(|i| matches!(i, Instr::LogFlush { .. })),
+        "release build must not contain Instr::LogFlush"
+    );
+}
+
+/// Unblocks the last real KAT candidate whose only prior blocker was the `Log` gap:
+/// `Winner(10, 7)` (`test_vectors/WitnessExtension/tests/winner.circom`) instantiates a
+/// component array (`commit[nInputs]`) inside a conforming loop plus one more
+/// subcomponent (`highest`), and ends with a single top-level `log("win guess: ",
+/// win_guess);` — everything else it needs (loops, component arrays, `EqN` via `===`) was
+/// already covered by earlier tasks.
+#[test]
+fn winner_kat() {
+    common::assert_kats("winner", CompilerConfig::default());
+}
+
+/// Unblocks `shared_control_flow` (`test_vectors/WitnessExtension/tests/
+/// shared_control_flow.circom`): a deeply nested `if`/`else if`/`else` chain across
+/// several *functions* (`someValue`/`anotherFunction`/`evenAnotherFunction`), whose
+/// condition (`t`, the template parameter passed as `y`) is a plain public value at
+/// runtime under the `PlainDriver` this harness uses — so every `Instr::SharedIf` this
+/// compiles to takes the ordinary (non-predicated) jump path, not the cmux/predicated-merge
+/// path (see `codegen::stmt::lower_branch`'s doc comment and
+/// `branch_if_else_shared_condition_takes_predicated_merge_path` above for where that
+/// other path *is* exercised). One dead branch (`y != 4`) contains a `log(...)` plus an
+/// `assert(0)` that never actually executes for this KAT's inputs — confirming a
+/// never-taken `Log`/`Assert` lowers and simply never fires, not just that a taken one
+/// does.
+#[test]
+fn shared_control_flow_kat() {
+    common::assert_kats("shared_control_flow", CompilerConfig::default());
+}
+
+/// The array-valued companion to [`shared_control_flow_kat`]:
+/// `shared_control_flow_arrays.circom` is the same nested `if`/`else if`/`else` control
+/// flow across functions, but every function returns a 2-element array instead of a
+/// scalar (`ReturnBucket` with `with_size == 2`, `RetSrc::Var`/`Instr::StoreN` on the
+/// caller side — see `codegen::stmt::lower_return`'s doc comment), including one function
+/// (`evenAnotherFunction`) returning a `var`-array literal instead of a computed one. Same
+/// dead `log(...)`/`assert(0)` branch as above, now returning `[0, 0]` instead of `0`.
+#[test]
+fn shared_control_flow_arrays_kat() {
+    common::assert_kats("shared_control_flow_arrays", CompilerConfig::default());
+}
