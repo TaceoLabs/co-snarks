@@ -515,3 +515,204 @@ fn loop_nested_mixed_unroll_inner_only() {
         .unwrap();
     assert_eq!(finalized.get_output("out"), Some(expected));
 }
+
+/// Counts how many instructions across every template match `matches`, for the Task 6
+/// shape assertions below (mirroring [`jmp_count`]'s pattern for `Instr::SharedIf`/
+/// `SharedElse`/`SharedEnd`).
+fn instr_count(program: &CompiledProgram<Fr>, matches: impl Fn(&Instr) -> bool) -> usize {
+    program
+        .templates
+        .iter()
+        .flat_map(|t| t.instrs.iter())
+        .filter(|i| matches(i))
+        .count()
+}
+
+/// The Task 6 "with else" milestone test (`tests/circuits/branch_if_else.circom`):
+/// correctness in both directions of the branch (`a < 5` and `a >= 5`) plus the
+/// instruction-shape assertion the brief calls for — exactly one `SharedIf`, one
+/// `SharedElse`, and one `SharedEnd`, matching `codegen::stmt::lower_branch`'s documented
+/// "with else" layout exactly (no stray extra branch-related instructions).
+#[test]
+fn branch_if_else_end_to_end() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/branch_if_else.circom", config).unwrap(),
+    );
+
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::SharedIf { .. })),
+        1
+    );
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::SharedElse { .. })),
+        1,
+        "an if/else must emit exactly one SharedElse"
+    );
+    assert_eq!(instr_count(&program, |i| matches!(i, Instr::SharedEnd)), 1);
+
+    for (a, expected) in [(3u64, 103u64), (7u64, 207u64)] {
+        let inputs = BTreeMap::from([("a".to_string(), Fr::from(a))]);
+        let finalized = PlainWitnessExtension::new_plain(program.clone(), VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+        assert_eq!(
+            finalized.get_output("out"),
+            Some(vec![Fr::from(expected)]),
+            "a={a}"
+        );
+    }
+}
+
+/// The Task 6 "without else" milestone test (`tests/circuits/branch_no_else.circom`):
+/// correctness in both directions plus the brief-mandated instruction-shape assertion —
+/// `SharedIf` and `SharedEnd` are both present, but **no** `SharedElse` appears anywhere
+/// in the compiled program at all, confirming the else-less elision (see
+/// `codegen::stmt::lower_branch`'s doc comment: this saves a Rep3 communication round
+/// when the condition turns out to be shared at runtime).
+#[test]
+fn branch_no_else_end_to_end() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/branch_no_else.circom", config).unwrap(),
+    );
+
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::SharedIf { .. })),
+        1
+    );
+    assert_eq!(instr_count(&program, |i| matches!(i, Instr::SharedEnd)), 1);
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::SharedElse { .. })),
+        0,
+        "an else-less if must never emit a SharedElse instruction"
+    );
+
+    for (a, expected) in [(3u64, 100u64), (7u64, 0u64)] {
+        let inputs = BTreeMap::from([("a".to_string(), Fr::from(a))]);
+        let finalized = PlainWitnessExtension::new_plain(program.clone(), VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+        assert_eq!(
+            finalized.get_output("out"),
+            Some(vec![Fr::from(expected)]),
+            "a={a}"
+        );
+    }
+}
+
+/// The Task 6 nested-composition milestone test (`tests/circuits/loop_with_branch.circom`):
+/// a conforming loop containing a `Branch` that only reads (never writes) the induction
+/// variable, run at both `unroll.threshold: 0` (rolled — the `Branch` lowers inside
+/// `lower_conforming_loop`'s per-iteration body) and `usize::MAX` (fully unrolled — the
+/// `Branch` lowers once per re-lowered iteration inside `try_unroll_loop`); both must
+/// agree on the same correct witness, confirming loops and branches compose through
+/// ordinary recursion with no special-casing needed on either side.
+#[test]
+fn loop_with_branch_composes_rolled_and_unrolled() {
+    for threshold in [0, usize::MAX] {
+        let config = CompilerConfig {
+            simplification: SimplificationLevel::O2(usize::MAX),
+            unroll: UnrollConfig { threshold },
+            ..Default::default()
+        };
+        let program = Arc::new(
+            CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_with_branch.circom", config)
+                .unwrap(),
+        );
+
+        let mut inputs = BTreeMap::new();
+        for k in 0..5u64 {
+            inputs.insert(format!("a[{k}]"), Fr::from(10 + k));
+        }
+        let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+        let expected: Vec<Fr> = (0..5u64)
+            .map(|i| Fr::from(10 + i + if i < 3 { 1 } else { 2 }))
+            .collect();
+        assert_eq!(
+            finalized.get_output("out"),
+            Some(expected),
+            "threshold={threshold}"
+        );
+    }
+}
+
+/// The real-KAT milestone test for Task 6 (branch lowering): `ControlFlow(4)`
+/// (`test_vectors/WitnessExtension/tests/control_flow.circom`) is the brief's own named
+/// candidate — nested loops (`for`/`while`) each containing `if`/`else`/`else if` chains,
+/// plus one else-less `if` buried inside a triple-nested loop (`if (i == 2) { ... }` with
+/// no `else`), and no subcomponents or functions anywhere in its template graph, so it's
+/// the first real KAT-backed circuit to exercise `codegen::stmt::lower_branch` end to end
+/// rather than a purpose-built fixture.
+#[test]
+fn control_flow_kat() {
+    common::assert_kats("control_flow", CompilerConfig::default());
+}
+
+/// A real KAT circuit exercising the "with else" branch layout via a different source
+/// mechanism than an explicit `if`/`else` statement: `IsZero`'s `inv <-- in!=0 ? 1/in :
+/// 0;` is a ternary (`InlineSwitchOp`), which circom's own front end desugars into a real
+/// `IfThenElse` statement with both arms assigning the same variable (see the `circom`
+/// compiler's `hir::sugar_cleaner::rhe_switch_case`) — i.e. a genuine `BranchBucket` with
+/// a non-empty `else_branch`, not a special ternary opcode. Confirmed newly compiling end
+/// to end by this task (previously bailed on the `Branch` this ternary desugars to); no
+/// subcomponents or functions.
+#[test]
+fn iszero_kat() {
+    common::assert_kats("iszero", CompilerConfig::default());
+}
+
+/// Additional componentless, function-free KAT circuits confirmed (empirically, by
+/// compiling every candidate in `test_vectors/WitnessExtension/kats/`) to now compile end
+/// to end with branches plus everything prior. None of these actually use an `if`/`else`/
+/// ternary themselves (they're plain straight-line/loop field and curve arithmetic), but
+/// per the brief's "add every other KAT circuit that now compiles ... without
+/// functions/subcomponents", they round out real-circuit coverage for this task's
+/// combined feature set.
+#[test]
+fn babyadd_tester_kat() {
+    common::assert_kats("babyadd_tester", CompilerConfig::default());
+}
+
+#[test]
+fn babycheck_test_kat() {
+    common::assert_kats("babycheck_test", CompilerConfig::default());
+}
+
+#[test]
+fn edwards2montgomery_kat() {
+    common::assert_kats("edwards2montgomery", CompilerConfig::default());
+}
+
+#[test]
+fn montgomery2edwards_kat() {
+    common::assert_kats("montgomery2edwards", CompilerConfig::default());
+}
+
+#[test]
+fn montgomeryadd_kat() {
+    common::assert_kats("montgomeryadd", CompilerConfig::default());
+}
+
+#[test]
+fn montgomerydouble_kat() {
+    common::assert_kats("montgomerydouble", CompilerConfig::default());
+}
+
+#[test]
+fn mimc_test_kat() {
+    common::assert_kats("mimc_test", CompilerConfig::default());
+}
+
+#[test]
+fn mimc_sponge_test_kat() {
+    common::assert_kats("mimc_sponge_test", CompilerConfig::default());
+}

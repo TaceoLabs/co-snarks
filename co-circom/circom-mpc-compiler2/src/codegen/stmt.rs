@@ -2,12 +2,12 @@
 //! function body (as opposed to nested inside an expression — see
 //! [`crate::codegen::expr`]).
 //!
-//! This task implements [`StoreBucket`], [`AssertBucket`], and [`LoopBucket`]; every
-//! other statement kind is a `bail!` stub filled in by its own task (see the module-level
-//! docs of `circom-mpc-compiler2` for the task breakdown). `Assert` is included here —
-//! ahead of its own task — because it's the *only* IR shape that can carry an `Eq`
-//! operator of size > 1: circom's front end lowers every `a === b`
-//! (`ConstraintEquality`) straight to `AssertBucket { evaluate: ComputeBucket { op:
+//! This module implements [`StoreBucket`], [`AssertBucket`], [`LoopBucket`], and
+//! [`BranchBucket`] lowering; every other statement kind is a `bail!` stub filled in by
+//! its own task (see the module-level docs of `circom-mpc-compiler2` for the task
+//! breakdown). `Assert` is included here — ahead of its own task — because it's the
+//! *only* IR shape that can carry an `Eq` operator of size > 1: circom's front end lowers
+//! every `a === b` (`ConstraintEquality`) straight to `AssertBucket { evaluate: ComputeBucket { op:
 //! Eq(length), .. } }` regardless of array size (see the `circom` compiler's
 //! `translate_constraint_equality`), so without this, this task's `EqN` lowering (see
 //! [`crate::codegen::expr`]) would be unreachable by any real circuit. The lowering
@@ -110,14 +110,33 @@
 //! [`Env`](crate::codegen::env::Env) that the outer iteration's [`Binding::ConstUsize`]
 //! bind/restore pair already disciplines) — nothing about the outer loop's unrolling
 //! needs to know or care whether the inner one also unrolls.
+//!
+//! ## Branches ([`lower_branch`])
+//!
+//! An `if`/`else` compiles to a [`BranchBucket`]; see [`lower_branch`]'s own doc comment
+//! for the two instruction layouts (with and without an `else`) and the else-less
+//! `SharedElse`-elision obligation. Unlike loops, there is no public/shared split at
+//! *codegen* time: the target ISA's `Instr::SharedIf`/`SharedElse`/`SharedEnd` (see
+//! `circom_mpc_vm2::isa`) defer that decision to the VM at runtime, so lowering a branch
+//! needs no knowledge of whether its condition turns out to be public or shared. Nested
+//! branches and loops compose through ordinary recursion — a `Branch` in a loop body (or
+//! vice versa) is just another top-level statement handed to [`lower_stmt`] — with two
+//! places that had to become explicitly `Branch`-aware to stay sound now that a loop body
+//! can contain one: [`instruction_writes_slot`] (a conditional store to the induction
+//! variable inside either arm makes the enclosing loop non-conforming, exactly like an
+//! unconditional one would) and [`lower_branch`]'s own [`CodeGen::last_const_store`]
+//! handling (a constant tracked while lowering one arm must not be trusted as the
+//! definite value once the branch has been lowered, since which arm actually ran at
+//! runtime is unknowable at compile time — see [`lower_branch`]'s doc comment for the
+//! join discipline, which mirrors [`lower_loop`]'s own before/after clears).
 use super::env::Binding;
 use super::index::static_const_slot;
 use super::{CodeGen, expr, instr_kind_name};
 use crate::frontend::get_size_from_size_option;
 use ark_ff::PrimeField;
 use circom_compiler::intermediate_representation::ir_interface::{
-    AddressType, AssertBucket, Instruction, LocationRule, LoopBucket, OperatorType, StoreBucket,
-    ValueBucket, ValueType,
+    AddressType, AssertBucket, BranchBucket, Instruction, LocationRule, LoopBucket, OperatorType,
+    StoreBucket, ValueBucket, ValueType,
 };
 use circom_mpc_vm2::isa::{Addr, Dst, ISrc, Instr, Src};
 use eyre::{Result, bail};
@@ -151,7 +170,7 @@ fn lower_stmt_inner<F: PrimeField>(cg: &mut CodeGen<'_, F>, inst: &Instruction) 
         // only bail when they'd actually need to produce code.
         Instruction::Log(_) if !cg.config.debug => Ok(()),
         Instruction::Log(_) => bail!("not yet lowered: Log"),
-        Instruction::Branch(_) => bail!("not yet lowered: Branch"),
+        Instruction::Branch(bb) => lower_branch(cg, bb),
         Instruction::Loop(lb) => lower_loop(cg, lb),
         Instruction::CreateCmp(_) => bail!("not yet lowered: CreateCmp"),
         Instruction::Call(_) => bail!("not yet lowered: Call"),
@@ -209,6 +228,94 @@ fn lower_assert<F: PrimeField>(cg: &mut CodeGen<'_, F>, ab: &AssertBucket) -> Re
         cond,
         line: u32::try_from(ab.line)?,
     });
+    Ok(())
+}
+
+/// Lowers a [`BranchBucket`] (an `if`/`else if`/`else` chain — circom's front end
+/// desugars an `else if` into a nested `Branch` inside the outer one's `else_branch`, so
+/// no special handling for chains is needed here): the layout mirrors the old
+/// stack-based compiler's `handle_branch_bucket` (`circom-mpc-compiler/src/lib.rs:
+/// 451-466`) at the *source*-semantics level, but the target ISA does the runtime
+/// public-vs-shared dispatch itself (see `circom_mpc_vm2::isa::Instr`'s
+/// `SharedIf`/`SharedElse`/`SharedEnd` docs), so this lowering only needs to emit one of
+/// the two layouts below and backpatch their targets (see [`CodeGen::patch`]) — no
+/// separate "is this condition shared" check at codegen time.
+///
+/// With an else branch:
+/// ```text
+///    <cond>  → r
+///    SharedIf  { r, else_target: E }
+///    <truthy>
+///    SharedElse { end_target: X }
+/// E: <falsy>
+/// X: SharedEnd
+/// ```
+///
+/// Without an else branch — **no `SharedElse` is emitted at all** (`branch_bucket.
+/// else_branch` is simply an empty `InstructionList`, not a synthesized empty block — a
+/// direct read of circom's own IR): `else_target` points straight at `SharedEnd`,
+/// eliding the whole `SharedElse` instruction. This is a Plan-1 obligation, not a
+/// cosmetic shortcut: a shared condition otherwise costs one extra Rep3 communication
+/// round toggling predication to run a no-op falsy arm.
+/// ```text
+///    <cond> → r
+///    SharedIf { r, else_target: X }
+///    <truthy>
+/// X: SharedEnd
+/// ```
+///
+/// Also a control-flow join for [`CodeGen::last_const_store`], mirroring [`lower_loop`]'s
+/// own before/after clears (see its doc comment): whichever arm actually runs at runtime
+/// is unknowable at compile time, so (1) tracking accumulated while lowering the truthy
+/// arm must not leak into the falsy arm's lowering — reset to the pre-branch snapshot
+/// before lowering it — and (2) nothing tracked by *either* arm can be trusted once both
+/// are done, so the map is cleared unconditionally on exit regardless of whether there
+/// even was a falsy arm (the truthy arm alone might not have run either).
+fn lower_branch<F: PrimeField>(cg: &mut CodeGen<'_, F>, bb: &BranchBucket) -> Result<()> {
+    let cond_mark = cg.regs.mark();
+    let cond = expr::lower_expr(cg, &bb.cond)?;
+    let if_idx = cg.instrs.len();
+    cg.instrs.push(Instr::SharedIf {
+        cond,
+        else_target: u32::MAX,
+    });
+    cg.regs.free_to(cond_mark);
+
+    let pre_branch_const_store = cg.last_const_store.clone();
+    for inst in bb.if_branch.iter() {
+        lower_stmt(cg, inst)?;
+    }
+
+    if bb.else_branch.is_empty() {
+        // Else-less elision (see the doc comment above): `else_target` points straight at
+        // `SharedEnd` — no `SharedElse` in the instruction stream at all.
+        let end_target = u32::try_from(cg.instrs.len())?;
+        cg.patch(if_idx, end_target);
+        cg.instrs.push(Instr::SharedEnd);
+    } else {
+        let else_idx = cg.instrs.len();
+        cg.instrs.push(Instr::SharedElse {
+            end_target: u32::MAX,
+        });
+        let else_target = u32::try_from(cg.instrs.len())?;
+        cg.patch(if_idx, else_target);
+
+        // Control-flow join, part 1: the falsy arm must start lowering from the same
+        // tracking state the truthy arm did, not from whatever the truthy arm's own
+        // stores left behind.
+        cg.last_const_store = pre_branch_const_store;
+        for inst in bb.else_branch.iter() {
+            lower_stmt(cg, inst)?;
+        }
+
+        let end_target = u32::try_from(cg.instrs.len())?;
+        cg.patch(else_idx, end_target);
+        cg.instrs.push(Instr::SharedEnd);
+    }
+
+    // Control-flow join, part 2: neither arm is guaranteed to have run, so nothing either
+    // one tracked can be trusted afterwards.
+    cg.last_const_store.clear();
     Ok(())
 }
 
@@ -390,10 +497,11 @@ fn detect_conforming<F: PrimeField>(
     };
     let step = const_as_u32(cg, step_vb)?;
 
-    // `slot` must be written nowhere else in the body (recursing into nested loop
-    // bodies — see `instruction_writes_slot`; a nested `Branch`'s bodies aren't
-    // inspected, since any loop body containing a `Branch` fails to lower regardless,
-    // Branch not being implemented yet — see `lower_stmt_inner`).
+    // `slot` must be written nowhere else in the body (recursing into nested loop bodies
+    // *and* both arms of any nested `Branch` — see `instruction_writes_slot`: a loop whose
+    // body conditionally re-stores its own induction variable inside an `if`/`else` is
+    // non-conforming, exactly like an unconditional extra store would be, since which arm
+    // runs — and hence whether the extra store happens — isn't known until runtime).
     let other_writes = lb.body[..lb.body.len() - 1]
         .iter()
         .any(|inst| instruction_writes_slot(inst, slot));
@@ -416,10 +524,12 @@ fn detect_conforming<F: PrimeField>(
 }
 
 /// Returns whether `inst` writes to variable slot `slot`, recursing into nested loop
-/// bodies (still executed within the outer loop's iteration) but not into `Branch`/
-/// `Call`/`CreateCmp` (any loop body containing one of those fails to lower regardless —
-/// see [`lower_stmt_inner`] — so it's moot whether conformance is judged correctly for a
-/// dead-end case).
+/// bodies (still executed within the outer loop's iteration) and into *both* arms of a
+/// nested `Branch` (a store to `slot` inside either arm is a potential write to it —
+/// conservatively "writes" regardless of which arm actually runs at runtime, since that's
+/// unknowable at compile time) but not into `Call`/`CreateCmp` (any loop body containing
+/// one of those fails to lower regardless — see [`lower_stmt_inner`] — so it's moot
+/// whether conformance is judged correctly for a dead-end case).
 fn instruction_writes_slot(inst: &Instruction, slot: usize) -> bool {
     match inst {
         Instruction::Store(sb) => {
@@ -431,6 +541,15 @@ fn instruction_writes_slot(inst: &Instruction, slot: usize) -> bool {
             .body
             .iter()
             .any(|inst| instruction_writes_slot(inst, slot)),
+        Instruction::Branch(bb) => {
+            bb.if_branch
+                .iter()
+                .any(|inst| instruction_writes_slot(inst, slot))
+                || bb
+                    .else_branch
+                    .iter()
+                    .any(|inst| instruction_writes_slot(inst, slot))
+        }
         _ => false,
     }
 }
@@ -520,10 +639,15 @@ fn estimate_unrolled_body_calls() -> usize {
 /// it once into a scratch instruction buffer and counting.
 ///
 /// A single representative iteration (`sample`) is enough to estimate every iteration:
-/// this crate doesn't lower `Branch` yet (see [`lower_stmt_inner`]), so nothing in a loop
-/// body's control flow can depend on the induction variable's concrete value — every
-/// iteration lowers to the same instruction *count*, only the embedded constant operands
-/// differ.
+/// [`lower_branch`] always lowers a `Branch`'s condition check plus *both* its arms (bar
+/// elision of `SharedElse` itself when there's no else arm — see its doc comment)
+/// unconditionally into the instruction stream, regardless of the condition's compile-time
+/// or runtime value — the target ISA (`circom_mpc_vm2::isa::Instr`'s
+/// `SharedIf`/`SharedElse`/`SharedEnd`) defers the public-vs-shared dispatch to the VM at
+/// *runtime*, so no lowered instruction is ever compile-time control-flow-conditional on
+/// the induction variable's concrete value. Every iteration therefore lowers to the same
+/// instruction *count* no matter what a nested `Branch`'s condition folds to, only the
+/// embedded constant operands differ.
 ///
 /// Side effects of the estimation lowering are undone before returning:
 /// [`CodeGen::instrs`] is swapped out for an empty scratch buffer and restored;
@@ -896,6 +1020,99 @@ mod tests {
                 }),
             ))],
         }
+    }
+
+    /// A hand-built [`Instruction::Branch`] (an `if`/`else` — or else-less, when
+    /// `else_branch` is empty): `cond`'s actual content is irrelevant to every test that
+    /// uses this helper (none of them ever lower it), so callers pass a trivial
+    /// placeholder value.
+    fn branch(
+        cond: Instruction,
+        if_branch: Vec<Instruction>,
+        else_branch: Vec<Instruction>,
+    ) -> Instruction {
+        Instruction::Branch(BranchBucket {
+            line: 0,
+            message_id: 0,
+            cond: Box::new(cond),
+            if_branch: if_branch.into_iter().map(Box::new).collect(),
+            else_branch: else_branch.into_iter().map(Box::new).collect(),
+        })
+    }
+
+    /// The Task 6 carried-over regression test (from the Task 4 review): a loop whose body
+    /// conditionally re-stores its own induction variable inside a `Branch` arm must be
+    /// judged non-conforming, exactly as if the store were unconditional — before this
+    /// task, [`instruction_writes_slot`] didn't recurse into `Branch` bodies at all (safe
+    /// only because `Branch` lowering used to bail outright), so this exact shape would
+    /// have been silently misjudged conforming.
+    #[test]
+    fn loop_with_conditional_induction_store_in_branch_is_non_conforming() {
+        let mut cg = cg();
+        // constants[0] = step (1), constants[1] = bound (5), constants[2] = an arbitrary
+        // value stored to `slot` from inside the branch's `if` arm.
+        cg.constants = vec![
+            ark_bn254::Fr::from(1u64),
+            ark_bn254::Fr::from(5u64),
+            ark_bn254::Fr::from(99u64),
+        ];
+        let slot = 0;
+        cg.last_const_store.insert(slot, 0);
+
+        let mut lb = synthetic_loop(slot, 1, 0);
+        let conditional_store = branch(
+            field_const(2), // placeholder cond, never lowered by this test
+            vec![store_var(slot, field_const(2))],
+            vec![],
+        );
+        lb.body.insert(0, Box::new(conditional_store));
+
+        assert!(
+            detect_conforming(&cg, &lb).is_none(),
+            "a Branch arm that stores to the induction variable must make the loop \
+             non-conforming, exactly like an unconditional extra store would"
+        );
+    }
+
+    /// The Task 6 carried-over regression test (from the Task 4 review): a constant store
+    /// made *inside* a `Branch` arm must not be trusted by [`detect_conforming`] as the
+    /// definite pre-loop value of a following loop's induction variable — which arm
+    /// actually ran at runtime is unknowable at compile time, so [`lower_branch`]'s
+    /// control-flow join must invalidate [`CodeGen::last_const_store`] rather than let the
+    /// arm's tracked constant leak out as if it were unconditionally established.
+    #[test]
+    fn branch_arm_const_store_does_not_feed_following_loop_conformance() {
+        let mut cg = cg();
+        // constants[0] = step (1), constants[1] = bound (5), constants[2] = the value the
+        // branch's `if` arm stores into `slot`.
+        cg.constants = vec![
+            ark_bn254::Fr::from(1u64),
+            ark_bn254::Fr::from(5u64),
+            ark_bn254::Fr::from(7u64),
+        ];
+        let slot = 0;
+        // Simulates an earlier, real `slot = 0` initialization before the branch.
+        cg.last_const_store.insert(slot, 0);
+
+        let branch_inst = branch(
+            field_const(2), // placeholder cond, never lowered by this test
+            vec![store_var(slot, field_const(2))],
+            vec![],
+        );
+        lower_stmt(&mut cg, &branch_inst).unwrap();
+
+        assert!(
+            !cg.last_const_store.contains_key(&slot),
+            "a constant store inside a Branch arm must not remain trusted after the \
+             branch — the control-flow join must invalidate it"
+        );
+
+        let lb = synthetic_loop(slot, 1, 0);
+        assert!(
+            detect_conforming(&cg, &lb).is_none(),
+            "detect_conforming must not use a Branch arm's constant store as `init` for a \
+             loop following the branch, since the arm may not have run at runtime"
+        );
     }
 
     /// The regression test for the trailing resync `Mov` in [`try_unroll_loop`] — the

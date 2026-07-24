@@ -345,16 +345,23 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             .map_err(|_| eyre!("template/function body exceeds 255 integer registers"))
     }
 
-    /// Backpatches a previously emitted jump's placeholder target now that it's known —
-    /// the "add a `patch(idx, target)` helper" the loop-lowering brief asks for: a loop's
-    /// head emits `Instr::JmpIfZero` with a placeholder target (`u32::MAX`) before the
-    /// body's length (hence the loop's exit index) is known; once the whole loop has been
-    /// lowered, this fixes it up. `idx` must index an already-emitted
-    /// [`Instr::Jmp`]/[`Instr::JmpIfZero`] in [`Self::instrs`] — anything else is a codegen
-    /// bug, not a user-triggerable error, so this panics rather than returning `Result`.
+    /// Backpatches a previously emitted jump/branch instruction's placeholder target now
+    /// that it's known — the "add a `patch(idx, target)` helper" the loop-lowering brief
+    /// asks for: a loop's head emits `Instr::JmpIfZero` with a placeholder target
+    /// (`u32::MAX`) before the body's length (hence the loop's exit index) is known; once
+    /// the whole loop has been lowered, this fixes it up. [`stmt::lower_branch`] (Task 6)
+    /// reuses the same helper for `Instr::SharedIf`'s `else_target` and
+    /// `Instr::SharedElse`'s `end_target` — same placeholder-then-backpatch discipline,
+    /// just different field names on the target instruction. `idx` must index an
+    /// already-emitted `Jmp`/`JmpIfZero`/`SharedIf`/`SharedElse` in [`Self::instrs`] —
+    /// anything else is a codegen bug, not a user-triggerable error, so this panics rather
+    /// than returning `Result`.
     pub(crate) fn patch(&mut self, idx: usize, target: u32) {
         match &mut self.instrs[idx] {
-            Instr::Jmp { target: t } | Instr::JmpIfZero { target: t, .. } => *t = target,
+            Instr::Jmp { target: t }
+            | Instr::JmpIfZero { target: t, .. }
+            | Instr::SharedIf { else_target: t, .. }
+            | Instr::SharedElse { end_target: t } => *t = target,
             other => unreachable!("CodeGen::patch called on non-jump instruction {other:?}"),
         }
     }
