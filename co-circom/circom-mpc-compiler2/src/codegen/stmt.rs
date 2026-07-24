@@ -647,10 +647,18 @@ fn lower_branch<F: PrimeField>(cg: &mut CodeGen<'_, F>, bb: &BranchBucket) -> Re
     let cond_mark = cg.regs.mark();
     let cond = expr::lower_expr(cg, &bb.cond)?;
     let if_idx = cg.instrs.len();
-    cg.instrs.push(Instr::SharedIf {
-        cond,
-        else_target: u32::MAX,
-    });
+    let branch = if expr::is_known_bit(&bb.cond) {
+        Instr::SharedIfBit {
+            cond,
+            else_target: u32::MAX,
+        }
+    } else {
+        Instr::SharedIf {
+            cond,
+            else_target: u32::MAX,
+        }
+    };
+    cg.instrs.push(branch);
     cg.regs.free_to(cond_mark);
 
     let pre_branch_const_store = cg.last_const_store.clone();
@@ -1312,6 +1320,7 @@ fn fuse_unrolled_binn<F: PrimeField>(cg: &mut CodeGen<'_, F>, unrolled_start: us
             Instr::Jmp { .. }
                 | Instr::JmpIfZero { .. }
                 | Instr::SharedIf { .. }
+                | Instr::SharedIfBit { .. }
                 | Instr::SharedElse { .. }
         )
     }) {

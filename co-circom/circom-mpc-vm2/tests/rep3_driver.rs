@@ -283,6 +283,73 @@ where
     ]
 }
 
+/// A compiler-proven boolean condition must not pay for Circom's general
+/// zero/non-zero normalization. The two programs differ only in `SharedIf` versus
+/// `SharedIfBit`; with a genuinely shared bit, the latter performs no network IO at
+/// branch entry while the former runs the Rep3 `neq(cond, 0)` protocol.
+#[test]
+fn rep3_shared_if_bit_skips_condition_normalization_messages() {
+    fn program(bit: bool) -> CompiledProgram<Fr> {
+        let branch = if bit {
+            Instr::SharedIfBit {
+                cond: Src::Signal(Addr::Const(0)),
+                else_target: 1,
+            }
+        } else {
+            Instr::SharedIf {
+                cond: Src::Signal(Addr::Const(0)),
+                else_target: 1,
+            }
+        };
+        common::single_template_program(
+            vec![branch, Instr::SharedEnd, Instr::Return],
+            0,
+            0,
+            0,
+            1,
+            0,
+            2,
+        )
+    }
+
+    let mut rng = rand::thread_rng();
+    let cond_shares = rep3::share_field_elements(&[Fr::from(1u64)], &mut rng);
+
+    let body = |cond: Rep3PrimeFieldShare<Fr>| {
+        move |net0: &CountingNetwork, net1: &CountingNetwork| -> (usize, usize) {
+            let mut driver = Rep3Driver::new(net0, net1, A2BType::default()).expect("driver");
+
+            let run = |program: CompiledProgram<Fr>, driver: &mut Rep3Driver<'_, Fr, _>| {
+                let mut machine = Machine::new(&program, driver, VMConfig::default()).unwrap();
+                machine.signals[program.main_input_list[0].offset] = Rep3VmType::Arithmetic(cond);
+                let start = net0.message_count();
+                machine.run_main().unwrap();
+                net0.message_count() - start
+            };
+
+            let normalized = run(program(false), &mut driver);
+            let already_bit = run(program(true), &mut driver);
+            (normalized, already_bit)
+        }
+    };
+
+    let results = run_3_parties_counting(
+        body(cond_shares[0][0]),
+        body(cond_shares[1][0]),
+        body(cond_shares[2][0]),
+    );
+    for (party, (normalized, already_bit)) in results.into_iter().enumerate() {
+        assert!(
+            normalized > already_bit,
+            "party {party}: SharedIf used {normalized} messages, SharedIfBit used {already_bit}"
+        );
+        assert_eq!(
+            already_bit, 0,
+            "party {party}: a top-level SharedIfBit should require no network messages"
+        );
+    }
+}
+
 /// (a)/(b): `bin_many` batched correctness AND order preservation, in one pass.
 /// Interleaved public/shared operand shapes on both sides — `a` is
 /// `[pub, shared, pub, shared]`, `b` is `[shared, shared, pub, pub]`, exactly the

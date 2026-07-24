@@ -46,7 +46,8 @@
 //! - **Predication**: circom `if` branches on a secret condition must still execute
 //!   *both* arms (revealing which arm ran would leak information about the secret),
 //!   selecting the right result with an oblivious multiplexer at the end. This is
-//!   compiled to [`isa::Instr::SharedIf`]/[`isa::Instr::SharedElse`]/[`isa::Instr::SharedEnd`]:
+//!   compiled to [`isa::Instr::SharedIf`]/[`isa::Instr::SharedIfBit`]/
+//!   [`isa::Instr::SharedElse`]/[`isa::Instr::SharedEnd`]:
 //!   a public condition still short-circuits to one branch, but a shared condition
 //!   pushes a predication level, runs both arms, and merges writes to `var`/`signal`
 //!   destinations via [`driver::VmDriver::cmux`] — register (`Reg`) writes are never

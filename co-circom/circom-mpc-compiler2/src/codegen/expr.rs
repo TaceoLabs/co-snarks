@@ -16,6 +16,30 @@ use circom_compiler::intermediate_representation::ir_interface::{
 use circom_mpc_vm2::isa::{Addr, BinOp, Instr, Src};
 use eyre::{Result, bail};
 
+/// Whether evaluating `inst` is guaranteed to produce a field element in `{0, 1}`.
+///
+/// This deliberately recognizes only operators whose result is boolean by definition.
+/// Loads are not tracked across stores, even if their runtime value happens to be a bit:
+/// a false negative merely retains `SharedIf`'s normalization, while a false positive
+/// would feed a non-bit condition into MPC boolean primitives.
+pub(super) fn is_known_bit(inst: &Instruction) -> bool {
+    let Instruction::Compute(cb) = inst else {
+        return false;
+    };
+    matches!(
+        &cb.op,
+        OperatorType::LesserEq
+            | OperatorType::GreaterEq
+            | OperatorType::Lesser
+            | OperatorType::Greater
+            | OperatorType::Eq(_)
+            | OperatorType::NotEq
+            | OperatorType::BoolOr
+            | OperatorType::BoolAnd
+            | OperatorType::BoolNot
+    )
+}
+
 /// Lowers an IR expression, returning the operand that holds its value.
 ///
 /// This does **not** necessarily materialize a register: a constant lowers straight to

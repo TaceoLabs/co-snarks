@@ -378,6 +378,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             Instr::Jmp { target: t }
             | Instr::JmpIfZero { target: t, .. }
             | Instr::SharedIf { else_target: t, .. }
+            | Instr::SharedIfBit { else_target: t, .. }
             | Instr::SharedElse { end_target: t } => *t = target,
             other => unreachable!("CodeGen::patch called on non-jump instruction {other:?}"),
         }

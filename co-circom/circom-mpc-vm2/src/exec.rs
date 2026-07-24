@@ -647,16 +647,21 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                     Flow::Continue
                 }
             }
-            Instr::SharedIf { cond, else_target } => {
+            Instr::SharedIf { cond, else_target } | Instr::SharedIfBit { cond, else_target } => {
                 // mirrors old mpc_vm.rs:562-576 (`MpcOpCode::If`).
                 let c =
                     read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?.clone();
                 if self.driver.is_shared(&c)? {
-                    // Circom conditions use zero/non-zero truthiness. Protocol cmux and
-                    // boolean-composition primitives require an actual bit, so normalize
-                    // a shared field value before it enters the predication stack.
-                    let zero = self.driver.public_zero();
-                    let c = self.driver.neq(&c, &zero)?;
+                    // Circom conditions use zero/non-zero truthiness, while protocol cmux
+                    // and boolean-composition primitives require a bit. Comparisons and
+                    // boolean operators already produce one, and `SharedIfBit` preserves
+                    // that fact from codegen so Rep3 can skip an expensive redundant neq.
+                    let c = if matches!(inst, Instr::SharedIfBit { .. }) {
+                        c
+                    } else {
+                        let zero = self.driver.public_zero();
+                        self.driver.neq(&c, &zero)?
+                    };
                     pred.push_shared(self.driver, c)?;
                     Flow::Continue
                 } else {

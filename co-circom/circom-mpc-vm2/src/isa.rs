@@ -239,6 +239,15 @@ pub enum Instr {
         /// Target of the else branch.
         else_target: u32,
     },
+    /// Branch entry for a condition already known to be a bit. Semantics match
+    /// [`Self::SharedIf`], but a shared condition skips the zero/non-zero normalization
+    /// protocol because the compiler guarantees it is already `0` or `1`.
+    SharedIfBit {
+        /// Boolean condition to test.
+        cond: Src,
+        /// Target of the else branch.
+        else_target: u32,
+    },
     /// End of truthy branch. Public level: jump to `end_target` (which holds `SharedEnd`).
     /// Shared level: toggle the condition, fall into the else branch.
     SharedElse {
@@ -380,6 +389,9 @@ impl fmt::Display for Instr {
             }
             Instr::SharedIf { cond, else_target } => {
                 write!(f, "SHAREDIF {:?}, {}", cond, else_target)
+            }
+            Instr::SharedIfBit { cond, else_target } => {
+                write!(f, "SHAREDIFBIT {:?}, {}", cond, else_target)
             }
             Instr::SharedElse { end_target } => {
                 write!(f, "SHAREDELSE {}", end_target)

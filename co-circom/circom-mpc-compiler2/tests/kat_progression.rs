@@ -768,8 +768,13 @@ fn branch_if_else_end_to_end() {
     );
 
     assert_eq!(
-        instr_count(&program, |i| matches!(i, Instr::SharedIf { .. })),
+        instr_count(&program, |i| matches!(i, Instr::SharedIfBit { .. })),
         1
+    );
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::SharedIf { .. })),
+        0,
+        "a comparison result must not be normalized again at runtime"
     );
     assert_eq!(
         instr_count(&program, |i| matches!(i, Instr::SharedElse { .. })),
@@ -872,6 +877,16 @@ fn descending_loop_inside_shared_branch_has_fixed_control_flow() {
         0,
         "a loop in a potentially shared arm must use a fixed unrolled schedule"
     );
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::SharedIf { .. })),
+        1,
+        "a direct field-valued condition must retain zero/non-zero normalization"
+    );
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::SharedIfBit { .. })),
+        0,
+        "a direct signal load is not statically known to be a bit"
+    );
 
     let cond_offset = program
         .main_input_list
@@ -922,8 +937,13 @@ fn branch_no_else_end_to_end() {
     );
 
     assert_eq!(
-        instr_count(&program, |i| matches!(i, Instr::SharedIf { .. })),
+        instr_count(&program, |i| matches!(i, Instr::SharedIfBit { .. })),
         1
+    );
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::SharedIf { .. })),
+        0,
+        "a comparison result must not be normalized again at runtime"
     );
     assert_eq!(instr_count(&program, |i| matches!(i, Instr::SharedEnd)), 1);
     assert_eq!(
@@ -1262,8 +1282,10 @@ fn func_loop_and_branch_end_to_end() {
                  just like a template's would"
             );
             assert!(
-                f.instrs.iter().any(|i| matches!(i, Instr::SharedIf { .. })),
-                "the function's own if/else must lower to SharedIf, just like a \
+                f.instrs
+                    .iter()
+                    .any(|i| matches!(i, Instr::SharedIfBit { .. })),
+                "the function's comparison-based if/else must lower to SharedIfBit, just like a \
                  template's would"
             );
         }
