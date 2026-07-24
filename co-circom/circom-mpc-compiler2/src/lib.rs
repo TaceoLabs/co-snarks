@@ -2,9 +2,16 @@
 //! This crate defines a [`Compiler`](CoCircomCompiler), which compiles `.circom` files into
 //! bytecode for the register-based `circom-mpc-vm2` MPC-VM.
 //!
-//! This is the successor of [`circom-mpc-compiler`](https://docs.rs/circom-mpc-compiler),
-//! targeting `circom-mpc-vm2`'s three-address instruction set
-//! ([`circom_mpc_vm2::isa::Instr`]) instead of the old stack-based bytecode.
+//! This is the successor of [`circom-mpc-compiler`](https://docs.rs/circom-mpc-compiler): the
+//! two crates live side by side (`circom-mpc-compiler` is untouched and still the
+//! production path), and `circom-mpc-compiler2` is the target of ongoing migration work.
+//! Where the old crate lowers straight to `circom-mpc-vm`'s stack-based bytecode, this
+//! crate targets `circom-mpc-vm2`'s three-address instruction set
+//! ([`circom_mpc_vm2::isa::Instr`]) and hands back a [`CompiledProgram`] — the type
+//! `circom-mpc-vm2` executes directly (see [`CoCircomCompiler::parse`] and
+//! `circom-mpc-vm2`'s own crate docs for the execution half of the pipeline). Like the
+//! circom compiler it wraps, this crate is licensed `GPL-3.0`; downstream code that only
+//! depends on `circom-mpc-vm2` (i.e. runs already-compiled programs) is unaffected.
 //!
 //! The compiler is generic over a [`Pairing`](https://docs.rs/ark-ec/latest/ark_ec/pairing/trait.Pairing.html).
 //! Currently, we support the curves `bn254` and `bls12-381`.
@@ -14,6 +21,67 @@
 //!     * [`CoCircomCompiler::get_public_inputs`] - to obtain the name of the public inputs of the circuit
 //!
 //! To configure the compiler, have a look at [`CompilerConfig`].
+//!
+//! # Pipeline
+//!
+//! [`CoCircomCompiler::parse`] runs two stages, split across [`frontend`] and the
+//! (private) `codegen` module:
+//!
+//! 1. **circom front half** ([`frontend`]): parsing, type checking, and constraint
+//!    generation, almost verbatim from the old `circom-mpc-compiler`'s front half —
+//!    everything up to (but not including) bytecode lowering. This runs the circom
+//!    compiler's own parser/type-checker/constraint-generation crates and produces a
+//!    circom `Circuit` (one IR "bucket" tree per template/function) plus the output
+//!    signal name -> `(offset, size)` mapping ([`frontend::OutputMapping`]).
+//! 2. **codegen** (`codegen::compile`): lowers that IR into a [`CompiledProgram`], in two
+//!    phases. First, every template/function is assigned a stable id and the
+//!    constant/string tables are parsed, so that calls and subcomponent instantiations
+//!    can resolve their targets regardless of declaration order. Second, each body is
+//!    walked bucket by bucket and lowered to [`circom_mpc_vm2::isa::Instr`]s; three
+//!    cooperating techniques do the actual translation work:
+//!    - **Symbolic-index lowering** (`codegen::index`): every array/subcomponent address
+//!      sub-tree is folded as far as possible at compile time into a constant, an affine
+//!      expression in one integer register, or (only if neither applies) a runtime
+//!      computation — so most array accesses cost a single addressing mode rather than
+//!      an index computed on every access.
+//!    - **Per-loop unroll heuristic** (`codegen::stmt`): a loop with a statically-known,
+//!      constant trip count is either unrolled (each iteration's body emitted
+//!      separately, letting its indices fold to constants) or compiled to a rolled form
+//!      with its induction variable mirrored into an integer register for affine
+//!      addressing, depending on [`UnrollConfig`] (below). Loops that don't match the
+//!      conservative "simple ascending counter" shape always take the rolled path.
+//!    - **Register allocation** (`codegen::regalloc`): field and integer registers are
+//!      handed out by a bump-pointer allocator with stack-discipline freeing (registers
+//!      are freed back to a mark, never individually), which is enough because
+//!      expression lowering always frees operand registers as soon as the consuming
+//!      instruction is emitted. The high-water mark reached becomes the frame's
+//!      register-file size in the resulting [`circom_mpc_vm2::program::TemplateCode`]/
+//!      [`circom_mpc_vm2::program::FunctionCode`].
+//!
+//! # Example
+//!
+//! Compiling always reads a `.circom` file from disk, so this example is `no_run` (it is
+//! still compile-checked). See `circom-mpc-vm2`'s crate docs for a runnable example that
+//! hand-assembles an equivalent [`CompiledProgram`] directly.
+//!
+//! ```no_run
+//! use ark_bn254::{Bn254, Fr};
+//! use circom_mpc_compiler2::{CoCircomCompiler, CompilerConfig};
+//! use circom_mpc_vm2::api::PlainWitnessExtension;
+//! use circom_mpc_vm2::program::VMConfig;
+//! use std::sync::Arc;
+//!
+//! // circuit.circom: `template Mul2() { signal input a; signal input b;
+//! //                  signal output c; c <== a * b; } component main = Mul2();`
+//! let program = CoCircomCompiler::<Bn254>::parse("circuit.circom", CompilerConfig::new())
+//!     .expect("compilation failed");
+//!
+//! let wex = PlainWitnessExtension::new_plain(Arc::new(program), VMConfig::default());
+//! let finalized = wex
+//!     .run_with_flat(vec![Fr::from(6u64), Fr::from(7u64)], 0)
+//!     .expect("run_with_flat");
+//! assert_eq!(finalized.get_output("c"), Some(vec![Fr::from(42u64)]));
+//! ```
 use ark_ec::pairing::Pairing;
 use circom_mpc_vm2::program::CompiledProgram;
 use circom_types::traits::CircomArkworksPairingBridge;
