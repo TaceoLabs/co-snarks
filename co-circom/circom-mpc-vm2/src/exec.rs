@@ -550,7 +550,6 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                     &mut self.signals,
                     comp_offset,
                     dst,
-                    0,
                     v,
                 )?;
                 Flow::Continue
@@ -566,20 +565,20 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 Flow::Continue
             }
             Instr::StoreN { dst, src, n } => {
-                // Consecutive predicated writes.
-                for k in 0..*n as usize {
-                    let v = frame.regs[*src as usize + k].clone();
-                    write_dst::<F, C>(
-                        self.driver,
-                        &*pred,
-                        frame,
-                        &mut self.signals,
-                        comp_offset,
-                        dst,
-                        k,
-                        v,
-                    )?;
-                }
+                // Consecutive predicated writes, batched through one `cmux_many` call
+                // (see `write_dst_n`) instead of `n` scalar `cmux`s.
+                let vals: Vec<_> = (0..*n as usize)
+                    .map(|k| frame.regs[*src as usize + k].clone())
+                    .collect();
+                write_dst_n::<F, C>(
+                    self.driver,
+                    &*pred,
+                    frame,
+                    &mut self.signals,
+                    comp_offset,
+                    dst,
+                    vals,
+                )?;
                 Flow::Continue
             }
             Instr::BinN { op, dst, a, b, n } => {
@@ -969,11 +968,11 @@ fn read_ret<T: Clone>(frame: &Frame<T>, src: &RetSrc, k: usize) -> T {
     }
 }
 
-/// Write a value to a `Reg`/`Var`/`Signal` destination, offset by `k` (used by
-/// `LoadN`/`StoreN` for element-wise writes; `k = 0` for a scalar `Mov`). This is the
-/// single write path for `Dst`: `Var`/`Signal` writes are predicated by `pred` (cmux'd
-/// against the current value); `Reg` writes never are (temporaries are branch-local).
-#[allow(clippy::too_many_arguments)]
+/// Write a value to a scalar `Reg`/`Var`/`Signal` destination (used by `Mov`; see
+/// `write_dst_n` for the element-wise `LoadN`/`StoreN` counterpart). Together the two
+/// are the single write path for `Dst`: `Var`/`Signal` writes are predicated by `pred`
+/// (cmux'd against the current value); `Reg` writes never are (temporaries are
+/// branch-local).
 fn write_dst<F: PrimeField, C: VmDriver<F>>(
     driver: &mut C,
     pred: &Predication<C::VmType>,
@@ -981,18 +980,17 @@ fn write_dst<F: PrimeField, C: VmDriver<F>>(
     signals: &mut [C::VmType],
     comp_offset: usize,
     dst: &Dst,
-    k: usize,
     val: C::VmType,
 ) -> Result<()> {
     match dst {
-        Dst::Reg(r) => frame.regs[*r as usize + k] = val,
+        Dst::Reg(r) => frame.regs[*r as usize] = val,
         Dst::Var(a) => {
-            let idx = resolve_at(&frame.iregs, a, k);
+            let idx = resolve(&frame.iregs, a);
             let merged = predicated_merge(driver, pred, &frame.vars[idx], val)?;
             frame.vars[idx] = merged;
         }
         Dst::Signal(a) => {
-            let idx = comp_offset + resolve_at(&frame.iregs, a, k);
+            let idx = comp_offset + resolve(&frame.iregs, a);
             let merged = predicated_merge(driver, pred, &signals[idx], val)?;
             signals[idx] = merged;
         }
@@ -1011,6 +1009,67 @@ fn predicated_merge<F: PrimeField, C: VmDriver<F>>(
 ) -> Result<C::VmType> {
     match pred.cond() {
         Some(cond) => driver.cmux(cond, &new, old),
+        None => Ok(new),
+    }
+}
+
+/// Write `n` consecutive values to a `Dst`, starting at its base address (used by
+/// `StoreN`). The batched counterpart of `write_dst`/`predicated_merge`: `Var`/`Signal`
+/// writes are still predicated by `pred`, but merged against the old values through one
+/// `cmux_many` call rather than `n` scalar `cmux`s — this is the other half of the
+/// single-choke-point property (`write_dst` for scalar writes, `write_dst_n` for the
+/// element-wise ones; every `Var`/`Signal` mutation in the VM goes through one of the
+/// two). `Reg` writes are never predicated (temporaries are branch-local).
+fn write_dst_n<F: PrimeField, C: VmDriver<F>>(
+    driver: &mut C,
+    pred: &Predication<C::VmType>,
+    frame: &mut Frame<C::VmType>,
+    signals: &mut [C::VmType],
+    comp_offset: usize,
+    dst: &Dst,
+    vals: Vec<C::VmType>,
+) -> Result<()> {
+    match dst {
+        Dst::Reg(r) => {
+            for (k, v) in vals.into_iter().enumerate() {
+                frame.regs[*r as usize + k] = v;
+            }
+        }
+        Dst::Var(a) => {
+            let idxs: Vec<usize> = (0..vals.len())
+                .map(|k| resolve_at(&frame.iregs, a, k))
+                .collect();
+            let olds: Vec<_> = idxs.iter().map(|&i| frame.vars[i].clone()).collect();
+            let merged = predicated_merge_many(driver, pred, &olds, vals)?;
+            for (i, v) in idxs.into_iter().zip(merged) {
+                frame.vars[i] = v;
+            }
+        }
+        Dst::Signal(a) => {
+            let idxs: Vec<usize> = (0..vals.len())
+                .map(|k| comp_offset + resolve_at(&frame.iregs, a, k))
+                .collect();
+            let olds: Vec<_> = idxs.iter().map(|&i| signals[i].clone()).collect();
+            let merged = predicated_merge_many(driver, pred, &olds, vals)?;
+            for (i, v) in idxs.into_iter().zip(merged) {
+                signals[i] = v;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Batched counterpart of `predicated_merge`: cmux `new` against `old`, elementwise,
+/// under the innermost shared-if condition, if any; otherwise just `new`. Same
+/// new-then-old argument order as `predicated_merge`.
+fn predicated_merge_many<F: PrimeField, C: VmDriver<F>>(
+    driver: &mut C,
+    pred: &Predication<C::VmType>,
+    old: &[C::VmType],
+    new: Vec<C::VmType>,
+) -> Result<Vec<C::VmType>> {
+    match pred.cond() {
+        Some(cond) => driver.cmux_many(cond, &new, old),
         None => Ok(new),
     }
 }

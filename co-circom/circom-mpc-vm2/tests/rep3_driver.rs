@@ -8,6 +8,7 @@ use ark_bn254::Fr;
 use circom_mpc_vm2::api::Rep3WitnessExtension;
 use circom_mpc_vm2::driver::VmDriver;
 use circom_mpc_vm2::drivers::rep3::{Rep3Driver, Rep3VmType};
+use circom_mpc_vm2::exec::Machine;
 use circom_mpc_vm2::isa::*;
 use circom_mpc_vm2::program::{CompiledProgram, VMConfig};
 use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare, conversion::A2BType};
@@ -728,6 +729,121 @@ fn rep3_bin_many_mul_round_count_matches_single_scalar_mul() {
             batched_msgs <= scalar_msgs,
             "party {party}: bin_many(Mul) over {n} shared pairs used {batched_msgs} messages, \
              more than a single scalar mul's {scalar_msgs}"
+        );
+    }
+}
+
+/// Round-count assertion, at the `Machine`/`Instr` level: a predicated `StoreN{n:8}`
+/// under a genuinely shared condition — the real `write_dst_n`/`cmux_many` path, driven
+/// through an actual VM program rather than a direct driver call — must not use more
+/// network messages than a single scalar `cmux`. Both bottom out in exactly one
+/// reshare round (`arithmetic::cmux_vec` vs. `mul`'s reshare), so batching 8 predicated
+/// stores into one costs no more than 1.
+///
+/// Signal layout (component-relative addresses; global index = comp.offset(1) + addr):
+/// `[0]=1, [1..9]=out (8 elements, addr 0..8), [9]=cond (addr 8), [10..18]=a (addr
+/// 9..17)`. The program: `LoadN` gathers `a` into regs, a `SharedIf` on `cond` guards a
+/// `StoreN{n:8}` writing `out = a`, no `else` body.
+#[test]
+fn rep3_predicated_storen_round_count_matches_single_scalar_cmux() {
+    let mut rng = rand::thread_rng();
+    let n = 8usize;
+    let cond_val = Fr::from(1u64);
+    let a_vals: Vec<Fr> = (0..n as u64).map(|i| Fr::from(i + 10)).collect();
+    let cond_shares = rep3::share_field_elements(&[cond_val], &mut rng);
+    let a_shares = rep3::share_field_elements(&a_vals, &mut rng);
+    let single_cond = rep3::share_field_elements(&[Fr::from(1u64)], &mut rng);
+    let single_truthy = rep3::share_field_elements(&[Fr::from(4u64)], &mut rng);
+
+    let program = common::single_template_program(
+        vec![
+            Instr::LoadN {
+                dst: 0,
+                src: Src::Signal(Addr::Const(9)),
+                n: n as u32,
+            },
+            Instr::SharedIf {
+                cond: Src::Signal(Addr::Const(8)),
+                else_target: 3,
+            },
+            Instr::StoreN {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: 0,
+                n: n as u32,
+            },
+            Instr::SharedElse { end_target: 4 },
+            Instr::SharedEnd,
+            Instr::Return,
+        ],
+        n as u16,
+        0,
+        0,
+        (n + 1) as u32,
+        n as u32,
+        2 + 2 * n,
+    );
+
+    let body = move |program: CompiledProgram<Fr>,
+                     cond: Rep3PrimeFieldShare<Fr>,
+                     a: Vec<Rep3PrimeFieldShare<Fr>>,
+                     single_cond: Rep3PrimeFieldShare<Fr>,
+                     single_truthy: Rep3PrimeFieldShare<Fr>| {
+        move |net0: &CountingNetwork, net1: &CountingNetwork| -> (usize, usize) {
+            let mut driver = Rep3Driver::new(net0, net1, A2BType::default()).expect("driver");
+
+            let start = net0.message_count();
+            let cond_vm = Rep3VmType::Arithmetic(single_cond);
+            let truthy_vm = Rep3VmType::Arithmetic(single_truthy);
+            let falsy_vm = Rep3VmType::Public(Fr::from(0u64));
+            driver
+                .cmux(&cond_vm, &truthy_vm, &falsy_vm)
+                .expect("scalar cmux");
+            let scalar_msgs = net0.message_count() - start;
+
+            let mut machine =
+                Machine::new(&program, &mut driver, VMConfig::default()).expect("Machine::new");
+            let info = program.main_input_list[0].clone();
+            machine.signals[info.offset] = Rep3VmType::Arithmetic(cond);
+            for (i, v) in a.into_iter().enumerate() {
+                machine.signals[info.offset + 1 + i] = Rep3VmType::Arithmetic(v);
+            }
+            let start = net0.message_count();
+            machine.run_main().expect("run_main");
+            let batched_msgs = net0.message_count() - start;
+
+            (scalar_msgs, batched_msgs)
+        }
+    };
+
+    let results = run_3_parties_counting(
+        body(
+            program.clone(),
+            cond_shares[0][0],
+            a_shares[0].clone(),
+            single_cond[0][0],
+            single_truthy[0][0],
+        ),
+        body(
+            program.clone(),
+            cond_shares[1][0],
+            a_shares[1].clone(),
+            single_cond[1][0],
+            single_truthy[1][0],
+        ),
+        body(
+            program,
+            cond_shares[2][0],
+            a_shares[2].clone(),
+            single_cond[2][0],
+            single_truthy[2][0],
+        ),
+    );
+
+    for (party, (scalar_msgs, batched_msgs)) in results.into_iter().enumerate() {
+        assert!(
+            batched_msgs <= scalar_msgs,
+            "party {party}: predicated StoreN{{n:{n}}} used {batched_msgs} messages, \
+             more than a single scalar cmux's {scalar_msgs}"
         );
     }
 }
