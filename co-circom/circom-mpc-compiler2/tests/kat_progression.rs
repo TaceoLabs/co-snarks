@@ -512,6 +512,47 @@ fn elementwise_mul_binn_fusion_end_to_end() {
     }
 }
 
+/// Non-unit loop-step end-to-end fixture (Task 7 of the rep3-accel-bench plan):
+/// `tests/circuits/loop_step_gather.circom`'s `for (i = 0; i < 10; i += 3)` is the first
+/// fixture in this suite whose induction variable does not increment by exactly `1` per
+/// iteration. Run at `unroll.threshold: 0` (rolled — `detect_conforming`'s mirrored
+/// `ireg` path, stepping by `3` each `IAdd`) and `usize::MAX` (fully unrolled — each `a[i]`
+/// index folds to a compile-time constant instead), both must gather the same four
+/// elements (`a[0], a[3], a[6], a[9]`, each `+ 1`) into `out`.
+#[test]
+fn loop_step_gather_non_unit_step_both_thresholds() {
+    let a_vals: Vec<u64> = (0..10u64).map(|i| 100 + i).collect();
+    let expected: Vec<Fr> = [0usize, 3, 6, 9]
+        .iter()
+        .map(|&i| Fr::from(a_vals[i] + 1))
+        .collect();
+
+    for threshold in [0, usize::MAX] {
+        let config = CompilerConfig {
+            simplification: SimplificationLevel::O2(usize::MAX),
+            unroll: UnrollConfig { threshold },
+            ..Default::default()
+        };
+        let program = Arc::new(
+            CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_step_gather.circom", config)
+                .unwrap(),
+        );
+
+        let mut inputs = BTreeMap::new();
+        for (i, v) in a_vals.iter().enumerate() {
+            inputs.insert(format!("a[{i}]"), Fr::from(*v));
+        }
+        let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+        assert_eq!(
+            finalized.get_output("out"),
+            Some(expected.clone()),
+            "threshold={threshold}"
+        );
+    }
+}
+
 /// The Task 5 BinN-fusion real-KAT test: `winner` (`test_vectors/WitnessExtension/tests/
 /// winner.circom`, already a proven KAT — see `winner_kat` above) happens to contain an
 /// unrolled elementwise loop (inside its `UniqueHighestValWithId` library component) that
