@@ -466,9 +466,8 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             .iter()
             .any(|x| matches!(x, ShamirVmType::Arithmetic(_)))
         {
-            let inputs_len = inputs.len();
             let poseidon = Poseidon2::<_, T, 5>::default();
-            let mut precomp = poseidon.precompute_shamir(inputs_len, self.net, &mut self.state)?;
+            let mut precomp = poseidon.precompute_shamir(1, self.net, &mut self.state)?;
 
             let mut iter = inputs.into_iter();
             let mut state: [ShamirPrimeFieldShare<F>; T] = std::array::from_fn(|_| {
