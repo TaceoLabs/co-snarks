@@ -1003,8 +1003,10 @@ dependencies = [
  "co-circom-types",
  "eyre",
  "mpc-core",
+ "mpc-net",
  "num-bigint 0.4.6",
  "num-traits",
+ "rand 0.8.6",
  "serde",
  "tracing",
 ]

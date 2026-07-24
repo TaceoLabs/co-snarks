@@ -3,11 +3,13 @@
 //! [`FinalizedWitnessExtension`].
 use crate::driver::VmDriver;
 use crate::drivers::plain::PlainDriver;
+use crate::drivers::rep3::Rep3Driver;
 use crate::exec::Machine;
 use crate::program::{CompiledProgram, InputInfo, VMConfig};
 use ark_ff::PrimeField;
 use co_circom_types::SharedWitness;
 use eyre::{Result, bail};
+use mpc_net::Network;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -102,6 +104,24 @@ impl<F: PrimeField> PlainWitnessExtension<F> {
     /// Convenience constructor for local plain execution.
     pub fn new_plain(program: Arc<CompiledProgram<F>>, config: VMConfig) -> Self {
         Self::new(program, PlainDriver::default(), config)
+    }
+}
+
+/// Convenience alias for Rep3 (3-party replicated secret sharing) execution.
+pub type Rep3WitnessExtension<'a, F, N> = WitnessExtension<F, Rep3Driver<'a, F, N>>;
+
+impl<'a, F: PrimeField, N: Network> Rep3WitnessExtension<'a, F, N> {
+    /// Convenience constructor for Rep3 execution: builds the [`Rep3Driver`] (running
+    /// the Rep3 setup handshake over `net0`/`net1`) and wraps it in a
+    /// [`WitnessExtension`].
+    pub fn new_rep3(
+        net0: &'a N,
+        net1: &'a N,
+        program: Arc<CompiledProgram<F>>,
+        config: VMConfig,
+    ) -> Result<Self> {
+        let driver = Rep3Driver::new(net0, net1, config.a2b_type)?;
+        Ok(Self::new(program, driver, config))
     }
 }
 

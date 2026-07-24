@@ -55,7 +55,7 @@ impl<F: PrimeField> PlainDriver<F> {
     /// Shifts `z` so that signed comparisons can be done with plain field-element `Ord`.
     /// See [`negative_one`].
     #[inline(always)]
-    fn signed_shift(&self, z: &F) -> F {
+    pub(crate) fn signed_shift(&self, z: &F) -> F {
         *z - self.negative_one
     }
 
@@ -63,6 +63,13 @@ impl<F: PrimeField> PlainDriver<F> {
     #[inline(always)]
     fn is_negative(&self, x: &F) -> bool {
         *x >= self.negative_one
+    }
+
+    /// The cached `(p + 1) / 2` signed-comparison boundary (see [`negative_one`]),
+    /// exposed so other drivers (e.g. the Rep3 driver) can shift their own shares the
+    /// same way without recomputing it.
+    pub(crate) fn negative_one_boundary(&self) -> F {
+        self.negative_one
     }
 }
 
