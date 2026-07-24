@@ -95,7 +95,20 @@ pub(crate) fn compile<F: PrimeField>(
                 .c_producer
                 .io_map
                 .get(&templ.id)
-                .map(|defs| defs.iter().map(|d| d.offset as u32).collect())
+                .map(|defs| {
+                    defs.iter()
+                        .map(|d| {
+                            u32::try_from(d.offset).map_err(|_| {
+                                eyre!(
+                                    "signal mapping offset {} overflows u32 in template {}",
+                                    d.offset,
+                                    templ.name
+                                )
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()
+                })
+                .transpose()?
                 .unwrap_or_default();
             cg.lower_template(templ, mappings)
         })
