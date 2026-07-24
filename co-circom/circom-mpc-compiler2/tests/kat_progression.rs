@@ -567,6 +567,66 @@ fn branch_if_else_end_to_end() {
     }
 }
 
+/// Coverage-gap fix (Task 6 review): every other test in this file drives
+/// `PlainDriver`/`PlainWitnessExtension`, whose `is_shared` is always `false` — no
+/// compiler2-emitted branch code has ever actually run the SHARED half of `Instr::SharedIf`'s
+/// runtime dispatch (`circom_mpc_vm2::exec::Machine::step`'s `self.driver.is_shared(&c)?`
+/// check, which decides between a plain jump and the both-arms-run/cmux "predicated merge"
+/// path). This test reuses the same purpose-built `branch_if_else.circom` fixture as
+/// [`branch_if_else_end_to_end`] above, but drives it with
+/// [`circom_mpc_vm2::drivers::taint::TaintDriver`] (`VmType = Taint<F> { val, shared }`)
+/// with the condition's input signal `a` marked `shared: true`, so `is_shared` genuinely
+/// returns `true` at runtime and the predicated-merge path actually executes.
+///
+/// Drives [`circom_mpc_vm2::exec::Machine`] directly (rather than going through
+/// `WitnessExtension::run_with_flat`/`FinalizedWitnessExtension`) because
+/// `TaintDriver::open`/`to_share` both intentionally return only the bare value — the
+/// whole point of a "finalized" witness is that it's been opened/shared, so it can't carry
+/// a `shared` tag any more. Inspecting the raw post-`run_main` signal is the only way to
+/// observe the taint that the SHARED path is actually responsible for propagating.
+#[test]
+fn branch_if_else_shared_condition_takes_predicated_merge_path() {
+    use circom_mpc_vm2::drivers::taint::{Taint, TaintDriver};
+    use circom_mpc_vm2::exec::Machine;
+
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/branch_if_else.circom", config).unwrap(),
+    );
+
+    let a_offset = program
+        .main_input_list
+        .iter()
+        .find(|info| info.name == "a")
+        .expect("branch_if_else.circom declares input `a`")
+        .offset;
+    let (out_offset, out_size) = program.output_mapping["out"];
+    assert_eq!(out_size, 1);
+
+    for (a, expected) in [(3u64, 103u64), (7u64, 207u64)] {
+        let mut driver = TaintDriver::<Fr>::default();
+        let mut machine = Machine::new(&program, &mut driver, VMConfig::default()).unwrap();
+        machine.signals[a_offset] = Taint {
+            val: Fr::from(a),
+            shared: true,
+        };
+        machine.run_main().unwrap();
+
+        let out = machine.signals[out_offset];
+        assert_eq!(out.val, Fr::from(expected), "a={a}");
+        assert!(
+            out.shared,
+            "a={a}: `out` must come out shared — a shared condition must take the \
+             predicated-merge (cmux) path through both `SharedIf` arms, not a plain \
+             jump that would only taint whichever arm's store the runtime value happens \
+             to run"
+        );
+    }
+}
+
 /// The Task 6 "without else" milestone test (`tests/circuits/branch_no_else.circom`):
 /// correctness in both directions plus the brief-mandated instruction-shape assertion —
 /// `SharedIf` and `SharedEnd` are both present, but **no** `SharedElse` appears anywhere

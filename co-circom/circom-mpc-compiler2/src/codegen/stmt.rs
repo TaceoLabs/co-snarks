@@ -1115,6 +1115,63 @@ mod tests {
         );
     }
 
+    /// Pins [`lower_branch`]'s control-flow join, part 1 — `cg.last_const_store =
+    /// pre_branch_const_store;`, restoring the pre-branch snapshot *before* lowering the
+    /// falsy arm — which the test above doesn't exercise: that one only has a truthy arm,
+    /// so its own `.clear()` on exit (part 2) is what actually protects it, and deleting
+    /// part 1 alone still leaves it passing.
+    ///
+    /// Here the truthy arm const-stores an unrelated value into `slot` (simulating a slot
+    /// reused by some other, non-overlapping-scope variable — completely ordinary for
+    /// circom-assigned var slots), and the falsy arm's *first* statement is a
+    /// conforming-shaped loop over that same `slot`, with `slot` never having been given a
+    /// tracked value before the branch at all. Correct behavior: the falsy arm starts from
+    /// the pre-branch snapshot (no entry for `slot`), so the loop's own `detect_conforming`
+    /// finds no `init` and falls back to the ordinary (non-promoted) lowering — no
+    /// `Instr::ISet` mirror-register initialization anywhere in the output. Without part 1,
+    /// the falsy arm would instead see the truthy arm's leftover `slot -> 42` entry still
+    /// sitting in `last_const_store`, wrongly detect the loop as conforming with that value
+    /// as `init`, and emit an `Instr::ISet` for it.
+    #[test]
+    fn branch_falsy_arm_does_not_inherit_truthy_arm_const_store_for_its_own_loop() {
+        // `threshold: 0` forces the rolled/mirror-promoted path whenever the loop is
+        // detected as conforming (see `lower_conforming_or_unrolled`/`try_unroll_loop`),
+        // so `Instr::ISet` unconditionally marks "detected conforming" here — no trip-count
+        // arithmetic (e.g. a large inherited `init` making `bound <= init` true and trivially
+        // "unrolling" to zero iterations without ever touching `ISet`) can mask the bug.
+        let mut cg = cg_with_threshold(0);
+        // constants[0] = step (1), constants[1] = bound (5), constants[2] = the value the
+        // truthy arm stores into `slot` (unrelated to the falsy arm's loop), constants[3] =
+        // placeholder cond value.
+        cg.constants = vec![
+            ark_bn254::Fr::from(1u64),
+            ark_bn254::Fr::from(5u64),
+            ark_bn254::Fr::from(42u64),
+            ark_bn254::Fr::from(0u64),
+        ];
+        let slot = 0;
+        // Deliberately *no* `cg.last_const_store.insert(..)` here: `slot` has no tracked
+        // pre-branch value, matching a falsy-arm loop variable whose slot is only ever
+        // initialized inside that same (not-yet-lowered) arm.
+
+        let loop_in_else = synthetic_loop(slot, 1, 0);
+        let branch_inst = branch(
+            field_const(3),                        // placeholder cond, never lowered by this test
+            vec![store_var(slot, field_const(2))], // truthy arm: unrelated store to `slot`
+            vec![Instruction::Loop(loop_in_else)],
+        );
+
+        lower_stmt(&mut cg, &branch_inst).unwrap();
+
+        assert!(
+            !cg.instrs.iter().any(|i| matches!(i, Instr::ISet { .. })),
+            "the falsy arm's loop must not inherit the truthy arm's const store to the \
+             same slot and be wrongly promoted to the conforming (mirror-register) form; \
+             expected the non-conforming fallback lowering (no Instr::ISet), got: {:?}",
+            cg.instrs
+        );
+    }
+
     /// The regression test for the trailing resync `Mov` in [`try_unroll_loop`] — the
     /// "highest-risk unrolling scenario": a post-loop *value-position* read of the
     /// induction variable, after the loop has unrolled.
