@@ -14,19 +14,22 @@
 //!     (constants, loads, computed values); [`stmt`] handles statement-position IR
 //!     (stores and — once their tasks land — asserts, branches, loops, calls, ...).
 //!
-//! This task (Task 2) implements straight-line lowering only: `ComputeBucket`,
-//! constant-address `LoadBucket`/`StoreBucket`, and the template body driver. Every
-//! other bucket kind is a `bail!("not yet lowered: ...")` stub, filled in by its own
-//! task — see the crate's task plan for the breakdown.
+//! Every bucket kind not yet lowered by whichever task's turn it is is a
+//! `bail!("not yet lowered: ...")` stub — see the crate's task plan for the breakdown.
+//! As of this crate's function-lowering task, the only remaining stub is subcomponent
+//! addressing (`CreateCmp`/`InputSub`/`OutputSub`/`SubcmpSignal`, Task 8) — every other
+//! bucket kind, including function bodies and calls
+//! ([`CodeGen::lower_function`]/[`stmt::lower_call`]), lowers fully.
 use crate::CompilerConfig;
 use crate::frontend::OutputMapping;
 use ark_ff::PrimeField;
+use circom_compiler::circuit_design::function::FunctionCodeInfo;
 use circom_compiler::circuit_design::template::TemplateCodeInfo;
 use circom_compiler::compiler_interface::Circuit as CircomCircuit;
 use circom_compiler::intermediate_representation::ir_interface::Instruction;
 use circom_mpc_vm2::isa::{FnId, Instr, TemplId};
 use circom_mpc_vm2::program::{CompiledProgram, DebugInfo, FunctionCode, InputInfo, TemplateCode};
-use eyre::{Result, bail, eyre};
+use eyre::{Result, eyre};
 use std::collections::HashMap;
 
 mod env;
@@ -78,17 +81,14 @@ pub(crate) fn compile<F: PrimeField>(
     }
     let strings = circuit.c_producer.get_string_table().clone();
 
-    // Function bodies are skeleton-only until Task 7: rather than silently emitting an
-    // incomplete/empty function table, bail loudly if the circuit actually declares any.
-    if !circuit.functions.is_empty() {
-        bail!(
-            "not yet lowered: {} function(s) defined in this circuit \
-             (full support lands in Task 7)",
-            circuit.functions.len()
-        );
-    }
-
-    // Phase 2: lower every template body.
+    // Phase 2: lower every function body first (templates may `Call` into any of them,
+    // regardless of declaration order — id assignment above already made every `FnId`
+    // resolvable), then every template body.
+    let functions = circuit
+        .functions
+        .iter()
+        .map(|fun| cg.lower_function(fun))
+        .collect::<Result<Vec<_>>>()?;
     let templates = circuit
         .templates
         .iter()
@@ -122,7 +122,7 @@ pub(crate) fn compile<F: PrimeField>(
 
     Ok(CompiledProgram {
         templates,
-        functions: Vec::<FunctionCode>::new(),
+        functions,
         constants: cg.constants,
         strings,
         main,
@@ -400,6 +400,57 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             mappings,
             name_id: self.names.intern(&templ.name),
             symbol_id: self.names.intern(&templ.header),
+        })
+    }
+
+    /// Lowers one function body into a [`FunctionCode`], resetting per-body state first
+    /// (the same [`Self::reset_body`] a template uses — a fresh [`Env`]/[`RegAlloc`]
+    /// pair, and every other per-body tracking field, per its own doc comment).
+    ///
+    /// Unlike [`Self::lower_template`], **no trailing instruction is appended**: a
+    /// template's body always ends in `Instr::Return` because circom's front end never
+    /// emits one itself (a template can fall off the end of its constraints), but a
+    /// function's body always ends in an explicit `return` in valid circom source (the
+    /// front end's own type checker rejects a function with a code path that doesn't
+    /// return), so old's `ReturnSharedIfFun` trailer — the fallback for a function whose
+    /// *only* executed `Ret`s were under a shared predicate — is exactly
+    /// `circom_mpc_vm2::exec::Machine::run_function`'s fall-off-end path (see its own
+    /// doc comment): falling off the end with a non-empty shared-return accumulator
+    /// merges it, matching old byte for byte, with no separate opcode needed here.
+    ///
+    /// `num_params` is computed exactly as old (`circom-mpc-compiler/src/lib.rs:717-721`):
+    /// the sum of every parameter's total element count (a scalar parameter contributes
+    /// `1`, an array parameter the product of its dimensions) — this is also the number
+    /// of `vars[0..num_params]` slots [`circom_mpc_vm2::exec::Machine::run_function`]
+    /// overwrites with the call's arguments before running the body.
+    fn lower_function(&mut self, fun: &FunctionCodeInfo) -> Result<FunctionCode> {
+        self.reset_body();
+        for inst in fun.body.iter() {
+            stmt::lower_stmt(self, inst)?;
+        }
+        let num_field_regs = self
+            .regs
+            .high_water()
+            .try_into()
+            .map_err(|_| eyre!("function {} exceeds 65535 field registers", fun.name))?;
+        let num_int_regs = self
+            .iregs
+            .high_water()
+            .try_into()
+            .map_err(|_| eyre!("function {} exceeds 255 integer registers", fun.name))?;
+        let num_params = u32::try_from(
+            fun.params
+                .iter()
+                .map(|p| p.length.iter().product::<usize>())
+                .sum::<usize>(),
+        )?;
+        Ok(FunctionCode {
+            instrs: std::mem::take(&mut self.instrs),
+            num_field_regs,
+            num_int_regs,
+            num_vars: u32::try_from(fun.max_number_of_vars)?,
+            num_params,
+            name_id: self.names.intern(&fun.name),
         })
     }
 }

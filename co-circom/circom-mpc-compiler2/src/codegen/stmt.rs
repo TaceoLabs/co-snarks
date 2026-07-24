@@ -130,16 +130,16 @@
 //! runtime is unknowable at compile time — see [`lower_branch`]'s doc comment for the
 //! join discipline, which mirrors [`lower_loop`]'s own before/after clears).
 use super::env::Binding;
-use super::index::static_const_slot;
+use super::index::{self, static_const_slot};
 use super::{CodeGen, expr, instr_kind_name};
 use crate::frontend::get_size_from_size_option;
 use ark_ff::PrimeField;
 use circom_compiler::intermediate_representation::ir_interface::{
-    AddressType, AssertBucket, BranchBucket, Instruction, LocationRule, LoopBucket, OperatorType,
-    StoreBucket, ValueBucket, ValueType,
+    AddressType, AssertBucket, BranchBucket, CallBucket, Instruction, LocationRule, LoopBucket,
+    OperatorType, ReturnBucket, ReturnType, StoreBucket, ValueBucket, ValueType,
 };
-use circom_mpc_vm2::isa::{Addr, Dst, ISrc, Instr, Src};
-use eyre::{Result, bail};
+use circom_mpc_vm2::isa::{Addr, Dst, ISrc, Instr, RetSrc, Src};
+use eyre::{Result, bail, eyre};
 
 /// Lowers one top-level body instruction, appending to [`CodeGen::instrs`].
 ///
@@ -173,8 +173,8 @@ fn lower_stmt_inner<F: PrimeField>(cg: &mut CodeGen<'_, F>, inst: &Instruction) 
         Instruction::Branch(bb) => lower_branch(cg, bb),
         Instruction::Loop(lb) => lower_loop(cg, lb),
         Instruction::CreateCmp(_) => bail!("not yet lowered: CreateCmp"),
-        Instruction::Call(_) => bail!("not yet lowered: Call"),
-        Instruction::Return(_) => bail!("not yet lowered: Return"),
+        Instruction::Call(cb) => lower_call(cg, cb),
+        Instruction::Return(rb) => lower_return(cg, rb),
         other => bail!(
             "unexpected {} instruction in statement position",
             instr_kind_name(other)
@@ -185,21 +185,30 @@ fn lower_stmt_inner<F: PrimeField>(cg: &mut CodeGen<'_, F>, inst: &Instruction) 
 /// Lowers a [`StoreBucket`]: a scalar store lowers straight to [`Instr::Mov`]; an array
 /// store lowers its source through [`expr::lower_expr`] (which materializes a
 /// multi-element load into a register range — see [`crate::codegen::expr::lower_load`])
-/// and copies out via [`Instr::StoreN`]. The destination address is resolved first (see
-/// [`compute_dst`]), matching the old stack-based compiler's evaluation order.
+/// and copies out via [`Instr::StoreN`]. The source is lowered *before* the destination
+/// address (see [`compute_dst`]), matching the old stack-based compiler's evaluation
+/// order (`circom-mpc-compiler`'s `handle_store_bucket` pushes the source's opcodes
+/// first, the destination-address opcodes second, only then the `Store*` opcode that
+/// consumes both) — this stayed purely academic through Task 6 (no bucket lowered here
+/// could yet have a side effect for the order to matter), but Task 7's `CallBucket`
+/// lowering means a source expression could in principle hide a side-effecting call;
+/// see [`lower_call`]'s doc comment for why that particular risk doesn't actually
+/// materialize (a call can never appear nested inside a `StoreBucket`'s `src`, or inside
+/// an index sub-tree, under this crate's supported IR shapes) — this ordering is kept
+/// matching old regardless, since it costs nothing and removes the question entirely
+/// rather than resting on that argument.
 ///
 /// Also updates [`CodeGen::last_const_store`] (see [`track_const_store`]) — every store
 /// passes through here, top-level or nested inside a loop body, so this is the single
 /// place that tracking needs to live.
 fn lower_store<F: PrimeField>(cg: &mut CodeGen<'_, F>, sb: &StoreBucket) -> Result<()> {
     let size = get_size_from_size_option(&sb.context.size);
+    let src = expr::lower_expr(cg, &sb.src)?;
     let dst = compute_dst(cg, &sb.dest, &sb.dest_address_type)?;
     track_const_store(cg, &sb.dest_address_type, &dst, &sb.src);
     if size == 1 {
-        let src = expr::lower_expr(cg, &sb.src)?;
         cg.instrs.push(Instr::Mov { dst, src });
     } else {
-        let src = expr::lower_expr(cg, &sb.src)?;
         let src_reg = match src {
             Src::Reg(r) => r,
             other => {
@@ -227,6 +236,198 @@ fn lower_assert<F: PrimeField>(cg: &mut CodeGen<'_, F>, ab: &AssertBucket) -> Re
     cg.instrs.push(Instr::Assert {
         cond,
         line: u32::try_from(ab.line)?,
+    });
+    Ok(())
+}
+
+/// Lowers a [`ReturnBucket`] (old `handle_return_bucket`, `circom-mpc-compiler/src/lib.rs:
+/// 476-503`) to [`Instr::Ret`]: this is only ever reached inside a function body (a
+/// template's `body` never contains one — circom's front end only emits `Return`
+/// buckets, [`Instruction::Return`], for functions, matching the old compiler's own
+/// `Return`/`ReturnFun` split), so no template-vs-function check is needed here — the
+/// target ISA's own `Ret`/`Return` split is enforced at *runtime* by `circom_mpc_vm2::
+/// exec::Machine::step`'s `StepCtx` instead.
+///
+/// `with_size == 1`: the value is lowered as an ordinary expression; if that already
+/// resolves to a var-slot address ([`Src::Var`], a bare variable load with no
+/// computation), the address passes straight through as [`RetSrc::Var`] with no extra
+/// instruction (functions never see [`Src::Signal`] — they cannot read circuit signals
+/// at all); anything else (a computed [`Src::Reg`], or a literal [`Src::Const`], which
+/// gets one `Mov` to materialize it into a register first) becomes [`RetSrc::Reg`].
+///
+/// `with_size > 1`: the value is always a `Load` of a variable array (old's own
+/// `panic!("Another way for multiple return vals???")` on anything else, old :494-500,
+/// confirms the front end never produces another shape) — this crate evaluates its
+/// address through the ordinary symbolic evaluator ([`index::eval_index`]) instead of
+/// the old compiler's panicky match-and-unwrap chain (old :482-491), which additionally
+/// means a computed (`Dynamic`) return-array address is supported here, not just a
+/// literal slot.
+fn lower_return<F: PrimeField>(cg: &mut CodeGen<'_, F>, rb: &ReturnBucket) -> Result<()> {
+    if rb.with_size == 1 {
+        let src = expr::lower_expr(cg, &rb.value)?;
+        let ret_src = match src {
+            Src::Var(addr) => RetSrc::Var(addr),
+            Src::Reg(r) => RetSrc::Reg(r),
+            Src::Const(_) => {
+                let dst = cg.alloc_freg()?;
+                cg.instrs.push(Instr::Mov {
+                    dst: Dst::Reg(dst),
+                    src,
+                });
+                RetSrc::Reg(dst)
+            }
+            Src::Signal(_) => {
+                bail!("function return of a signal value (functions cannot read signals)")
+            }
+        };
+        cg.instrs.push(Instr::Ret { src: ret_src, n: 1 });
+        return Ok(());
+    }
+
+    let Instruction::Load(load_bucket) = rb.value.as_ref() else {
+        bail!(
+            "multi-value return (with_size={}) expects a Load, got {}",
+            rb.with_size,
+            instr_kind_name(&rb.value)
+        );
+    };
+    if !matches!(load_bucket.address_type, AddressType::Variable) {
+        bail!("multi-value return expects a Variable load, got a non-Variable load");
+    }
+    let LocationRule::Indexed { location, .. } = &load_bucket.src else {
+        bail!("multi-value return expects an Indexed location, got Mapped");
+    };
+    let addr = index::eval_index(cg, location)?.to_addr();
+    cg.instrs.push(Instr::Ret {
+        src: RetSrc::Var(addr),
+        n: u32::try_from(rb.with_size)?,
+    });
+    Ok(())
+}
+
+/// Lowers a [`CallBucket`] (old `handle_call_bucket`, `circom-mpc-compiler/src/lib.rs:
+/// 505-594`): every argument is evaluated into a fresh, consecutive register block
+/// (`args_start..args_start+args_n`, reserved atomically via
+/// [`CodeGen::alloc_freg_n`]) — see [`lower_call_arg`] for how each argument (scalar or
+/// array) lands in its slot; this contiguous-block-up-front approach is what replaces
+/// the old compiler's last-opcode-patching hack (old :514-535), which instead lowered
+/// each argument generically and then rewrote whichever single-element load opcode that
+/// had just emitted into its multi-element counterpart in place.
+///
+/// `Instr::CallFn` follows, then the results are stored via the ordinary
+/// [`compute_dst`]/`Instr::Mov`/`Instr::StoreN` path — exactly like [`lower_store`],
+/// just fed from the call's freshly allocated `ret` register block instead of an
+/// arbitrary expression.
+///
+/// `ReturnType::Intermediate` (a call used as an operand *inside* another expression,
+/// e.g. `f(a) + 1`) is old's own `todo!()` (`circom-mpc-compiler/src/lib.rs:537`) — this
+/// crate keeps that parity and bails with a clear message instead of panicking. This is
+/// also what makes [`lower_store`]'s src-before-dst evaluation-order question moot for
+/// now: with `Intermediate` unsupported, a `Call` can never appear nested inside
+/// another bucket's expression tree at all — [`expr::lower_expr`] and
+/// [`index::eval_index`] both have no `Call` match arm (see their trailing `bail!`s), so
+/// any attempt to embed one would already fail to lower, rather than silently lowering
+/// in the wrong order. A `Call` is therefore always its own top-level statement, args
+/// and destination store fully self-contained within this one function.
+///
+/// `SubcmpSignal` destinations bail until Task 8 wires up subcomponent addressing (see
+/// [`compute_dst`]).
+fn lower_call<F: PrimeField>(cg: &mut CodeGen<'_, F>, cb: &CallBucket) -> Result<()> {
+    let fn_id = *cg
+        .fn_ids
+        .get(&cb.symbol)
+        .ok_or_else(|| eyre!("call to unknown function {:?}", cb.symbol))?;
+
+    let sizes: Vec<usize> = cb
+        .argument_types
+        .iter()
+        .map(|t| get_size_from_size_option(&t.size))
+        .collect();
+    let args_n: usize = sizes.iter().sum();
+    let args_n_u32 = u32::try_from(args_n)?;
+    let args_start = cg.alloc_freg_n(args_n_u32)?;
+
+    let mut offset: u32 = 0;
+    for (arg_inst, &size) in cb.arguments.iter().zip(sizes.iter()) {
+        let dst_reg = u16::try_from(u32::from(args_start) + offset)?;
+        lower_call_arg(cg, arg_inst, size, dst_reg)?;
+        offset += u32::try_from(size)?;
+    }
+
+    let final_data = match &cb.return_info {
+        ReturnType::Intermediate { .. } => bail!(
+            "not yet lowered: function call used as an intermediate expression value \
+             (old compiler parity: this is a todo!() there too)"
+        ),
+        ReturnType::Final(final_data) => final_data,
+    };
+    let ret_n = get_size_from_size_option(&final_data.context.size);
+    let ret_n_u32 = u32::try_from(ret_n)?;
+    let ret = cg.alloc_freg_n(ret_n_u32)?;
+
+    cg.instrs.push(Instr::CallFn {
+        fn_id,
+        args_start,
+        args_n: args_n_u32,
+        ret,
+        ret_n: ret_n_u32,
+    });
+
+    let dst = compute_dst(cg, &final_data.dest, &final_data.dest_address_type)?;
+    if ret_n == 1 {
+        cg.instrs.push(Instr::Mov {
+            dst,
+            src: Src::Reg(ret),
+        });
+    } else {
+        cg.instrs.push(Instr::StoreN {
+            dst,
+            src: ret,
+            n: ret_n_u32,
+        });
+    }
+    Ok(())
+}
+
+/// Lowers one [`CallBucket`] argument into `dst_reg` (a slot in the contiguous
+/// `args_start..args_start+args_n` block — see [`lower_call`]): a scalar (`size == 1`)
+/// argument lowers through the ordinary expression path and one `Mov`; a `size > 1`
+/// argument is always an array `Load` in circom's IR (there is no array-valued
+/// arithmetic to produce anything else), so its address is read directly via
+/// `Instr::LoadN` straight into the block — no intermediate register range, unlike the
+/// generic [`expr::lower_load`]'s `materialize`.
+fn lower_call_arg<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    inst: &Instruction,
+    size: usize,
+    dst_reg: u16,
+) -> Result<()> {
+    if size == 1 {
+        let src = expr::lower_expr(cg, inst)?;
+        cg.instrs.push(Instr::Mov {
+            dst: Dst::Reg(dst_reg),
+            src,
+        });
+        return Ok(());
+    }
+    let Instruction::Load(lb) = inst else {
+        bail!(
+            "call argument of size {size} expects an array Load, got {}",
+            instr_kind_name(inst)
+        );
+    };
+    let addr = expr::addr_from_location_rule(cg, &lb.src)?;
+    let src = match lb.address_type {
+        AddressType::Signal => Src::Signal(addr),
+        AddressType::Variable => Src::Var(addr),
+        AddressType::SubcmpSignal { .. } => {
+            bail!("not yet lowered: subcomponent signal call argument (Task 8)")
+        }
+    };
+    cg.instrs.push(Instr::LoadN {
+        dst: dst_reg,
+        src,
+        n: u32::try_from(size)?,
     });
     Ok(())
 }

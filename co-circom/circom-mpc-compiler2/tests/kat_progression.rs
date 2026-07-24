@@ -776,3 +776,218 @@ fn mimc_test_kat() {
 fn mimc_sponge_test_kat() {
     common::assert_kats("mimc_sponge_test", CompilerConfig::default());
 }
+
+/// The named KAT candidate for this task (function lowering): `sub(x, y)` (`assert(x >
+/// y); return x - y;`) called directly as a `<==` store's RHS — the single-value-return
+/// (`with_size == 1`) `Ret`/`CallFn` path end to end, with a real argument (the template
+/// parameter `N`, monomorphized to a literal) and a real assertion inside the function
+/// body.
+#[test]
+fn functions_kat() {
+    common::assert_kats("functions", CompilerConfig::default());
+}
+
+/// A real KAT circuit exercising a *pure* function whose body itself has the full
+/// statement machinery this crate lowers — nested `while` loops, `if`s with no `else`,
+/// early `return`s — called from a template with no subcomponents anywhere in its graph
+/// (confirmed by empirically probing every KAT circuit's compile result; `sqrt` lives in
+/// `test_vectors/WitnessExtension/tests/libs/pointbits.circom` and is called once per
+/// witness from `Main`). This is the milestone test for "a function containing a loop
+/// (and a branch) works" via a real circuit, not just a purpose-built one (see
+/// `func_loop_and_branch_end_to_end` below for the purpose-built companion with a
+/// mechanism-level shape assertion).
+#[test]
+fn sqrt_test_kat() {
+    common::assert_kats("sqrt_test", CompilerConfig::default());
+}
+
+/// Two more real KAT circuits confirmed (empirically, by compiling every candidate in
+/// `test_vectors/WitnessExtension/kats/`) to now compile *and* produce a matching
+/// witness end to end with function lowering plus everything prior: both call
+/// `EscalarMulW4Table(base, 0)` (`test_vectors/WitnessExtension/tests/libs/
+/// escalarmulw4table.circom`), a function returning a `256`-element nested array
+/// (`Dimension` of `[16][2]` folded into one flat `with_size`), entirely computed in
+/// `var`s inside `Main` with no subcomponents anywhere in either circuit's template
+/// graph.
+#[test]
+fn escalarmulw4table_test_kat() {
+    common::assert_kats("escalarmulw4table_test", CompilerConfig::default());
+}
+
+#[test]
+fn escalarmulw4table_test3_kat() {
+    common::assert_kats("escalarmulw4table_test3", CompilerConfig::default());
+}
+
+/// The purpose-built multi-value-return milestone (`with_size > 1`): none of the KAT
+/// candidates' functions return more than one value in a shape that isolates the
+/// `RetSrc::Var`/`eval_index` path this cleanly (`escalarmulw4table`'s `256`-element
+/// return, exercised above, already proves the mechanism works, but at a size that
+/// obscures a hand-checkable expected value). `tests/circuits/func_multi_return.circom`'s
+/// `minmax(a, b)` returns a compile-time-sized 2-element array (`var r[2]; r[0] = ...;
+/// r[1] = ...; return r;`) — a `ReturnBucket` with `with_size == 2` whose value is a
+/// `Load` of that array's var-slot range, lowered via `Instr::Ret { src: RetSrc::Var(..),
+/// n: 2 }` (`lower_return`'s multi-value path) and copied out on the caller side via
+/// `Instr::StoreN` (the normal multi-element `CallBucket` result-store path,
+/// `lower_call`).
+#[test]
+fn func_multi_return_end_to_end() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/func_multi_return.circom", config)
+            .unwrap(),
+    );
+
+    for (a, b) in [(3u64, 7u64), (9u64, 2u64), (5u64, 5u64)] {
+        let inputs = BTreeMap::from([
+            ("a".to_string(), Fr::from(a)),
+            ("b".to_string(), Fr::from(b)),
+        ]);
+        let finalized = PlainWitnessExtension::new_plain(program.clone(), VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+        assert_eq!(
+            finalized.get_output("out"),
+            Some(vec![Fr::from(a.min(b)), Fr::from(a.max(b))]),
+            "a={a}, b={b}"
+        );
+    }
+}
+
+/// The purpose-built "function called inside an expression" milestone
+/// (`tests/circuits/func_call_in_expr.circom`): `square(a) + square(b)` combines two
+/// separate `CallBucket`s' results with an ordinary `Add` — each call is still its own
+/// top-level statement (see `lower_call`'s doc comment on why `ReturnType::Intermediate`,
+/// a call truly nested inside another expression's tree, stays unsupported), but this
+/// confirms a call's *result*, once stored to a `var`, composes with ordinary expression
+/// lowering exactly like any other value — nothing about `Instr::CallFn`/`Ret` needs the
+/// consuming expression to know a function was involved at all. `square_of_sum` also
+/// exercises a call whose own argument is itself a non-trivial expression (`square(a +
+/// b)`, not just a bare variable).
+#[test]
+fn func_call_in_expr_end_to_end() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/func_call_in_expr.circom", config)
+            .unwrap(),
+    );
+
+    for (a, b) in [(3u64, 4u64), (5u64, 6u64)] {
+        let inputs = BTreeMap::from([
+            ("a".to_string(), Fr::from(a)),
+            ("b".to_string(), Fr::from(b)),
+        ]);
+        let finalized = PlainWitnessExtension::new_plain(program.clone(), VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+        assert_eq!(
+            finalized.get_output("sum_of_squares"),
+            Some(vec![Fr::from(a * a + b * b)]),
+            "a={a}, b={b}"
+        );
+        assert_eq!(
+            finalized.get_output("square_of_sum"),
+            Some(vec![Fr::from((a + b) * (a + b))]),
+            "a={a}, b={b}"
+        );
+    }
+}
+
+/// The recursion milestone (`tests/circuits/func_recursion.circom`): circom functions
+/// can be recursive (confirmed both by the front end's own docs,
+/// `mkdocs/docs/circom-language/functions.md`: "Functions can be recursive", and
+/// empirically — this circuit compiles and runs correctly), so `factorial(n)` is a
+/// direct, literal recursive function (`if (n == 0) return 1; return n * factorial(n -
+/// 1);`), calling through `Instr::CallFn` into a fresh `run_function` activation for
+/// every level of recursion (`circom_mpc_vm2::exec::Machine::run_function` recurses via
+/// ordinary Rust call stack depth — see its own doc comment/the `vm2` `recursion` test).
+#[test]
+fn func_recursion_end_to_end() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/func_recursion.circom", config).unwrap(),
+    );
+
+    for n in [0u64, 1, 5, 7] {
+        let inputs = BTreeMap::from([("n".to_string(), Fr::from(n))]);
+        let finalized = PlainWitnessExtension::new_plain(program.clone(), VMConfig::default())
+            .run(inputs, 0)
+            .unwrap();
+        let expected: u64 = (1..=n).product::<u64>().max(1);
+        assert_eq!(
+            finalized.get_output("out"),
+            Some(vec![Fr::from(expected)]),
+            "n={n}"
+        );
+    }
+}
+
+/// The "function body contains a loop and a branch" milestone
+/// (`tests/circuits/func_loop_and_branch.circom`): function bodies lower with the exact
+/// same statement machinery as template bodies (`CodeGen::lower_function` calls
+/// `stmt::lower_stmt` on each body statement, identically to
+/// `CodeGen::lower_template`), so a function whose body is a conforming `for` loop over
+/// a *literal* bound (`i < 5`, so it promotes/unrolls exactly like a template's loop
+/// would — unlike `func_recursion.circom`/`func_multi_return.circom`, whose functions
+/// have no loop at all, and unlike a loop bounded by the function's own runtime
+/// argument, which would be non-conforming by construction, see
+/// `detect_conforming`'s docs) containing an `if`/`else` (adding a scaled bonus on even
+/// iterations) must lower and run correctly — exercising loop unrolling/rolling,
+/// induction-variable promotion, and `SharedIf`/`SharedElse`/`SharedEnd` all *inside* a
+/// function frame rather than a template's. `scale` is a genuine runtime (signal-derived)
+/// argument, so only the loop's own bound is compile-time-known. Run at both
+/// `unroll.threshold: 0` (rolled) and `usize::MAX` (fully unrolled) to also confirm the
+/// mechanism-level claim (`Instr::ISet`/`Instr::SharedIf` appear in the function's own
+/// compiled instructions at `threshold: 0`), not just witness correctness.
+#[test]
+fn func_loop_and_branch_end_to_end() {
+    for threshold in [0, usize::MAX] {
+        let config = CompilerConfig {
+            simplification: SimplificationLevel::O2(usize::MAX),
+            unroll: UnrollConfig { threshold },
+            ..Default::default()
+        };
+        let program = Arc::new(
+            CoCircomCompiler::<Bn254>::parse("tests/circuits/func_loop_and_branch.circom", config)
+                .unwrap(),
+        );
+
+        if threshold == 0 {
+            let f = &program.functions[0];
+            assert!(
+                f.instrs.iter().any(|i| matches!(i, Instr::ISet { .. })),
+                "the function's own conforming loop must mirror its induction variable, \
+                 just like a template's would"
+            );
+            assert!(
+                f.instrs.iter().any(|i| matches!(i, Instr::SharedIf { .. })),
+                "the function's own if/else must lower to SharedIf, just like a \
+                 template's would"
+            );
+        }
+
+        for scale in [0u64, 1, 3, 7] {
+            let inputs = BTreeMap::from([("scale".to_string(), Fr::from(scale))]);
+            let finalized = PlainWitnessExtension::new_plain(program.clone(), VMConfig::default())
+                .run(inputs, 0)
+                .unwrap();
+            // sum_{i=0}^{4} (i + bonus) * scale, bonus = 10 on even i, 0 on odd i:
+            // (10 + 1 + 12 + 3 + 14) * scale = 40 * scale.
+            let expected: u64 = 40 * scale;
+            assert_eq!(
+                finalized.get_output("out"),
+                Some(vec![Fr::from(expected)]),
+                "scale={scale}, threshold={threshold}"
+            );
+        }
+    }
+}
