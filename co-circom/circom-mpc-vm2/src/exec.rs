@@ -18,6 +18,7 @@
 //! recurse into `run_component` for a freshly-created or newly-completed subcomponent
 //! without fighting the borrow checker, since the subcomponent is reachable through a
 //! parameter rather than through `self`.
+use crate::accel::{AccelBindings, MpcAccelerator};
 use crate::driver::{VmDriver, apply_bin};
 use crate::isa::*;
 use crate::program::{CompiledProgram, FunctionCode, TemplateCode, VMConfig};
@@ -241,10 +242,16 @@ pub struct Machine<'a, F: PrimeField, C: VmDriver<F>> {
     pub config: VMConfig,
     /// Accumulated log output pending a `LogFlush`.
     pub log_buf: String,
+    /// The bound accelerator registry for this run, if any (see
+    /// [`Machine::new_with_accelerator`]): the registry itself (to dispatch through)
+    /// plus its [`AccelBindings`] against `program` (computed once, at construction).
+    accel: Option<(&'a MpcAccelerator<F, C>, AccelBindings)>,
 }
 
 impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
-    /// Allocate signal RAM, inject constants, place the constant 1 at signal 0.
+    /// Allocate signal RAM, inject constants, place the constant 1 at signal 0. No
+    /// accelerator is bound — every component/function runs its own body (see
+    /// [`Machine::new_with_accelerator`] to bind one).
     pub fn new(
         program: &'a CompiledProgram<F>,
         driver: &'a mut C,
@@ -264,7 +271,24 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             consts,
             config,
             log_buf: String::with_capacity(1024),
+            accel: None,
         })
+    }
+
+    /// Same as [`Machine::new`], but also binds `accelerator`'s registrations against
+    /// `program` (see [`MpcAccelerator::bind`](crate::accel::MpcAccelerator::bind)):
+    /// [`Machine::run_component`] and the `CallFn` instruction dispatch (see [`step`])
+    /// consult the resulting bindings before running a component/function body.
+    pub fn new_with_accelerator(
+        program: &'a CompiledProgram<F>,
+        driver: &'a mut C,
+        config: VMConfig,
+        accelerator: &'a MpcAccelerator<F, C>,
+    ) -> Result<Self> {
+        let mut machine = Self::new(program, driver, config)?;
+        let bindings = accelerator.bind(program);
+        machine.accel = Some((accelerator, bindings));
+        Ok(machine)
     }
 
     /// Run the main component (inputs must already be written into signal RAM).
@@ -278,11 +302,45 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         self.run_component(&mut main)
     }
 
-    /// Execute one template activation to completion (until `Return`).
+    /// Execute one template activation to completion (until `Return`), unless an
+    /// accelerator is bound for its template (see [`Machine::new_with_accelerator`]):
+    /// in that case its body is skipped entirely, and the accelerator's outputs and
+    /// intermediates are written straight into signal RAM instead (mirrors old
+    /// `mpc_vm.rs:326-354`).
     fn run_component(&mut self, comp: &mut ComponentInst) -> Result<()> {
         let program = self.program;
         let code = &program.templates[comp.templ.0 as usize];
         let name: &str = &program.debug.names[code.symbol_id as usize];
+
+        // `self.accel` is `Option<(&'a MpcAccelerator<F, C>, AccelBindings)>`: both the
+        // registry reference and the `usize` index are `Copy`, so this extracts an
+        // owned tuple and drops the borrow of `self.accel` immediately, leaving
+        // `self.driver`/`self.signals` free to borrow mutably below.
+        let dispatch = self.accel.as_ref().and_then(|(accel, bindings)| {
+            bindings.component_accel(comp.templ).map(|i| (*accel, i))
+        });
+        if let Some((accelerator, accel_idx)) = dispatch {
+            let output_signals = code.output_signals as usize;
+            let input_signals = code.input_signals as usize;
+            let input_start = comp.offset + output_signals;
+            let intermediate_start = input_start + input_signals;
+            let inputs = self.signals[input_start..intermediate_start].to_vec();
+            let result =
+                accelerator.run_component(accel_idx, self.driver, &inputs, output_signals)?;
+            if result.output.len() != output_signals {
+                bail!(
+                    "accelerator for component {name} returned {} output(s), expected {output_signals}",
+                    result.output.len()
+                );
+            }
+            self.signals[comp.offset..comp.offset + output_signals]
+                .clone_from_slice(&result.output);
+            let intermediate_end = intermediate_start + result.intermediate.len();
+            self.signals[intermediate_start..intermediate_end]
+                .clone_from_slice(&result.intermediate);
+            return Ok(());
+        }
+
         let mut frame = Frame::for_template(code);
         let instrs_len = code.instrs.len();
         // Fresh per component activation, matching the old per-`Component` `if_stack`;
@@ -671,10 +729,23 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 let args: Vec<C::VmType> = frame.regs
                     [*args_start as usize..*args_start as usize + *args_n as usize]
                     .to_vec();
-                // The callsite's `ret_n` is the arity contract: `run_function` pads or
-                // truncates the callee's actual returns to match (old-VM parity, see
-                // its docs), so `result.len() == *ret_n as usize` always holds here.
-                let result = self.run_function(*fn_id, args, pred, comp_offset, *ret_n as usize)?;
+                // Same borrow-shedding trick as `run_component`'s accelerator dispatch
+                // (see its docs): extract a `Copy` `(accelerator, accel_idx)` pair before
+                // touching `self.driver`.
+                let dispatch = self.accel.as_ref().and_then(|(accel, bindings)| {
+                    bindings.function_accel(*fn_id).map(|i| (*accel, i))
+                });
+                // The callsite's `ret_n` is the arity contract in both branches: an
+                // accelerated call's results are padded/truncated exactly like a normal
+                // `run_function` return (old-VM parity, see that method's docs) — this
+                // is also what fixes old-VM's single-value-only accelerator limitation,
+                // since multi-value returns now go through the same resize path.
+                let result = if let Some((accelerator, accel_idx)) = dispatch {
+                    let vals = accelerator.run_function(accel_idx, self.driver, &args)?;
+                    self.resize_ret(vals, *ret_n as usize)
+                } else {
+                    self.run_function(*fn_id, args, pred, comp_offset, *ret_n as usize)?
+                };
                 for (k, v) in result.into_iter().enumerate() {
                     frame.regs[*ret as usize + k] = v;
                 }

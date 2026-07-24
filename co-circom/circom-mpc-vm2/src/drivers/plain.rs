@@ -2,7 +2,8 @@
 use crate::driver::VmDriver;
 use crate::program::VMConfig;
 use ark_ff::{One, PrimeField};
-use eyre::{Result, eyre};
+use eyre::{Result, bail, eyre};
+use mpc_core::gadgets::poseidon2::{CircomTracePlainHasher, Poseidon2};
 use num_bigint::BigUint;
 use num_traits::cast::ToPrimitive;
 
@@ -292,6 +293,61 @@ impl<F: PrimeField> VmDriver<F> for PlainDriver<F> {
 
     fn log(&mut self, a: &Self::VmType, _allow_leaky_logs: bool) -> Result<String> {
         Ok(a.to_string())
+    }
+
+    fn num2bits(&mut self, a: &Self::VmType, bits: usize) -> Result<Vec<Self::VmType>> {
+        let a = to_biguint(a);
+        let mut res = Vec::with_capacity(bits);
+        for i in 0..bits {
+            res.push(F::from((&a >> i) & BigUint::one()));
+        }
+        Ok(res)
+    }
+
+    fn addbits(
+        &mut self,
+        a: &[Self::VmType],
+        b: &[Self::VmType],
+    ) -> Result<(Vec<Self::VmType>, Self::VmType)> {
+        if a.len() != b.len() {
+            bail!(
+                "addbits: operand length mismatch ({} vs {})",
+                a.len(),
+                b.len()
+            );
+        }
+        let bitlen = a.len();
+        if bitlen >= F::MODULUS_BIT_SIZE as usize - 1 {
+            bail!("addbits: bit length {bitlen} too large for the field");
+        }
+        let acc_a = a.iter().fold(F::ZERO, |acc, x| acc.double() + x);
+        let acc_b = b.iter().fold(F::ZERO, |acc, x| acc.double() + x);
+        let sum = acc_a + acc_b;
+        let sum = to_biguint(&sum);
+        let carry_mask = BigUint::one() << bitlen;
+        let carry = F::from((&sum & &carry_mask) >> bitlen);
+        let mut res = Vec::with_capacity(bitlen);
+        for i in 0..bitlen {
+            res.push(F::from((&sum >> i) & BigUint::one()));
+        }
+        res.reverse();
+        Ok((res, carry))
+    }
+
+    fn poseidon2_accelerator<const T: usize>(
+        &mut self,
+        inputs: &[Self::VmType],
+    ) -> Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        if inputs.len() != T {
+            bail!(
+                "poseidon2 accelerator: expected {T} inputs, got {}",
+                inputs.len()
+            );
+        }
+        let poseidon = Poseidon2::<F, T, 5>::default();
+        let state: [F; T] = inputs.to_vec().try_into().expect("length checked above");
+        let (state, trace) = poseidon.plain_permutation_intermediate(state)?;
+        Ok((state.to_vec(), trace))
     }
 }
 

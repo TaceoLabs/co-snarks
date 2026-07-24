@@ -1,6 +1,9 @@
 //! The supported public API of the crate: [`WitnessExtension`], driven to completion via
 //! [`WitnessExtension::run`]/[`WitnessExtension::run_with_flat`] into a
 //! [`FinalizedWitnessExtension`].
+use crate::accel::{
+    ComponentAcceleratorOutput, MpcAccelerator, MpcAcceleratorConfig, TemplateInfo,
+};
 use crate::driver::VmDriver;
 use crate::drivers::plain::PlainDriver;
 use crate::drivers::rep3::Rep3Driver;
@@ -22,6 +25,7 @@ pub struct WitnessExtension<F: PrimeField, C: VmDriver<F>> {
     program: Arc<CompiledProgram<F>>,
     driver: C,
     config: VMConfig,
+    accelerator: MpcAccelerator<F, C>,
 }
 
 /// Convenience alias for local (non-MPC) plain execution.
@@ -29,12 +33,49 @@ pub type PlainWitnessExtension<F> = WitnessExtension<F, PlainDriver<F>>;
 
 impl<F: PrimeField, C: VmDriver<F>> WitnessExtension<F, C> {
     /// Creates a new witness extension for `program`, driven by `driver`.
+    ///
+    /// The accelerator registry defaults to [`MpcAcceleratorConfig::from_env`]'s
+    /// predefined set (`sqrt_0`/`Num2Bits`/`AddBits`/`IsZero`/`Poseidon2`, each gated by
+    /// its own `CIRCOM_MPC_ACCELERATOR_*` variable) — use
+    /// [`WitnessExtension::register_accelerator_component`]/
+    /// [`WitnessExtension::register_accelerator_function`] to add to it. Registrations
+    /// are matched against `program`'s templates/functions lazily, once, at the start
+    /// of [`WitnessExtension::run`]/[`WitnessExtension::run_with_flat`] — so register
+    /// everything you need before calling either.
     pub fn new(program: Arc<CompiledProgram<F>>, driver: C, config: VMConfig) -> Self {
         Self {
             program,
             driver,
             config,
+            accelerator: MpcAccelerator::from_config(MpcAcceleratorConfig::from_env()),
         }
+    }
+
+    /// Registers a component accelerator (see
+    /// [`MpcAccelerator::register_component`]) on this witness extension's registry.
+    /// Must be called before [`WitnessExtension::run`]/[`WitnessExtension::run_with_flat`]
+    /// (binding happens lazily at the start of either).
+    pub fn register_accelerator_component(
+        &mut self,
+        name: impl Into<String>,
+        can_handle: impl Fn(&TemplateInfo) -> bool + Send + 'static,
+        fun: impl Fn(&mut C, &[C::VmType], usize) -> Result<ComponentAcceleratorOutput<C::VmType>>
+        + Send
+        + 'static,
+    ) {
+        self.accelerator.register_component(name, can_handle, fun);
+    }
+
+    /// Registers a function accelerator (see [`MpcAccelerator::register_function`]) on
+    /// this witness extension's registry. Must be called before
+    /// [`WitnessExtension::run`]/[`WitnessExtension::run_with_flat`] (binding happens
+    /// lazily at the start of either).
+    pub fn register_accelerator_function(
+        &mut self,
+        name: impl Into<String>,
+        fun: impl Fn(&mut C, &[C::VmType]) -> Result<Vec<C::VmType>> + Send + 'static,
+    ) {
+        self.accelerator.register_function(name, fun);
     }
 
     /// Starts the witness extension with the provided named inputs and consumes `self`.
@@ -52,7 +93,12 @@ impl<F: PrimeField, C: VmDriver<F>> WitnessExtension<F, C> {
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.driver.compare_vm_config(&self.config)?;
         let signals = {
-            let mut machine = Machine::new(&self.program, &mut self.driver, self.config.clone())?;
+            let mut machine = Machine::new_with_accelerator(
+                &self.program,
+                &mut self.driver,
+                self.config.clone(),
+                &self.accelerator,
+            )?;
             set_input_signals(&self.program.main_input_list, &mut machine.signals, inputs)?;
             machine.run_main()?;
             machine.signals
@@ -81,7 +127,12 @@ impl<F: PrimeField, C: VmDriver<F>> WitnessExtension<F, C> {
         amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         let signals = {
-            let mut machine = Machine::new(&self.program, &mut self.driver, self.config.clone())?;
+            let mut machine = Machine::new_with_accelerator(
+                &self.program,
+                &mut self.driver,
+                self.config.clone(),
+                &self.accelerator,
+            )?;
             set_flat_input_signals(
                 self.program.main_inputs,
                 self.program.main_outputs,

@@ -227,6 +227,45 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
     fn sqrt(&mut self, a: &Self::VmType) -> Result<Self::VmType> {
         self.un(a, PlainDriver::sqrt)
     }
+
+    fn num2bits(&mut self, a: &Self::VmType, bits: usize) -> Result<Vec<Self::VmType>> {
+        let bits_vals = self.inner.num2bits(&a.val, bits)?;
+        Ok(bits_vals
+            .into_iter()
+            .map(|val| Taint {
+                val,
+                shared: a.shared,
+            })
+            .collect())
+    }
+
+    fn addbits(
+        &mut self,
+        a: &[Self::VmType],
+        b: &[Self::VmType],
+    ) -> Result<(Vec<Self::VmType>, Self::VmType)> {
+        let shared = a.iter().any(|x| x.shared) || b.iter().any(|x| x.shared);
+        let a_vals: Vec<F> = a.iter().map(|x| x.val).collect();
+        let b_vals: Vec<F> = b.iter().map(|x| x.val).collect();
+        let (res, carry) = self.inner.addbits(&a_vals, &b_vals)?;
+        Ok((
+            res.into_iter().map(|val| Taint { val, shared }).collect(),
+            Taint { val: carry, shared },
+        ))
+    }
+
+    fn poseidon2_accelerator<const T: usize>(
+        &mut self,
+        inputs: &[Self::VmType],
+    ) -> Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        let shared = inputs.iter().any(|x| x.shared);
+        let vals: Vec<F> = inputs.iter().map(|x| x.val).collect();
+        let (state, trace) = self.inner.poseidon2_accelerator::<T>(&vals)?;
+        Ok((
+            state.into_iter().map(|val| Taint { val, shared }).collect(),
+            trace.into_iter().map(|val| Taint { val, shared }).collect(),
+        ))
+    }
 }
 
 #[cfg(test)]

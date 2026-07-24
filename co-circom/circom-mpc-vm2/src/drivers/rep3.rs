@@ -9,15 +9,16 @@ use crate::driver::{VmDriver, apply_bin};
 use crate::drivers::plain::PlainDriver;
 use crate::isa::BinOp;
 use crate::program::VMConfig;
-use ark_ff::PrimeField;
+use ark_ff::{One, PrimeField};
 use co_circom_types::Rep3InputType;
 use eyre::{Result, bail};
 use mpc_core::MpcState;
+use mpc_core::gadgets::poseidon2::Poseidon2;
 use mpc_core::protocols::rep3::{
     Rep3PrimeFieldShare, Rep3State,
     arithmetic::{self, promote_to_trivial_share},
     binary,
-    conversion::{self, A2BType},
+    conversion::{self, A2BType, bit_inject_many},
     id::PartyID,
     network::Rep3NetworkExt,
     yao,
@@ -748,6 +749,124 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
                 mul -= sqrt;
                 Ok(mul.into())
             }
+        }
+    }
+
+    fn num2bits(&mut self, a: &Self::VmType, bits: usize) -> Result<Vec<Self::VmType>> {
+        match a {
+            Rep3VmType::Public(a) => Ok(self
+                .plain
+                .num2bits(a, bits)?
+                .into_iter()
+                .map(Into::into)
+                .collect()),
+            Rep3VmType::Arithmetic(a) => {
+                let a_bits = conversion::a2b_selector(*a, self.net0, &mut self.state0)?;
+                let a_bits_split: Vec<_> =
+                    (0..bits).map(|i| (&a_bits >> i) & BigUint::one()).collect();
+                Ok(bit_inject_many(&a_bits_split, self.net0, &mut self.state0)?
+                    .into_iter()
+                    .map(Into::into)
+                    .collect())
+            }
+        }
+    }
+
+    fn addbits(
+        &mut self,
+        a: &[Self::VmType],
+        b: &[Self::VmType],
+    ) -> Result<(Vec<Self::VmType>, Self::VmType)> {
+        if a.len() != b.len() {
+            bail!(
+                "addbits: operand length mismatch ({} vs {})",
+                a.len(),
+                b.len()
+            );
+        }
+        let bitlen = a.len();
+        if bitlen >= F::MODULUS_BIT_SIZE as usize - 1 {
+            bail!("addbits: bit length {bitlen} too large for the field");
+        }
+        let promote = |x: &Rep3VmType<F>| match x {
+            Rep3VmType::Public(x) => promote_to_trivial_share(self.id, *x),
+            Rep3VmType::Arithmetic(x) => *x,
+        };
+        let a_sum = a
+            .iter()
+            .map(promote)
+            .fold(Rep3PrimeFieldShare::zero_share(), |acc, x| acc + acc + x);
+        let b_sum = b
+            .iter()
+            .map(promote)
+            .fold(Rep3PrimeFieldShare::zero_share(), |acc, x| acc + acc + x);
+        let sum = a_sum + b_sum;
+
+        let sum_bits = conversion::a2b_selector(sum, self.net0, &mut self.state0)?;
+        let individual_bits: Vec<_> = (0..bitlen + 1)
+            .map(|i| (&sum_bits >> i) & BigUint::one())
+            .collect();
+        let mut result = bit_inject_many(&individual_bits, self.net0, &mut self.state0)?;
+        let carry = result.pop().expect("bitlen + 1 >= 1");
+        result.reverse();
+        Ok((result.into_iter().map(Into::into).collect(), carry.into()))
+    }
+
+    fn poseidon2_accelerator<const T: usize>(
+        &mut self,
+        inputs: &[Self::VmType],
+    ) -> Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        if inputs.len() != T {
+            bail!(
+                "poseidon2 accelerator: expected {T} inputs, got {}",
+                inputs.len()
+            );
+        }
+        if inputs
+            .iter()
+            .any(|x| matches!(x, Rep3VmType::Arithmetic(_)))
+        {
+            let poseidon = Poseidon2::<F, T, 5>::default();
+            let mut precomp =
+                poseidon.precompute_rep3(inputs.len(), self.net0, &mut self.state0)?;
+
+            // Promote all inputs to arithmetic shares.
+            let mut iter = inputs.iter();
+            let mut state: [Rep3PrimeFieldShare<F>; T] = std::array::from_fn(|_| {
+                match iter
+                    .next()
+                    .expect("poseidon2_accelerator: not enough inputs")
+                {
+                    Rep3VmType::Public(x) => promote_to_trivial_share(self.id, *x),
+                    Rep3VmType::Arithmetic(x) => *x,
+                }
+            });
+
+            let trace = poseidon.rep3_permutation_in_place_with_precomputation_intermediate(
+                &mut state,
+                &mut precomp,
+                self.net0,
+            )?;
+
+            let outputs = state.into_iter().map(Rep3VmType::Arithmetic).collect();
+            let trace = trace.into_iter().map(Rep3VmType::Arithmetic).collect();
+            Ok((outputs, trace))
+        } else {
+            let plain_inputs: Vec<F> = inputs
+                .iter()
+                .map(|x| match x {
+                    Rep3VmType::Public(x) => *x,
+                    Rep3VmType::Arithmetic(_) => unreachable!("checked above"),
+                })
+                .collect();
+            self.plain
+                .poseidon2_accelerator::<T>(&plain_inputs)
+                .map(|(outs, trace)| {
+                    (
+                        outs.into_iter().map(Rep3VmType::Public).collect(),
+                        trace.into_iter().map(Rep3VmType::Public).collect(),
+                    )
+                })
         }
     }
 

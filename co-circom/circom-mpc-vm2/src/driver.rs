@@ -3,7 +3,7 @@ use crate::isa::BinOp;
 use crate::program::VMConfig;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use eyre::Result;
+use eyre::{Result, bail};
 use std::fmt;
 
 /// Protocol driver for the register VM. All scalar operations take operands by
@@ -92,6 +92,35 @@ pub trait VmDriver<F: PrimeField>: Sized {
     fn log(&mut self, a: &Self::VmType, allow_leaky_logs: bool) -> Result<String>;
     /// c = sqrt(a) (used by the sqrt function accelerator; Plan 3).
     fn sqrt(&mut self, a: &Self::VmType) -> Result<Self::VmType>;
+
+    /// Num2Bits accelerator: the `bits` least-significant bits of `a`, LSB first.
+    /// Default: not supported (bails).
+    fn num2bits(&mut self, _a: &Self::VmType, _bits: usize) -> Result<Vec<Self::VmType>> {
+        bail!("num2bits accelerator not supported by this driver")
+    }
+
+    /// AddBits accelerator: binary addition of two equal-length bit vectors (MSB
+    /// first, matching the `AddBits` component's convention), returning the sum bits
+    /// (MSB first) and the carry-out bit. Default: not supported (bails).
+    fn addbits(
+        &mut self,
+        _a: &[Self::VmType],
+        _b: &[Self::VmType],
+    ) -> Result<(Vec<Self::VmType>, Self::VmType)> {
+        bail!("addbits accelerator not supported by this driver")
+    }
+
+    /// Poseidon2 permutation accelerator: `T` is the state size (2, 3, 4, or 16 — see
+    /// the `Poseidon2` component registration's `can_handle` in [`crate::accel`]).
+    /// Returns the permuted state and the round trace needed for the Circom witness.
+    /// Default: not supported (bails).
+    #[expect(clippy::type_complexity)]
+    fn poseidon2_accelerator<const T: usize>(
+        &mut self,
+        _inputs: &[Self::VmType],
+    ) -> Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
+        bail!("poseidon2 accelerator not supported by this driver")
+    }
 
     /// Vectorized binary op — the batching hook. Default: scalar loop.
     /// Protocol drivers override this per op-kind to use one communication round.

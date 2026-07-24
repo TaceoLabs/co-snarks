@@ -129,6 +129,7 @@
 //!     .expect("run_with_flat");
 //! assert_eq!(finalized.get_output("out"), Some(vec![Fr::from(42u64)]));
 //! ```
+pub mod accel;
 pub mod api;
 pub mod driver;
 pub mod drivers;
