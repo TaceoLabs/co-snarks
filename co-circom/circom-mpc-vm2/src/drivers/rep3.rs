@@ -827,8 +827,7 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
             .any(|x| matches!(x, Rep3VmType::Arithmetic(_)))
         {
             let poseidon = Poseidon2::<F, T, 5>::default();
-            let mut precomp =
-                poseidon.precompute_rep3(inputs.len(), self.net0, &mut self.state0)?;
+            let mut precomp = poseidon.precompute_rep3(1, self.net0, &mut self.state0)?;
 
             // Promote all inputs to arithmetic shares.
             let mut iter = inputs.iter();
