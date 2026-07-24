@@ -3,7 +3,7 @@ mod common;
 use ark_bn254::{Bn254, Fr};
 use circom_mpc_compiler2::{CoCircomCompiler, CompilerConfig, SimplificationLevel, UnrollConfig};
 use circom_mpc_vm2::api::PlainWitnessExtension;
-use circom_mpc_vm2::isa::Instr;
+use circom_mpc_vm2::isa::{ISrc, Instr};
 use circom_mpc_vm2::program::{CompiledProgram, VMConfig};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -990,4 +990,300 @@ fn func_loop_and_branch_end_to_end() {
             );
         }
     }
+}
+
+/// The Task 8 milestone test: `bitonic_sort` is the brief's own named component-array
+/// candidate — a network of `Compare`/swap subcomponents wired up across a `for`-loop-
+/// indexed array (`component comp[...]`), no functions anywhere in its template graph, so
+/// this is the first real KAT-backed circuit to exercise [`Instr::CreateCmp`]/[`Instr::
+/// InputSub`]/[`Instr::OutputSub`] end to end rather than a purpose-built fixture.
+#[test]
+fn bitonic_sort_kat() {
+    common::assert_kats("bitonic_sort", CompilerConfig::default());
+}
+
+/// A single non-array subcomponent (`component c = BabyAdd(); c.x1 <== ...; out <==
+/// c.xout;`) — the simplest possible `CreateCmp`/`InputSub`/`OutputSub` shape (`count: 1`),
+/// confirming the mechanism works even without array/loop-indexed addressing.
+#[test]
+fn babyadd_test_kat() {
+    common::assert_kats("babypbk_test", CompilerConfig::default());
+}
+
+/// `AliasCheck` instantiates a *tree* of subcomponents (a `Num2Bits`-shaped bit
+/// decomposition feeding a `CompConstant`), i.e. subcomponents whose own template body in
+/// turn creates further subcomponents — the "multi-level component tree" case the brief
+/// calls out explicitly.
+#[test]
+fn aliascheck_test_kat() {
+    common::assert_kats("aliascheck_test", CompilerConfig::default());
+}
+
+/// `BinSub(4, 4)` (bit subtraction with borrow) — another real-circuit component tree
+/// (via `Num2Bits`-style decomposition), deferred from Task 4 (it needs subcomponents) per
+/// this crate's own progression notes; now unlocked by this task.
+#[test]
+fn binsub_test_kat() {
+    common::assert_kats("binsub_test", CompilerConfig::default());
+}
+
+/// `IsEqual` wraps a single `IsZero` subcomponent behind a `<==`-computed difference —
+/// confirms a subcomponent's *output* signal (`isz.out`) feeding straight into an ordinary
+/// expression composes correctly with everything from prior tasks (branches, `EqN`, ...).
+#[test]
+fn isequal_kat() {
+    common::assert_kats("isequal", CompilerConfig::default());
+}
+
+/// The comparator family (`LessThan`/`GreaterThan`/`LessEqThan`/`GreaterEqThan`), each
+/// wrapping a `Num2Bits` subcomponent: four more real KATs confirmed to compile and match
+/// their KAT witnesses end to end.
+#[test]
+fn lessthan_kat() {
+    common::assert_kats("lessthan", CompilerConfig::default());
+}
+
+#[test]
+fn greaterthan_kat() {
+    common::assert_kats("greaterthan", CompilerConfig::default());
+}
+
+#[test]
+fn lesseqthan_kat() {
+    common::assert_kats("lesseqthan", CompilerConfig::default());
+}
+
+#[test]
+fn greatereqthan_kat() {
+    common::assert_kats("greatereqthan", CompilerConfig::default());
+}
+
+/// The `Mux1`/`Mux2`/`Mux3` family: each multiplexes an array of subcomponent-free
+/// signals directly (no sub-templates of their own beyond the multiplexer arithmetic),
+/// but `mux3_1`'s `MultiMux3` internally instantiates a `component mux[n]` array — real
+/// component-array coverage alongside `bitonic_sort`.
+#[test]
+fn mux1_1_kat() {
+    common::assert_kats("mux1_1", CompilerConfig::default());
+}
+
+#[test]
+fn mux2_1_kat() {
+    common::assert_kats("mux2_1", CompilerConfig::default());
+}
+
+#[test]
+fn mux3_1_kat() {
+    common::assert_kats("mux3_1", CompilerConfig::default());
+}
+
+/// `MiMCHash(...)` chains a `component mimc[...]` array of `MiMCFeistel` permutation
+/// rounds, and `MiMCSponge` likewise — two more real component-array KATs beyond
+/// `bitonic_sort`/`mux3_1`.
+#[test]
+fn mimc_hasher_kat() {
+    common::assert_kats("mimc_hasher", CompilerConfig::default());
+}
+
+#[test]
+fn mimc_sponge_hash_test_kat() {
+    common::assert_kats("mimc_sponge_hash_test", CompilerConfig::default());
+}
+
+/// The brief's own named *mapped-IO* candidates: `EscalarMulAny`/`EscalarMulFix` build a
+/// `component[n]` array whose element template varies across positions (a genuinely mixed
+/// component-array cluster), so named-signal access into it — `dbl[i].out`, `adr[i].in`,
+/// ... — compiles through `LocationRule::Mapped` (`Instr::InputSub`/`OutputSub`'s
+/// `mapped: Some(_)`) rather than the plain `Indexed` addressing every other KAT above
+/// exercises. `escalarmul_test`/`escalarmul_test_min` (already function-lowering KATs)
+/// keep passing unchanged now that their own component graphs lower too.
+#[test]
+fn escalarmul_test_kat() {
+    common::assert_kats("escalarmul_test", CompilerConfig::default());
+}
+
+#[test]
+fn escalarmul_test_min_kat() {
+    common::assert_kats("escalarmul_test_min", CompilerConfig::default());
+}
+
+#[test]
+fn escalarmulany_test_kat() {
+    common::assert_kats("escalarmulany_test", CompilerConfig::default());
+}
+
+#[test]
+fn escalarmulfix_test_kat() {
+    common::assert_kats("escalarmulfix_test", CompilerConfig::default());
+}
+
+/// The brief's own "heavy, time-box it" candidates: `eddsa_test`/`eddsa_verify` build the
+/// deepest component tree in the whole KAT suite (`EdDSAVerifier` -> `EdDSAMiMCVerifier`/
+/// `EdDSAPoseidonVerifier`-style signature checks -> `EscalarMulAny`/`BabyDbl`/`MiMCSponge`/
+/// `Poseidon` subcomponents, several levels deep, with mapped IO throughout the
+/// `EscalarMulAny` layer) — confirmed to compile and match their KAT witnesses with no
+/// special-casing beyond what every KAT above already exercises.
+#[test]
+fn eddsa_test_kat() {
+    common::assert_kats("eddsa_test", CompilerConfig::default());
+}
+
+#[test]
+fn eddsa_verify_kat() {
+    common::assert_kats("eddsa_verify", CompilerConfig::default());
+}
+
+/// Two more real component-tree KATs confirmed alongside the `eddsa_*` pair above: the
+/// MiMC- and Poseidon-hash variants of EdDSA signature verification.
+#[test]
+fn eddsamimc_test_kat() {
+    common::assert_kats("eddsamimc_test", CompilerConfig::default());
+}
+
+#[test]
+fn eddsaposeidon_test_kat() {
+    common::assert_kats("eddsaposeidon_test", CompilerConfig::default());
+}
+
+/// The Pedersen-hash family: `Pedersen(...)` builds a `component[n]` array of
+/// `EscalarMulFix`-style window lookups (mapped IO again) chained through `BabyAdd`
+/// accumulation — real multi-level component-tree coverage independent of the `eddsa_*`
+/// tree above.
+#[test]
+fn pedersen_test_kat() {
+    common::assert_kats("pedersen_test", CompilerConfig::default());
+}
+
+#[test]
+fn pedersen2_test_kat() {
+    common::assert_kats("pedersen2_test", CompilerConfig::default());
+}
+
+#[test]
+fn pedersen_hasher_kat() {
+    common::assert_kats("pedersen_hasher", CompilerConfig::default());
+}
+
+/// The Poseidon-hash family: `Poseidon(...)` builds a `component[nRoundsF+nRoundsP]` array
+/// of S-box/mix-layer subcomponents — another independent real component-array KAT.
+#[test]
+fn poseidon3_test_kat() {
+    common::assert_kats("poseidon3_test", CompilerConfig::default());
+}
+
+/// Confirms the crate compiles every remaining component-heavy candidate from the brief's
+/// own list that this task's probing found to compile and match its KAT witness, beyond
+/// the individually-documented tests above: more of the Poseidon family, the full SHA-256
+/// family, and the sparse-Merkle-tree (`smt*`) family — real multi-level component trees
+/// (an `smt` processor/verifier instantiates a chain of `SMTHash`/`SMTVerifier`-style
+/// subcomponents down the tree's depth) and, for SHA-256, large `Sha256compression`
+/// component arrays.
+#[test]
+fn poseidon_family_kats() {
+    for name in [
+        "poseidon6_test",
+        "poseidon_hasher1",
+        "poseidon_hasher2",
+        "poseidon_hasher16",
+        "poseidonex_test",
+    ] {
+        common::assert_kats(name, CompilerConfig::default());
+    }
+}
+
+#[test]
+fn sha256_family_kats() {
+    for name in ["sha256_2_test", "sha256_test448", "sha256_test512"] {
+        common::assert_kats(name, CompilerConfig::default());
+    }
+}
+
+#[test]
+fn smt_family_kats() {
+    for name in ["smtprocessor10_test", "smtverifier10_test"] {
+        common::assert_kats(name, CompilerConfig::default());
+    }
+}
+
+/// Rounds out real-circuit coverage with the remaining component-bearing KATs confirmed to
+/// compile and match end to end by this task's probing (accelerators, sign/sum helpers,
+/// and the `pointbits_loopback`/`multiplier16`/`constants_test` fixtures already used as
+/// milestones by earlier tasks, now exercised with real subcomponents in their graphs too).
+#[test]
+fn misc_component_kats() {
+    for name in [
+        "num2bits_accelerator",
+        "reclaim_addbits_accelerator",
+        "reclaim_addbits_accelerator_small",
+        "sign_test",
+        "sum_test",
+        "multiplier16",
+        "constants_test",
+        "pointbits_loopback",
+    ] {
+        common::assert_kats(name, CompilerConfig::default());
+    }
+}
+
+/// The brief-mandated instruction-shape test: a component-*array* circuit accessed with a
+/// loop-indexed (not literal-constant) subscript must lower `cmp` as `ISrc::Reg` — i.e. the
+/// subcomponent index itself is a runtime value read out of an integer register, not folded
+/// away to `ISrc::Const` — confirming the codegen's index-materialization path (`codegen::
+/// index`'s `IndexExpr::to_isrc`, internal to the compiler crate, so this test can only
+/// observe its effect on the emitted `Instr` shape) actually materializes the loop variable
+/// rather than only ever exercising the `count: 1`/literal-index case the other KATs above
+/// could in principle satisfy via constant folding alone.
+/// `tests/circuits/cmp_array.circom` (purpose-built, since none of the brief's named KATs
+/// isolate this mechanism-level claim as cleanly as a small fixture does) instantiates
+/// `component c[3]` inside a conforming `for (i = 0; i < 3; i++)` loop and both stores to
+/// and reads from `c[i]` — the loop's own promoted mirror register (an `Instr::ISet`-backed
+/// `ireg`, see `codegen::stmt`'s loop docs) is exactly what ends up as `InputSub`/
+/// `OutputSub`'s `cmp: ISrc::Reg(_)`.
+#[test]
+fn component_array_uses_isrc_reg_for_loop_indexed_cmp() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        unroll: UnrollConfig { threshold: 0 },
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/cmp_array.circom", config).unwrap(),
+    );
+
+    let instrs = &program.templates[program.main.0 as usize].instrs;
+    assert!(
+        instrs.iter().any(|i| matches!(
+            i,
+            Instr::InputSub {
+                cmp: ISrc::Reg(_),
+                ..
+            }
+        )),
+        "a loop-indexed component array store must lower InputSub's cmp as ISrc::Reg, got: \
+         {instrs:?}"
+    );
+    assert!(
+        instrs.iter().any(|i| matches!(
+            i,
+            Instr::OutputSub {
+                cmp: ISrc::Reg(_),
+                ..
+            }
+        )),
+        "a loop-indexed component array load must lower OutputSub's cmp as ISrc::Reg, got: \
+         {instrs:?}"
+    );
+
+    let mut inputs = BTreeMap::new();
+    for k in 0..3u64 {
+        inputs.insert(format!("a[{k}]"), Fr::from(10 + k));
+        inputs.insert(format!("b[{k}]"), Fr::from(k + 1));
+    }
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    assert_eq!(
+        finalized.get_output("out"),
+        Some((0..3u64).map(|k| Fr::from((10 + k) * (k + 1))).collect())
+    );
 }

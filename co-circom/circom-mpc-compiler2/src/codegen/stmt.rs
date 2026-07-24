@@ -135,8 +135,9 @@ use super::{CodeGen, expr, instr_kind_name};
 use crate::frontend::get_size_from_size_option;
 use ark_ff::PrimeField;
 use circom_compiler::intermediate_representation::ir_interface::{
-    AddressType, AssertBucket, BranchBucket, CallBucket, Instruction, LocationRule, LoopBucket,
-    OperatorType, ReturnBucket, ReturnType, StoreBucket, ValueBucket, ValueType,
+    AddressType, AssertBucket, BranchBucket, CallBucket, CreateCmpBucket, Instruction,
+    LocationRule, LoopBucket, OperatorType, ReturnBucket, ReturnType, StoreBucket, ValueBucket,
+    ValueType,
 };
 use circom_mpc_vm2::isa::{Addr, Dst, ISrc, Instr, RetSrc, Src};
 use eyre::{Result, bail, eyre};
@@ -172,7 +173,7 @@ fn lower_stmt_inner<F: PrimeField>(cg: &mut CodeGen<'_, F>, inst: &Instruction) 
         Instruction::Log(_) => bail!("not yet lowered: Log"),
         Instruction::Branch(bb) => lower_branch(cg, bb),
         Instruction::Loop(lb) => lower_loop(cg, lb),
-        Instruction::CreateCmp(_) => bail!("not yet lowered: CreateCmp"),
+        Instruction::CreateCmp(cb) => lower_create_cmp(cg, cb),
         Instruction::Call(cb) => lower_call(cg, cb),
         Instruction::Return(rb) => lower_return(cg, rb),
         other => bail!(
@@ -204,6 +205,18 @@ fn lower_stmt_inner<F: PrimeField>(cg: &mut CodeGen<'_, F>, inst: &Instruction) 
 fn lower_store<F: PrimeField>(cg: &mut CodeGen<'_, F>, sb: &StoreBucket) -> Result<()> {
     let size = get_size_from_size_option(&sb.context.size);
     let src = expr::lower_expr(cg, &sb.src)?;
+    if let AddressType::SubcmpSignal {
+        cmp_address,
+        is_output,
+        ..
+    } = &sb.dest_address_type
+    {
+        debug_assert!(
+            !is_output,
+            "a store's destination must never be a subcomponent *output* signal"
+        );
+        return lower_store_subcmp(cg, cmp_address, &sb.dest, src, size);
+    }
     let dst = compute_dst(cg, &sb.dest, &sb.dest_address_type)?;
     track_const_store(cg, &sb.dest_address_type, &dst, &sb.src);
     if size == 1 {
@@ -222,6 +235,54 @@ fn lower_store<F: PrimeField>(cg: &mut CodeGen<'_, F>, sb: &StoreBucket) -> Resu
         });
     }
     Ok(())
+}
+
+/// Lowers a store to a subcomponent's input signal (`AddressType::SubcmpSignal`, old
+/// `emit_store_opcodes`'s `SubcmpSignal` arm, old :276-285): unlike `Signal`/`Var`, there's
+/// no `Dst` addressing mode for this — [`Instr::InputSub`] always writes from a plain
+/// register, so a `src` that isn't already one (e.g. a bare constant, or a size-1 signal/var
+/// read that never allocated a register) is materialized into a fresh one first; a
+/// multi-element `src` is always already `Src::Reg` (materialized by [`expr::lower_expr`]'s
+/// own array-load path), same as the ordinary `StoreN` case above.
+///
+/// `n` is `size` here, not `context_size` under some other name — this crate's `StoreBucket`
+/// only ever has the one `context.size` (the value this function's caller already computed),
+/// matching what `Instr::InputSub`'s docs call `n`.
+fn lower_store_subcmp<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    cmp_address: &Instruction,
+    dest: &LocationRule,
+    src: Src,
+    size: usize,
+) -> Result<()> {
+    let (addr, mapped) = index::eval_subcmp_location(cg, dest)?;
+    let cmp = index::eval_index(cg, cmp_address)?.to_isrc(cg)?;
+    let src = materialize_reg(cg, src)?;
+    cg.instrs.push(Instr::InputSub {
+        cmp,
+        addr,
+        mapped,
+        src,
+        n: u32::try_from(size)?,
+    });
+    Ok(())
+}
+
+/// Materializes `src` into a plain field register if it isn't already one — used wherever
+/// the ISA wants a bare `u16` register (not the richer [`Src`] enum), such as
+/// [`Instr::InputSub`]'s `src` field.
+fn materialize_reg<F: PrimeField>(cg: &mut CodeGen<'_, F>, src: Src) -> Result<u16> {
+    match src {
+        Src::Reg(r) => Ok(r),
+        other => {
+            let dst = cg.alloc_freg()?;
+            cg.instrs.push(Instr::Mov {
+                dst: Dst::Reg(dst),
+                src: other,
+            });
+            Ok(dst)
+        }
+    }
 }
 
 /// Lowers an [`AssertBucket`]: dropped outright when `debug` is off (matching the old
@@ -314,10 +375,12 @@ fn lower_return<F: PrimeField>(cg: &mut CodeGen<'_, F>, rb: &ReturnBucket) -> Re
 /// each argument generically and then rewrote whichever single-element load opcode that
 /// had just emitted into its multi-element counterpart in place.
 ///
-/// `Instr::CallFn` follows, then the results are stored via the ordinary
-/// [`compute_dst`]/`Instr::Mov`/`Instr::StoreN` path — exactly like [`lower_store`],
-/// just fed from the call's freshly allocated `ret` register block instead of an
-/// arbitrary expression.
+/// `Instr::CallFn` follows, then the results are stored: a `SubcmpSignal` destination goes
+/// through `Instr::InputSub` (mirroring [`lower_store_subcmp`] — `ret`, already a plain
+/// register block, is used directly as `InputSub`'s `src`, no extra materialization
+/// needed); anything else uses the ordinary [`compute_dst`]/`Instr::Mov`/`Instr::StoreN`
+/// path — exactly like [`lower_store`], just fed from the call's freshly allocated `ret`
+/// register block instead of an arbitrary expression.
 ///
 /// `ReturnType::Intermediate` (a call used as an operand *inside* another expression,
 /// e.g. `f(a) + 1`) is old's own `todo!()` (`circom-mpc-compiler/src/lib.rs:537`) — this
@@ -329,9 +392,6 @@ fn lower_return<F: PrimeField>(cg: &mut CodeGen<'_, F>, rb: &ReturnBucket) -> Re
 /// any attempt to embed one would already fail to lower, rather than silently lowering
 /// in the wrong order. A `Call` is therefore always its own top-level statement, args
 /// and destination store fully self-contained within this one function.
-///
-/// `SubcmpSignal` destinations bail until Task 8 wires up subcomponent addressing (see
-/// [`compute_dst`]).
 fn lower_call<F: PrimeField>(cg: &mut CodeGen<'_, F>, cb: &CallBucket) -> Result<()> {
     let fn_id = *cg
         .fn_ids
@@ -373,6 +433,28 @@ fn lower_call<F: PrimeField>(cg: &mut CodeGen<'_, F>, cb: &CallBucket) -> Result
         ret_n: ret_n_u32,
     });
 
+    if let AddressType::SubcmpSignal {
+        cmp_address,
+        is_output,
+        ..
+    } = &final_data.dest_address_type
+    {
+        debug_assert!(
+            !is_output,
+            "a call's destination must never be a subcomponent *output* signal"
+        );
+        let (addr, mapped) = index::eval_subcmp_location(cg, &final_data.dest)?;
+        let cmp = index::eval_index(cg, cmp_address)?.to_isrc(cg)?;
+        cg.instrs.push(Instr::InputSub {
+            cmp,
+            addr,
+            mapped,
+            src: ret,
+            n: ret_n_u32,
+        });
+        return Ok(());
+    }
+
     let dst = compute_dst(cg, &final_data.dest, &final_data.dest_address_type)?;
     if ret_n == 1 {
         cg.instrs.push(Instr::Mov {
@@ -391,11 +473,17 @@ fn lower_call<F: PrimeField>(cg: &mut CodeGen<'_, F>, cb: &CallBucket) -> Result
 
 /// Lowers one [`CallBucket`] argument into `dst_reg` (a slot in the contiguous
 /// `args_start..args_start+args_n` block — see [`lower_call`]): a scalar (`size == 1`)
-/// argument lowers through the ordinary expression path and one `Mov`; a `size > 1`
-/// argument is always an array `Load` in circom's IR (there is no array-valued
-/// arithmetic to produce anything else), so its address is read directly via
-/// `Instr::LoadN` straight into the block — no intermediate register range, unlike the
-/// generic [`expr::lower_load`]'s `materialize`.
+/// argument lowers through the ordinary expression path and one `Mov` (this already
+/// handles a subcomponent-signal argument correctly — [`expr::lower_expr`]'s `Load` path
+/// materializes it via `Instr::OutputSub` like any other consumer, so no special case is
+/// needed here for `size == 1`); a `size > 1` argument is always an array `Load` in
+/// circom's IR (there is no array-valued arithmetic to produce anything else), so its
+/// address is read directly via `Instr::LoadN` straight into the block — no intermediate
+/// register range, unlike the generic [`expr::lower_load`]'s `materialize` — except for a
+/// subcomponent signal, which has no addressing mode `LoadN` could use at all and instead
+/// reads straight into `dst_reg` via `Instr::OutputSub` (mirroring [`expr::
+/// lower_load_subcmp`], just writing directly into the caller-supplied register instead of
+/// a freshly allocated one).
 fn lower_call_arg<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     inst: &Instruction,
@@ -416,18 +504,49 @@ fn lower_call_arg<F: PrimeField>(
             instr_kind_name(inst)
         );
     };
+    if let AddressType::SubcmpSignal { cmp_address, .. } = &lb.address_type {
+        let (addr, mapped) = index::eval_subcmp_location(cg, &lb.src)?;
+        let cmp = index::eval_index(cg, cmp_address)?.to_isrc(cg)?;
+        cg.instrs.push(Instr::OutputSub {
+            cmp,
+            addr,
+            mapped,
+            dst: dst_reg,
+            n: u32::try_from(size)?,
+        });
+        return Ok(());
+    }
     let addr = expr::addr_from_location_rule(cg, &lb.src)?;
     let src = match lb.address_type {
         AddressType::Signal => Src::Signal(addr),
         AddressType::Variable => Src::Var(addr),
-        AddressType::SubcmpSignal { .. } => {
-            bail!("not yet lowered: subcomponent signal call argument (Task 8)")
-        }
+        AddressType::SubcmpSignal { .. } => unreachable!("handled above"),
     };
     cg.instrs.push(Instr::LoadN {
         dst: dst_reg,
         src,
         n: u32::try_from(size)?,
+    });
+    Ok(())
+}
+
+/// Lowers a [`CreateCmpBucket`] (old `handle_create_cmp_bucket`, old :431-438) to
+/// [`Instr::CreateCmp`]: every field is already a compile-time constant in the bucket
+/// itself (`symbol`/`number_of_cmp`/`signal_offset`/`signal_offset_jump`), matching old's
+/// own `PushIndex`-of-constants emission — no address evaluation needed here at all, unlike
+/// `Load`/`Store`'s `SubcmpSignal` handling. `templ` resolves through [`CodeGen::templ_ids`],
+/// keyed by the bucket's own `symbol` (its monomorphized template header), exactly like a
+/// `CallBucket`'s `symbol` resolves through [`CodeGen::fn_ids`] (see [`lower_call`]).
+fn lower_create_cmp<F: PrimeField>(cg: &mut CodeGen<'_, F>, cb: &CreateCmpBucket) -> Result<()> {
+    let templ = *cg
+        .templ_ids
+        .get(&cb.symbol)
+        .ok_or_else(|| eyre!("CreateCmp references unknown template {:?}", cb.symbol))?;
+    cg.instrs.push(Instr::CreateCmp {
+        templ,
+        count: u32::try_from(cb.number_of_cmp)?,
+        base: u32::try_from(cb.signal_offset)?,
+        jump: u32::try_from(cb.signal_offset_jump)?,
     });
     Ok(())
 }
@@ -520,8 +639,11 @@ fn lower_branch<F: PrimeField>(cg: &mut CodeGen<'_, F>, bb: &BranchBucket) -> Re
     Ok(())
 }
 
-/// Resolves a [`StoreBucket`]'s destination to a [`Dst`], symbolically evaluating a
-/// computed index via [`expr::addr_from_location_rule`].
+/// Resolves a [`StoreBucket`]'s (or a [`CallBucket`]'s result's) destination to a [`Dst`],
+/// symbolically evaluating a computed index via [`expr::addr_from_location_rule`]. Both
+/// callers ([`lower_store`]/[`lower_call`]) intercept a `SubcmpSignal` destination before
+/// ever reaching here — [`Instr::InputSub`] has no `Dst`-shaped addressing mode at all (see
+/// [`lower_store_subcmp`]) — so the `SubcmpSignal` arm is unreachable in practice.
 fn compute_dst<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     dest: &LocationRule,
@@ -532,7 +654,7 @@ fn compute_dst<F: PrimeField>(
         AddressType::Variable => Ok(Dst::Var(addr)),
         AddressType::Signal => Ok(Dst::Signal(addr)),
         AddressType::SubcmpSignal { .. } => {
-            bail!("not yet lowered: subcomponent signal store (Task 8)")
+            unreachable!("callers intercept a SubcmpSignal destination before compute_dst")
         }
     }
 }

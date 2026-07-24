@@ -56,9 +56,10 @@ fn lower_value(vb: &ValueBucket) -> Result<Src> {
 /// a computed `Indexed` location via [`index::eval_index`].
 ///
 /// `Mapped` locations are used for subcomponent IO ([`AddressType::SubcmpSignal`]) only —
-/// they cannot occur for a plain `Signal`/`Var` load or store, so this errors if one
-/// shows up here (matches the old stack-based compiler's paths); real `Mapped` handling
-/// lands in Task 8.
+/// they cannot occur for a plain `Signal`/`Var` load or store, so this errors if one shows
+/// up here (matches the old stack-based compiler's paths). Real `Mapped` handling is
+/// [`index::eval_subcmp_location`], used directly by the `SubcmpSignal` paths in
+/// [`lower_load_subcmp`]/`codegen::stmt`'s store/call lowering instead of through here.
 pub(super) fn addr_from_location_rule<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     loc: &LocationRule,
@@ -66,7 +67,10 @@ pub(super) fn addr_from_location_rule<F: PrimeField>(
     match loc {
         LocationRule::Indexed { location, .. } => Ok(index::eval_index(cg, location)?.to_addr()),
         LocationRule::Mapped { .. } => {
-            bail!("not yet lowered: Mapped location (subcomponent signal access, Task 8)")
+            bail!(
+                "unexpected Mapped location outside subcomponent signal access (see \
+                 index::eval_subcmp_location)"
+            )
         }
     }
 }
@@ -91,14 +95,45 @@ fn lower_load<F: PrimeField>(cg: &mut CodeGen<'_, F>, lb: &LoadBucket) -> Result
         let id = cg.const_id(F::from(v as u64))?;
         return Ok(Src::Const(id));
     }
+    if let AddressType::SubcmpSignal { cmp_address, .. } = &lb.address_type {
+        return lower_load_subcmp(cg, cmp_address, &lb.src, size);
+    }
     let addr = addr_from_location_rule(cg, &lb.src)?;
     match &lb.address_type {
         AddressType::Signal => materialize(cg, Src::Signal(addr), size),
         AddressType::Variable => materialize(cg, Src::Var(addr), size),
-        AddressType::SubcmpSignal { .. } => {
-            bail!("not yet lowered: subcomponent signal load (Task 8)")
-        }
+        AddressType::SubcmpSignal { .. } => unreachable!("handled above"),
     }
+}
+
+/// Lowers a subcomponent-output read (`AddressType::SubcmpSignal`, old `handle_load_bucket`'s
+/// `SubcmpSignal` arm, old :419-428): unlike `Signal`/`Var`, there is no addressing mode a
+/// consuming instruction can read directly — the subcomponent's signal RAM lives at an
+/// offset only known once [`Instr::CreateCmp`] has run, reached only through the dedicated
+/// [`Instr::OutputSub`] — so this always materializes into a fresh `n`-register block, even
+/// for `size == 1` (no `Src::Signal`-style zero-cost addressing mode is possible here).
+///
+/// Evaluation order mirrors old: the location/mapping (`loc`) is resolved before
+/// `cmp_address`, matching old's `handle_instruction(location)` (or the `indexes`/`PushIndex`
+/// handling) preceding `handle_instruction(cmp_address)` in `handle_load_bucket`.
+fn lower_load_subcmp<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    cmp_address: &Instruction,
+    loc: &LocationRule,
+    size: usize,
+) -> Result<Src> {
+    let (addr, mapped) = index::eval_subcmp_location(cg, loc)?;
+    let cmp = index::eval_index(cg, cmp_address)?.to_isrc(cg)?;
+    let n = u32::try_from(size)?;
+    let dst = cg.alloc_freg_n(n)?;
+    cg.instrs.push(Instr::OutputSub {
+        cmp,
+        addr,
+        mapped,
+        dst,
+        n,
+    });
+    Ok(Src::Reg(dst))
 }
 
 /// Resolves whether `loc` is a plain scalar variable load whose slot is currently bound to
@@ -263,6 +298,11 @@ fn lower_eqn<F: PrimeField>(
 /// register copy — `EqN` itself walks `n` slots from there); anything else falls back to
 /// [`lower_expr`], which materializes a multi-element result into a contiguous register
 /// block via [`Instr::LoadN`] (still `n` consecutive slots, just register-backed).
+///
+/// A subcomponent-signal `Load` has no such zero-cost addressing mode at all (see
+/// [`lower_load_subcmp`]), so it's deliberately excluded from the shortcut and falls
+/// through to [`lower_expr`]/[`lower_load`] instead, which materializes it via
+/// [`Instr::OutputSub`] like any other consumer of a subcomponent signal.
 fn lower_eqn_operand<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     inst: &Instruction,
@@ -270,14 +310,13 @@ fn lower_eqn_operand<F: PrimeField>(
 ) -> Result<Src> {
     if let Instruction::Load(lb) = inst {
         let load_size = get_size_from_size_option(&lb.context.size);
-        if load_size == size {
+        let is_subcmp = matches!(lb.address_type, AddressType::SubcmpSignal { .. });
+        if load_size == size && !is_subcmp {
             let addr = addr_from_location_rule(cg, &lb.src)?;
             return Ok(match &lb.address_type {
                 AddressType::Signal => Src::Signal(addr),
                 AddressType::Variable => Src::Var(addr),
-                AddressType::SubcmpSignal { .. } => {
-                    bail!("not yet lowered: subcomponent signal load (Task 8)")
-                }
+                AddressType::SubcmpSignal { .. } => unreachable!("excluded above"),
             });
         }
     }

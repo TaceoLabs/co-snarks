@@ -14,12 +14,10 @@
 //!     (constants, loads, computed values); [`stmt`] handles statement-position IR
 //!     (stores and — once their tasks land — asserts, branches, loops, calls, ...).
 //!
-//! Every bucket kind not yet lowered by whichever task's turn it is is a
-//! `bail!("not yet lowered: ...")` stub — see the crate's task plan for the breakdown.
-//! As of this crate's function-lowering task, the only remaining stub is subcomponent
-//! addressing (`CreateCmp`/`InputSub`/`OutputSub`/`SubcmpSignal`, Task 8) — every other
-//! bucket kind, including function bodies and calls
-//! ([`CodeGen::lower_function`]/[`stmt::lower_call`]), lowers fully.
+//! Every bucket kind is now lowered, including subcomponent addressing (`CreateCmp`/
+//! `InputSub`/`OutputSub`/`SubcmpSignal` — see [`stmt::lower_create_cmp`]/[`stmt::
+//! lower_store_subcmp`]/[`expr::lower_load_subcmp`]) and function bodies/calls
+//! ([`CodeGen::lower_function`]/[`stmt::lower_call`]).
 use crate::CompilerConfig;
 use crate::frontend::OutputMapping;
 use ark_ff::PrimeField;
@@ -368,7 +366,8 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
 
     /// Lowers one template body into a [`TemplateCode`], resetting per-body state
     /// first. `mappings` is this template's io-map offsets, computed by the caller from
-    /// `circuit.c_producer.io_map` (used for mapped subcomponent signal access, Task 8).
+    /// `circuit.c_producer.io_map` (used for mapped subcomponent signal access — see
+    /// [`index::eval_subcmp_location`]).
     fn lower_template(
         &mut self,
         templ: &TemplateCodeInfo,

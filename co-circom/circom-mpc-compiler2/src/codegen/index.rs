@@ -18,8 +18,8 @@ use super::env::Binding;
 use super::{CodeGen, expr};
 use ark_ff::PrimeField;
 use circom_compiler::intermediate_representation::ir_interface::{
-    AddressType, ComputeBucket, Instruction, LoadBucket, LocationRule, OperatorType, ValueBucket,
-    ValueType,
+    AccessType, AddressType, ComputeBucket, Instruction, LoadBucket, LocationRule, OperatorType,
+    ValueBucket, ValueType,
 };
 use circom_mpc_vm2::isa::{Addr, ISrc, Instr};
 use eyre::{Result, bail, eyre};
@@ -67,6 +67,14 @@ impl IndexExpr {
             },
             IndexExpr::Dynamic(ireg) => Addr::Dynamic(ireg),
         }
+    }
+
+    /// Materializes to an [`ISrc`] — the operand shape `CreateCmp`/`InputSub`/`OutputSub`'s
+    /// `cmp` field needs (see `codegen::stmt`'s subcomponent lowering): a `Const` is an
+    /// immediate (no register needed); `Dynamic`/`Affine` materialize into an integer
+    /// register via [`to_isrc`] (`IAdd`/`IMul` as needed for the affine case — see there).
+    pub(crate) fn to_isrc<F: PrimeField>(self, cg: &mut CodeGen<'_, F>) -> Result<ISrc> {
+        to_isrc(cg, self)
     }
 }
 
@@ -213,6 +221,61 @@ pub(super) fn static_const_slot(loc: &Instruction) -> Option<usize> {
     match loc {
         Instruction::Value(vb) if vb.parse_as == ValueType::U32 => Some(vb.value),
         _ => None,
+    }
+}
+
+/// Resolves a [`LocationRule`] used for subcomponent signal access
+/// (`AddressType::SubcmpSignal`'s own `src`/`dest`) to `(addr, mapped)` — the pair
+/// [`Instr::InputSub`]/[`Instr::OutputSub`] need. `Indexed` is the ordinary case (`mapped:
+/// None`); `Mapped` resolves its `indexes` via [`eval_mapped_indexes`] and carries
+/// `signal_code` through as `mapped: Some(_)` (old :401-406/:263-266's `PushIndex`/
+/// `(true, signal_code)` split).
+pub(super) fn eval_subcmp_location<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    loc: &LocationRule,
+) -> Result<(Addr, Option<u32>)> {
+    match loc {
+        LocationRule::Indexed { location, .. } => Ok((eval_index(cg, location)?.to_addr(), None)),
+        LocationRule::Mapped {
+            signal_code,
+            indexes,
+        } => {
+            let addr = eval_mapped_indexes(cg, indexes)?.to_addr();
+            Ok((addr, Some(u32::try_from(*signal_code)?)))
+        }
+    }
+}
+
+/// Resolves a `Mapped` location's `indexes` (old `handle_access_type`, old :289-301) to a
+/// single [`IndexExpr`]: empty is a plain (non-array) mapped signal — `Const(0)` (old
+/// :401-406's `PushIndex(0)` special case) — and exactly one [`AccessType::Indexed`] with
+/// exactly one inner instruction is an array-element mapped signal with a single flattened
+/// offset expression (the only two shapes any real circuit in this crate's KAT corpus
+/// produces — confirmed empirically). Anything else (an [`AccessType::Qualified`] bus-field
+/// selector, or more than one entry/inner instruction) is circom's *bus* feature, which old
+/// itself never correctly supported either (`handle_access_type` just pushes every entry
+/// without ever combining them, so old's own stack-based VM would silently miscompute —
+/// not merely bail — on that IR shape): rather than reproduce that latent bug, this bails
+/// clearly.
+fn eval_mapped_indexes<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    indexes: &[AccessType],
+) -> Result<IndexExpr> {
+    match indexes {
+        [] => Ok(IndexExpr::Const(0)),
+        [AccessType::Indexed(info)] => match info.indexes.as_slice() {
+            [] => Ok(IndexExpr::Const(0)),
+            [single] => eval_index(cg, single),
+            _ => bail!(
+                "Mapped subcomponent signal access with a multi-dimensional index (bus \
+                 type?) is not supported"
+            ),
+        },
+        _ => bail!(
+            "Mapped subcomponent signal access with {} index entries (bus type?) is not \
+             supported",
+            indexes.len()
+        ),
     }
 }
 
