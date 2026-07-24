@@ -5,7 +5,7 @@
 mod common;
 
 use ark_bn254::Fr;
-use circom_mpc_vm2::api::Rep3WitnessExtension;
+use circom_mpc_vm2::api::{Rep3WitnessExtension, WitnessExtension};
 use circom_mpc_vm2::driver::VmDriver;
 use circom_mpc_vm2::drivers::rep3::{Rep3Driver, Rep3VmType};
 use circom_mpc_vm2::exec::Machine;
@@ -436,6 +436,100 @@ fn rep3_scalar_predicated_writes_share_one_cmux_round() {
         assert_eq!(
             public_msgs, 0,
             "party {party}: public operands under a shared condition need no communication"
+        );
+    }
+}
+
+/// Witness post-processing must open all shared public outputs in one Rep3 round.
+/// The program itself only copies inputs to outputs, so every network message measured
+/// during `run_with_flat` comes from finalization's `open_many` call.
+#[test]
+fn rep3_public_outputs_open_in_one_round() {
+    let n = 8usize;
+    let program = common::single_template_program(
+        (0..n)
+            .map(|i| Instr::Mov {
+                dst: Dst::Signal(Addr::Const(i as u32)),
+                src: Src::Signal(Addr::Const((n + i) as u32)),
+            })
+            .chain([Instr::Return])
+            .collect(),
+        0,
+        0,
+        0,
+        n as u32,
+        n as u32,
+        2 * n + 1,
+    );
+
+    let values: Vec<_> = (0..n as u64).map(|i| Fr::from(i + 20)).collect();
+    let mut rng = rand::thread_rng();
+    let shares = rep3::share_field_elements(&values, &mut rng);
+
+    let body = |program: CompiledProgram<Fr>, shares: Vec<Rep3PrimeFieldShare<Fr>>| {
+        move |net0: &CountingNetwork,
+              net1: &CountingNetwork|
+              -> (usize, usize, usize, usize, Vec<Fr>) {
+            let mut driver = Rep3Driver::new(net0, net1, A2BType::default()).expect("driver");
+            let inputs: Vec<_> = shares.into_iter().map(Rep3VmType::Arithmetic).collect();
+
+            let start = net0.message_count();
+            driver.open(&inputs[0]).expect("single open baseline");
+            let single_msgs = net0.message_count() - start;
+
+            let start = net0.message_count();
+            for input in &inputs {
+                driver.open(input).expect("sequential open baseline");
+            }
+            let sequential_msgs = net0.message_count() - start;
+
+            let publics = vec![Rep3VmType::Public(Fr::from(7u64)); n];
+            let start = net0.message_count();
+            driver
+                .open_many(publics.iter())
+                .expect("all-public open_many");
+            let public_msgs = net0.message_count() - start;
+
+            let wex = WitnessExtension::new(Arc::new(program), driver, VMConfig::default());
+            let start = net0.message_count();
+            let finalized = wex
+                .run_with_flat(inputs, 0)
+                .expect("batched witness finalization");
+            let batched_msgs = net0.message_count() - start;
+            let public_inputs = finalized.into_shared_witness().public_inputs;
+
+            (
+                single_msgs,
+                sequential_msgs,
+                batched_msgs,
+                public_msgs,
+                public_inputs,
+            )
+        }
+    };
+
+    let results = run_3_parties_counting(
+        body(program.clone(), shares[0].clone()),
+        body(program.clone(), shares[1].clone()),
+        body(program, shares[2].clone()),
+    );
+    let expected: Vec<_> = std::iter::once(Fr::from(1u64)).chain(values).collect();
+    for (party, (single_msgs, sequential_msgs, batched_msgs, public_msgs, opened)) in
+        results.into_iter().enumerate()
+    {
+        assert_eq!(opened, expected, "party {party}: finalized public outputs");
+        assert_eq!(
+            batched_msgs, single_msgs,
+            "party {party}: {n} shared outputs must cost one scalar-open round"
+        );
+        assert_eq!(
+            sequential_msgs,
+            single_msgs * n,
+            "party {party}: scalar baseline must perform {n} separate opens"
+        );
+        assert_eq!(
+            public_msgs, 0,
+            "party {party}: public values must remain communication-free"
         );
     }
 }

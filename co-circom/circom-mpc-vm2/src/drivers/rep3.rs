@@ -689,6 +689,41 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
         }
     }
 
+    /// Opens every shared entry through one `open_vec` call while copying public
+    /// entries locally. Empty result slots restore the caller's mixed public/shared
+    /// ordering without promoting public values or putting them on the wire.
+    fn open_many<'a, I>(&mut self, values: I) -> Result<Vec<Self::Public>>
+    where
+        I: IntoIterator<Item = &'a Self::VmType>,
+        Self::VmType: 'a,
+    {
+        let values = values.into_iter();
+        let mut result = Vec::with_capacity(values.size_hint().0);
+        let mut shares = Vec::new();
+
+        for value in values {
+            match value {
+                Rep3VmType::Public(value) => result.push(Some(*value)),
+                Rep3VmType::Arithmetic(share) => {
+                    shares.push(*share);
+                    result.push(None);
+                }
+            }
+        }
+
+        if !shares.is_empty() {
+            let opened = arithmetic::open_vec(&shares, self.net0)?;
+            for (slot, value) in result.iter_mut().filter(|slot| slot.is_none()).zip(opened) {
+                *slot = Some(value);
+            }
+        }
+
+        Ok(result
+            .into_iter()
+            .map(|value| value.expect("every open_many output is populated"))
+            .collect())
+    }
+
     fn to_share(&mut self, a: &Self::VmType) -> Result<Self::ArithmeticShare> {
         match a {
             Rep3VmType::Public(a) => Ok(promote_to_trivial_share(self.id, *a)),

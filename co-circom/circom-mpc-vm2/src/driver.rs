@@ -78,6 +78,15 @@ pub trait VmDriver<F: PrimeField>: Sized {
     fn to_index(&mut self, a: &Self::VmType) -> Result<usize>;
     /// Open (reconstruct) a value.
     fn open(&mut self, a: &Self::VmType) -> Result<Self::Public>;
+    /// Open several values in input order. The scalar default preserves behavior for
+    /// local drivers; protocol drivers override this to batch communication.
+    fn open_many<'a, I>(&mut self, values: I) -> Result<Vec<Self::Public>>
+    where
+        I: IntoIterator<Item = &'a Self::VmType>,
+        Self::VmType: 'a,
+    {
+        values.into_iter().map(|value| self.open(value)).collect()
+    }
     /// Convert to an arithmetic share (promoting publics).
     fn to_share(&mut self, a: &Self::VmType) -> Result<Self::ArithmeticShare>;
     /// Public 1.

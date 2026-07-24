@@ -84,10 +84,11 @@
 //!
 //! Every [`driver::VmDriver`] method listed above is scalar (one operand pair in, one
 //! result out); most also have a `_many` counterpart (e.g. [`driver::VmDriver::bin_many`],
-//! [`driver::VmDriver::cmux_many`]) with a scalar-loop default that protocol drivers can
-//! override to batch network communication into a single round covering a whole
-//! vectorized op (e.g. an unrolled elementwise loop's fused `BinN`, or a `SharedIf`'s
-//! `cmux` merge) instead of one round per element — [`drivers::rep3::Rep3Driver`]'s
+//! [`driver::VmDriver::cmux_many`], and [`driver::VmDriver::open_many`]) with a
+//! scalar-loop default that protocol drivers can override to batch network communication
+//! into a single round covering a whole vectorized op (e.g. an unrolled elementwise
+//! loop's fused `BinN`, a `SharedIf`'s `cmux` merge, or witness finalization) instead of
+//! one round per element — [`drivers::rep3::Rep3Driver`]'s
 //! `mul_like` (backing `Mul`/`BoolAnd`) is the batching core this is built around:
 //! public∘public and public∘shared operand pairs resolve locally with no communication,
 //! and only the shared∘shared pairs in the batch are reshared together through one

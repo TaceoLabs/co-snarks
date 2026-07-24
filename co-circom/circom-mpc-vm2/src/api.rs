@@ -238,19 +238,21 @@ fn post_processing<F: PrimeField, C: VmDriver<F>>(
     amount_public_inputs: usize,
 ) -> Result<FinalizedWitnessExtension<F, C>> {
     let total_public_amount = program.main_outputs + amount_public_inputs + 1;
-    let mut public_inputs = Vec::with_capacity(total_public_amount);
+    let public_inputs = driver.open_many(
+        program
+            .signal_to_witness
+            .iter()
+            .take(total_public_amount)
+            .map(|idx| &signals[*idx]),
+    )?;
     let mut witness = Vec::with_capacity(
         program
             .signal_to_witness
             .len()
             .saturating_sub(total_public_amount),
     );
-    for (count, idx) in program.signal_to_witness.iter().enumerate() {
-        if count < total_public_amount {
-            public_inputs.push(driver.open(&signals[*idx])?);
-        } else {
-            witness.push(driver.to_share(&signals[*idx])?);
-        }
+    for idx in program.signal_to_witness.iter().skip(total_public_amount) {
+        witness.push(driver.to_share(&signals[*idx])?);
     }
     Ok(FinalizedWitnessExtension {
         shared_witness: SharedWitness {
