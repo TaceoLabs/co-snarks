@@ -721,60 +721,85 @@ fn gmean(ratios: &[f64]) -> f64 {
     (sum_ln / ratios.len() as f64).exp()
 }
 
+/// Builds the report's `## Summary` block from every measured row: per-column
+/// (plain/Rep3/compile) faster/slower/within-noise counts, geometric-mean ratio, and
+/// worst regression -- self-reproducing so these numbers never again have to be
+/// eyeballed and computed by hand from the table (see `build_summary_matches_a_hand_
+/// computed_synthetic_table` below, and the Task 6 review finding this fixes).
 fn build_summary(rows: &[Row]) -> String {
-    let mut plain_ratios = Vec::new();
-    let mut rep3_ratios = Vec::new();
-    let mut faster = 0;
-    let mut slower = 0;
-    let mut noise = 0;
-    let mut worst: Option<(String, f64)> = None;
-
-    for row in rows {
-        let r = ratio(row.old_plain.median, row.new_plain.median);
-        plain_ratios.push(r);
-        classify(r, &mut faster, &mut slower, &mut noise);
-        if worst.as_ref().is_none_or(|(_, wr)| r < *wr) {
-            worst = Some((format!("{} (plain)", row.circuit), r));
-        }
-        if let Some((o, n)) = &row.rep3 {
-            let rr = ratio(o.median, n.median);
-            rep3_ratios.push(rr);
-            if worst.as_ref().is_none_or(|(_, wr)| rr < *wr) {
-                worst = Some((format!("{} (rep3)", row.circuit), rr));
-            }
-        }
-    }
+    let plain: Vec<(&str, f64)> = rows
+        .iter()
+        .map(|row| {
+            (
+                row.circuit.as_str(),
+                ratio(row.old_plain.median, row.new_plain.median),
+            )
+        })
+        .collect();
+    let rep3: Vec<(&str, f64)> = rows
+        .iter()
+        .filter_map(|row| {
+            row.rep3
+                .as_ref()
+                .map(|(o, n)| (row.circuit.as_str(), ratio(o.median, n.median)))
+        })
+        .collect();
+    let compile: Vec<(&str, f64)> = rows
+        .iter()
+        .filter_map(|row| {
+            row.compile
+                .as_ref()
+                .map(|(o, n)| (row.circuit.as_str(), ratio(o.median, n.median)))
+        })
+        .collect();
 
     let mut s = String::new();
     let _ = writeln!(s, "\n## Summary\n");
     let _ = writeln!(s, "- Rows measured: {}", rows.len());
-    let _ = writeln!(
-        s,
-        "- Plain: faster (ratio > 1.1) / slower (< 0.9) / within-noise (0.9-1.1), counted \
-over plain ratios only: {faster} / {slower} / {noise}"
-    );
-    let _ = writeln!(
-        s,
-        "- Geometric mean ratio, plain: {:.3}",
-        gmean(&plain_ratios)
-    );
-    let _ = writeln!(
-        s,
-        "- Geometric mean ratio, rep3: {:.3}",
-        gmean(&rep3_ratios)
-    );
-    if let Some((name, r)) = worst {
-        let _ = writeln!(
-            s,
-            "- Worst regression (lowest old/new ratio): {name}, ratio {r:.3}"
-        );
-    }
+    write_column_summary(&mut s, "Plain", &plain);
+    write_column_summary(&mut s, "Rep3/local", &rep3);
+    write_column_summary(&mut s, "Compile", &compile);
     let _ = writeln!(
         s,
         "\nNote: acceptance (\"faster on most, regression on none\") is for the user to \
 judge from the table above, not asserted here."
     );
     s
+}
+
+/// Writes one column's summary lines (counts, geometric mean, worst regression) to `s` —
+/// `label` names the column (`"Plain"`, `"Rep3/local"`, `"Compile"`); `ratios` is that
+/// column's `(circuit name, old/new ratio)` pairs, already restricted to the rows that
+/// actually have this measurement (e.g. Rep3 only has the subset of rows with a Rep3
+/// KAT).
+fn write_column_summary(s: &mut String, label: &str, ratios: &[(&str, f64)]) {
+    if ratios.is_empty() {
+        let _ = writeln!(s, "- {label}: no rows have this measurement.");
+        return;
+    }
+
+    let (mut faster, mut slower, mut noise) = (0usize, 0usize, 0usize);
+    let mut worst: Option<(&str, f64)> = None;
+    for &(name, r) in ratios {
+        classify(r, &mut faster, &mut slower, &mut noise);
+        if worst.is_none_or(|(_, wr)| r < wr) {
+            worst = Some((name, r));
+        }
+    }
+    let vals: Vec<f64> = ratios.iter().map(|&(_, r)| r).collect();
+
+    let _ = writeln!(
+        s,
+        "- {label}, over {} row(s) with this measurement: faster (ratio > 1.1) / slower \
+(< 0.9) / within-noise (0.9-1.1): {faster} / {slower} / {noise}",
+        ratios.len()
+    );
+    let _ = writeln!(s, "- {label} geometric mean ratio: {:.3}", gmean(&vals));
+    let (name, r) = worst.expect("ratios is non-empty, so at least one worst candidate was set");
+    let _ = writeln!(
+        s,
+        "- {label} worst regression (lowest old/new ratio): {name}, ratio {r:.3}"
+    );
 }
 
 fn classify(r: f64, faster: &mut usize, slower: &mut usize, noise: &mut usize) {
@@ -784,5 +809,118 @@ fn classify(r: f64, faster: &mut usize, slower: &mut usize, noise: &mut usize) {
         *slower += 1;
     } else {
         *noise += 1;
+    }
+}
+
+// Named `summary_tests`, not `tests` -- this binary's own crate is named `tests`
+// (`tests::test_utils::...` is used elsewhere in this file), and a same-named local
+// module would shadow that extern crate reference in name resolution.
+#[cfg(test)]
+mod summary_tests {
+    use super::*;
+
+    /// A [`Measurement`] with the given millisecond median — `reps_run`/`capped` don't
+    /// feed into `build_summary`'s output, so any fixed value is fine for these tests.
+    fn measurement(ms: u64) -> Measurement {
+        Measurement {
+            median: Duration::from_millis(ms),
+            reps_run: 1,
+            capped: false,
+        }
+    }
+
+    /// A small synthetic table exercising every column independently: one circuit is
+    /// faster everywhere it's measured; one has a Rep3 regression but no compile
+    /// measurement; one has a plain *and* compile regression but no Rep3 KAT. Hand-
+    /// computed expectations (ratio = old/new) live in the assertions below.
+    fn synthetic_rows() -> Vec<Row> {
+        vec![
+            Row {
+                circuit: "faster_everywhere".to_string(),
+                old_plain: measurement(100),
+                new_plain: measurement(50), // ratio 2.0 -> faster
+                rep3: Some((measurement(100), measurement(50))), // ratio 2.0 -> faster
+                compile: Some((measurement(100), measurement(50))), // ratio 2.0 -> faster
+            },
+            Row {
+                circuit: "rep3_regression".to_string(),
+                old_plain: measurement(100),
+                new_plain: measurement(100), // ratio 1.0 -> noise
+                rep3: Some((measurement(100), measurement(200))), // ratio 0.5 -> slower
+                compile: None,
+            },
+            Row {
+                circuit: "plain_and_compile_regression".to_string(),
+                old_plain: measurement(100),
+                new_plain: measurement(120), // ratio 0.833 -> slower
+                rep3: None,
+                compile: Some((measurement(100), measurement(300))), // ratio 0.333 -> slower
+            },
+        ]
+    }
+
+    #[test]
+    fn build_summary_matches_a_hand_computed_synthetic_table() {
+        let summary = build_summary(&synthetic_rows());
+
+        assert!(summary.contains("Rows measured: 3"), "summary:\n{summary}");
+
+        // Plain ratios: 2.0 (faster), 1.0 (noise), 0.833 (slower) — one of each, over all
+        // 3 rows (every row has a plain measurement).
+        assert!(
+            summary.contains(
+                "Plain, over 3 row(s) with this measurement: faster (ratio > 1.1) / slower \
+(< 0.9) / within-noise (0.9-1.1): 1 / 1 / 1"
+            ),
+            "summary:\n{summary}"
+        );
+        assert!(
+            summary.contains(
+                "Plain worst regression (lowest old/new ratio): plain_and_compile_regression, \
+ratio 0.833"
+            ),
+            "summary:\n{summary}"
+        );
+
+        // Rep3 ratios: 2.0 (faster), 0.5 (slower) — over only the 2 rows with a Rep3
+        // measurement (`plain_and_compile_regression` has none).
+        assert!(
+            summary.contains(
+                "Rep3/local, over 2 row(s) with this measurement: faster (ratio > 1.1) / \
+slower (< 0.9) / within-noise (0.9-1.1): 1 / 1 / 0"
+            ),
+            "summary:\n{summary}"
+        );
+        assert!(
+            summary.contains(
+                "Rep3/local worst regression (lowest old/new ratio): rep3_regression, ratio \
+0.500"
+            ),
+            "summary:\n{summary}"
+        );
+
+        // Compile ratios: 2.0 (faster), 0.333 (slower) — over only the 2 rows with a
+        // compile measurement (`rep3_regression` has none).
+        assert!(
+            summary.contains(
+                "Compile, over 2 row(s) with this measurement: faster (ratio > 1.1) / slower \
+(< 0.9) / within-noise (0.9-1.1): 1 / 1 / 0"
+            ),
+            "summary:\n{summary}"
+        );
+        assert!(
+            summary.contains(
+                "Compile worst regression (lowest old/new ratio): \
+plain_and_compile_regression, ratio 0.333"
+            ),
+            "summary:\n{summary}"
+        );
+    }
+
+    #[test]
+    fn write_column_summary_reports_absence_instead_of_dividing_by_zero() {
+        let mut s = String::new();
+        write_column_summary(&mut s, "Rep3/local", &[]);
+        assert_eq!(s, "- Rep3/local: no rows have this measurement.\n");
     }
 }
