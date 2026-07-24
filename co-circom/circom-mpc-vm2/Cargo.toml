@@ -25,6 +25,5 @@ tracing.workspace = true
 
 [dev-dependencies]
 ark-bn254.workspace = true
-bincode.workspace = true
 mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }
 rand.workspace = true

@@ -58,6 +58,64 @@
 //! [`driver::VmDriver`]; [`api::PlainWitnessExtension`] is the convenience alias for
 //! [`drivers::plain::PlainDriver`].
 //!
+//! # Drivers
+//!
+//! [`drivers`] currently has three [`driver::VmDriver`] implementations:
+//!
+//! - [`drivers::plain::PlainDriver`] runs directly on `F`, for local execution and
+//!   tests. Every other driver embeds one (see below).
+//! - [`drivers::rep3::Rep3Driver`] implements the 3-party Rep3 (replicated secret
+//!   sharing) protocol; `VmType` is [`drivers::rep3::Rep3VmType`] — either a public `F`
+//!   or an `mpc_core::protocols::rep3` arithmetic share. Every scalar op matches on the
+//!   operand shapes (`Public`/`Public`, `Public`/`Arithmetic`, `Arithmetic`/
+//!   `Arithmetic`), delegating the all-public case to its embedded `PlainDriver` and
+//!   every other case to the corresponding Rep3 gadget — so a circuit that happens to
+//!   run entirely on public values never pays MPC overhead, even under a Rep3
+//!   `WitnessExtension`. [`drivers::rep3::Rep3Driver::new`] performs the Rep3 setup
+//!   handshake (correlated randomness) and holds two independent `(network, state)`
+//!   pairs so operations needing two concurrent conversions (e.g. `bit_xor` on two
+//!   shared operands) can run them on separate connections via `mpc_net::join` instead
+//!   of serializing them on one. [`api::Rep3WitnessExtension`] is the convenience alias
+//!   ([`api::Rep3WitnessExtension::new_rep3`] wraps driver construction + `WitnessExtension::new`).
+//! - [`drivers::taint`] wraps another driver to track which values ever touched a
+//!   secret share, for the debug/assert-lowering paths that need to tell public from
+//!   shared control flow apart without being a full protocol themselves.
+//!
+//! Every [`driver::VmDriver`] method listed above is scalar (one operand pair in, one
+//! result out); most also have a `_many` counterpart (e.g. [`driver::VmDriver::bin_many`],
+//! [`driver::VmDriver::cmux_many`]) with a scalar-loop default that protocol drivers can
+//! override to batch network communication into a single round covering a whole
+//! vectorized op (e.g. an unrolled elementwise loop's fused `BinN`, or a `SharedIf`'s
+//! `cmux` merge) instead of one round per element — [`drivers::rep3::Rep3Driver`]'s
+//! `mul_like` (backing `Mul`/`BoolAnd`) is the batching core this is built around:
+//! public∘public and public∘shared operand pairs resolve locally with no communication,
+//! and only the shared∘shared pairs in the batch are reshared together through one
+//! `arithmetic::mul_vec` round, regardless of how many elements that group contains.
+//!
+//! # Accelerators
+//!
+//! [`accel::MpcAccelerator`] is a registry of *component* and *function* accelerators:
+//! driver-specific fast paths (e.g. a Rep3-native Poseidon2 permutation with
+//! precomputed randomness) that replace a whole component/function body instead of
+//! interpreting its lowered instructions. [`accel::MpcAccelerator::from_config`] builds
+//! the predefined set (`sqrt_0`, `Num2Bits`, `AddBits`, `IsZero`, `Poseidon2`), each
+//! individually gated by its own `CIRCOM_MPC_ACCELERATOR_*` environment variable via
+//! [`accel::MpcAcceleratorConfig::from_env`] (the default an [`api::WitnessExtension::new`]
+//! is constructed with); add custom ones with
+//! [`api::WitnessExtension::register_accelerator_component`]/
+//! [`api::WitnessExtension::register_accelerator_function`] before the first
+//! [`api::WitnessExtension::run`]/[`api::WitnessExtension::run_with_flat`] call.
+//!
+//! Registrations are matched against a [`program::CompiledProgram`]'s templates/
+//! functions **once, by name, at the start of that first run** (not a per-instruction
+//! lookup): binding produces `Vec<Option<usize>>` side tables indexed directly by
+//! [`isa::TemplId`]/[`isa::FnId`], which [`exec::Machine`] then consults before running
+//! a component body or dispatching a function call. A component accelerator also gets a
+//! [`accel::TemplateInfo`] (name, input/output signal counts) at binding time so it can
+//! decline a monomorphization it doesn't apply to (e.g. Poseidon2's state-size
+//! restriction) via its `can_handle` predicate, rather than only being selectable by
+//! name.
+//!
 //! # Example
 //!
 //! Hand-assembling and running the two-signal circuit `out <== a * b` (no compiler
