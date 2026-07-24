@@ -145,6 +145,134 @@ fn multi_value_return() {
     assert_eq!(signals[3], Fr::from(30u64));
 }
 
+// Callsite-arity parity (old mpc_vm.rs:788-838): the CALLSITE, not the callee,
+// determines how many values a call produces. f() returns 2 values but the callsite
+// asks for 3 (`ret_n: 3`) — the third slot must be zero-padded.
+//
+// f instrs: vars[0..2] = consts[0..2]; Ret Var(0), n=2.
+// template: CallFn(f, ret_n=3) -> regs[0..3], StoreN into 3 output signals.
+#[test]
+fn callee_returns_fewer_than_callsite_pads_with_zero() {
+    let f = FunctionCode {
+        instrs: vec![
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(0)),
+                src: Src::Const(0),
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(1)),
+                src: Src::Const(1),
+            },
+            Instr::Ret {
+                src: RetSrc::Var(Addr::Const(0)),
+                n: 2,
+            },
+        ],
+        num_field_regs: 0,
+        num_int_regs: 0,
+        num_vars: 2,
+        num_params: 0,
+        name_id: 1,
+    };
+    let program = common::program_with_functions(
+        vec![
+            Instr::CallFn {
+                fn_id: FnId(0),
+                args_start: 0,
+                args_n: 0,
+                ret: 0,
+                ret_n: 3,
+            },
+            Instr::StoreN {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: 0,
+                n: 3,
+            },
+            Instr::Return,
+        ],
+        3,
+        0,
+        0,
+        0,
+        3,
+        4,
+        vec![f],
+        vec!["f"],
+    );
+    let signals =
+        common::run_plain_with_consts(&program, vec![Fr::from(10u64), Fr::from(20u64)], vec![]);
+    assert_eq!(signals[1], Fr::from(10u64));
+    assert_eq!(signals[2], Fr::from(20u64));
+    assert_eq!(signals[3], Fr::from(0u64)); // padded with public_zero()
+}
+
+// Callsite-arity parity, the other direction: f() returns 3 values but the callsite
+// only wants 2 (`ret_n: 2`) — old behavior copies exactly the callsite's arity, so the
+// third value is dropped.
+//
+// f instrs: vars[0..3] = consts[0..3]; Ret Var(0), n=3.
+// template: CallFn(f, ret_n=2) -> regs[0..2], StoreN into 2 output signals.
+#[test]
+fn callee_returns_more_than_callsite_truncates() {
+    let f = FunctionCode {
+        instrs: vec![
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(0)),
+                src: Src::Const(0),
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(1)),
+                src: Src::Const(1),
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(2)),
+                src: Src::Const(2),
+            },
+            Instr::Ret {
+                src: RetSrc::Var(Addr::Const(0)),
+                n: 3,
+            },
+        ],
+        num_field_regs: 0,
+        num_int_regs: 0,
+        num_vars: 3,
+        num_params: 0,
+        name_id: 1,
+    };
+    let program = common::program_with_functions(
+        vec![
+            Instr::CallFn {
+                fn_id: FnId(0),
+                args_start: 0,
+                args_n: 0,
+                ret: 0,
+                ret_n: 2,
+            },
+            Instr::StoreN {
+                dst: Dst::Signal(Addr::Const(0)),
+                src: 0,
+                n: 2,
+            },
+            Instr::Return,
+        ],
+        3,
+        0,
+        0,
+        0,
+        2,
+        3,
+        vec![f],
+        vec!["f"],
+    );
+    let signals = common::run_plain_with_consts(
+        &program,
+        vec![Fr::from(10u64), Fr::from(20u64), Fr::from(30u64)],
+        vec![],
+    );
+    assert_eq!(signals[1], Fr::from(10u64));
+    assert_eq!(signals[2], Fr::from(20u64)); // the third (30) is dropped
+}
+
 // fact(n): if n == 0 { return 1 } else { return n * fact(n - 1) } — a public-condition
 // early return, recursing via plain Rust recursion of `run_function`.
 //

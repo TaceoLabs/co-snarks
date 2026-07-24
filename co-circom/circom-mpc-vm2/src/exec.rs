@@ -328,12 +328,19 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
     /// per-`Component` `if_stack` behavior — functions don't get a fresh one).
     /// `comp_offset` is the enclosing component's signal-RAM offset, for any `Signal`
     /// operands the function body reads/writes.
+    ///
+    /// `ret_n` is the *callsite's* arity (the `CallFn`'s `ret_n`), not the callee's own
+    /// idea of how many values it returns: old-VM parity (`circom-mpc-vm/src/mpc_vm.rs:788-838`)
+    /// has the callsite determine the arity, resizing/zero-padding a callee that
+    /// returns fewer values and truncating one that returns more — see
+    /// [`Machine::resize_ret`], applied at every return boundary below.
     pub fn run_function(
         &mut self,
         fn_id: FnId,
         args: Vec<C::VmType>,
         pred: &mut Predication<C::VmType>,
         comp_offset: usize,
+        ret_n: usize,
     ) -> Result<Vec<C::VmType>> {
         let program = self.program;
         let code = &program.functions[fn_id.0 as usize];
@@ -358,7 +365,8 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 // was under a shared predicate (old `ReturnSharedIfFun` trailer); an
                 // empty one means the body never returned at all.
                 if !ret_acc.is_empty() {
-                    return self.merge_ret_acc(ret_acc);
+                    let vals = self.merge_ret_acc(ret_acc)?;
+                    return Ok(self.resize_ret(vals, ret_n));
                 }
                 bail!("function {name} ended without returning");
             }
@@ -369,7 +377,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             match self.step(&mut frame, pred, comp_offset, name, &mut kind, inst, None)? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
-                Flow::ReturnFn(vals) => return Ok(vals),
+                Flow::ReturnFn(vals) => return Ok(self.resize_ret(vals, ret_n)),
                 Flow::ReturnTempl => {
                     unreachable!("step never yields ReturnTempl for a function body")
                 }
@@ -378,21 +386,42 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
     }
 
     /// `Σ_i cond_i · val_i`, per output position, over the accumulated shared-if `Ret`
-    /// entries. Mirrors old `handle_shared_fun_return`
+    /// entries. Entries may differ in length (old `ReturnFun`'s resize-on-return lets
+    /// different shared branches return different arities, `circom-mpc-vm/src/mpc_vm.rs:791-795`):
+    /// the merged length is the longest entry, and any entry missing a position simply
+    /// contributes zero there. Mirrors old `handle_shared_fun_return`
     /// (`circom-mpc-vm/src/mpc_vm.rs:883-907`).
     fn merge_ret_acc(
         &mut self,
         ret_acc: Vec<(C::VmType, Vec<C::VmType>)>,
     ) -> Result<Vec<C::VmType>> {
-        let ret_n = ret_acc.first().map(|(_, vals)| vals.len()).unwrap_or(0);
+        let ret_n = ret_acc
+            .iter()
+            .map(|(_, vals)| vals.len())
+            .max()
+            .unwrap_or(0);
         let mut acc = vec![self.driver.public_zero(); ret_n];
         for (cond, vals) in ret_acc {
             for (slot, v) in acc.iter_mut().zip(vals.iter()) {
                 let contribution = self.driver.mul(&cond, v)?;
                 *slot = self.driver.add(slot, &contribution)?;
             }
+            // Entries shorter than `ret_n` simply stop contributing past their own
+            // length — the `zip` above already skips them, so nothing else to do.
         }
         Ok(acc)
+    }
+
+    /// Resize `vals` to exactly `ret_n` elements: pad with `public_zero()` if shorter,
+    /// truncate if longer. This is the callsite-arity boundary applied at every
+    /// [`Machine::run_function`] return path (old-VM parity, see that method's docs).
+    fn resize_ret(&mut self, mut vals: Vec<C::VmType>, ret_n: usize) -> Vec<C::VmType> {
+        if vals.len() < ret_n {
+            vals.resize_with(ret_n, || self.driver.public_zero());
+        } else {
+            vals.truncate(ret_n);
+        }
+        vals
     }
 
     /// Execute one instruction, shared between template and function bodies (see
@@ -642,15 +671,10 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 let args: Vec<C::VmType> = frame.regs
                     [*args_start as usize..*args_start as usize + *args_n as usize]
                     .to_vec();
-                let result = self.run_function(*fn_id, args, pred, comp_offset)?;
-                if result.len() != *ret_n as usize {
-                    let fname = &self.program.debug.names
-                        [self.program.functions[fn_id.0 as usize].name_id as usize];
-                    bail!(
-                        "function {fname} returned {} value(s), expected {ret_n}",
-                        result.len()
-                    );
-                }
+                // The callsite's `ret_n` is the arity contract: `run_function` pads or
+                // truncates the callee's actual returns to match (old-VM parity, see
+                // its docs), so `result.len() == *ret_n as usize` always holds here.
+                let result = self.run_function(*fn_id, args, pred, comp_offset, *ret_n as usize)?;
                 for (k, v) in result.into_iter().enumerate() {
                     frame.regs[*ret as usize + k] = v;
                 }
