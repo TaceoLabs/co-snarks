@@ -57,7 +57,9 @@
 //! body (including recursively inside nested loop bodies — see
 //! [`instruction_writes_slot`]). Descending loops can be statically unrolled but still use
 //! the ordinary fallback when they must remain rolled, because the integer ISA has no
-//! decrement instruction.
+//! decrement instruction. Circom sometimes folds a one-iteration loop's trailing update
+//! to a direct constant assignment; that form is also accepted when the known init and
+//! bound prove the assignment exits after at most one iteration.
 //!
 //! ### Where the persistent integer register lives
 //!
@@ -850,11 +852,20 @@ fn detect_conforming<F: PrimeField>(
         return None;
     };
 
-    // The body's last top-level statement must be the increment:
-    // `Store(Variable slot, Add(Load(Variable, slot), Value(step)))`. This is exactly
-    // where circom's own `for`-to-`while` desugaring places a `for`'s step (see the
-    // module docs) — a stricter-than-necessary but sufficient shape for every real KAT
-    // loop this task exercises.
+    // The value of `slot` immediately before the loop must be a known constant (tracked
+    // by `track_const_store` across every preceding `Store` this body has lowered so
+    // far). The concrete bound is optional for an ordinary additive update, but required
+    // to prove that a direct constant update terminates after at most one iteration.
+    let init = *cg.last_const_store.get(&slot)?;
+    let bound = const_as_u32(cg, bound_vb);
+
+    // The body's last top-level statement must update the induction variable. Normally
+    // circom's for-to-while desugaring leaves `slot = slot +/- step`. Its constant
+    // propagation can instead turn a one-iteration loop's update into `slot = next`
+    // (Semaphore's Poseidon(1) emits `j = 2` for `for (j = 1; j < 2; j++)`). Accept that
+    // form only when the known init/bound prove zero or one iterations; treating an
+    // arbitrary constant assignment as a repeated step could otherwise turn a genuinely
+    // non-terminating shared-branch loop into a fixed schedule.
     let last = lb.body.last()?;
     let Instruction::Store(inc_sb) = last.as_ref() else {
         return None;
@@ -871,36 +882,57 @@ fn detect_conforming<F: PrimeField>(
     if static_const_slot(inc_dest)? != slot {
         return None;
     }
-    let Instruction::Compute(inc_cb) = inc_sb.src.as_ref() else {
-        return None;
+    let step = match inc_sb.src.as_ref() {
+        Instruction::Compute(inc_cb) => {
+            let expected_step_op = match direction {
+                LoopDirection::Ascending => OperatorType::Add,
+                LoopDirection::Descending => OperatorType::Sub,
+            };
+            if inc_cb.op != expected_step_op || inc_cb.stack.len() != 2 {
+                return None;
+            }
+            let Instruction::Load(inc_load) = inc_cb.stack[0].as_ref() else {
+                return None;
+            };
+            if !matches!(inc_load.address_type, AddressType::Variable) {
+                return None;
+            }
+            let LocationRule::Indexed {
+                location: inc_load_loc,
+                ..
+            } = &inc_load.src
+            else {
+                return None;
+            };
+            if static_const_slot(inc_load_loc)? != slot {
+                return None;
+            }
+            let Instruction::Value(step_vb) = inc_cb.stack[1].as_ref() else {
+                return None;
+            };
+            const_as_u32(cg, step_vb)?
+        }
+        Instruction::Value(next_vb) => {
+            let next = const_as_u32(cg, next_vb)?;
+            let step = match direction {
+                LoopDirection::Ascending => next.checked_sub(init)?,
+                LoopDirection::Descending => init.checked_sub(next)?,
+            };
+            let candidate = ConformingLoop {
+                slot,
+                init,
+                step,
+                direction,
+                inclusive,
+                bound: Some(bound?),
+            };
+            if !matches!(trip_count(&candidate), Some(0..=1)) {
+                return None;
+            }
+            step
+        }
+        _ => return None,
     };
-    let expected_step_op = match direction {
-        LoopDirection::Ascending => OperatorType::Add,
-        LoopDirection::Descending => OperatorType::Sub,
-    };
-    if inc_cb.op != expected_step_op || inc_cb.stack.len() != 2 {
-        return None;
-    }
-    let Instruction::Load(inc_load) = inc_cb.stack[0].as_ref() else {
-        return None;
-    };
-    if !matches!(inc_load.address_type, AddressType::Variable) {
-        return None;
-    }
-    let LocationRule::Indexed {
-        location: inc_load_loc,
-        ..
-    } = &inc_load.src
-    else {
-        return None;
-    };
-    if static_const_slot(inc_load_loc)? != slot {
-        return None;
-    }
-    let Instruction::Value(step_vb) = inc_cb.stack[1].as_ref() else {
-        return None;
-    };
-    let step = const_as_u32(cg, step_vb)?;
 
     // `slot` must be written nowhere else in the body (recursing into nested loop bodies
     // *and* both arms of any nested `Branch` — see `instruction_writes_slot`: a loop whose
@@ -913,12 +945,6 @@ fn detect_conforming<F: PrimeField>(
     if other_writes {
         return None;
     }
-
-    // The value of `slot` immediately before the loop must be a known constant (tracked
-    // by `track_const_store` across every preceding `Store` this body has lowered so
-    // far).
-    let init = *cg.last_const_store.get(&slot)?;
-    let bound = const_as_u32(cg, bound_vb);
 
     Some(ConformingLoop {
         slot,
@@ -1783,6 +1809,62 @@ mod tests {
                 }),
             ))],
         }
+    }
+
+    /// The constant-update shape circom emits for a one-iteration loop after propagating
+    /// its induction variable: `slot < bound`, body ending in `slot = next`.
+    fn synthetic_constant_update_loop(
+        slot: usize,
+        bound_const_idx: usize,
+        next_const_idx: usize,
+    ) -> LoopBucket {
+        let mut loop_bucket = synthetic_loop(slot, bound_const_idx, next_const_idx);
+        loop_bucket.body = vec![Box::new(store_var(slot, field_const(next_const_idx)))];
+        loop_bucket
+    }
+
+    #[test]
+    fn constant_update_is_conforming_when_it_exits_after_one_iteration() {
+        let mut cg = cg();
+        // Bound and direct update are both 2, matching circom's folded form of
+        // `for (j = 1; j < 2; j++)` in Semaphore's Poseidon(1).
+        cg.constants = vec![ark_bn254::Fr::from(2u64)];
+        cg.last_const_store.insert(0, 1);
+        let loop_bucket = synthetic_constant_update_loop(0, 0, 0);
+
+        let info = detect_conforming(&cg, &loop_bucket).expect("one-shot loop must conform");
+        assert_eq!(info.init, 1);
+        assert_eq!(info.step, 1);
+        assert_eq!(trip_count(&info), Some(1));
+    }
+
+    #[test]
+    fn constant_update_is_rejected_when_it_does_not_exit() {
+        let mut cg = cg();
+        // `j = 1; while (j < 3) { j = 2; }` never exits: after the first iteration it
+        // remains stuck at 2. It must not be assigned a fixed shared-branch schedule.
+        cg.constants = vec![ark_bn254::Fr::from(3u64), ark_bn254::Fr::from(2u64)];
+        cg.last_const_store.insert(0, 1);
+        let loop_bucket = synthetic_constant_update_loop(0, 0, 1);
+
+        assert!(detect_conforming(&cg, &loop_bucket).is_none());
+    }
+
+    #[test]
+    fn inclusive_constant_update_is_rejected_when_bound_runs_again() {
+        let mut cg = cg();
+        cg.constants = vec![ark_bn254::Fr::from(2u64)];
+        cg.last_const_store.insert(0, 1);
+        let mut loop_bucket = synthetic_constant_update_loop(0, 0, 0);
+        let Instruction::Compute(condition) = loop_bucket.continue_condition.as_mut() else {
+            unreachable!("synthetic loop condition is Compute")
+        };
+        condition.op = OperatorType::LesserEq;
+
+        assert!(
+            detect_conforming(&cg, &loop_bucket).is_none(),
+            "j = 2 still satisfies j <= 2, so the constant update would loop forever"
+        );
     }
 
     /// A hand-built [`Instruction::Branch`] (an `if`/`else` — or else-less, when
