@@ -3,7 +3,7 @@ mod common;
 use ark_bn254::{Bn254, Fr};
 use circom_mpc_compiler2::{CoCircomCompiler, CompilerConfig, SimplificationLevel, UnrollConfig};
 use circom_mpc_vm2::api::PlainWitnessExtension;
-use circom_mpc_vm2::isa::{BinOp, ISrc, Instr};
+use circom_mpc_vm2::isa::{BinOp, Dst, ISrc, Instr};
 use circom_mpc_vm2::program::{CompiledProgram, VMConfig};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -76,6 +76,9 @@ fn constant_folding_eliminates_known_protocol_work_and_branch_scaffolding() {
             instr,
             Instr::Bin {
                 op: BinOp::Add | BinOp::Sub | BinOp::Mul,
+                ..
+            } | Instr::Mov {
+                dst: Dst::Reg(_),
                 ..
             } | Instr::SharedIf { .. }
                 | Instr::SharedIfBit { .. }

@@ -62,7 +62,8 @@
 //!      [`circom_mpc_vm2::program::FunctionCode`].
 //!    - **Post-lowering passes** (`codegen::passes`): a CFG validates absolute targets,
 //!      scalar constants and algebraic identities are folded, statically selected branch
-//!      arms and unreachable blocks are removed, and all surviving targets are remapped.
+//!      arms and unreachable blocks are removed, register liveness eliminates unused
+//!      computations, and all surviving targets are remapped.
 //!
 //! # Example
 //!

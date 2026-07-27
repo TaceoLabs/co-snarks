@@ -13,6 +13,8 @@ use circom_mpc_vm2::isa::{BinOp, Dst, Instr, Src};
 use eyre::{Result, bail, eyre};
 use std::collections::HashMap;
 
+mod dce;
+
 /// Runs the post-lowering pipeline for one template or function body.
 ///
 /// The pipeline validates and constructs a CFG, folds constants and statically selected
@@ -40,6 +42,7 @@ pub(super) fn run<F: PrimeField>(
     };
     let (instrs, removed_fallthrough_jumps) = remove_fallthrough_jumps(instrs)?;
     folded += removed_fallthrough_jumps;
+    let (instrs, removed_dead) = dce::eliminate_dead_register_defs(instrs)?;
     let cfg = ControlFlowGraph::build(&instrs)
         .map_err(|error| eyre!("invalid optimized bytecode for {body_name}: {error}"))?;
     tracing::trace!(
@@ -49,6 +52,7 @@ pub(super) fn run<F: PrimeField>(
         cfg_edges = cfg.edge_count(),
         folded_instructions = folded,
         removed_unreachable = unreachable,
+        removed_dead_register_defs = removed_dead,
         "ran post-lowering bytecode passes"
     );
     Ok(instrs)
@@ -668,6 +672,29 @@ mod tests {
         (instrs, constants)
     }
 
+    fn fold_only(
+        instrs: Vec<Instr>,
+        num_field_regs: usize,
+        mut constants: Vec<Fr>,
+    ) -> (Vec<Instr>, Vec<Fr>) {
+        let mut constant_ids = constants
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(id, value)| (value, id as u32))
+            .collect();
+        let cfg = ControlFlowGraph::build(&instrs).unwrap();
+        let (instrs, _) = fold_constants(
+            instrs,
+            &cfg,
+            num_field_regs,
+            &mut constants,
+            &mut constant_ids,
+        )
+        .unwrap();
+        (instrs, constants)
+    }
+
     #[test]
     fn cfg_models_conditional_and_ret_fallthrough() {
         let instrs = vec![
@@ -717,7 +744,7 @@ mod tests {
 
     #[test]
     fn folds_literals_propagates_register_constants_and_applies_identities() {
-        let (out, constants) = optimize(
+        let (out, constants) = fold_only(
             vec![
                 Instr::Bin {
                     op: BinOp::Add,
