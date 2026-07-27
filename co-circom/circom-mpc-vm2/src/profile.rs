@@ -230,6 +230,10 @@ fn analyze_static_body(instrs: &[Instr], report: &mut StaticBatchability) {
                 report.existing_vector_calls += 1;
                 report.existing_vector_lanes += *n as u64;
             }
+            Instr::BinBatch { op, lanes } if rep3_vectorizable(*op) => {
+                report.existing_vector_calls += 1;
+                report.existing_vector_lanes += lanes.len() as u64;
+            }
             Instr::EqN { n, .. } => {
                 report.eqn_instructions += 1;
                 report.eqn_lanes += *n as u64;
@@ -300,7 +304,7 @@ fn analyze_dynamic_body(
                 report.vectorizable_scalar_calls += calls;
                 report.vectorizable_scalar_by_op.add(*op, calls);
             }
-            Instr::BinN { op, .. } if rep3_vectorizable(*op) => {
+            Instr::BinN { op, .. } | Instr::BinBatch { op, .. } if rep3_vectorizable(*op) => {
                 let stats = profile.at(site, InteractionKind::BinN(*op));
                 report.existing_vector_calls += stats.calls;
                 report.existing_vector_lanes += stats.lanes;

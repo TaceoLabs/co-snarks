@@ -415,6 +415,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             usize::from(num_field_regs),
             &mut self.constants,
             &mut self.const_ids,
+            self.config.batching.max_batch_size,
         )?;
         Ok(TemplateCode {
             instrs,
@@ -478,6 +479,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             usize::from(num_field_regs),
             &mut self.constants,
             &mut self.const_ids,
+            self.config.batching.max_batch_size,
         )?;
         Ok(FunctionCode {
             instrs,

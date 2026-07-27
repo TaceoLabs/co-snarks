@@ -161,6 +161,14 @@ fn kill_definitions(live: &mut LiveSet, instr: &Instr) {
         Instr::Bin { dst, .. } | Instr::Neg { dst, .. } | Instr::EqN { dst, .. } => {
             live.remove_field(*dst);
         }
+        Instr::BinBatch { lanes, .. } => {
+            for lane in lanes {
+                live.remove_field(lane.dst);
+                if let Some(Dst::Reg(dst)) = lane.store {
+                    live.remove_field(dst);
+                }
+            }
+        }
         Instr::Mov {
             dst: Dst::Reg(dst), ..
         } => live.remove_field(*dst),
@@ -186,6 +194,18 @@ fn add_uses(live: &mut LiveSet, instr: &Instr) {
         Instr::Bin { a, b, .. } => {
             live.add_src(*a, 1);
             live.add_src(*b, 1);
+        }
+        Instr::BinBatch { lanes, .. } => {
+            // Batches are introduced after DCE in the normal pipeline. Keep this
+            // conservative transfer so a future repeated pipeline never removes values
+            // supplying a batch or an address used by one of its stores.
+            for lane in lanes {
+                live.add_src(lane.a, 1);
+                live.add_src(lane.b, 1);
+                if let Some(store) = lane.store {
+                    live.add_dst_address(store);
+                }
+            }
         }
         Instr::Neg { a, .. } => live.add_src(*a, 1),
         Instr::EqN { a, b, n, .. } | Instr::BinN { a, b, n, .. } => {

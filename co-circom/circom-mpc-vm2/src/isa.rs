@@ -115,6 +115,24 @@ pub enum BinOp {
     ShiftL,
 }
 
+/// One lane of an irregular batched binary operation.
+///
+/// Unlike [`Instr::BinN`], lanes need not use consecutive operands or destinations. This
+/// lets the compiler batch independent scalar operations after register allocation without
+/// inserting gather/scatter bytecode or copying values through large temporary register
+/// blocks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BinLane {
+    /// Scalar temporary written by the original [`Instr::Bin`].
+    pub dst: u16,
+    /// Destination of an immediately-following [`Instr::Mov`] absorbed into this lane.
+    pub store: Option<Dst>,
+    /// First operand.
+    pub a: Src,
+    /// Second operand.
+    pub b: Src,
+}
+
 /// One VM instruction. Three-address form: operands are addressing modes, not stack slots.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Instr {
@@ -185,7 +203,6 @@ pub enum Instr {
         /// Number of elements.
         n: u32,
     },
-
     /// `iregs[dst] = val`.
     ISet {
         /// Destination integer register.
@@ -343,6 +360,17 @@ pub enum Instr {
         /// Source line number.
         line: u32,
     },
+    /// Irregular elementwise binary operations executed by one vectorized driver call.
+    /// All operands are gathered before any destination is written.
+    ///
+    /// Kept last so adding it does not renumber the bincode discriminants of pre-existing
+    /// instructions.
+    BinBatch {
+        /// Operation shared by every lane.
+        op: BinOp,
+        /// Arbitrary independent lanes.
+        lanes: Box<[BinLane]>,
+    },
 }
 
 impl fmt::Display for Instr {
@@ -368,6 +396,9 @@ impl fmt::Display for Instr {
             }
             Instr::BinN { op, dst, a, b, n } => {
                 write!(f, "{:?}N r{}, {:?}, {:?}, {}", op, dst, a, b, n)
+            }
+            Instr::BinBatch { op, lanes } => {
+                write!(f, "{:?}BATCH {} lanes", op, lanes.len())
             }
             Instr::ISet { dst, val } => {
                 write!(f, "ISET ir{}, {}", dst, val)

@@ -749,6 +749,49 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 }
                 Flow::Continue
             }
+            Instr::BinBatch { op, lanes } => {
+                // Snapshot every input before scattering results. Besides matching the
+                // vector driver's slice API, this preserves anti-dependencies where an
+                // earlier lane reads a slot that a later lane overwrites.
+                let mut av = Vec::with_capacity(lanes.len());
+                let mut bv = Vec::with_capacity(lanes.len());
+                for lane in lanes {
+                    av.push(
+                        read::<F, C>(frame, &self.signals, &self.consts, comp_offset, &lane.a)?
+                            .clone(),
+                    );
+                    bv.push(
+                        read::<F, C>(frame, &self.signals, &self.consts, comp_offset, &lane.b)?
+                            .clone(),
+                    );
+                }
+                let rv = if matches!(op, BinOp::Div) && pred.is_shared() {
+                    let ones = vec![self.driver.public_one(); lanes.len()];
+                    let cond = pred.cond().expect("is_shared implies cond is Some").clone();
+                    let guarded_b = self.driver.cmux_many(&cond, &bv, &ones)?;
+                    self.driver.bin_many(*op, &av, &guarded_b)?
+                } else {
+                    self.driver.bin_many(*op, &av, &bv)?
+                };
+                for (lane, value) in lanes.iter().zip(rv) {
+                    // Preserve both instructions represented by the lane: the scalar
+                    // Bin's temporary remains observable if later bytecode reads it,
+                    // followed by the Mov through the usual predicated write path.
+                    frame.regs[lane.dst as usize] = value.clone();
+                    if let Some(store) = &lane.store {
+                        write_dst::<F, C>(
+                            &*pred,
+                            pending,
+                            frame,
+                            &mut self.signals,
+                            comp_offset,
+                            store,
+                            value,
+                        )?;
+                    }
+                }
+                Flow::Continue
+            }
             Instr::ISet { dst, val } => {
                 frame.iregs[*dst as usize] = *val as usize;
                 Flow::Continue

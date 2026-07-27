@@ -3,6 +3,8 @@
 //! With no arguments this scans every top-level circuit in `test_vectors` and the
 //! co-SNARK benchmark corpus. Additional positional arguments replace those roots.
 //! `--static-only` skips KAT/input-driven taint execution.
+//! `--no-batching` disables compiler2's post-lowering batching pass for before/after
+//! comparisons.
 
 use ark_bn254::{Bn254, Fr};
 use ark_ff::PrimeField;
@@ -22,10 +24,13 @@ const BENCHMARK_ROOT: &str = "../benchmarks-co-snarks/circom";
 
 fn main() -> Result<()> {
     let mut static_only = false;
+    let mut no_batching = false;
     let mut roots = Vec::new();
     for arg in std::env::args().skip(1) {
         if arg == "--static-only" {
             static_only = true;
+        } else if arg == "--no-batching" {
+            no_batching = true;
         } else {
             roots.push(PathBuf::from(arg));
         }
@@ -49,7 +54,10 @@ fn main() -> Result<()> {
     let mut compiled = 0usize;
     let mut dynamically_profiled = 0usize;
     for circuit in circuits {
-        let program = match CoCircomCompiler::<Bn254>::parse(&circuit, compiler_config(&circuit)) {
+        let program = match CoCircomCompiler::<Bn254>::parse(
+            &circuit,
+            compiler_config(&circuit, no_batching),
+        ) {
             Ok(program) => program,
             Err(error) => {
                 eprintln!("skip compile {}: {error:#}", circuit.display());
@@ -162,8 +170,11 @@ fn source_has_main(path: &Path) -> Result<bool> {
     Ok(false)
 }
 
-fn compiler_config(circuit: &Path) -> CompilerConfig {
+fn compiler_config(circuit: &Path, no_batching: bool) -> CompilerConfig {
     let mut config = CompilerConfig::release();
+    if no_batching {
+        config.batching.max_batch_size = 0;
+    }
     if let Some(parent) = circuit.parent() {
         config.link_library.push(parent.to_path_buf());
         for local_lib in [parent.join("BN254/lib"), parent.join("bn254/lib")] {

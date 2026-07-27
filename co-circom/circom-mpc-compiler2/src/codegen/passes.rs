@@ -13,19 +13,21 @@ use circom_mpc_vm2::isa::{BinOp, Dst, Instr, Src};
 use eyre::{Result, bail, eyre};
 use std::collections::HashMap;
 
+mod batch;
 mod dce;
 
 /// Runs the post-lowering pipeline for one template or function body.
 ///
 /// The pipeline validates and constructs a CFG, folds constants and statically selected
 /// branches, removes unreachable blocks, then strips redundant fallthrough jumps. Later
-/// DCE and scheduling passes use the same CFG/remapping boundary.
+/// DCE and batching passes use the same CFG/remapping boundary.
 pub(super) fn run<F: PrimeField>(
     instrs: Vec<Instr>,
     body_name: &str,
     num_field_regs: usize,
     constants: &mut Vec<F>,
     constant_ids: &mut HashMap<F, u32>,
+    max_batch_size: usize,
 ) -> Result<Vec<Instr>> {
     let cfg = ControlFlowGraph::build(&instrs)
         .map_err(|error| eyre!("invalid bytecode for {body_name}: {error}"))?;
@@ -43,6 +45,8 @@ pub(super) fn run<F: PrimeField>(
     let (instrs, removed_fallthrough_jumps) = remove_fallthrough_jumps(instrs)?;
     folded += removed_fallthrough_jumps;
     let (instrs, removed_dead) = dce::eliminate_dead_register_defs(instrs)?;
+    let (instrs, mul_batches, mul_batch_lanes) =
+        batch::batch_independent_muls(instrs, max_batch_size)?;
     let cfg = ControlFlowGraph::build(&instrs)
         .map_err(|error| eyre!("invalid optimized bytecode for {body_name}: {error}"))?;
     tracing::trace!(
@@ -53,6 +57,8 @@ pub(super) fn run<F: PrimeField>(
         folded_instructions = folded,
         removed_unreachable = unreachable,
         removed_dead_register_defs = removed_dead,
+        mul_batches,
+        mul_batch_lanes,
         "ran post-lowering bytecode passes"
     );
     Ok(instrs)
@@ -234,6 +240,17 @@ fn fold_constants<F: PrimeField>(
                         }
                         set_known(&mut known, dst, constant_id(src));
                     }
+                }
+                Instr::BinBatch { op, mut lanes } => {
+                    for lane in &mut lanes {
+                        lane.a = resolve_src(lane.a, &known);
+                        lane.b = resolve_src(lane.b, &known);
+                        set_known(&mut known, lane.dst, None);
+                        if let Some(Dst::Reg(dst)) = lane.store {
+                            set_known(&mut known, dst, None);
+                        }
+                    }
+                    instrs[ip] = Instr::BinBatch { op, lanes };
                 }
                 Instr::EqN { dst, .. } => set_known(&mut known, dst, None),
                 Instr::LoadN { dst, n, .. }
@@ -667,6 +684,7 @@ mod tests {
             num_field_regs,
             &mut constants,
             &mut constant_ids,
+            0,
         )
         .unwrap();
         (instrs, constants)
@@ -737,6 +755,7 @@ mod tests {
             0,
             &mut constants,
             &mut constant_ids,
+            0,
         )
         .unwrap_err();
         assert!(error.to_string().contains("instruction 0 targets 2"));

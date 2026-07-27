@@ -310,6 +310,53 @@ fn binn_elementwise_mul() {
     assert_eq!(signals[4], Fr::from(50u64));
 }
 
+// signal layout: [0]=1, [1..3]=out[2], [3..7]=in[4]
+#[test]
+fn binbatch_gathers_irregular_lanes_before_scattering() {
+    let program = common::single_template_program(
+        vec![
+            Instr::BinBatch {
+                op: BinOp::Mul,
+                lanes: vec![
+                    BinLane {
+                        dst: 0,
+                        store: Some(Dst::Signal(Addr::Const(0))),
+                        a: Src::Signal(Addr::Const(2)),
+                        b: Src::Signal(Addr::Const(3)),
+                    },
+                    // The same scalar scratch is intentional: this is the shape emitted
+                    // by stack-disciplined codegen for successive statements.
+                    BinLane {
+                        dst: 0,
+                        store: Some(Dst::Signal(Addr::Const(1))),
+                        a: Src::Signal(Addr::Const(4)),
+                        b: Src::Signal(Addr::Const(5)),
+                    },
+                ]
+                .into_boxed_slice(),
+            },
+            Instr::Return,
+        ],
+        1,
+        0,
+        0,
+        4,
+        2,
+        7,
+    );
+    let signals = common::run_plain(
+        &program,
+        vec![
+            Fr::from(2u64),
+            Fr::from(3u64),
+            Fr::from(4u64),
+            Fr::from(5u64),
+        ],
+    );
+    assert_eq!(signals[1], Fr::from(6u64));
+    assert_eq!(signals[2], Fr::from(20u64));
+}
+
 // signal layout: [0]=1, [1]=out, [2..6]=in[4]; loads in[in[0]] via ToIndex + Dynamic
 // double indirection.
 #[test]

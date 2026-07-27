@@ -63,7 +63,8 @@
 //!    - **Post-lowering passes** (`codegen::passes`): a CFG validates absolute targets,
 //!      scalar constants and algebraic identities are folded, statically selected branch
 //!      arms and unreachable blocks are removed, register liveness eliminates unused
-//!      computations, and all surviving targets are remapped.
+//!      computations, adjacent dependency-free multiplication/store pairs are batched,
+//!      and all surviving targets are remapped.
 //!
 //! # Example
 //!
@@ -159,6 +160,29 @@ impl Default for UnrollConfig {
     }
 }
 
+/// Controls post-lowering batching of independent interactive operations.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct BatchingConfig {
+    /// Maximum number of scalar operations combined into one VM vector call.
+    ///
+    /// This bounds the temporary operand/result vectors allocated by the VM and the size
+    /// of a single protocol batch. `0` disables post-lowering batching.
+    #[serde(default = "default_max_batch_size")]
+    pub max_batch_size: usize,
+}
+
+fn default_max_batch_size() -> usize {
+    16_384
+}
+
+impl Default for BatchingConfig {
+    fn default() -> Self {
+        Self {
+            max_batch_size: default_max_batch_size(),
+        }
+    }
+}
+
 /// The mpc-compiler configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct CompilerConfig {
@@ -186,6 +210,9 @@ pub struct CompilerConfig {
     /// Loop-unrolling configuration used by codegen.
     #[serde(default)]
     pub unroll: UnrollConfig,
+    /// Post-lowering interactive-operation batching configuration.
+    #[serde(default)]
+    pub batching: BatchingConfig,
 }
 
 fn default_true() -> bool {
@@ -207,6 +234,7 @@ impl Default for CompilerConfig {
             inspect: false,
             debug: true,
             unroll: UnrollConfig::default(),
+            batching: BatchingConfig::default(),
         }
     }
 }

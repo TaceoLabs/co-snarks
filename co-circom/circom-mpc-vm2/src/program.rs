@@ -293,6 +293,16 @@ mod tests {
                         dst: Dst::Signal(Addr::Const(0)),
                         src: Src::Reg(0),
                     },
+                    Instr::BinBatch {
+                        op: BinOp::Mul,
+                        lanes: vec![BinLane {
+                            dst: 0,
+                            store: Some(Dst::Signal(Addr::Const(0))),
+                            a: Src::Signal(Addr::Const(1)),
+                            b: Src::Signal(Addr::Const(2)),
+                        }]
+                        .into_boxed_slice(),
+                    },
                     Instr::Return,
                 ],
                 num_field_regs: 1,
