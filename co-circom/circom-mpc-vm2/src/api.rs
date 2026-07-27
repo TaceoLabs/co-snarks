@@ -1,12 +1,12 @@
 //! The supported public API of the crate: [`WitnessExtension`], driven to completion via
 //! [`WitnessExtension::run`]/[`WitnessExtension::run_with_flat`] into a
 //! [`FinalizedWitnessExtension`].
-use crate::accel::{ComponentAcceleratorOutput, MpcAccelerator, TemplateInfo};
+use crate::accel::{AccelBindings, ComponentAcceleratorOutput, MpcAccelerator, TemplateInfo};
 use crate::driver::VmDriver;
 use crate::drivers::plain::PlainDriver;
 use crate::drivers::rep3::Rep3Driver;
 use crate::exec::Machine;
-use crate::program::{CompiledProgram, InputInfo, VMConfig};
+use crate::program::{CompiledProgram, InputInfo, VMConfig, execution_fingerprint};
 use ark_ff::PrimeField;
 use co_circom_types::SharedWitness;
 use eyre::{Result, bail};
@@ -30,6 +30,24 @@ pub struct WitnessExtension<F: PrimeField, C: VmDriver<F>> {
 pub type PlainWitnessExtension<F> = WitnessExtension<F, PlainDriver<F>>;
 
 impl<F: PrimeField, C: VmDriver<F>> WitnessExtension<F, C> {
+    /// Binds accelerators once, fingerprints every execution-affecting input, and asks
+    /// the driver to establish cross-party agreement. The driver receives a lazy builder:
+    /// plain/taint runs skip the potentially large program hash entirely.
+    fn prepare_execution(&mut self) -> Result<AccelBindings> {
+        let program = &*self.program;
+        let config = &self.config;
+        let accelerator = &self.accelerator;
+        let bindings = accelerator.bind(program);
+        self.driver.compare_execution_fingerprint(|| {
+            execution_fingerprint(
+                config,
+                program.execution_digest()?,
+                accelerator.bindings_digest(&bindings)?,
+            )
+        })?;
+        Ok(bindings)
+    }
+
     /// Creates a new witness extension for `program`, driven by `driver`.
     ///
     /// The accelerator registry uses [`VMConfig::accelerator`]'s predefined set
@@ -84,20 +102,21 @@ impl<F: PrimeField, C: VmDriver<F>> WitnessExtension<F, C> {
     /// of size `n` must be provided as the keys `name[0]..name[n-1]` (matching circom's
     /// own naming convention), not as a single `name` key.
     ///
-    /// Cross-checks `config` across parties via [`VmDriver::compare_vm_config`] before
-    /// running.
+    /// Cross-checks the VM configuration, compiled program, and accelerator bindings
+    /// across parties via [`VmDriver::compare_execution_fingerprint`] before running.
     pub fn run(
         mut self,
         inputs: BTreeMap<String, C::VmType>,
         amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
-        self.driver.compare_vm_config(&self.config)?;
+        let bindings = self.prepare_execution()?;
         let signals = {
-            let mut machine = Machine::new_with_accelerator(
+            let mut machine = Machine::new_with_accelerator_bindings(
                 &self.program,
                 &mut self.driver,
                 self.config.clone(),
                 &self.accelerator,
+                bindings,
             )?;
             set_input_signals(&self.program.main_input_list, &mut machine.signals, inputs)?;
             machine.run_main()?;
@@ -118,20 +137,19 @@ impl<F: PrimeField, C: VmDriver<F>> WitnessExtension<F, C> {
     /// following the main component's input layout — there is no name-based mapping.
     /// Use this only when you are certain which value corresponds to which input
     /// position; prefer [`WitnessExtension::run`] otherwise.
-    ///
-    /// Unlike [`WitnessExtension::run`], this does **not** call
-    /// [`VmDriver::compare_vm_config`] first.
     pub fn run_with_flat(
         mut self,
         inputs: Vec<C::VmType>,
         amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
+        let bindings = self.prepare_execution()?;
         let signals = {
-            let mut machine = Machine::new_with_accelerator(
+            let mut machine = Machine::new_with_accelerator_bindings(
                 &self.program,
                 &mut self.driver,
                 self.config.clone(),
                 &self.accelerator,
+                bindings,
             )?;
             set_flat_input_signals(
                 self.program.main_inputs,

@@ -8,7 +8,6 @@
 use crate::driver::{VmDriver, apply_bin};
 use crate::drivers::plain::PlainDriver;
 use crate::isa::BinOp;
-use crate::program::VMConfig;
 use ark_ff::{One, PrimeField};
 use co_circom_types::Rep3InputType;
 use eyre::{Result, bail};
@@ -743,13 +742,14 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
         Rep3VmType::Public(f)
     }
 
-    fn compare_vm_config(&mut self, config: &VMConfig) -> Result<()> {
-        let ser = bincode::serialize(&config)?;
-        self.net0.send_next(ser)?;
-        let recv: Vec<u8> = self.net0.recv_prev()?;
-        let deser = bincode::deserialize(&recv)?;
-        if config != &deser {
-            bail!("VM Config does not match: {:?} != {:?}", config, deser);
+    fn compare_execution_fingerprint(
+        &mut self,
+        fingerprint: impl FnOnce() -> Result<[u8; 32]>,
+    ) -> Result<()> {
+        let fingerprint = fingerprint()?;
+        let (prev, next) = self.net0.broadcast(fingerprint)?;
+        if fingerprint != prev || fingerprint != next {
+            bail!("execution fingerprint does not match across MPC parties");
         }
         Ok(())
     }

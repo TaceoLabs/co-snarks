@@ -1,7 +1,9 @@
 //! The compiled program artifact produced by circom-mpc-compiler2.
 use crate::accel::MpcAcceleratorConfig;
+use crate::fingerprint::FingerprintWriter;
 use crate::isa::{Instr, TemplId};
-use ark_ff::PrimeField;
+use ark_ff::{BigInteger, PrimeField};
+use eyre::Result;
 use mpc_core::protocols::rep3::conversion::A2BType;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -105,6 +107,39 @@ pub struct CompiledProgram<F: PrimeField> {
 }
 
 impl<F: PrimeField> CompiledProgram<F> {
+    /// Computes the deterministic digest used to ensure every MPC party will execute
+    /// identical bytecode and witness layout. The hash is streamed rather than first
+    /// materializing a second program-sized byte buffer. `output_mapping` is sorted
+    /// explicitly because its in-memory `HashMap` iteration order is randomized.
+    pub(crate) fn execution_digest(&self) -> Result<[u8; 32]> {
+        let mut writer = FingerprintWriter::new(b"circom-mpc-vm2/program/v1\0");
+        writer.serialize(&1u32)?;
+        writer.serialize(&F::MODULUS.to_bytes_le())?;
+        writer.serialize(&self.templates)?;
+        writer.serialize(&self.functions)?;
+        writer.serialize(&self.constants.len())?;
+        writer.serialize_canonical(&self.constants)?;
+        writer.serialize(&self.strings)?;
+        writer.serialize(&self.main)?;
+        writer.serialize(&self.total_signals)?;
+        writer.serialize(&self.main_inputs)?;
+        writer.serialize(&self.main_outputs)?;
+        writer.serialize(&self.main_input_list)?;
+
+        let mut output_mapping: Vec<_> = self
+            .output_mapping
+            .iter()
+            .map(|(name, &(offset, size))| (name.as_str(), offset, size))
+            .collect();
+        output_mapping.sort_unstable_by(|a, b| a.0.cmp(b.0));
+        writer.serialize(&output_mapping)?;
+
+        writer.serialize(&self.signal_to_witness)?;
+        writer.serialize(&self.public_inputs)?;
+        writer.serialize(&self.debug)?;
+        Ok(writer.finish())
+    }
+
     /// Returns the main component's input names and sizes (old
     /// `CoCircomCompilerParsed::inputs`, `circom-mpc-vm/src/types.rs:199-205`), derived
     /// from [`Self::main_input_list`].
@@ -120,6 +155,22 @@ impl<F: PrimeField> CompiledProgram<F> {
     pub fn public_inputs(&self) -> &[String] {
         &self.public_inputs
     }
+}
+
+/// Combines every execution-affecting input checked between MPC parties into one compact
+/// fingerprint. `program_digest` and `accelerator_digest` are separately domain-separated;
+/// this outer hash binds both to the selected VM configuration and schema version.
+pub(crate) fn execution_fingerprint(
+    config: &VMConfig,
+    program_digest: [u8; 32],
+    accelerator_digest: [u8; 32],
+) -> Result<[u8; 32]> {
+    let mut writer = FingerprintWriter::new(b"circom-mpc-vm2/execution/v1\0");
+    writer.serialize(&1u32)?;
+    writer.serialize(config)?;
+    writer.serialize(&program_digest)?;
+    writer.serialize(&accelerator_digest)?;
+    Ok(writer.finish())
 }
 
 /// The VM configuration (parity with the old crate's `VMConfig`).
@@ -157,6 +208,75 @@ impl VMConfig {
 mod tests {
     use super::*;
     use crate::isa::*;
+
+    fn digest_test_program() -> CompiledProgram<ark_bn254::Fr> {
+        CompiledProgram {
+            templates: vec![TemplateCode {
+                instrs: vec![Instr::Return],
+                num_field_regs: 0,
+                num_int_regs: 0,
+                num_vars: 0,
+                input_signals: 0,
+                output_signals: 0,
+                intermediate_signals: 0,
+                sub_components: 0,
+                mappings: vec![],
+                name_id: 0,
+                symbol_id: 0,
+            }],
+            functions: vec![],
+            constants: vec![ark_bn254::Fr::from(42u64)],
+            strings: vec![],
+            main: TemplId(0),
+            total_signals: 1,
+            main_inputs: 0,
+            main_outputs: 0,
+            main_input_list: vec![],
+            output_mapping: HashMap::new(),
+            signal_to_witness: vec![0],
+            public_inputs: vec![],
+            debug: DebugInfo {
+                names: vec!["Main".into()],
+            },
+        }
+    }
+
+    #[test]
+    fn execution_digest_is_independent_of_hash_map_insertion_order() {
+        let mut a = digest_test_program();
+        a.output_mapping.insert("z".into(), (3, 4));
+        a.output_mapping.insert("a".into(), (1, 2));
+
+        let mut b = digest_test_program();
+        b.output_mapping.insert("a".into(), (1, 2));
+        b.output_mapping.insert("z".into(), (3, 4));
+
+        assert_eq!(a.execution_digest().unwrap(), b.execution_digest().unwrap());
+    }
+
+    #[test]
+    fn execution_digest_covers_program_and_context_changes() {
+        let program = digest_test_program();
+        let digest = program.execution_digest().unwrap();
+
+        let mut changed = program.clone();
+        changed.templates[0].instrs.insert(0, Instr::SharedEnd);
+        assert_ne!(digest, changed.execution_digest().unwrap());
+
+        let accelerator_digest = [7u8; 32];
+        let config = VMConfig::default();
+        let fingerprint = execution_fingerprint(&config, digest, accelerator_digest).unwrap();
+        let mut changed_config = config;
+        changed_config.allow_leaky_logs = !changed_config.allow_leaky_logs;
+        assert_ne!(
+            fingerprint,
+            execution_fingerprint(&changed_config, digest, accelerator_digest).unwrap()
+        );
+        assert_ne!(
+            fingerprint,
+            execution_fingerprint(&VMConfig::default(), digest, [8u8; 32]).unwrap()
+        );
+    }
 
     #[test]
     fn program_bincode_roundtrip() {

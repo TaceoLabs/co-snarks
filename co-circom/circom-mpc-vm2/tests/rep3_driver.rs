@@ -15,6 +15,7 @@ use mpc_core::protocols::rep3::{self, Rep3PrimeFieldShare, conversion::A2BType};
 use mpc_net::bytes::Bytes;
 use mpc_net::local::LocalNetwork;
 use mpc_net::{ConnectionStats, Network};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -136,6 +137,117 @@ fn rep3_engine_end_to_end() {
 
     let witness = rep3::combine_field_elements(&w0.witness, &w1.witness, &w2.witness);
     assert_eq!(witness, vec![Fr::from(6u64), Fr::from(7u64)]);
+}
+
+fn assert_all_parties_reject_fingerprint(results: [String; 3]) {
+    for (party, error) in results.into_iter().enumerate() {
+        assert!(
+            error.contains("execution fingerprint does not match"),
+            "party {party} returned unexpected error: {error}"
+        );
+    }
+}
+
+/// A one-party bytecode/config mismatch must be reported by all three parties before
+/// execution. Comparing with both peers is load-bearing: the previous one-neighbor
+/// VMConfig check allowed the third party to continue and potentially hang.
+#[test]
+fn rep3_rejects_mismatched_compiled_program_on_every_party() {
+    let program = common::multiplier_program();
+    let mut changed = program.clone();
+    let Instr::Bin { op, .. } = &mut changed.templates[0].instrs[0] else {
+        panic!("multiplier starts with Bin");
+    };
+    *op = BinOp::Add;
+
+    let body = |program: CompiledProgram<Fr>| {
+        move |net0: &LocalNetwork, net1: &LocalNetwork| -> String {
+            let wex =
+                Rep3WitnessExtension::new_rep3(net0, net1, Arc::new(program), VMConfig::default())
+                    .expect("new_rep3");
+            match wex.run_with_flat(
+                vec![
+                    Rep3VmType::Public(Fr::from(6u64)),
+                    Rep3VmType::Public(Fr::from(7u64)),
+                ],
+                0,
+            ) {
+                Ok(_) => panic!("mismatched program was accepted"),
+                Err(error) => error.to_string(),
+            }
+        }
+    };
+
+    assert_all_parties_reject_fingerprint(run_3_parties(
+        body(changed),
+        body(program.clone()),
+        body(program),
+    ));
+}
+
+#[test]
+fn rep3_rejects_mismatched_vm_config_on_every_party() {
+    let program = Arc::new(common::single_template_program(
+        vec![Instr::Return],
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+    ));
+    let body = |config: VMConfig| {
+        let program = program.clone();
+        move |net0: &LocalNetwork, net1: &LocalNetwork| -> String {
+            let wex =
+                Rep3WitnessExtension::new_rep3(net0, net1, program, config).expect("new_rep3");
+            match wex.run_with_flat(vec![], 0) {
+                Ok(_) => panic!("mismatched VM config was accepted"),
+                Err(error) => error.to_string(),
+            }
+        }
+    };
+    let default = VMConfig::default();
+    let mut changed = default.clone();
+    changed.allow_leaky_logs = !changed.allow_leaky_logs;
+
+    assert_all_parties_reject_fingerprint(run_3_parties(
+        body(changed),
+        body(default.clone()),
+        body(default),
+    ));
+}
+
+/// Accelerator selection changes whether a body is interpreted at all, so it is part of
+/// the execution fingerprint even when `VMConfig` itself is identical.
+#[test]
+fn rep3_rejects_mismatched_accelerator_bindings_on_every_party() {
+    let program = common::single_template_program(vec![Instr::Return], 0, 0, 0, 0, 0, 1);
+    let body = |register_custom_accelerator: bool| {
+        let program = Arc::new(program.clone());
+        move |net0: &LocalNetwork, net1: &LocalNetwork| -> String {
+            let mut wex = Rep3WitnessExtension::new_rep3(net0, net1, program, VMConfig::default())
+                .expect("new_rep3");
+            if register_custom_accelerator {
+                wex.register_accelerator_component(
+                    "Test",
+                    |_| true,
+                    |_driver, _inputs, _outputs| {
+                        Ok(circom_mpc_vm2::accel::ComponentAcceleratorOutput::new(
+                            vec![],
+                            vec![],
+                        ))
+                    },
+                );
+            }
+            match wex.run(BTreeMap::new(), 0) {
+                Ok(_) => panic!("mismatched accelerator bindings were accepted"),
+                Err(error) => error.to_string(),
+            }
+        }
+    };
+
+    assert_all_parties_reject_fingerprint(run_3_parties(body(true), body(false), body(false)));
 }
 
 /// Hand-assembled shared-if program (mirrors `shared_if::shared_if_merges_stores`):
@@ -440,8 +552,9 @@ fn rep3_scalar_predicated_writes_share_one_cmux_round() {
     }
 }
 
-/// Witness post-processing must open all shared public outputs in one Rep3 round.
-/// The program itself only copies inputs to outputs, so every network message measured
+/// Witness post-processing must open all shared public outputs in one Rep3 round. The
+/// program itself only copies inputs to outputs; after subtracting the execution-
+/// fingerprint broadcast (two sends + two receives), every remaining message measured
 /// during `run_with_flat` comes from finalization's `open_many` call.
 #[test]
 fn rep3_public_outputs_open_in_one_round() {
@@ -517,9 +630,11 @@ fn rep3_public_outputs_open_in_one_round() {
     for (party, (single_msgs, sequential_msgs, batched_msgs, public_msgs, opened)) in
         results.into_iter().enumerate()
     {
+        const FINGERPRINT_BROADCAST_MESSAGES: usize = 4;
         assert_eq!(opened, expected, "party {party}: finalized public outputs");
         assert_eq!(
-            batched_msgs, single_msgs,
+            batched_msgs - FINGERPRINT_BROADCAST_MESSAGES,
+            single_msgs,
             "party {party}: {n} shared outputs must cost one scalar-open round"
         );
         assert_eq!(

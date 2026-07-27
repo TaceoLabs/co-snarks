@@ -371,8 +371,21 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         config: VMConfig,
         accelerator: &'a MpcAccelerator<F, C>,
     ) -> Result<Self> {
-        let mut machine = Self::new(program, driver, config)?;
         let bindings = accelerator.bind(program);
+        Self::new_with_accelerator_bindings(program, driver, config, accelerator, bindings)
+    }
+
+    /// Constructs an accelerated machine with dispatch bindings already computed by the
+    /// API's execution-agreement step. This avoids running every accelerator predicate a
+    /// second time after hashing the selected bindings.
+    pub(crate) fn new_with_accelerator_bindings(
+        program: &'a CompiledProgram<F>,
+        driver: &'a mut C,
+        config: VMConfig,
+        accelerator: &'a MpcAccelerator<F, C>,
+        bindings: AccelBindings,
+    ) -> Result<Self> {
+        let mut machine = Self::new(program, driver, config)?;
         machine.accel = Some((accelerator, bindings));
         Ok(machine)
     }

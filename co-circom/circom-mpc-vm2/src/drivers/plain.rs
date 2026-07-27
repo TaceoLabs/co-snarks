@@ -1,6 +1,5 @@
 //! Plain (non-MPC) driver: `VmType = F`. For local runs and testing only.
 use crate::driver::VmDriver;
-use crate::program::VMConfig;
 use ark_ff::{One, PrimeField};
 use eyre::{Result, bail, eyre};
 use mpc_core::gadgets::poseidon2::{CircomTracePlainHasher, Poseidon2};
@@ -285,10 +284,6 @@ impl<F: PrimeField> VmDriver<F> for PlainDriver<F> {
 
     fn public_from(&self, f: F) -> Self::VmType {
         f
-    }
-
-    fn compare_vm_config(&mut self, _config: &VMConfig) -> Result<()> {
-        Ok(())
     }
 
     fn log(&mut self, a: &Self::VmType, _allow_leaky_logs: bool) -> Result<String> {

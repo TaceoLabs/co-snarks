@@ -1,6 +1,5 @@
 //! The driver trait connecting the VM to an MPC protocol (or plain execution).
 use crate::isa::BinOp;
-use crate::program::VMConfig;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use eyre::{Result, bail};
@@ -95,8 +94,16 @@ pub trait VmDriver<F: PrimeField>: Sized {
     fn public_zero(&self) -> Self::VmType;
     /// Public value from a field element (constant-table injection).
     fn public_from(&self, f: F) -> Self::VmType;
-    /// Cross-party VM-config consistency check (no-op for local drivers).
-    fn compare_vm_config(&mut self, config: &VMConfig) -> Result<()>;
+    /// Cross-party agreement on all execution-affecting configuration, compiled program,
+    /// and accelerator bindings. Local drivers use the no-op default and deliberately do
+    /// not evaluate the lazy fingerprint builder, avoiding a full-program hash on plain
+    /// runs. Interactive drivers must override this method.
+    fn compare_execution_fingerprint(
+        &mut self,
+        _fingerprint: impl FnOnce() -> Result<[u8; 32]>,
+    ) -> Result<()> {
+        Ok(())
+    }
     /// String form for logging; secret values render as "secret" unless allowed.
     fn log(&mut self, a: &Self::VmType, allow_leaky_logs: bool) -> Result<String>;
     /// c = sqrt(a) (used by the sqrt function accelerator; Plan 3).

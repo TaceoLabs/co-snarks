@@ -7,7 +7,6 @@
 //! protocol.
 use crate::driver::VmDriver;
 use crate::drivers::plain::PlainDriver;
-use crate::program::VMConfig;
 use ark_ff::PrimeField;
 use eyre::{Result, bail};
 
@@ -211,10 +210,6 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
             val: self.inner.public_from(f),
             shared: false,
         }
-    }
-
-    fn compare_vm_config(&mut self, _config: &VMConfig) -> Result<()> {
-        Ok(())
     }
 
     fn log(&mut self, a: &Self::VmType, allow_leaky_logs: bool) -> Result<String> {

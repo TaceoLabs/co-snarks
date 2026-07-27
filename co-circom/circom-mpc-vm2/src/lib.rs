@@ -197,5 +197,6 @@ pub mod driver;
 pub mod drivers;
 #[doc(hidden)]
 pub mod exec;
+mod fingerprint;
 pub mod isa;
 pub mod program;

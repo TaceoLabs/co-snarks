@@ -14,6 +14,7 @@
 //! hardcoded check in the VM loop (old `mpc_vm.rs:330-332`) now expressed as the
 //! `Poseidon2` registration's own `can_handle` predicate.
 use crate::driver::VmDriver;
+use crate::fingerprint::FingerprintWriter;
 use crate::isa::{FnId, TemplId};
 use crate::program::CompiledProgram;
 use ark_ff::PrimeField;
@@ -333,6 +334,30 @@ impl<F: PrimeField, C: VmDriver<F>> MpcAccelerator<F, C> {
             templ_bind,
             fn_bind,
         }
+    }
+
+    /// Digests the exact dispatch choices made by [`Self::bind`]. Registration indices
+    /// and names are both included: the index selects the closure executed by this
+    /// process, while the name makes differently ordered registries distinguishable even
+    /// when an index happens to coincide. Closure code itself cannot be fingerprinted, so
+    /// callers registering custom accelerators must still deploy identical binaries.
+    pub(crate) fn bindings_digest(&self, bindings: &AccelBindings) -> Result<[u8; 32]> {
+        let template_bindings: Vec<_> = bindings
+            .templ_bind
+            .iter()
+            .map(|binding| binding.map(|idx| (idx, self.components[idx].name.as_str())))
+            .collect();
+        let function_bindings: Vec<_> = bindings
+            .fn_bind
+            .iter()
+            .map(|binding| binding.map(|idx| (idx, self.functions[idx].name.as_str())))
+            .collect();
+
+        let mut writer = FingerprintWriter::new(b"circom-mpc-vm2/accelerators/v1\0");
+        writer.serialize(&1u32)?;
+        writer.serialize(&template_bindings)?;
+        writer.serialize(&function_bindings)?;
+        Ok(writer.finish())
     }
 
     /// Runs the component accelerator bound at `accel_idx` (see [`Self::bind`]).
