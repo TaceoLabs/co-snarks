@@ -33,6 +33,7 @@ use std::collections::HashMap;
 mod env;
 mod expr;
 mod index;
+mod passes;
 mod regalloc;
 mod stmt;
 
@@ -408,8 +409,9 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             .high_water()
             .try_into()
             .map_err(|_| eyre!("template {} exceeds 255 integer registers", templ.name))?;
+        let instrs = passes::run(std::mem::take(&mut self.instrs), &templ.name)?;
         Ok(TemplateCode {
-            instrs: std::mem::take(&mut self.instrs),
+            instrs,
             num_field_regs,
             num_int_regs,
             num_vars: u32::try_from(templ.var_stack_depth)?,
@@ -464,8 +466,9 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
                 .map(|p| p.length.iter().product::<usize>())
                 .sum::<usize>(),
         )?;
+        let instrs = passes::run(std::mem::take(&mut self.instrs), &fun.name)?;
         Ok(FunctionCode {
-            instrs: std::mem::take(&mut self.instrs),
+            instrs,
             num_field_regs,
             num_int_regs,
             num_vars: u32::try_from(fun.max_number_of_vars)?,
