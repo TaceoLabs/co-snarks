@@ -62,10 +62,10 @@
 //!      [`circom_mpc_vm2::program::FunctionCode`].
 //!    - **Post-lowering passes** (`codegen::passes`): a CFG validates absolute targets;
 //!      sparse conditional constant propagation folds values across blocks; constant
-//!      frame-variable loads are forwarded; statically selected branches, unreachable
-//!      blocks, dead variable stores, and dead register computations are removed to a
-//!      fixed point; adjacent dependency-free multiplication/store pairs are batched;
-//!      and all surviving targets are remapped.
+//!      register copies and frame-variable loads are forwarded; statically selected
+//!      branches, unreachable blocks, redundant moves, dead variable stores, and dead
+//!      register computations are removed to a fixed point; adjacent dependency-free
+//!      multiplication/store pairs are batched; and all surviving targets are remapped.
 //!
 //! # Example
 //!

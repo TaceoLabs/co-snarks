@@ -14,6 +14,7 @@ use eyre::{Result, bail, eyre};
 use std::collections::{HashMap, VecDeque};
 
 mod batch;
+mod copy;
 mod dce;
 mod memory;
 
@@ -35,13 +36,15 @@ pub(super) fn run<F: PrimeField>(
     let mut folded = 0usize;
     let mut unreachable = 0usize;
     let mut removed_dead = 0usize;
+    let mut propagated_register_copies = 0usize;
+    let mut removed_redundant_moves = 0usize;
     let mut forwarded_var_loads = 0usize;
     let mut removed_dead_var_stores = 0usize;
 
-    // Every transformation is monotone: operands only become constants, instructions
-    // only simplify, and bytecode only disappears. Repeating the inexpensive passes
-    // exposes second-order wins such as a forwarded var constant selecting a branch,
-    // whose dead arm then makes the computation feeding another store dead.
+    // Every transformation is monotone: operands only become constants or canonical
+    // register sources, instructions only simplify, and bytecode only disappears.
+    // Repeating the inexpensive passes exposes second-order wins such as a forwarded var
+    // constant selecting a branch, whose dead arm then makes another definition dead.
     loop {
         let cfg = ControlFlowGraph::build(&instrs)
             .map_err(|error| eyre!("invalid bytecode for {body_name}: {error}"))?;
@@ -63,6 +66,11 @@ pub(super) fn run<F: PrimeField>(
         instrs = next;
         folded += fallthrough_now;
 
+        let (next, copies_now, moves_now) = copy::propagate_register_copies(instrs)?;
+        instrs = next;
+        propagated_register_copies += copies_now;
+        removed_redundant_moves += moves_now;
+
         let (next, forwarded_now) = memory::forward_constant_vars(instrs)?;
         instrs = next;
         forwarded_var_loads += forwarded_now;
@@ -78,6 +86,8 @@ pub(super) fn run<F: PrimeField>(
         if folded_now
             + unreachable_now
             + fallthrough_now
+            + copies_now
+            + moves_now
             + forwarded_now
             + dead_stores_now
             + dead_regs_now
@@ -99,6 +109,8 @@ pub(super) fn run<F: PrimeField>(
         folded_instructions = folded,
         removed_unreachable = unreachable,
         removed_dead_register_defs = removed_dead,
+        propagated_register_copies,
+        removed_redundant_moves,
         forwarded_var_loads,
         removed_dead_var_stores,
         mul_batches,
