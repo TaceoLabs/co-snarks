@@ -60,10 +60,11 @@
 //!      instruction is emitted. The high-water mark reached becomes the frame's
 //!      register-file size in the resulting [`circom_mpc_vm2::program::TemplateCode`]/
 //!      [`circom_mpc_vm2::program::FunctionCode`].
-//!    - **Post-lowering passes** (`codegen::passes`): a CFG validates absolute targets,
-//!      scalar constants and algebraic identities are folded, statically selected branch
-//!      arms and unreachable blocks are removed, register liveness eliminates unused
-//!      computations, adjacent dependency-free multiplication/store pairs are batched,
+//!    - **Post-lowering passes** (`codegen::passes`): a CFG validates absolute targets;
+//!      sparse conditional constant propagation folds values across blocks; constant
+//!      frame-variable loads are forwarded; statically selected branches, unreachable
+//!      blocks, dead variable stores, and dead register computations are removed to a
+//!      fixed point; adjacent dependency-free multiplication/store pairs are batched;
 //!      and all surviving targets are remapped.
 //!
 //! # Example

@@ -11,16 +11,18 @@ use circom_mpc_vm2::driver::apply_bin;
 use circom_mpc_vm2::drivers::plain::PlainDriver;
 use circom_mpc_vm2::isa::{BinOp, Dst, Instr, Src};
 use eyre::{Result, bail, eyre};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 mod batch;
 mod dce;
+mod memory;
 
 /// Runs the post-lowering pipeline for one template or function body.
 ///
-/// The pipeline validates and constructs a CFG, folds constants and statically selected
-/// branches, removes unreachable blocks, then strips redundant fallthrough jumps. Later
-/// DCE and batching passes use the same CFG/remapping boundary.
+/// The pipeline validates and constructs a CFG, then repeatedly propagates constants,
+/// forwards frame-local constants, simplifies control flow, and eliminates dead register
+/// definitions and variable stores. Once that fixed point is reached, dependency-safe
+/// interactive multiplications are batched.
 pub(super) fn run<F: PrimeField>(
     instrs: Vec<Instr>,
     body_name: &str,
@@ -29,22 +31,62 @@ pub(super) fn run<F: PrimeField>(
     constant_ids: &mut HashMap<F, u32>,
     max_batch_size: usize,
 ) -> Result<Vec<Instr>> {
-    let cfg = ControlFlowGraph::build(&instrs)
-        .map_err(|error| eyre!("invalid bytecode for {body_name}: {error}"))?;
-    let (instrs, mut folded) =
-        fold_constants(instrs, &cfg, num_field_regs, constants, constant_ids)?;
-    let cfg = ControlFlowGraph::build(&instrs)
-        .map_err(|error| eyre!("invalid optimized bytecode for {body_name}: {error}"))?;
-    let reachable = cfg.reachable_instructions(instrs.len());
-    let unreachable = reachable.iter().filter(|keep| !**keep).count();
-    let instrs = if unreachable == 0 {
-        instrs
-    } else {
-        compact(instrs, &reachable)?
-    };
-    let (instrs, removed_fallthrough_jumps) = remove_fallthrough_jumps(instrs)?;
-    folded += removed_fallthrough_jumps;
-    let (instrs, removed_dead) = dce::eliminate_dead_register_defs(instrs)?;
+    let mut instrs = instrs;
+    let mut folded = 0usize;
+    let mut unreachable = 0usize;
+    let mut removed_dead = 0usize;
+    let mut forwarded_var_loads = 0usize;
+    let mut removed_dead_var_stores = 0usize;
+
+    // Every transformation is monotone: operands only become constants, instructions
+    // only simplify, and bytecode only disappears. Repeating the inexpensive passes
+    // exposes second-order wins such as a forwarded var constant selecting a branch,
+    // whose dead arm then makes the computation feeding another store dead.
+    loop {
+        let cfg = ControlFlowGraph::build(&instrs)
+            .map_err(|error| eyre!("invalid bytecode for {body_name}: {error}"))?;
+        let (next, folded_now) =
+            fold_constants(instrs, &cfg, num_field_regs, constants, constant_ids)?;
+        instrs = next;
+        folded += folded_now;
+
+        let cfg = ControlFlowGraph::build(&instrs)
+            .map_err(|error| eyre!("invalid optimized bytecode for {body_name}: {error}"))?;
+        let reachable = cfg.reachable_instructions(instrs.len());
+        let unreachable_now = reachable.iter().filter(|keep| !**keep).count();
+        if unreachable_now != 0 {
+            instrs = compact(instrs, &reachable)?;
+            unreachable += unreachable_now;
+        }
+
+        let (next, fallthrough_now) = remove_fallthrough_jumps(instrs)?;
+        instrs = next;
+        folded += fallthrough_now;
+
+        let (next, forwarded_now) = memory::forward_constant_vars(instrs)?;
+        instrs = next;
+        forwarded_var_loads += forwarded_now;
+
+        let (next, dead_stores_now) = memory::eliminate_dead_var_stores(instrs)?;
+        instrs = next;
+        removed_dead_var_stores += dead_stores_now;
+
+        let (next, dead_regs_now) = dce::eliminate_dead_register_defs(instrs)?;
+        instrs = next;
+        removed_dead += dead_regs_now;
+
+        if folded_now
+            + unreachable_now
+            + fallthrough_now
+            + forwarded_now
+            + dead_stores_now
+            + dead_regs_now
+            == 0
+        {
+            break;
+        }
+    }
+
     let (instrs, mul_batches, mul_batch_lanes) =
         batch::batch_independent_muls(instrs, max_batch_size)?;
     let cfg = ControlFlowGraph::build(&instrs)
@@ -57,6 +99,8 @@ pub(super) fn run<F: PrimeField>(
         folded_instructions = folded,
         removed_unreachable = unreachable,
         removed_dead_register_defs = removed_dead,
+        forwarded_var_loads,
+        removed_dead_var_stores,
         mul_batches,
         mul_batch_lanes,
         "ran post-lowering bytecode passes"
@@ -166,10 +210,73 @@ impl ControlFlowGraph {
     }
 }
 
-/// Folds scalar constants within each basic block. Registers deliberately do not carry
-/// facts across block boundaries yet: that keeps joins conservative without requiring a
-/// data-flow fixed point, while still covering expression temporaries and branch
-/// conditions emitted immediately before their consumers.
+/// Computes sparse constant facts at every basic-block entry.
+///
+/// Only known constants are stored. The first incoming edge seeds a block and later
+/// incoming edges intersect that map, so a fact survives a join exactly when every path
+/// agrees on its value. Maps can only shrink after that initial seed, which makes loops
+/// converge without allocating `blocks * num_field_regs` lattice entries.
+fn constant_inputs<F: PrimeField>(
+    instrs: &[Instr],
+    cfg: &ControlFlowGraph,
+    num_field_regs: usize,
+    constants: &mut Vec<F>,
+    constant_ids: &mut HashMap<F, u32>,
+) -> Result<Vec<HashMap<u16, u32>>> {
+    if cfg.blocks.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut inputs = vec![None; cfg.blocks.len()];
+    // Body-entry registers have no incoming values. Keeping the implicit entry edge
+    // empty also prevents a back-edge targeting block zero from inventing facts.
+    inputs[0] = Some(HashMap::new());
+    let mut pending = VecDeque::from([0usize]);
+    let mut queued = vec![false; cfg.blocks.len()];
+    queued[0] = true;
+    let mut driver = None;
+
+    while let Some(block_id) = pending.pop_front() {
+        queued[block_id] = false;
+        let block = &cfg.blocks[block_id];
+        let mut known = inputs[block_id].clone().unwrap_or_default();
+        for instr in &instrs[block.start..block.end] {
+            transfer_constants(
+                instr,
+                &mut known,
+                num_field_regs,
+                constants,
+                constant_ids,
+                &mut driver,
+            )?;
+        }
+
+        for successor in &block.successors {
+            let Successor::Block(next) = successor else {
+                continue;
+            };
+            let changed = if let Some(input) = &mut inputs[*next] {
+                let old_len = input.len();
+                input.retain(|reg, value| known.get(reg) == Some(value));
+                input.len() != old_len
+            } else {
+                inputs[*next] = Some(known.clone());
+                true
+            };
+            if changed && !queued[*next] {
+                queued[*next] = true;
+                pending.push_back(*next);
+            }
+        }
+    }
+
+    Ok(inputs.into_iter().map(Option::unwrap_or_default).collect())
+}
+
+/// Folds scalar constants using the SCCP facts computed above. Besides ordinary
+/// arithmetic, this selects constant public/shared branches and rewrites their structured
+/// control-flow scaffolding, allowing the outer fixed point to remove newly unreachable
+/// blocks and propagate again through the smaller CFG.
 fn fold_constants<F: PrimeField>(
     mut instrs: Vec<Instr>,
     cfg: &ControlFlowGraph,
@@ -177,7 +284,8 @@ fn fold_constants<F: PrimeField>(
     constants: &mut Vec<F>,
     constant_ids: &mut HashMap<F, u32>,
 ) -> Result<(Vec<Instr>, usize)> {
-    let mut known = vec![None; num_field_regs];
+    let known_inputs = constant_inputs(&instrs, cfg, num_field_regs, constants, constant_ids)?;
+    let mut known = HashMap::new();
     let mut keep = vec![true; instrs.len()];
     let mut constant_branches = Vec::new();
     let mut folded = 0usize;
@@ -185,8 +293,8 @@ fn fold_constants<F: PrimeField>(
     // literal binary expression to fold, so construct the plain driver lazily.
     let mut driver = None;
 
-    for block in &cfg.blocks {
-        known.fill(None);
+    for (block_id, block) in cfg.blocks.iter().enumerate() {
+        known.clone_from(&known_inputs[block_id]);
         for ip in block.start..block.end {
             match instrs[ip].clone() {
                 Instr::Bin { op, dst, a, b } => {
@@ -252,10 +360,93 @@ fn fold_constants<F: PrimeField>(
                     }
                     instrs[ip] = Instr::BinBatch { op, lanes };
                 }
-                Instr::EqN { dst, .. } => set_known(&mut known, dst, None),
-                Instr::LoadN { dst, n, .. }
-                | Instr::BinN { dst, n, .. }
-                | Instr::OutputSub { dst, n, .. } => {
+                Instr::EqN { dst, a, b, n } => {
+                    let replacement = if n == 0 || a == b {
+                        Some(intern_constant(F::ONE, constants, constant_ids)?)
+                    } else if n == 1 {
+                        let a = resolve_src(a, &known);
+                        let b = resolve_src(b, &known);
+                        match (constant(a, constants), constant(b, constants)) {
+                            (Some(a), Some(b)) => {
+                                Some(intern_constant(F::from(a == b), constants, constant_ids)?)
+                            }
+                            _ => None,
+                        }
+                    } else {
+                        None
+                    };
+                    if let Some(id) = replacement {
+                        instrs[ip] = Instr::Mov {
+                            dst: Dst::Reg(dst),
+                            src: Src::Const(id),
+                        };
+                        set_known(&mut known, dst, Some(id));
+                        folded += 1;
+                    } else {
+                        set_known(&mut known, dst, None);
+                    }
+                }
+                Instr::LoadN { dst, src, n: 1 } => {
+                    let src = resolve_src(src, &known);
+                    instrs[ip] = Instr::Mov {
+                        dst: Dst::Reg(dst),
+                        src,
+                    };
+                    set_known(&mut known, dst, constant_id(src));
+                    folded += 1;
+                }
+                Instr::BinN {
+                    op,
+                    dst,
+                    a,
+                    b,
+                    n: 1,
+                } => {
+                    instrs[ip] = Instr::Bin {
+                        op,
+                        dst,
+                        a: resolve_src(a, &known),
+                        b: resolve_src(b, &known),
+                    };
+                    set_known(&mut known, dst, None);
+                    folded += 1;
+                }
+                Instr::LoadN { dst, src, n } => {
+                    for k in 0..n {
+                        let fact = source_constant_at(src, k, &known, constants);
+                        set_known_u32(&mut known, u32::from(dst) + k, fact);
+                    }
+                }
+                Instr::BinN { op, dst, a, b, n } => {
+                    for k in 0..n {
+                        let fact =
+                            match (resolve_src_at(a, k, &known), resolve_src_at(b, k, &known)) {
+                                (Some(a), Some(b)) => folded_constant_id(
+                                    op,
+                                    a,
+                                    b,
+                                    constants,
+                                    constant_ids,
+                                    &mut driver,
+                                )?,
+                                _ => None,
+                            };
+                        set_known_u32(&mut known, u32::from(dst) + k, fact);
+                    }
+                }
+                Instr::StoreN {
+                    dst: Dst::Reg(dst),
+                    src,
+                    n,
+                } => {
+                    let facts = (0..n)
+                        .map(|k| known.get(&u16_at(src, k)).copied())
+                        .collect::<Vec<_>>();
+                    for (k, fact) in facts.into_iter().enumerate() {
+                        set_known_u32(&mut known, u32::from(dst) + k as u32, fact);
+                    }
+                }
+                Instr::OutputSub { dst, n, .. } => {
                     clear_known_range(&mut known, dst, n);
                 }
                 Instr::CallFn { ret, ret_n, .. } => {
@@ -409,6 +600,173 @@ fn fold_bin<F: PrimeField>(
     }
 }
 
+/// Sparse SCCP transfer for one instruction. Definitions overwrite the current physical
+/// register fact; values that cannot be proven constant simply remove it from the map.
+fn transfer_constants<F: PrimeField>(
+    instr: &Instr,
+    known: &mut HashMap<u16, u32>,
+    num_field_regs: usize,
+    constants: &mut Vec<F>,
+    constant_ids: &mut HashMap<F, u32>,
+    driver: &mut Option<PlainDriver<F>>,
+) -> Result<()> {
+    match instr {
+        Instr::Bin { op, dst, a, b } => {
+            let a = resolve_src(*a, known);
+            let b = resolve_src(*b, known);
+            let fact = folded_constant_id(*op, a, b, constants, constant_ids, driver)?;
+            set_known_bounded(known, *dst, fact, num_field_regs);
+        }
+        Instr::Neg { dst, a } => {
+            let fact = constant(resolve_src(*a, known), constants)
+                .map(|value| intern_constant(-value, constants, constant_ids))
+                .transpose()?;
+            set_known_bounded(known, *dst, fact, num_field_regs);
+        }
+        Instr::EqN { dst, a, b, n } => {
+            let fact = if *n == 0 || a == b {
+                Some(intern_constant(F::ONE, constants, constant_ids)?)
+            } else {
+                let mut equal = true;
+                let mut all_known = true;
+                for k in 0..*n {
+                    match (
+                        source_constant_at(*a, k, known, constants),
+                        source_constant_at(*b, k, known, constants),
+                    ) {
+                        (Some(a), Some(b)) => {
+                            equal &= constants[a as usize] == constants[b as usize]
+                        }
+                        _ => {
+                            all_known = false;
+                            break;
+                        }
+                    }
+                }
+                all_known
+                    .then(|| {
+                        intern_constant(
+                            if equal { F::ONE } else { F::ZERO },
+                            constants,
+                            constant_ids,
+                        )
+                    })
+                    .transpose()?
+            };
+            set_known_bounded(known, *dst, fact, num_field_regs);
+        }
+        Instr::Mov {
+            dst: Dst::Reg(dst),
+            src,
+        } => {
+            let fact = constant_id(resolve_src(*src, known));
+            set_known_bounded(known, *dst, fact, num_field_regs);
+        }
+        Instr::LoadN { dst, src, n } => {
+            let facts = (0..*n)
+                .map(|k| source_constant_at(*src, k, known, constants))
+                .collect::<Vec<_>>();
+            for (k, fact) in facts.into_iter().enumerate() {
+                set_known_u32_bounded(known, u32::from(*dst) + k as u32, fact, num_field_regs);
+            }
+        }
+        Instr::StoreN {
+            dst: Dst::Reg(dst),
+            src,
+            n,
+        } => {
+            let facts = (0..*n)
+                .map(|k| known.get(&u16_at(*src, k)).copied())
+                .collect::<Vec<_>>();
+            for (k, fact) in facts.into_iter().enumerate() {
+                set_known_u32_bounded(known, u32::from(*dst) + k as u32, fact, num_field_regs);
+            }
+        }
+        Instr::BinN { op, dst, a, b, n } => {
+            let mut facts = Vec::with_capacity(*n as usize);
+            for k in 0..*n {
+                let fact = match (resolve_src_at(*a, k, known), resolve_src_at(*b, k, known)) {
+                    (Some(a), Some(b)) => {
+                        folded_constant_id(*op, a, b, constants, constant_ids, driver)?
+                    }
+                    _ => None,
+                };
+                facts.push(fact);
+            }
+            for (k, fact) in facts.into_iter().enumerate() {
+                set_known_u32_bounded(known, u32::from(*dst) + k as u32, fact, num_field_regs);
+            }
+        }
+        Instr::BinBatch { op, lanes } => {
+            // The VM snapshots every lane input before writing any destination.
+            let before = known.clone();
+            let facts = lanes
+                .iter()
+                .map(|lane| {
+                    folded_constant_id(
+                        *op,
+                        resolve_src(lane.a, &before),
+                        resolve_src(lane.b, &before),
+                        constants,
+                        constant_ids,
+                        driver,
+                    )
+                })
+                .collect::<Result<Vec<_>>>()?;
+            for (lane, fact) in lanes.iter().zip(facts) {
+                set_known_bounded(known, lane.dst, fact, num_field_regs);
+                if let Some(Dst::Reg(dst)) = lane.store {
+                    set_known_bounded(known, dst, fact, num_field_regs);
+                }
+            }
+        }
+        Instr::OutputSub { dst, n, .. }
+        | Instr::CallFn {
+            ret: dst, ret_n: n, ..
+        } => {
+            clear_known_range(known, *dst, *n);
+        }
+        Instr::Mov { .. }
+        | Instr::StoreN { .. }
+        | Instr::ISet { .. }
+        | Instr::IAdd { .. }
+        | Instr::IMul { .. }
+        | Instr::ToIndex { .. }
+        | Instr::Jmp { .. }
+        | Instr::JmpIfZero { .. }
+        | Instr::SharedIf { .. }
+        | Instr::SharedIfBit { .. }
+        | Instr::SharedElse { .. }
+        | Instr::SharedEnd
+        | Instr::CreateCmp { .. }
+        | Instr::InputSub { .. }
+        | Instr::Ret { .. }
+        | Instr::Return
+        | Instr::Assert { .. }
+        | Instr::Log { .. }
+        | Instr::LogStr { .. }
+        | Instr::LogFlush { .. } => {}
+    }
+    Ok(())
+}
+
+fn folded_constant_id<F: PrimeField>(
+    op: BinOp,
+    a: Src,
+    b: Src,
+    constants: &mut Vec<F>,
+    constant_ids: &mut HashMap<F, u32>,
+    driver: &mut Option<PlainDriver<F>>,
+) -> Result<Option<u32>> {
+    fold_bin(op, a, b, constants, driver)
+        .map(|folded| match folded {
+            Folded::Value(value) => intern_constant(value, constants, constant_ids).map(Some),
+            Folded::Source(src) => Ok(constant_id(src)),
+        })
+        .transpose()
+        .map(Option::flatten)
+}
+
 fn fold_structured_branch(
     instrs: &[Instr],
     keep: &mut [bool],
@@ -474,16 +832,64 @@ fn remove_fallthrough_jumps(mut instrs: Vec<Instr>) -> Result<(Vec<Instr>, usize
     }
 }
 
-fn resolve_src(src: Src, known: &[Option<u32>]) -> Src {
+fn resolve_src(src: Src, known: &HashMap<u16, u32>) -> Src {
     match src {
-        Src::Reg(reg) => known
-            .get(reg as usize)
-            .copied()
-            .flatten()
-            .map(Src::Const)
-            .unwrap_or(src),
+        Src::Reg(reg) => known.get(&reg).copied().map(Src::Const).unwrap_or(src),
         _ => src,
     }
+}
+
+fn resolve_src_at(src: Src, k: u32, known: &HashMap<u16, u32>) -> Option<Src> {
+    Some(match src {
+        Src::Reg(reg) => known
+            .get(&u16::try_from(u32::from(reg).checked_add(k)?).ok()?)
+            .copied()
+            .map(Src::Const)
+            .unwrap_or(Src::Reg(u16::try_from(u32::from(reg) + k).ok()?)),
+        Src::Const(id) => Src::Const(id.checked_add(k)?),
+        Src::Var(addr) => Src::Var(offset_addr(addr, k)?),
+        Src::Signal(addr) => Src::Signal(offset_addr(addr, k)?),
+    })
+}
+
+fn offset_addr(addr: circom_mpc_vm2::isa::Addr, k: u32) -> Option<circom_mpc_vm2::isa::Addr> {
+    use circom_mpc_vm2::isa::Addr;
+    Some(match addr {
+        Addr::Const(slot) => Addr::Const(slot.checked_add(k)?),
+        Addr::Affine {
+            ireg,
+            stride,
+            offset,
+        } => Addr::Affine {
+            ireg,
+            stride,
+            offset: offset.checked_add(k)?,
+        },
+        Addr::Dynamic(ireg) if k == 0 => Addr::Dynamic(ireg),
+        // `read_n` adds `k` after resolving a dynamic address, which has no equivalent
+        // scalar `Addr` form without materializing a new integer register.
+        Addr::Dynamic(_) => return None,
+    })
+}
+
+fn source_constant_at<F: PrimeField>(
+    src: Src,
+    k: u32,
+    known: &HashMap<u16, u32>,
+    constants: &[F],
+) -> Option<u32> {
+    match src {
+        Src::Reg(reg) => known.get(&u16_at(reg, k)).copied(),
+        Src::Const(id) => {
+            let id = id.checked_add(k)?;
+            constants.get(id as usize).map(|_| id)
+        }
+        Src::Var(_) | Src::Signal(_) => None,
+    }
+}
+
+fn u16_at(start: u16, k: u32) -> u16 {
+    u16::try_from(u32::from(start) + k).expect("validated register range exceeds u16")
 }
 
 fn constant<F: PrimeField>(src: Src, constants: &[F]) -> Option<F> {
@@ -519,16 +925,46 @@ fn intern_constant<F: PrimeField>(
     Ok(id)
 }
 
-fn set_known(known: &mut [Option<u32>], reg: u16, value: Option<u32>) {
-    if let Some(slot) = known.get_mut(reg as usize) {
-        *slot = value;
+fn set_known(known: &mut HashMap<u16, u32>, reg: u16, value: Option<u32>) {
+    if let Some(value) = value {
+        known.insert(reg, value);
+    } else {
+        known.remove(&reg);
     }
 }
 
-fn clear_known_range(known: &mut [Option<u32>], start: u16, n: u32) {
-    let start = start as usize;
-    let end = start.saturating_add(n as usize).min(known.len());
-    known[start..end].fill(None);
+fn set_known_bounded(
+    known: &mut HashMap<u16, u32>,
+    reg: u16,
+    value: Option<u32>,
+    num_field_regs: usize,
+) {
+    if usize::from(reg) < num_field_regs {
+        set_known(known, reg, value);
+    }
+}
+
+fn set_known_u32(known: &mut HashMap<u16, u32>, reg: u32, value: Option<u32>) {
+    if let Ok(reg) = u16::try_from(reg) {
+        set_known(known, reg, value);
+    }
+}
+
+fn set_known_u32_bounded(
+    known: &mut HashMap<u16, u32>,
+    reg: u32,
+    value: Option<u32>,
+    num_field_regs: usize,
+) {
+    if let Ok(reg) = u16::try_from(reg) {
+        set_known_bounded(known, reg, value, num_field_regs);
+    }
+}
+
+fn clear_known_range(known: &mut HashMap<u16, u32>, start: u16, n: u32) {
+    for k in 0..n {
+        known.remove(&u16_at(start, k));
+    }
 }
 
 fn validate_targets(instrs: &[Instr]) -> Result<()> {
@@ -912,6 +1348,161 @@ mod tests {
                 Instr::Mov {
                     dst: Dst::Signal(Addr::Const(0)),
                     src: Src::Const(3),
+                },
+                Instr::Return,
+            ]
+        );
+    }
+
+    #[test]
+    fn sccp_propagates_matching_constants_through_a_cfg_join() {
+        let (out, _) = optimize(
+            vec![
+                Instr::JmpIfZero {
+                    cond: Src::Signal(Addr::Const(0)),
+                    target: 3,
+                },
+                Instr::Mov {
+                    dst: Dst::Reg(0),
+                    src: Src::Const(0),
+                },
+                Instr::Jmp { target: 4 },
+                Instr::Mov {
+                    dst: Dst::Reg(0),
+                    src: Src::Const(0),
+                },
+                Instr::Bin {
+                    op: BinOp::Add,
+                    dst: 1,
+                    a: Src::Reg(0),
+                    b: Src::Const(1),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(1)),
+                    src: Src::Reg(1),
+                },
+                Instr::Return,
+            ],
+            2,
+            vec![Fr::from(2u64), Fr::from(3u64)],
+        );
+        let five = out.iter().find_map(|instr| match instr {
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(1)),
+                src: Src::Const(id),
+            } => Some(*id),
+            _ => None,
+        });
+        assert!(five.is_some(), "joined constant was not folded: {out:?}");
+        assert!(!out.iter().any(|instr| matches!(instr, Instr::Bin { .. })));
+    }
+
+    #[test]
+    fn sccp_drops_a_fact_when_joining_different_constants() {
+        let (out, _) = optimize(
+            vec![
+                Instr::JmpIfZero {
+                    cond: Src::Signal(Addr::Const(0)),
+                    target: 3,
+                },
+                Instr::Mov {
+                    dst: Dst::Reg(0),
+                    src: Src::Const(0),
+                },
+                Instr::Jmp { target: 4 },
+                Instr::Mov {
+                    dst: Dst::Reg(0),
+                    src: Src::Const(1),
+                },
+                Instr::Bin {
+                    op: BinOp::Add,
+                    dst: 1,
+                    a: Src::Reg(0),
+                    b: Src::Const(2),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(1)),
+                    src: Src::Reg(1),
+                },
+                Instr::Return,
+            ],
+            2,
+            vec![Fr::from(2u64), Fr::from(3u64), Fr::from(4u64)],
+        );
+        assert!(
+            out.iter()
+                .any(|instr| matches!(instr, Instr::Bin { a: Src::Reg(0), .. }))
+        );
+    }
+
+    #[test]
+    fn sccp_accounts_for_a_loop_backedge() {
+        let (out, _) = optimize(
+            vec![
+                Instr::Mov {
+                    dst: Dst::Reg(0),
+                    src: Src::Const(0),
+                },
+                Instr::JmpIfZero {
+                    cond: Src::Signal(Addr::Const(0)),
+                    target: 4,
+                },
+                Instr::Mov {
+                    dst: Dst::Reg(0),
+                    src: Src::Const(1),
+                },
+                Instr::Jmp { target: 1 },
+                Instr::Bin {
+                    op: BinOp::Add,
+                    dst: 1,
+                    a: Src::Reg(0),
+                    b: Src::Const(2),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(1)),
+                    src: Src::Reg(1),
+                },
+                Instr::Return,
+            ],
+            2,
+            vec![Fr::from(2u64), Fr::from(3u64), Fr::from(4u64)],
+        );
+        assert!(
+            out.iter()
+                .any(|instr| matches!(instr, Instr::Bin { a: Src::Reg(0), .. }))
+        );
+    }
+
+    #[test]
+    fn fixed_point_forwards_var_constant_then_removes_its_store() {
+        let (out, _) = optimize(
+            vec![
+                Instr::Mov {
+                    dst: Dst::Var(Addr::Const(0)),
+                    src: Src::Const(0),
+                },
+                Instr::Jmp { target: 2 },
+                Instr::Bin {
+                    op: BinOp::Add,
+                    dst: 0,
+                    a: Src::Var(Addr::Const(0)),
+                    b: Src::Const(1),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Reg(0),
+                },
+                Instr::Return,
+            ],
+            1,
+            vec![Fr::from(2u64), Fr::from(3u64)],
+        );
+        assert_eq!(
+            out,
+            vec![
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Const(2),
                 },
                 Instr::Return,
             ]
