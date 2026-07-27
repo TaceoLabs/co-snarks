@@ -5,8 +5,10 @@
 //! lets tests exercise the visibility rules of the VM (e.g. which operations are
 //! forbidden on secret values) deterministically, without running an actual MPC
 //! protocol.
-use crate::driver::VmDriver;
+use crate::driver::{InstructionSite, VmDriver, apply_bin};
 use crate::drivers::plain::PlainDriver;
+use crate::isa::BinOp;
+use crate::profile::{InteractionKind, Rep3InteractionProfile};
 use ark_ff::PrimeField;
 use eyre::{Result, bail};
 
@@ -31,16 +33,71 @@ pub struct Taint<F> {
 #[derive(Debug, Clone, Default)]
 pub struct TaintDriver<F: PrimeField> {
     inner: PlainDriver<F>,
+    profile: Option<Rep3InteractionProfile>,
+    current_site: Option<InstructionSite>,
 }
 
 impl<F: PrimeField> TaintDriver<F> {
+    /// Creates a taint driver that records Rep3-interactive driver calls by bytecode
+    /// location. Ordinary [`Default`] drivers leave profiling disabled.
+    pub fn profiling() -> Self {
+        Self {
+            inner: PlainDriver::default(),
+            profile: Some(Rep3InteractionProfile::default()),
+            current_site: None,
+        }
+    }
+
+    /// Returns the interaction trace, if this driver was created with
+    /// [`Self::profiling`].
+    pub fn interaction_profile(&self) -> Option<&Rep3InteractionProfile> {
+        self.profile.as_ref()
+    }
+
+    /// Consumes the driver and returns its interaction trace, if profiling was enabled.
+    pub fn into_interaction_profile(self) -> Option<Rep3InteractionProfile> {
+        self.profile
+    }
+
+    fn record(&mut self, kind: InteractionKind, lanes: usize) {
+        if let Some(profile) = &mut self.profile {
+            profile.record(self.current_site, kind, lanes);
+        }
+    }
+
+    fn bin_is_interactive(op: BinOp, a: &Taint<F>, b: &Taint<F>) -> bool {
+        match op {
+            BinOp::Add | BinOp::Sub => false,
+            BinOp::Mul | BinOp::BoolAnd => a.shared && b.shared,
+            BinOp::Eq | BinOp::Neq => a.shared || b.shared,
+            BinOp::BoolOr => a.shared && b.shared,
+            BinOp::ShiftL => (!a.shared && b.shared && !a.val.is_zero()) || (a.shared && b.shared),
+            BinOp::ShiftR => (a.shared && !b.shared) || (a.shared && b.shared),
+            BinOp::Div
+            | BinOp::IntDiv
+            | BinOp::Pow
+            | BinOp::Mod
+            | BinOp::Lt
+            | BinOp::Le
+            | BinOp::Gt
+            | BinOp::Ge
+            | BinOp::BitOr
+            | BinOp::BitAnd
+            | BinOp::BitXor => a.shared || b.shared,
+        }
+    }
+
     /// c = f(a, b), tagging the result shared if either operand is shared.
     fn bin(
         &mut self,
+        op: BinOp,
         a: &Taint<F>,
         b: &Taint<F>,
         f: impl FnOnce(&mut PlainDriver<F>, &F, &F) -> Result<F>,
     ) -> Result<Taint<F>> {
+        if Self::bin_is_interactive(op, a, b) {
+            self.record(InteractionKind::Bin(op), 1);
+        }
         Ok(Taint {
             val: f(&mut self.inner, &a.val, &b.val)?,
             shared: a.shared || b.shared,
@@ -66,31 +123,31 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
     type VmType = Taint<F>;
 
     fn add(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::add)
+        self.bin(BinOp::Add, a, b, PlainDriver::add)
     }
 
     fn sub(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::sub)
+        self.bin(BinOp::Sub, a, b, PlainDriver::sub)
     }
 
     fn mul(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::mul)
+        self.bin(BinOp::Mul, a, b, PlainDriver::mul)
     }
 
     fn div(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::div)
+        self.bin(BinOp::Div, a, b, PlainDriver::div)
     }
 
     fn int_div(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::int_div)
+        self.bin(BinOp::IntDiv, a, b, PlainDriver::int_div)
     }
 
     fn pow(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::pow)
+        self.bin(BinOp::Pow, a, b, PlainDriver::pow)
     }
 
     fn modulo(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::modulo)
+        self.bin(BinOp::Mod, a, b, PlainDriver::modulo)
     }
 
     fn neg(&mut self, a: &Self::VmType) -> Result<Self::VmType> {
@@ -98,35 +155,35 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
     }
 
     fn lt(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::lt)
+        self.bin(BinOp::Lt, a, b, PlainDriver::lt)
     }
 
     fn le(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::le)
+        self.bin(BinOp::Le, a, b, PlainDriver::le)
     }
 
     fn gt(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::gt)
+        self.bin(BinOp::Gt, a, b, PlainDriver::gt)
     }
 
     fn ge(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::ge)
+        self.bin(BinOp::Ge, a, b, PlainDriver::ge)
     }
 
     fn eq(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::eq)
+        self.bin(BinOp::Eq, a, b, PlainDriver::eq)
     }
 
     fn neq(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::neq)
+        self.bin(BinOp::Neq, a, b, PlainDriver::neq)
     }
 
     fn shift_r(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::shift_r)
+        self.bin(BinOp::ShiftR, a, b, PlainDriver::shift_r)
     }
 
     fn shift_l(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::shift_l)
+        self.bin(BinOp::ShiftL, a, b, PlainDriver::shift_l)
     }
 
     fn bool_not(&mut self, a: &Self::VmType) -> Result<Self::VmType> {
@@ -134,23 +191,23 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
     }
 
     fn bool_and(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::bool_and)
+        self.bin(BinOp::BoolAnd, a, b, PlainDriver::bool_and)
     }
 
     fn bool_or(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::bool_or)
+        self.bin(BinOp::BoolOr, a, b, PlainDriver::bool_or)
     }
 
     fn bit_xor(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::bit_xor)
+        self.bin(BinOp::BitXor, a, b, PlainDriver::bit_xor)
     }
 
     fn bit_or(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::bit_or)
+        self.bin(BinOp::BitOr, a, b, PlainDriver::bit_or)
     }
 
     fn bit_and(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        self.bin(a, b, PlainDriver::bit_and)
+        self.bin(BinOp::BitAnd, a, b, PlainDriver::bit_and)
     }
 
     fn cmux(
@@ -159,6 +216,9 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
         truthy: &Self::VmType,
         falsy: &Self::VmType,
     ) -> Result<Self::VmType> {
+        if cond.shared && (truthy.shared || falsy.shared) {
+            self.record(InteractionKind::Other, 1);
+        }
         Ok(Taint {
             val: self.inner.cmux(&cond.val, &truthy.val, &falsy.val)?,
             shared: cond.shared || truthy.shared || falsy.shared,
@@ -168,6 +228,9 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
     fn is_zero(&mut self, a: &Self::VmType, allow_secret_inputs: bool) -> Result<bool> {
         if a.shared && !allow_secret_inputs {
             bail!("cannot check is_zero on a shared value without allow_secret_inputs");
+        }
+        if a.shared {
+            self.record(InteractionKind::Other, 1);
         }
         self.inner.is_zero(&a.val, allow_secret_inputs)
     }
@@ -220,10 +283,16 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
     }
 
     fn sqrt(&mut self, a: &Self::VmType) -> Result<Self::VmType> {
+        if a.shared {
+            self.record(InteractionKind::Other, 1);
+        }
         self.un(a, PlainDriver::sqrt)
     }
 
     fn num2bits(&mut self, a: &Self::VmType, bits: usize) -> Result<Vec<Self::VmType>> {
+        if a.shared {
+            self.record(InteractionKind::Other, 1);
+        }
         let bits_vals = self.inner.num2bits(&a.val, bits)?;
         Ok(bits_vals
             .into_iter()
@@ -240,6 +309,9 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
         b: &[Self::VmType],
     ) -> Result<(Vec<Self::VmType>, Self::VmType)> {
         let shared = a.iter().any(|x| x.shared) || b.iter().any(|x| x.shared);
+        if shared {
+            self.record(InteractionKind::Other, 1);
+        }
         let a_vals: Vec<F> = a.iter().map(|x| x.val).collect();
         let b_vals: Vec<F> = b.iter().map(|x| x.val).collect();
         let (res, carry) = self.inner.addbits(&a_vals, &b_vals)?;
@@ -254,12 +326,47 @@ impl<F: PrimeField> VmDriver<F> for TaintDriver<F> {
         inputs: &[Self::VmType],
     ) -> Result<(Vec<Self::VmType>, Vec<Self::VmType>)> {
         let shared = inputs.iter().any(|x| x.shared);
+        if shared {
+            self.record(InteractionKind::Other, 1);
+        }
         let vals: Vec<F> = inputs.iter().map(|x| x.val).collect();
         let (state, trace) = self.inner.poseidon2_accelerator::<T>(&vals)?;
         Ok((
             state.into_iter().map(|val| Taint { val, shared }).collect(),
             trace.into_iter().map(|val| Taint { val, shared }).collect(),
         ))
+    }
+
+    fn bin_many(
+        &mut self,
+        op: BinOp,
+        a: &[Self::VmType],
+        b: &[Self::VmType],
+    ) -> Result<Vec<Self::VmType>> {
+        debug_assert_eq!(a.len(), b.len());
+        let interactive_lanes = a
+            .iter()
+            .zip(b)
+            .filter(|(a, b)| Self::bin_is_interactive(op, a, b))
+            .count();
+        self.record(InteractionKind::BinN(op), interactive_lanes);
+        a.iter()
+            .zip(b)
+            .map(|(a, b)| {
+                Ok(Taint {
+                    val: apply_bin(&mut self.inner, op, &a.val, &b.val)?,
+                    shared: a.shared || b.shared,
+                })
+            })
+            .collect()
+    }
+
+    fn trace_instruction_start(&mut self, site: InstructionSite) {
+        self.current_site = Some(site);
+    }
+
+    fn trace_instruction_end(&mut self) {
+        self.current_site = None;
     }
 }
 

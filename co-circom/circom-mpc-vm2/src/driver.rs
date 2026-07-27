@@ -1,9 +1,27 @@
 //! The driver trait connecting the VM to an MPC protocol (or plain execution).
-use crate::isa::BinOp;
+use crate::isa::{BinOp, FnId, TemplId};
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use eyre::{Result, bail};
 use std::fmt;
+
+/// Identifies the bytecode body containing an instruction being executed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum CodeBody {
+    /// A component-template body.
+    Template(TemplId),
+    /// A function body.
+    Function(FnId),
+}
+
+/// Stable location of an instruction in a compiled program.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct InstructionSite {
+    /// Template or function containing the instruction.
+    pub body: CodeBody,
+    /// Zero-based instruction index within the body.
+    pub ip: u32,
+}
 
 /// Protocol driver for the register VM. All scalar operations take operands by
 /// reference; only results are moved. `_many` methods have scalar-loop defaults and
@@ -104,6 +122,15 @@ pub trait VmDriver<F: PrimeField>: Sized {
     ) -> Result<()> {
         Ok(())
     }
+    /// Optional instrumentation hook called immediately before an instruction's driver
+    /// work. The default is a no-op; profiling drivers can associate subsequent calls
+    /// with a bytecode location without affecting ordinary drivers.
+    #[inline(always)]
+    fn trace_instruction_start(&mut self, _site: InstructionSite) {}
+    /// Completes the instruction instrumentation scope opened by
+    /// [`Self::trace_instruction_start`].
+    #[inline(always)]
+    fn trace_instruction_end(&mut self) {}
     /// String form for logging; secret values render as "secret" unless allowed.
     fn log(&mut self, a: &Self::VmType, allow_leaky_logs: bool) -> Result<String>;
     /// c = sqrt(a) (used by the sqrt function accelerator; Plan 3).

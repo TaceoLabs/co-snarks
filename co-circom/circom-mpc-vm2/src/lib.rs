@@ -199,4 +199,5 @@ pub mod drivers;
 pub mod exec;
 mod fingerprint;
 pub mod isa;
+pub mod profile;
 pub mod program;

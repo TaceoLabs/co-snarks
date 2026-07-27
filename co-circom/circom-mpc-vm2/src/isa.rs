@@ -3,11 +3,11 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Index of a template in [`CompiledProgram::templates`](crate::program::CompiledProgram).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TemplId(pub u32);
 
 /// Index of a function in [`CompiledProgram::functions`](crate::program::CompiledProgram).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct FnId(pub u32);
 
 /// A storage address, resolved at compile time where possible.
@@ -71,7 +71,7 @@ pub enum RetSrc {
 }
 
 /// Binary field operations, mapping 1:1 to [`VmDriver`](crate::driver::VmDriver) methods.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum BinOp {
     /// Addition.
     Add,

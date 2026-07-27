@@ -19,7 +19,7 @@
 //! without fighting the borrow checker, since the subcomponent is reachable through a
 //! parameter rather than through `self`.
 use crate::accel::{AccelBindings, MpcAccelerator};
-use crate::driver::{VmDriver, apply_bin};
+use crate::driver::{CodeBody, InstructionSite, VmDriver, apply_bin};
 use crate::isa::*;
 use crate::program::{CompiledProgram, FunctionCode, TemplateCode, VMConfig};
 use ark_ff::PrimeField;
@@ -462,7 +462,14 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             }
             let inst = &code.instrs[ip];
             let offset = comp.offset;
-            match self.step(
+            if is_write_barrier(inst) {
+                pending.flush::<F, C>(self.driver, &pred, &mut frame, &mut self.signals)?;
+            }
+            self.driver.trace_instruction_start(InstructionSite {
+                body: CodeBody::Template(comp.templ),
+                ip: ip as u32,
+            });
+            let flow = self.step(
                 &mut frame,
                 &mut pred,
                 &mut pending,
@@ -471,7 +478,9 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 &mut kind,
                 inst,
                 Some(&mut *comp),
-            )? {
+            );
+            self.driver.trace_instruction_end();
+            match flow? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
                 Flow::ReturnTempl => break,
@@ -542,7 +551,14 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             let mut kind = StepCtx::Function {
                 ret_acc: &mut ret_acc,
             };
-            match self.step(
+            if is_write_barrier(inst) {
+                pending.flush::<F, C>(self.driver, pred, &mut frame, &mut self.signals)?;
+            }
+            self.driver.trace_instruction_start(InstructionSite {
+                body: CodeBody::Function(fn_id),
+                ip: ip as u32,
+            });
+            let flow = self.step(
                 &mut frame,
                 pred,
                 &mut pending,
@@ -551,7 +567,9 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 &mut kind,
                 inst,
                 None,
-            )? {
+            );
+            self.driver.trace_instruction_end();
+            match flow? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
                 Flow::ReturnFn(vals) => return Ok(self.resize_ret(vals, ret_n)),
@@ -619,9 +637,6 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         inst: &Instr,
         comp: Option<&mut ComponentInst>,
     ) -> Result<Flow<C::VmType>> {
-        if is_write_barrier(inst) {
-            pending.flush::<F, C>(self.driver, pred, frame, &mut self.signals)?;
-        }
         Ok(match inst {
             Instr::Bin { op, dst, a, b } => {
                 let r = {
