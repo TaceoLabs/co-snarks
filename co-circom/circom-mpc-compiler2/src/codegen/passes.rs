@@ -6,23 +6,49 @@
 //! remaps all targets through old instruction boundaries. Keeping target rewriting here
 //! avoids each optimization growing a subtly different jump-fixup implementation.
 
-use circom_mpc_vm2::isa::Instr;
+use ark_ff::PrimeField;
+use circom_mpc_vm2::driver::apply_bin;
+use circom_mpc_vm2::drivers::plain::PlainDriver;
+use circom_mpc_vm2::isa::{BinOp, Dst, Instr, Src};
 use eyre::{Result, bail, eyre};
+use std::collections::HashMap;
 
 /// Runs the post-lowering pipeline for one template or function body.
 ///
-/// The initial pipeline is deliberately semantics-neutral: it constructs and validates
-/// the CFG that subsequent folding, DCE, and scheduling passes consume. Having every body
-/// cross this boundary now means those passes can be added without changing codegen's
-/// template/function finalization paths independently.
-pub(super) fn run(instrs: Vec<Instr>, body_name: &str) -> Result<Vec<Instr>> {
+/// The pipeline validates and constructs a CFG, folds constants and statically selected
+/// branches, removes unreachable blocks, then strips redundant fallthrough jumps. Later
+/// DCE and scheduling passes use the same CFG/remapping boundary.
+pub(super) fn run<F: PrimeField>(
+    instrs: Vec<Instr>,
+    body_name: &str,
+    num_field_regs: usize,
+    constants: &mut Vec<F>,
+    constant_ids: &mut HashMap<F, u32>,
+) -> Result<Vec<Instr>> {
     let cfg = ControlFlowGraph::build(&instrs)
         .map_err(|error| eyre!("invalid bytecode for {body_name}: {error}"))?;
+    let (instrs, mut folded) =
+        fold_constants(instrs, &cfg, num_field_regs, constants, constant_ids)?;
+    let cfg = ControlFlowGraph::build(&instrs)
+        .map_err(|error| eyre!("invalid optimized bytecode for {body_name}: {error}"))?;
+    let reachable = cfg.reachable_instructions(instrs.len());
+    let unreachable = reachable.iter().filter(|keep| !**keep).count();
+    let instrs = if unreachable == 0 {
+        instrs
+    } else {
+        compact(instrs, &reachable)?
+    };
+    let (instrs, removed_fallthrough_jumps) = remove_fallthrough_jumps(instrs)?;
+    folded += removed_fallthrough_jumps;
+    let cfg = ControlFlowGraph::build(&instrs)
+        .map_err(|error| eyre!("invalid optimized bytecode for {body_name}: {error}"))?;
     tracing::trace!(
         body = body_name,
         instructions = instrs.len(),
         basic_blocks = cfg.blocks.len(),
         cfg_edges = cfg.edge_count(),
+        folded_instructions = folded,
+        removed_unreachable = unreachable,
         "ran post-lowering bytecode passes"
     );
     Ok(instrs)
@@ -102,6 +128,386 @@ impl ControlFlowGraph {
     fn edge_count(&self) -> usize {
         self.blocks.iter().map(|block| block.successors.len()).sum()
     }
+
+    fn reachable_instructions(&self, instruction_count: usize) -> Vec<bool> {
+        let mut keep = vec![false; instruction_count];
+        if self.blocks.is_empty() {
+            return keep;
+        }
+
+        let mut seen = vec![false; self.blocks.len()];
+        let mut pending = vec![0usize];
+        while let Some(block_id) = pending.pop() {
+            if seen[block_id] {
+                continue;
+            }
+            seen[block_id] = true;
+            let block = &self.blocks[block_id];
+            keep[block.start..block.end].fill(true);
+            for successor in &block.successors {
+                if let Successor::Block(next) = successor
+                    && !seen[*next]
+                {
+                    pending.push(*next);
+                }
+            }
+        }
+        keep
+    }
+}
+
+/// Folds scalar constants within each basic block. Registers deliberately do not carry
+/// facts across block boundaries yet: that keeps joins conservative without requiring a
+/// data-flow fixed point, while still covering expression temporaries and branch
+/// conditions emitted immediately before their consumers.
+fn fold_constants<F: PrimeField>(
+    mut instrs: Vec<Instr>,
+    cfg: &ControlFlowGraph,
+    num_field_regs: usize,
+    constants: &mut Vec<F>,
+    constant_ids: &mut HashMap<F, u32>,
+) -> Result<(Vec<Instr>, usize)> {
+    let mut known = vec![None; num_field_regs];
+    let mut keep = vec![true; instrs.len()];
+    let mut constant_branches = Vec::new();
+    let mut folded = 0usize;
+    // Signed-comparison setup computes a field-dependent boundary. Most bodies have no
+    // literal binary expression to fold, so construct the plain driver lazily.
+    let mut driver = None;
+
+    for block in &cfg.blocks {
+        known.fill(None);
+        for ip in block.start..block.end {
+            match instrs[ip].clone() {
+                Instr::Bin { op, dst, a, b } => {
+                    let a = resolve_src(a, &known);
+                    let b = resolve_src(b, &known);
+                    let replacement =
+                        fold_bin(op, a, b, constants, &mut driver).map(|folded| match folded {
+                            Folded::Value(value) => {
+                                intern_constant(value, constants, constant_ids).map(Src::Const)
+                            }
+                            Folded::Source(src) => Ok(src),
+                        });
+                    if let Some(src) = replacement.transpose()? {
+                        if src == Src::Reg(dst) {
+                            keep[ip] = false;
+                        } else {
+                            instrs[ip] = Instr::Mov {
+                                dst: Dst::Reg(dst),
+                                src,
+                            };
+                        }
+                        set_known(&mut known, dst, constant_id(src));
+                        folded += 1;
+                    } else {
+                        instrs[ip] = Instr::Bin { op, dst, a, b };
+                        set_known(&mut known, dst, None);
+                    }
+                }
+                Instr::Neg { dst, a } => {
+                    let a = resolve_src(a, &known);
+                    if let Some(value) = constant(a, constants) {
+                        let id = intern_constant(-value, constants, constant_ids)?;
+                        instrs[ip] = Instr::Mov {
+                            dst: Dst::Reg(dst),
+                            src: Src::Const(id),
+                        };
+                        set_known(&mut known, dst, Some(id));
+                        folded += 1;
+                    } else {
+                        instrs[ip] = Instr::Neg { dst, a };
+                        set_known(&mut known, dst, None);
+                    }
+                }
+                Instr::Mov { dst, src } => {
+                    let src = resolve_src(src, &known);
+                    instrs[ip] = Instr::Mov { dst, src };
+                    if let Dst::Reg(dst) = dst {
+                        if src == Src::Reg(dst) {
+                            keep[ip] = false;
+                            folded += 1;
+                        }
+                        set_known(&mut known, dst, constant_id(src));
+                    }
+                }
+                Instr::EqN { dst, .. } => set_known(&mut known, dst, None),
+                Instr::LoadN { dst, n, .. }
+                | Instr::BinN { dst, n, .. }
+                | Instr::OutputSub { dst, n, .. } => {
+                    clear_known_range(&mut known, dst, n);
+                }
+                Instr::CallFn { ret, ret_n, .. } => {
+                    clear_known_range(&mut known, ret, ret_n);
+                }
+                Instr::ToIndex { dst, src } => {
+                    instrs[ip] = Instr::ToIndex {
+                        dst,
+                        src: resolve_src(src, &known),
+                    };
+                }
+                Instr::JmpIfZero { cond, target } => {
+                    let cond = resolve_src(cond, &known);
+                    if let Some(value) = constant(cond, constants) {
+                        if value == F::ZERO {
+                            instrs[ip] = Instr::Jmp { target };
+                        } else {
+                            keep[ip] = false;
+                        }
+                        folded += 1;
+                    } else {
+                        instrs[ip] = Instr::JmpIfZero { cond, target };
+                    }
+                }
+                Instr::SharedIf { cond, else_target } => {
+                    let cond = resolve_src(cond, &known);
+                    instrs[ip] = Instr::SharedIf { cond, else_target };
+                    if let Some(value) = constant(cond, constants) {
+                        constant_branches.push((ip, value != F::ZERO));
+                    }
+                }
+                Instr::SharedIfBit { cond, else_target } => {
+                    let cond = resolve_src(cond, &known);
+                    instrs[ip] = Instr::SharedIfBit { cond, else_target };
+                    if let Some(value) = constant(cond, constants) {
+                        constant_branches.push((ip, value != F::ZERO));
+                    }
+                }
+                Instr::Assert { cond, line } => {
+                    instrs[ip] = Instr::Assert {
+                        cond: resolve_src(cond, &known),
+                        line,
+                    };
+                }
+                Instr::Log { src } => {
+                    instrs[ip] = Instr::Log {
+                        src: resolve_src(src, &known),
+                    };
+                }
+                Instr::ISet { .. }
+                | Instr::IAdd { .. }
+                | Instr::IMul { .. }
+                | Instr::StoreN { .. }
+                | Instr::Jmp { .. }
+                | Instr::SharedElse { .. }
+                | Instr::SharedEnd
+                | Instr::CreateCmp { .. }
+                | Instr::InputSub { .. }
+                | Instr::Ret { .. }
+                | Instr::Return
+                | Instr::LogStr { .. }
+                | Instr::LogFlush { .. } => {}
+            }
+        }
+    }
+
+    for (ip, take_truthy) in constant_branches {
+        fold_structured_branch(&instrs, &mut keep, ip, take_truthy)?;
+        folded += 1;
+    }
+
+    if keep.iter().all(|keep| *keep) {
+        Ok((instrs, folded))
+    } else {
+        Ok((compact(instrs, &keep)?, folded))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Folded<F> {
+    Value(F),
+    Source(Src),
+}
+
+fn fold_bin<F: PrimeField>(
+    op: BinOp,
+    a: Src,
+    b: Src,
+    constants: &[F],
+    driver: &mut Option<PlainDriver<F>>,
+) -> Option<Folded<F>> {
+    let av = constant(a, constants);
+    let bv = constant(b, constants);
+    if let (Some(av), Some(bv)) = (av, bv) {
+        let valid = match op {
+            BinOp::Div | BinOp::IntDiv | BinOp::Mod => bv != F::ZERO,
+            BinOp::BoolAnd | BinOp::BoolOr => is_bit(av) && is_bit(bv),
+            // Avoid turning an attacker-controlled constant shift into excessive
+            // compile-time allocation. Zero shifts are handled as identities below.
+            BinOp::ShiftR | BinOp::ShiftL => false,
+            _ => true,
+        };
+        if valid {
+            return apply_bin(driver.get_or_insert_with(PlainDriver::new), op, &av, &bv)
+                .ok()
+                .map(Folded::Value);
+        }
+    }
+
+    if a == b {
+        return match op {
+            BinOp::Sub | BinOp::Neq | BinOp::Lt | BinOp::Gt | BinOp::BitXor => {
+                Some(Folded::Value(F::ZERO))
+            }
+            BinOp::Eq | BinOp::Le | BinOp::Ge => Some(Folded::Value(F::ONE)),
+            BinOp::BitOr | BinOp::BitAnd => Some(Folded::Source(a)),
+            _ => None,
+        };
+    }
+
+    match op {
+        BinOp::Add => {
+            if av == Some(F::ZERO) {
+                Some(Folded::Source(b))
+            } else if bv == Some(F::ZERO) {
+                Some(Folded::Source(a))
+            } else {
+                None
+            }
+        }
+        BinOp::Sub if bv == Some(F::ZERO) => Some(Folded::Source(a)),
+        BinOp::Mul => {
+            if av == Some(F::ZERO) || bv == Some(F::ZERO) {
+                Some(Folded::Value(F::ZERO))
+            } else if av == Some(F::ONE) {
+                Some(Folded::Source(b))
+            } else if bv == Some(F::ONE) {
+                Some(Folded::Source(a))
+            } else {
+                None
+            }
+        }
+        BinOp::Div if bv == Some(F::ONE) => Some(Folded::Source(a)),
+        BinOp::Pow if bv == Some(F::ZERO) => Some(Folded::Value(F::ONE)),
+        BinOp::Pow if bv == Some(F::ONE) => Some(Folded::Source(a)),
+        BinOp::BitOr | BinOp::BitXor if av == Some(F::ZERO) => Some(Folded::Source(b)),
+        BinOp::BitOr | BinOp::BitXor if bv == Some(F::ZERO) => Some(Folded::Source(a)),
+        BinOp::BitAnd if av == Some(F::ZERO) || bv == Some(F::ZERO) => Some(Folded::Value(F::ZERO)),
+        BinOp::ShiftR | BinOp::ShiftL if bv == Some(F::ZERO) => Some(Folded::Source(a)),
+        _ => None,
+    }
+}
+
+fn fold_structured_branch(
+    instrs: &[Instr],
+    keep: &mut [bool],
+    if_ip: usize,
+    take_truthy: bool,
+) -> Result<()> {
+    let else_ip = match &instrs[if_ip] {
+        Instr::SharedIf { else_target, .. } | Instr::SharedIfBit { else_target, .. } => {
+            *else_target as usize
+        }
+        _ => bail!("constant branch at {if_ip} is not SharedIf/SharedIfBit"),
+    };
+
+    if matches!(instrs.get(else_ip), Some(Instr::SharedEnd)) {
+        if take_truthy {
+            keep[if_ip] = false;
+            keep[else_ip] = false;
+        } else {
+            keep[if_ip..=else_ip].fill(false);
+        }
+        return Ok(());
+    }
+
+    let shared_else_ip = else_ip
+        .checked_sub(1)
+        .ok_or_else(|| eyre!("constant branch at {if_ip} has invalid else target {else_ip}"))?;
+    let end_ip = match instrs.get(shared_else_ip) {
+        Some(Instr::SharedElse { end_target }) => *end_target as usize,
+        _ => bail!("constant branch at {if_ip} does not have SharedElse before target {else_ip}"),
+    };
+    if !matches!(instrs.get(end_ip), Some(Instr::SharedEnd)) {
+        bail!("constant branch at {if_ip} does not end at SharedEnd {end_ip}");
+    }
+
+    if take_truthy {
+        keep[if_ip] = false;
+        keep[shared_else_ip..=end_ip].fill(false);
+    } else {
+        keep[if_ip..else_ip].fill(false);
+        keep[end_ip] = false;
+    }
+    Ok(())
+}
+
+/// Removes unconditional jumps whose remapped target is already the next instruction.
+/// Compaction can expose another such jump, so repeat until the body stabilizes.
+fn remove_fallthrough_jumps(mut instrs: Vec<Instr>) -> Result<(Vec<Instr>, usize)> {
+    let mut removed = 0usize;
+    loop {
+        let keep = instrs
+            .iter()
+            .enumerate()
+            .map(
+                |(ip, instr)| !matches!(instr, Instr::Jmp { target } if *target as usize == ip + 1),
+            )
+            .collect::<Vec<_>>();
+        let count = keep.iter().filter(|keep| !**keep).count();
+        if count == 0 {
+            return Ok((instrs, removed));
+        }
+        removed += count;
+        instrs = compact(instrs, &keep)?;
+    }
+}
+
+fn resolve_src(src: Src, known: &[Option<u32>]) -> Src {
+    match src {
+        Src::Reg(reg) => known
+            .get(reg as usize)
+            .copied()
+            .flatten()
+            .map(Src::Const)
+            .unwrap_or(src),
+        _ => src,
+    }
+}
+
+fn constant<F: PrimeField>(src: Src, constants: &[F]) -> Option<F> {
+    match src {
+        Src::Const(id) => constants.get(id as usize).copied(),
+        _ => None,
+    }
+}
+
+fn constant_id(src: Src) -> Option<u32> {
+    match src {
+        Src::Const(id) => Some(id),
+        _ => None,
+    }
+}
+
+fn is_bit<F: PrimeField>(value: F) -> bool {
+    value == F::ZERO || value == F::ONE
+}
+
+fn intern_constant<F: PrimeField>(
+    value: F,
+    constants: &mut Vec<F>,
+    constant_ids: &mut HashMap<F, u32>,
+) -> Result<u32> {
+    if let Some(id) = constant_ids.get(&value) {
+        return Ok(*id);
+    }
+    let id = u32::try_from(constants.len())
+        .map_err(|_| eyre!("constant table exceeds u32::MAX entries"))?;
+    constants.push(value);
+    constant_ids.insert(value, id);
+    Ok(id)
+}
+
+fn set_known(known: &mut [Option<u32>], reg: u16, value: Option<u32>) {
+    if let Some(slot) = known.get_mut(reg as usize) {
+        *slot = value;
+    }
+}
+
+fn clear_known_range(known: &mut [Option<u32>], start: u16, n: u32) {
+    let start = start as usize;
+    let end = start.saturating_add(n as usize).min(known.len());
+    known[start..end].fill(None);
 }
 
 fn validate_targets(instrs: &[Instr]) -> Result<()> {
@@ -199,7 +605,6 @@ fn target_mut(instr: &mut Instr) -> Option<&mut u32> {
 ///
 /// This deletion-only primitive is sufficient for unreachable-block cleanup and DCE.
 /// Passes that replace an instruction in place can mutate it before calling `compact`.
-#[allow(dead_code)] // Used by the first mutating passes; kept exercised by unit tests now.
 fn compact(instrs: Vec<Instr>, keep: &[bool]) -> Result<Vec<Instr>> {
     if instrs.len() != keep.len() {
         bail!(
@@ -238,7 +643,30 @@ fn compact(instrs: Vec<Instr>, keep: &[bool]) -> Result<Vec<Instr>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use circom_mpc_vm2::isa::{Dst, RetSrc, Src};
+    use ark_bn254::Fr;
+    use circom_mpc_vm2::isa::{Addr, Dst, RetSrc, Src};
+
+    fn optimize(
+        instrs: Vec<Instr>,
+        num_field_regs: usize,
+        mut constants: Vec<Fr>,
+    ) -> (Vec<Instr>, Vec<Fr>) {
+        let mut constant_ids = constants
+            .iter()
+            .copied()
+            .enumerate()
+            .map(|(id, value)| (value, id as u32))
+            .collect();
+        let instrs = run(
+            instrs,
+            "test",
+            num_field_regs,
+            &mut constants,
+            &mut constant_ids,
+        )
+        .unwrap();
+        (instrs, constants)
+    }
 
     #[test]
     fn cfg_models_conditional_and_ret_fallthrough() {
@@ -274,8 +702,174 @@ mod tests {
 
     #[test]
     fn rejects_target_past_end_of_body() {
-        let error = run(vec![Instr::Jmp { target: 2 }], "bad").unwrap_err();
+        let mut constants = Vec::<Fr>::new();
+        let mut constant_ids = HashMap::new();
+        let error = run(
+            vec![Instr::Jmp { target: 2 }],
+            "bad",
+            0,
+            &mut constants,
+            &mut constant_ids,
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("instruction 0 targets 2"));
+    }
+
+    #[test]
+    fn folds_literals_propagates_register_constants_and_applies_identities() {
+        let (out, constants) = optimize(
+            vec![
+                Instr::Bin {
+                    op: BinOp::Add,
+                    dst: 0,
+                    a: Src::Const(0),
+                    b: Src::Const(1),
+                },
+                Instr::Bin {
+                    op: BinOp::Mul,
+                    dst: 1,
+                    a: Src::Reg(0),
+                    b: Src::Const(2),
+                },
+                Instr::Bin {
+                    op: BinOp::Mul,
+                    dst: 2,
+                    a: Src::Signal(Addr::Const(0)),
+                    b: Src::Const(3),
+                },
+                Instr::Bin {
+                    op: BinOp::Eq,
+                    dst: 3,
+                    a: Src::Reg(2),
+                    b: Src::Reg(2),
+                },
+                Instr::Return,
+            ],
+            4,
+            vec![
+                Fr::from(2u64),
+                Fr::from(3u64),
+                Fr::from(4u64),
+                Fr::from(1u64),
+            ],
+        );
+
+        let five = constants
+            .iter()
+            .position(|value| *value == Fr::from(5u64))
+            .unwrap() as u32;
+        let twenty = constants
+            .iter()
+            .position(|value| *value == Fr::from(20u64))
+            .unwrap() as u32;
+        assert_eq!(
+            out,
+            vec![
+                Instr::Mov {
+                    dst: Dst::Reg(0),
+                    src: Src::Const(five),
+                },
+                Instr::Mov {
+                    dst: Dst::Reg(1),
+                    src: Src::Const(twenty),
+                },
+                Instr::Mov {
+                    dst: Dst::Reg(2),
+                    src: Src::Signal(Addr::Const(0)),
+                },
+                Instr::Mov {
+                    dst: Dst::Reg(3),
+                    src: Src::Const(3),
+                },
+                Instr::Return,
+            ]
+        );
+    }
+
+    #[test]
+    fn constant_jump_removes_unreachable_fallthrough_and_remaps_target() {
+        let (out, _) = optimize(
+            vec![
+                Instr::JmpIfZero {
+                    cond: Src::Const(0),
+                    target: 3,
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Const(1),
+                },
+                Instr::Jmp { target: 4 },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Const(2),
+                },
+                Instr::Return,
+            ],
+            0,
+            vec![Fr::from(0u64), Fr::from(11u64), Fr::from(22u64)],
+        );
+        assert_eq!(
+            out,
+            vec![
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Const(2),
+                },
+                Instr::Return,
+            ]
+        );
+    }
+
+    #[test]
+    fn constant_shared_if_selects_one_arm_and_removes_predication_scaffold() {
+        let body = |cond| {
+            vec![
+                Instr::SharedIfBit {
+                    cond: Src::Const(cond),
+                    else_target: 3,
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Const(2),
+                },
+                Instr::SharedElse { end_target: 4 },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Const(3),
+                },
+                Instr::SharedEnd,
+                Instr::Return,
+            ]
+        };
+        let constants = vec![
+            Fr::from(0u64),
+            Fr::from(1u64),
+            Fr::from(10u64),
+            Fr::from(20u64),
+        ];
+
+        let (truthy, _) = optimize(body(1), 0, constants.clone());
+        let (falsy, _) = optimize(body(0), 0, constants);
+        assert_eq!(
+            truthy,
+            vec![
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Const(2),
+                },
+                Instr::Return,
+            ]
+        );
+        assert_eq!(
+            falsy,
+            vec![
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(0)),
+                    src: Src::Const(3),
+                },
+                Instr::Return,
+            ]
+        );
     }
 
     #[test]

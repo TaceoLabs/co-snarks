@@ -409,7 +409,13 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             .high_water()
             .try_into()
             .map_err(|_| eyre!("template {} exceeds 255 integer registers", templ.name))?;
-        let instrs = passes::run(std::mem::take(&mut self.instrs), &templ.name)?;
+        let instrs = passes::run(
+            std::mem::take(&mut self.instrs),
+            &templ.name,
+            usize::from(num_field_regs),
+            &mut self.constants,
+            &mut self.const_ids,
+        )?;
         Ok(TemplateCode {
             instrs,
             num_field_regs,
@@ -466,7 +472,13 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
                 .map(|p| p.length.iter().product::<usize>())
                 .sum::<usize>(),
         )?;
-        let instrs = passes::run(std::mem::take(&mut self.instrs), &fun.name)?;
+        let instrs = passes::run(
+            std::mem::take(&mut self.instrs),
+            &fun.name,
+            usize::from(num_field_regs),
+            &mut self.constants,
+            &mut self.const_ids,
+        )?;
         Ok(FunctionCode {
             instrs,
             num_field_regs,

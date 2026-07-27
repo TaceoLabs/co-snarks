@@ -3,7 +3,7 @@ mod common;
 use ark_bn254::{Bn254, Fr};
 use circom_mpc_compiler2::{CoCircomCompiler, CompilerConfig, SimplificationLevel, UnrollConfig};
 use circom_mpc_vm2::api::PlainWitnessExtension;
-use circom_mpc_vm2::isa::{ISrc, Instr};
+use circom_mpc_vm2::isa::{BinOp, ISrc, Instr};
 use circom_mpc_vm2::program::{CompiledProgram, VMConfig};
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -56,6 +56,41 @@ fn mul2_straight_line_end_to_end() {
     // inputs).
     assert_eq!(witness.public_inputs, vec![Fr::from(1u64), Fr::from(42u64)]);
     assert_eq!(witness.witness, vec![Fr::from(6u64), Fr::from(7u64)]);
+}
+
+#[test]
+fn constant_folding_eliminates_known_protocol_work_and_branch_scaffolding() {
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse(
+            "tests/circuits/constant_folding.circom",
+            CompilerConfig {
+                simplification: SimplificationLevel::O0,
+                ..Default::default()
+            },
+        )
+        .unwrap(),
+    );
+    let main = &program.templates[program.main.0 as usize];
+    assert!(
+        main.instrs.iter().all(|instr| !matches!(
+            instr,
+            Instr::Bin {
+                op: BinOp::Add | BinOp::Sub | BinOp::Mul,
+                ..
+            } | Instr::SharedIf { .. }
+                | Instr::SharedIfBit { .. }
+                | Instr::SharedElse { .. }
+                | Instr::SharedEnd
+        )),
+        "constant arithmetic and its statically-false branch should be gone: {:?}",
+        main.instrs
+    );
+
+    let inputs = BTreeMap::from([("in".to_string(), Fr::from(123u64))]);
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    assert_eq!(finalized.get_output("out"), Some(vec![Fr::from(7u64)]));
 }
 
 /// Regression test for the multi-register `LoadN` frame-size bug: a size-2 array copy

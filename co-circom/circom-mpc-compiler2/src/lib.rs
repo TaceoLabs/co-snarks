@@ -60,6 +60,9 @@
 //!      instruction is emitted. The high-water mark reached becomes the frame's
 //!      register-file size in the resulting [`circom_mpc_vm2::program::TemplateCode`]/
 //!      [`circom_mpc_vm2::program::FunctionCode`].
+//!    - **Post-lowering passes** (`codegen::passes`): a CFG validates absolute targets,
+//!      scalar constants and algebraic identities are folded, statically selected branch
+//!      arms and unreachable blocks are removed, and all surviving targets are remapped.
 //!
 //! # Example
 //!
