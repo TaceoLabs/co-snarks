@@ -1249,7 +1249,13 @@ fn read_ret<T: Clone>(frame: &Frame<T>, src: &RetSrc, k: usize) -> T {
 /// before any of these boundaries. Arithmetic, loads, stores, and integer-address
 /// calculations deliberately remain barrier-free so an entire straight-line region
 /// shares one batched merge.
-fn is_write_barrier(inst: &Instr) -> bool {
+///
+/// Public because the compiler's optimization passes must respect exactly this set: a
+/// barrier's operands observe the *merged* var/signal state, and any var written since
+/// the previous barrier may change when the merge runs. Function bodies inherit their
+/// caller's predication (unlike templates, which start a fresh [`Predication`]), so a
+/// function can hit these merges without any `Shared*` instruction of its own.
+pub fn is_write_barrier(inst: &Instr) -> bool {
     matches!(
         inst,
         Instr::Jmp { .. }

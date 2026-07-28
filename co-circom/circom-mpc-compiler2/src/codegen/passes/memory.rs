@@ -17,8 +17,21 @@
 //! instruction redefines `r0` itself. Like copy propagation's alias facts, a register
 //! fact is a *sameness* claim, not a value claim, so it survives a CFG join whenever
 //! every incoming path established it, even if the runtime value differs per path.
+//!
+//! Function bodies need one extra discipline: they *inherit* the caller's predication
+//! through `CallFn` (templates start with a fresh, empty predication state), so a
+//! function may run entirely under a shared predicate without any local `Shared*`
+//! instruction — invisible to [`shared_region_mask`]. Under such an inherited
+//! predicate, the VM cmux-merges every buffered var write immediately before each
+//! write barrier ([`is_write_barrier`]), changing var values without a store. Forward
+//! facts in function bodies are therefore cleared at every write barrier, and a
+//! barrier instruction's own operands are never rewritten (they observe the *merged*
+//! state — rewriting an `Assert`/`JmpIfZero`/`Ret` operand to its speculative source
+//! would bypass the merge, potentially skipping a real assertion failure or branching
+//! on what should have become a shared value).
 
 use super::{ControlFlowGraph, Successor, compact};
+use circom_mpc_vm2::exec::is_write_barrier;
 use circom_mpc_vm2::isa::{Addr, Dst, Instr, RetSrc, Src};
 use eyre::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -42,19 +55,28 @@ impl VarValue {
 
 type KnownVars = HashMap<u32, VarValue>;
 
-pub(super) fn forward_var_values(mut instrs: Vec<Instr>) -> Result<(Vec<Instr>, usize)> {
+/// `inherits_predication` must be `true` for function bodies — see the module docs: an
+/// inherited shared predicate makes every [`is_write_barrier`] instruction a potential
+/// var-merging point that [`shared_region_mask`] cannot see.
+pub(super) fn forward_var_values(
+    mut instrs: Vec<Instr>,
+    inherits_predication: bool,
+) -> Result<(Vec<Instr>, usize)> {
     let cfg = ControlFlowGraph::build(&instrs)?;
     if cfg.blocks.is_empty() {
         return Ok((instrs, 0));
     }
     let shared = shared_region_mask(&instrs);
-    let inputs = var_value_inputs(&instrs, &cfg, &shared);
+    let inputs = var_value_inputs(&instrs, &cfg, &shared, inherits_predication);
     let mut forwarded = 0usize;
 
     for (block_id, block) in cfg.blocks.iter().enumerate() {
         let mut known = inputs[block_id].clone();
         for ip in block.start..block.end {
-            if shared[ip] {
+            if shared[ip] || (inherits_predication && is_write_barrier(&instrs[ip])) {
+                // Under a (possibly inherited) shared predicate the VM merges buffered
+                // writes before this instruction: its operands read the merged state,
+                // and every fact established since the previous barrier is stale.
                 known.clear();
                 continue;
             }
@@ -65,7 +87,12 @@ pub(super) fn forward_var_values(mut instrs: Vec<Instr>) -> Result<(Vec<Instr>, 
     Ok((instrs, forwarded))
 }
 
-fn var_value_inputs(instrs: &[Instr], cfg: &ControlFlowGraph, shared: &[bool]) -> Vec<KnownVars> {
+fn var_value_inputs(
+    instrs: &[Instr],
+    cfg: &ControlFlowGraph,
+    shared: &[bool],
+    inherits_predication: bool,
+) -> Vec<KnownVars> {
     let mut inputs = vec![None; cfg.blocks.len()];
     inputs[0] = Some(KnownVars::new());
     let mut pending = VecDeque::from([0usize]);
@@ -77,7 +104,7 @@ fn var_value_inputs(instrs: &[Instr], cfg: &ControlFlowGraph, shared: &[bool]) -
         let block = &cfg.blocks[block_id];
         let mut known = inputs[block_id].clone().unwrap_or_default();
         for ip in block.start..block.end {
-            if shared[ip] {
+            if shared[ip] || (inherits_predication && is_write_barrier(&instrs[ip])) {
                 known.clear();
             } else {
                 transfer_known_vars(&instrs[ip], &mut known);
@@ -248,20 +275,10 @@ fn rewrite_sources(instr: &mut Instr, known: &KnownVars) -> usize {
                 rewrite(&mut lane.b);
             }
         }
-        Instr::Ret {
-            src: src @ RetSrc::Var(Addr::Const(_)),
-            n: 1,
-        } => {
-            // A scalar `return v` reading a var that mirrors a register can return the
-            // register directly. `RetSrc` has no constant form, so constant facts stay.
-            let RetSrc::Var(Addr::Const(slot)) = src else {
-                unreachable!("matched above");
-            };
-            if let Some(VarValue::Reg(reg)) = known.get(slot) {
-                *src = RetSrc::Reg(*reg);
-                rewritten += 1;
-            }
-        }
+        // `Ret` is deliberately not rewritten: it only appears in function bodies,
+        // where it is a write barrier whose operands must observe the merged state
+        // under a possibly-inherited shared predicate (see the module docs) — the
+        // barrier handling in `forward_var_values` never reaches here with facts.
         _ => {}
     }
     rewritten
@@ -270,6 +287,15 @@ fn rewrite_sources(instr: &mut Instr, known: &KnownVars) -> usize {
 /// Removes exact var stores whose values cannot reach a later read. Stores within a
 /// possibly-shared region are conditional: when live they do not kill the previous value,
 /// because the VM's merge still needs that value for the untaken arm.
+///
+/// Unlike the forward pass, this needs no extra care for a function body's *inherited*
+/// predicate. Under a predicate `c`, a slot's post-merge value is always
+/// `c ? last_written : value_at_region_entry`: the pending-write buffer records the
+/// pre-first-write value once, and successive merges compose as
+/// `cmux(c, new, cmux(c, mid, entry)) == cmux(c, new, entry)` — intermediate values
+/// cancel for the same `c`. Removing a store that no read observes therefore never
+/// changes any merged result; it only removes that slot's lane from the merge, which
+/// every party drops identically (the usual identical-program argument).
 pub(super) fn eliminate_dead_var_stores(instrs: Vec<Instr>) -> Result<(Vec<Instr>, usize)> {
     let cfg = ControlFlowGraph::build(&instrs)?;
     if cfg.blocks.is_empty() {
@@ -538,7 +564,7 @@ mod tests {
             },
             Instr::Return,
         ];
-        let (out, forwarded) = forward_var_values(instrs).unwrap();
+        let (out, forwarded) = forward_var_values(instrs, false).unwrap();
         assert_eq!(forwarded, 1);
         assert_eq!(
             out[2],
@@ -566,7 +592,7 @@ mod tests {
             },
             Instr::Return,
         ];
-        let (out, forwarded) = forward_var_values(instrs).unwrap();
+        let (out, forwarded) = forward_var_values(instrs, false).unwrap();
         assert_eq!(forwarded, 1);
         assert_eq!(
             out[2],
@@ -602,7 +628,7 @@ mod tests {
             },
             Instr::Return,
         ];
-        let (out, forwarded) = forward_var_values(instrs).unwrap();
+        let (out, forwarded) = forward_var_values(instrs, false).unwrap();
         // The Bin's operand forwards; the later read must NOT (r0 was redefined).
         assert_eq!(forwarded, 1);
         assert!(matches!(out[2], Instr::Bin { a: Src::Reg(0), .. }));
@@ -634,7 +660,7 @@ mod tests {
             },
             Instr::Return,
         ];
-        let (out, forwarded) = forward_var_values(instrs).unwrap();
+        let (out, forwarded) = forward_var_values(instrs, false).unwrap();
         assert_eq!(forwarded, 1);
         assert_eq!(
             out[2],
@@ -646,30 +672,105 @@ mod tests {
     }
 
     #[test]
-    fn scalar_var_return_forwards_to_register() {
+    fn function_body_barrier_operand_is_not_rewritten_and_kills_facts() {
+        // Function bodies may run under an *inherited* shared predicate: the VM
+        // cmux-merges the buffered var write immediately before the Assert, so the
+        // Assert must read the merged slot (not the speculative register), and the
+        // fact must not survive past the barrier either.
         let instrs = vec![
             Instr::Mov {
-                dst: Dst::Reg(2),
-                src: Src::Signal(Addr::Const(0)),
+                dst: Dst::Reg(0),
+                src: Src::Const(0),
             },
             Instr::Mov {
-                dst: Dst::Var(Addr::Const(0)),
-                src: Src::Reg(2),
+                dst: Dst::Var(Addr::Const(3)),
+                src: Src::Reg(0),
+            },
+            Instr::Assert {
+                cond: Src::Var(Addr::Const(3)),
+                line: 1,
+            },
+            Instr::Mov {
+                dst: Dst::Reg(1),
+                src: Src::Var(Addr::Const(3)),
             },
             Instr::Ret {
-                src: RetSrc::Var(Addr::Const(0)),
+                src: RetSrc::Reg(1),
                 n: 1,
             },
         ];
-        let (out, forwarded) = forward_var_values(instrs).unwrap();
-        assert_eq!(forwarded, 1);
-        assert_eq!(
-            out[2],
+        let (out, forwarded) = forward_var_values(instrs.clone(), true).unwrap();
+        assert_eq!(forwarded, 0);
+        assert_eq!(out, instrs);
+    }
+
+    #[test]
+    fn function_body_still_forwards_within_a_barrier_free_span() {
+        let instrs = vec![
+            Instr::Mov {
+                dst: Dst::Reg(0),
+                src: Src::Const(0),
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(3)),
+                src: Src::Reg(0),
+            },
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 1,
+                a: Src::Var(Addr::Const(3)),
+                b: Src::Const(0),
+            },
             Instr::Ret {
-                src: RetSrc::Reg(2),
+                src: RetSrc::Reg(1),
                 n: 1,
+            },
+        ];
+        let (out, forwarded) = forward_var_values(instrs, true).unwrap();
+        assert_eq!(forwarded, 1);
+        assert!(matches!(out[2], Instr::Bin { a: Src::Reg(0), .. }));
+    }
+
+    #[test]
+    fn template_body_facts_survive_write_barriers() {
+        // Templates start with a fresh predication state, so outside local Shared*
+        // regions no merge can happen at a barrier — forwarding across an Assert (and
+        // into its operand) stays valid there.
+        let instrs = vec![
+            Instr::Mov {
+                dst: Dst::Reg(0),
+                src: Src::Signal(Addr::Const(0)),
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(3)),
+                src: Src::Reg(0),
+            },
+            Instr::Assert {
+                cond: Src::Var(Addr::Const(3)),
+                line: 1,
+            },
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(1)),
+                src: Src::Var(Addr::Const(3)),
+            },
+            Instr::Return,
+        ];
+        let (out, forwarded) = forward_var_values(instrs, false).unwrap();
+        assert_eq!(forwarded, 2);
+        assert!(matches!(
+            out[2],
+            Instr::Assert {
+                cond: Src::Reg(0),
+                ..
             }
-        );
+        ));
+        assert!(matches!(
+            out[3],
+            Instr::Mov {
+                src: Src::Reg(0),
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -692,7 +793,7 @@ mod tests {
             },
             Instr::Return,
         ];
-        let (out, forwarded) = forward_var_values(instrs.clone()).unwrap();
+        let (out, forwarded) = forward_var_values(instrs.clone(), false).unwrap();
         assert_eq!(forwarded, 0);
         assert_eq!(out, instrs);
     }
@@ -721,7 +822,7 @@ mod tests {
             Instr::SharedEnd,
             Instr::Return,
         ];
-        let (out, forwarded) = forward_var_values(instrs.clone()).unwrap();
+        let (out, forwarded) = forward_var_values(instrs.clone(), false).unwrap();
         assert_eq!(forwarded, 0);
         assert_eq!(out, instrs);
     }

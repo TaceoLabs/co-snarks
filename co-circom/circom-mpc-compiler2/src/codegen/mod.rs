@@ -412,6 +412,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
         let instrs = passes::run(
             std::mem::take(&mut self.instrs),
             &templ.name,
+            passes::BodyKind::Template,
             usize::from(num_field_regs),
             &mut self.constants,
             &mut self.const_ids,
@@ -476,6 +477,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
         let instrs = passes::run(
             std::mem::take(&mut self.instrs),
             &fun.name,
+            passes::BodyKind::Function,
             usize::from(num_field_regs),
             &mut self.constants,
             &mut self.const_ids,

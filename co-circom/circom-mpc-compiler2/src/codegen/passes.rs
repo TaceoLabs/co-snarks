@@ -19,6 +19,17 @@ mod cse;
 mod dce;
 mod memory;
 
+/// Which kind of body is being optimized. Templates always start with a fresh, empty
+/// predication state, so their shared regions are exactly the local `Shared*` nesting.
+/// Function bodies *inherit* the caller's predication through `CallFn`, so they may run
+/// entirely under a shared predicate without any local `Shared*` instruction — passes
+/// forwarding var facts must additionally respect the VM's write-barrier merges there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum BodyKind {
+    Template,
+    Function,
+}
+
 /// Runs the post-lowering pipeline for one template or function body.
 ///
 /// The pipeline validates and constructs a CFG, then repeatedly propagates constants,
@@ -28,6 +39,7 @@ mod memory;
 pub(super) fn run<F: PrimeField>(
     instrs: Vec<Instr>,
     body_name: &str,
+    body_kind: BodyKind,
     num_field_regs: usize,
     constants: &mut Vec<F>,
     constant_ids: &mut HashMap<F, u32>,
@@ -73,7 +85,8 @@ pub(super) fn run<F: PrimeField>(
         propagated_register_copies += copies_now;
         removed_redundant_moves += moves_now;
 
-        let (next, forwarded_now) = memory::forward_var_values(instrs)?;
+        let (next, forwarded_now) =
+            memory::forward_var_values(instrs, body_kind == BodyKind::Function)?;
         instrs = next;
         forwarded_var_loads += forwarded_now;
 
@@ -1137,6 +1150,7 @@ mod tests {
         let instrs = run(
             instrs,
             "test",
+            BodyKind::Template,
             num_field_regs,
             &mut constants,
             &mut constant_ids,
@@ -1208,6 +1222,7 @@ mod tests {
         let error = run(
             vec![Instr::Jmp { target: 2 }],
             "bad",
+            BodyKind::Template,
             0,
             &mut constants,
             &mut constant_ids,
