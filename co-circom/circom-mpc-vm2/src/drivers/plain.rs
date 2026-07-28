@@ -4,7 +4,6 @@ use ark_ff::{One, PrimeField};
 use eyre::{Result, bail, eyre};
 use mpc_core::gadgets::poseidon2::{CircomTracePlainHasher, Poseidon2};
 use num_bigint::BigUint;
-use num_traits::cast::ToPrimitive;
 
 /// `(p + 1) / 2`, expressed as a field element.
 ///
@@ -23,12 +22,17 @@ fn to_biguint<F: PrimeField>(f: &F) -> BigUint {
 }
 
 /// Converts a field element into a `usize`, erroring if it does not fit.
+///
+/// Inspects the canonical limb representation directly instead of round-tripping
+/// through a heap-allocated [`BigUint`] — this sits on the VM's hot path (`ToIndex`,
+/// shift amounts).
 fn to_usize<F: PrimeField>(f: &F) -> Result<usize> {
-    let a = to_biguint(f);
-    let a = a
-        .to_u64()
-        .ok_or_else(|| eyre!("Cannot convert var into usize"))?;
-    Ok(usize::try_from(a)?)
+    let repr = f.into_bigint();
+    let limbs = repr.as_ref();
+    if limbs[1..].iter().any(|&limb| limb != 0) {
+        return Err(eyre!("Cannot convert var into usize"));
+    }
+    Ok(usize::try_from(limbs[0])?)
 }
 
 /// Local plain-field driver. Do not use with sensitive data — nothing is protected.
@@ -199,11 +203,12 @@ impl<F: PrimeField> VmDriver<F> for PlainDriver<F> {
     }
 
     fn bool_and(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_usize(a)?;
-        let rhs = to_usize(b)?;
-        debug_assert!(rhs == 0 || rhs == 1);
-        debug_assert!(lhs == 0 || lhs == 1);
-        if rhs == 1 && lhs == 1 {
+        // Operands are bits by the trait contract; `is_one`/`is_zero` compare in place,
+        // without the integer conversion (and heap allocation) of the previous
+        // implementation.
+        debug_assert!(a.is_zero() || a.is_one());
+        debug_assert!(b.is_zero() || b.is_one());
+        if a.is_one() && b.is_one() {
             Ok(F::one())
         } else {
             Ok(F::zero())
@@ -211,11 +216,9 @@ impl<F: PrimeField> VmDriver<F> for PlainDriver<F> {
     }
 
     fn bool_or(&mut self, a: &Self::VmType, b: &Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_usize(a)?;
-        let rhs = to_usize(b)?;
-        debug_assert!(rhs == 0 || rhs == 1);
-        debug_assert!(lhs == 0 || lhs == 1);
-        if rhs == 1 || lhs == 1 {
+        debug_assert!(a.is_zero() || a.is_one());
+        debug_assert!(b.is_zero() || b.is_one());
+        if a.is_one() || b.is_one() {
             Ok(F::one())
         } else {
             Ok(F::zero())

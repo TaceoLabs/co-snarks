@@ -21,7 +21,7 @@
 use crate::accel::{AccelBindings, MpcAccelerator};
 use crate::driver::{CodeBody, InstructionSite, VmDriver, apply_bin};
 use crate::isa::*;
-use crate::program::{CompiledProgram, FunctionCode, TemplateCode, VMConfig};
+use crate::program::{CompiledProgram, VMConfig};
 use ark_ff::PrimeField;
 use eyre::{Result, bail};
 use std::collections::HashSet;
@@ -59,6 +59,13 @@ impl<T: Clone> PendingWrites<T> {
             entries: Vec::new(),
             dirty: HashSet::new(),
         }
+    }
+
+    /// Whether any speculative write awaits its merge. Almost always false, so the
+    /// dispatch loops check this single load before matching an instruction against
+    /// the barrier set.
+    fn has_pending(&self) -> bool {
+        !self.entries.is_empty()
     }
 
     fn write_var(&mut self, vars: &mut [T], idx: usize, value: T) {
@@ -118,27 +125,6 @@ impl<T: Clone> PendingWrites<T> {
             }
         }
         Ok(())
-    }
-}
-
-impl<T: Default + Clone> Frame<T> {
-    /// Allocate a fresh, zeroed frame sized for template `t`.
-    fn for_template(t: &TemplateCode) -> Self {
-        Self {
-            regs: vec![T::default(); t.num_field_regs as usize],
-            iregs: vec![0; t.num_int_regs as usize],
-            vars: vec![T::default(); t.num_vars as usize],
-        }
-    }
-
-    /// Allocate a fresh, zeroed frame sized for function `f` (`vars[0..num_params]`
-    /// are overwritten with the call's arguments by [`Machine::run_function`]).
-    fn for_function(f: &FunctionCode) -> Self {
-        Self {
-            regs: vec![T::default(); f.num_field_regs as usize],
-            iregs: vec![0; f.num_int_regs as usize],
-            vars: vec![T::default(); f.num_vars as usize],
-        }
     }
 }
 
@@ -338,6 +324,14 @@ pub struct Machine<'a, F: PrimeField, C: VmDriver<F>> {
     /// [`Machine::new_with_accelerator`]): the registry itself (to dispatch through)
     /// plus its [`AccelBindings`] against `program` (computed once, at construction).
     accel: Option<(&'a MpcAccelerator<F, C>, AccelBindings)>,
+    /// Reusable operand-gather buffers for the vector instructions (`BinN`/`BinBatch`),
+    /// taken and restored around each use so no per-instruction allocation happens.
+    scratch_a: Vec<C::VmType>,
+    /// Second operand-gather buffer, see [`Self::scratch_a`].
+    scratch_b: Vec<C::VmType>,
+    /// Retired activation frames, reused by [`Self::take_frame`] so template/function
+    /// activations don't allocate three fresh vectors each.
+    frame_pool: Vec<Frame<C::VmType>>,
 }
 
 impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
@@ -364,7 +358,35 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             config,
             log_buf: String::with_capacity(1024),
             accel: None,
+            scratch_a: Vec::new(),
+            scratch_b: Vec::new(),
+            frame_pool: Vec::new(),
         })
+    }
+
+    /// Pops a retired frame from the pool (or starts an empty one) and resizes it to
+    /// the requested activation shape, resetting every slot to its default. `resize`
+    /// reuses the vectors' existing capacity, so a steady-state run performs no frame
+    /// allocation at all.
+    fn take_frame(&mut self, regs: usize, iregs: usize, vars: usize) -> Frame<C::VmType> {
+        let mut frame = self.frame_pool.pop().unwrap_or_else(|| Frame {
+            regs: Vec::new(),
+            iregs: Vec::new(),
+            vars: Vec::new(),
+        });
+        frame.regs.clear();
+        frame.regs.resize(regs, C::VmType::default());
+        frame.iregs.clear();
+        frame.iregs.resize(iregs, 0);
+        frame.vars.clear();
+        frame.vars.resize(vars, C::VmType::default());
+        frame
+    }
+
+    /// Returns a finished activation's frame to the pool for reuse. Error paths skip
+    /// this — the whole execution aborts there, so the buffers are simply dropped.
+    fn recycle_frame(&mut self, frame: Frame<C::VmType>) {
+        self.frame_pool.push(frame);
     }
 
     /// Same as [`Machine::new`], but also binds `accelerator`'s registrations against
@@ -453,7 +475,11 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             return Ok(());
         }
 
-        let mut frame = Frame::for_template(code);
+        let mut frame = self.take_frame(
+            code.num_field_regs as usize,
+            code.num_int_regs as usize,
+            code.num_vars as usize,
+        );
         let instrs_len = code.instrs.len();
         // Fresh per component activation, matching the old per-`Component` `if_stack`;
         // threaded by reference through any function calls made from here (old
@@ -468,7 +494,9 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             }
             let inst = &code.instrs[ip];
             let offset = comp.offset;
-            if is_write_barrier(inst) {
+            // Pending writes only exist under a shared predicate; check that cheap
+            // emptiness bit before matching the instruction against the barrier set.
+            if pending.has_pending() && is_write_barrier(inst) {
                 pending.flush::<F, C>(self.driver, &pred, &mut frame, &mut self.signals)?;
             }
             self.driver.trace_instruction_start(InstructionSite {
@@ -495,6 +523,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 }
             }
         }
+        self.recycle_frame(frame);
         Ok(())
     }
 
@@ -518,7 +547,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
     pub fn run_function(
         &mut self,
         fn_id: FnId,
-        args: Vec<C::VmType>,
+        args: &[C::VmType],
         pred: &mut Predication<C::VmType>,
         comp_offset: usize,
         ret_n: usize,
@@ -527,16 +556,18 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
         let code = &program.functions[fn_id.0 as usize];
         let name: &str = &program.debug.names[code.name_id as usize];
         let num_params = code.num_params as usize;
-        let mut frame = Frame::for_function(code);
         if args.len() != num_params {
             bail!(
                 "function {name} called with {} argument(s), expected {num_params}",
                 args.len()
             );
         }
-        for (i, v) in args.into_iter().enumerate() {
-            frame.vars[i] = v;
-        }
+        let mut frame = self.take_frame(
+            code.num_field_regs as usize,
+            code.num_int_regs as usize,
+            code.num_vars as usize,
+        );
+        frame.vars[..num_params].clone_from_slice(args);
         let instrs_len = code.instrs.len();
         let mut ret_acc: Vec<(C::VmType, Vec<C::VmType>)> = Vec::new();
         let mut pending = PendingWrites::new();
@@ -549,6 +580,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 pending.flush::<F, C>(self.driver, pred, &mut frame, &mut self.signals)?;
                 if !ret_acc.is_empty() {
                     let vals = self.merge_ret_acc(ret_acc)?;
+                    self.recycle_frame(frame);
                     return Ok(self.resize_ret(vals, ret_n));
                 }
                 bail!("function {name} ended without returning");
@@ -557,7 +589,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             let mut kind = StepCtx::Function {
                 ret_acc: &mut ret_acc,
             };
-            if is_write_barrier(inst) {
+            if pending.has_pending() && is_write_barrier(inst) {
                 pending.flush::<F, C>(self.driver, pred, &mut frame, &mut self.signals)?;
             }
             self.driver.trace_instruction_start(InstructionSite {
@@ -578,7 +610,10 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             match flow? {
                 Flow::Continue => ip += 1,
                 Flow::Jump(target) => ip = target,
-                Flow::ReturnFn(vals) => return Ok(self.resize_ret(vals, ret_n)),
+                Flow::ReturnFn(vals) => {
+                    self.recycle_frame(frame);
+                    return Ok(self.resize_ret(vals, ret_n));
+                }
                 Flow::ReturnTempl => {
                     unreachable!("step never yields ReturnTempl for a function body")
                 }
@@ -745,10 +780,14 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 Flow::Continue
             }
             Instr::BinN { op, dst, a, b, n } => {
-                // Gather operands, one vectorized driver call, scatter results.
+                // Gather operands, one vectorized driver call, scatter results. The
+                // gather buffers are machine-owned scratch (taken and restored below),
+                // so a hot loop's vector instructions never touch the allocator.
                 let n = *n as usize;
-                let mut av = Vec::with_capacity(n);
-                let mut bv = Vec::with_capacity(n);
+                let mut av = std::mem::take(&mut self.scratch_a);
+                let mut bv = std::mem::take(&mut self.scratch_b);
+                av.clear();
+                bv.clear();
                 for k in 0..n {
                     av.push(
                         read_n::<F, C>(frame, &self.signals, &self.consts, comp_offset, a, k)?
@@ -771,6 +810,8 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 } else {
                     self.driver.bin_many(*op, &av, &bv)?
                 };
+                self.scratch_a = av;
+                self.scratch_b = bv;
                 for (k, v) in rv.into_iter().enumerate() {
                     frame.regs[*dst as usize + k] = v;
                 }
@@ -779,9 +820,12 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             Instr::BinBatch { op, lanes } => {
                 // Snapshot every input before scattering results. Besides matching the
                 // vector driver's slice API, this preserves anti-dependencies where an
-                // earlier lane reads a slot that a later lane overwrites.
-                let mut av = Vec::with_capacity(lanes.len());
-                let mut bv = Vec::with_capacity(lanes.len());
+                // earlier lane reads a slot that a later lane overwrites. The gather
+                // buffers are machine-owned scratch, as in `BinN` above.
+                let mut av = std::mem::take(&mut self.scratch_a);
+                let mut bv = std::mem::take(&mut self.scratch_b);
+                av.clear();
+                bv.clear();
                 for lane in lanes {
                     av.push(
                         read::<F, C>(frame, &self.signals, &self.consts, comp_offset, &lane.a)?
@@ -800,6 +844,8 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 } else {
                     self.driver.bin_many(*op, &av, &bv)?
                 };
+                self.scratch_a = av;
+                self.scratch_b = bv;
                 for (lane, value) in lanes.iter().zip(rv) {
                     // Preserve both instructions represented by the lane: the scalar
                     // Bin's temporary remains observable if later bytecode reads it,
@@ -832,40 +878,44 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 Flow::Continue
             }
             Instr::ToIndex { dst, src } => {
-                let v = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, src)?.clone();
-                frame.iregs[*dst as usize] = self.driver.to_index(&v)?;
+                // Convert before touching the frame mutably; the operand is read by
+                // reference (no clone just to inspect it).
+                let idx = {
+                    let v = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, src)?;
+                    self.driver.to_index(v)?
+                };
+                frame.iregs[*dst as usize] = idx;
                 Flow::Continue
             }
             Instr::Jmp { target } => Flow::Jump(*target as usize),
             Instr::JmpIfZero { cond, target } => {
-                let c =
-                    read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?.clone();
-                if self.driver.is_zero(&c, false)? {
+                let c = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?;
+                if self.driver.is_zero(c, false)? {
                     Flow::Jump(*target as usize)
                 } else {
                     Flow::Continue
                 }
             }
             Instr::SharedIf { cond, else_target } | Instr::SharedIfBit { cond, else_target } => {
-                // mirrors old mpc_vm.rs:562-576 (`MpcOpCode::If`).
-                let c =
-                    read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?.clone();
-                if self.driver.is_shared(&c)? {
+                // mirrors old mpc_vm.rs:562-576 (`MpcOpCode::If`). The condition is
+                // only cloned on the shared path, where ownership is genuinely needed.
+                let c = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?;
+                if self.driver.is_shared(c)? {
                     // Circom conditions use zero/non-zero truthiness, while protocol cmux
                     // and boolean-composition primitives require a bit. Comparisons and
                     // boolean operators already produce one, and `SharedIfBit` preserves
                     // that fact from codegen so Rep3 can skip an expensive redundant neq.
                     let c = if matches!(inst, Instr::SharedIfBit { .. }) {
-                        c
+                        c.clone()
                     } else {
                         let zero = self.driver.public_zero();
-                        self.driver.neq(&c, &zero)?
+                        self.driver.neq(c, &zero)?
                     };
                     pred.push_shared(self.driver, c)?;
                     Flow::Continue
                 } else {
                     pred.push_public();
-                    if self.driver.is_zero(&c, false)? {
+                    if self.driver.is_zero(c, false)? {
                         Flow::Jump(*else_target as usize)
                     } else {
                         Flow::Continue
@@ -948,9 +998,11 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 ret,
                 ret_n,
             } => {
-                let args: Vec<C::VmType> = frame.regs
-                    [*args_start as usize..*args_start as usize + *args_n as usize]
-                    .to_vec();
+                // The argument block is borrowed straight out of the caller's register
+                // file — `run_function` clones it into the callee's `vars`, so no
+                // intermediate argument vector is materialized per call.
+                let args =
+                    &frame.regs[*args_start as usize..*args_start as usize + *args_n as usize];
                 // Same borrow-shedding trick as `run_component`'s accelerator dispatch
                 // (see its docs): extract a `Copy` `(accelerator, accel_idx)` pair before
                 // touching `self.driver`.
@@ -963,7 +1015,7 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 // is also what fixes old-VM's single-value-only accelerator limitation,
                 // since multi-value returns now go through the same resize path.
                 let result = if let Some((accelerator, accel_idx)) = dispatch {
-                    let vals = accelerator.run_function(accel_idx, self.driver, &args)?;
+                    let vals = accelerator.run_function(accel_idx, self.driver, args)?;
                     self.resize_ret(vals, *ret_n as usize)
                 } else {
                     self.run_function(*fn_id, args, pred, comp_offset, *ret_n as usize)?
@@ -1089,9 +1141,8 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 }
             },
             Instr::Assert { cond, line } => {
-                let c =
-                    read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?.clone();
-                if self.driver.is_zero(&c, true)? {
+                let c = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?;
+                if self.driver.is_zero(c, true)? {
                     let ctx_word = match kind {
                         StepCtx::Template => "component",
                         StepCtx::Function { .. } => "function",
@@ -1102,8 +1153,10 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             }
             Instr::Log { src } => {
                 // mirrors old circom-mpc-vm/src/mpc_vm.rs:858-862.
-                let v = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, src)?.clone();
-                let log = self.driver.log(&v, self.config.allow_leaky_logs)?;
+                let log = {
+                    let v = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, src)?;
+                    self.driver.log(v, self.config.allow_leaky_logs)?
+                };
                 self.log_buf.push_str(&log);
                 self.log_buf.push(' ');
                 Flow::Continue
