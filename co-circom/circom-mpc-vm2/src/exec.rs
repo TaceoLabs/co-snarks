@@ -877,6 +877,12 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 frame.iregs[*dst as usize] = iread(frame, a) * iread(frame, b);
                 Flow::Continue
             }
+            Instr::ISub { dst, a, b } => {
+                // Saturating by design — see the ISA docs: a descending mirror's
+                // post-final value is conceptually negative and never read.
+                frame.iregs[*dst as usize] = iread(frame, a).saturating_sub(iread(frame, b));
+                Flow::Continue
+            }
             Instr::ToIndex { dst, src } => {
                 // Convert before touching the frame mutably; the operand is read by
                 // reference (no clone just to inspect it).
@@ -888,6 +894,13 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 Flow::Continue
             }
             Instr::Jmp { target } => Flow::Jump(*target as usize),
+            Instr::IJmpIfZero { reg, target } => {
+                if frame.iregs[*reg as usize] == 0 {
+                    Flow::Jump(*target as usize)
+                } else {
+                    Flow::Continue
+                }
+            }
             Instr::JmpIfZero { cond, target } => {
                 let c = read::<F, C>(frame, &self.signals, &self.consts, comp_offset, cond)?;
                 if self.driver.is_zero(c, false)? {
@@ -1260,6 +1273,7 @@ pub fn is_write_barrier(inst: &Instr) -> bool {
         inst,
         Instr::Jmp { .. }
             | Instr::JmpIfZero { .. }
+            | Instr::IJmpIfZero { .. }
             | Instr::SharedIf { .. }
             | Instr::SharedIfBit { .. }
             | Instr::SharedElse { .. }

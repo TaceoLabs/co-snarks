@@ -339,6 +339,7 @@ impl State {
             Instr::ISet { dst, .. }
             | Instr::IAdd { dst, .. }
             | Instr::IMul { dst, .. }
+            | Instr::ISub { dst, .. }
             | Instr::ToIndex { dst, .. } => {
                 self.ireg_gen[usize::from(*dst)] += 1;
             }
@@ -374,6 +375,7 @@ impl State {
             // Block terminators: facts never survive past them (blocks are re-seeded).
             Instr::Jmp { .. }
             | Instr::JmpIfZero { .. }
+            | Instr::IJmpIfZero { .. }
             | Instr::SharedIf { .. }
             | Instr::SharedIfBit { .. }
             | Instr::SharedElse { .. }

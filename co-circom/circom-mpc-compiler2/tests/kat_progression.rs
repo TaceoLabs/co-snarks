@@ -307,12 +307,13 @@ fn loop_ascending_takes_the_affine_path() {
 
 /// The fallback-correctness milestone test the brief asks for explicitly (`tests/
 /// circuits/loop_descending.circom`): with ordinary unrolling disabled, a descending
-/// `for` loop takes the rolled fallback because the ISA has no integer-register subtract.
-/// Its induction variable stays a plain `FieldSlot`, and `a[i]`/`out[i]` use the ordinary
-/// dynamic-address path. This asserts both that no `Instr::ISet` appears and that the
-/// witness is still correct.
+/// `for` loop stays rolled (unrolling disabled) and takes the integer-controlled form:
+/// the induction variable is promoted to an integer mirror stepped by `ISub`, loop exit
+/// is a trip counter tested by `IJmpIfZero`, and no field-domain condition survives —
+/// `i` is only ever read in index position, so the field-side counter maintenance
+/// disappears entirely. The witness must be unchanged.
 #[test]
-fn loop_descending_stays_correct_via_fallback() {
+fn loop_descending_uses_integer_loop_control() {
     let config = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
         unroll: UnrollConfig {
@@ -327,8 +328,16 @@ fn loop_descending_stays_correct_via_fallback() {
 
     let instrs = &program.templates[program.main.0 as usize].instrs;
     assert!(
-        !instrs.iter().any(|i| matches!(i, Instr::ISet { .. })),
-        "a descending loop must never promote its induction variable"
+        instrs.iter().any(|i| matches!(i, Instr::ISub { .. })),
+        "a descending rolled loop must step its integer mirror with ISub"
+    );
+    assert!(
+        instrs.iter().any(|i| matches!(i, Instr::IJmpIfZero { .. })),
+        "loop exit must be decided by the integer trip counter"
+    );
+    assert!(
+        !instrs.iter().any(|i| matches!(i, Instr::JmpIfZero { .. })),
+        "no field-domain loop condition should survive"
     );
 
     let mut inputs = BTreeMap::new();
@@ -896,9 +905,15 @@ fn loop_nested_mixed_unroll_inner_only() {
 
     assert_eq!(
         jmp_count(&program),
-        2,
-        "only the outer loop should stay rolled (contributing its own Jmp+JmpIfZero \
-         pair); the inner loop must unroll away entirely"
+        1,
+        "only the outer loop should stay rolled, contributing its back-edge Jmp; its \
+         condition lives in the integer unit, and the inner loop must unroll away \
+         entirely"
+    );
+    assert_eq!(
+        instr_count(&program, |i| matches!(i, Instr::IJmpIfZero { .. })),
+        1,
+        "the rolled outer loop must be integer-controlled (one trip-counter branch)"
     );
 
     let mut inputs = BTreeMap::new();

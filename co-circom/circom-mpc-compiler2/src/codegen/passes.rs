@@ -532,8 +532,10 @@ fn fold_constants<F: PrimeField>(
                 Instr::ISet { .. }
                 | Instr::IAdd { .. }
                 | Instr::IMul { .. }
+                | Instr::ISub { .. }
                 | Instr::StoreN { .. }
                 | Instr::Jmp { .. }
+                | Instr::IJmpIfZero { .. }
                 | Instr::SharedElse { .. }
                 | Instr::SharedEnd
                 | Instr::CreateCmp { .. }
@@ -764,9 +766,11 @@ fn transfer_constants<F: PrimeField>(
         | Instr::ISet { .. }
         | Instr::IAdd { .. }
         | Instr::IMul { .. }
+        | Instr::ISub { .. }
         | Instr::ToIndex { .. }
         | Instr::Jmp { .. }
         | Instr::JmpIfZero { .. }
+        | Instr::IJmpIfZero { .. }
         | Instr::SharedIf { .. }
         | Instr::SharedIfBit { .. }
         | Instr::SharedElse { .. }
@@ -1020,6 +1024,7 @@ fn is_block_terminator(instr: &Instr) -> bool {
         instr,
         Instr::Jmp { .. }
             | Instr::JmpIfZero { .. }
+            | Instr::IJmpIfZero { .. }
             | Instr::SharedIf { .. }
             | Instr::SharedIfBit { .. }
             | Instr::SharedElse { .. }
@@ -1034,6 +1039,7 @@ fn successors(instrs: &[Instr], ip: usize, block_at: &[usize]) -> Vec<Successor>
     match &instrs[ip] {
         Instr::Jmp { target } => vec![jump(*target)],
         Instr::JmpIfZero { target, .. }
+        | Instr::IJmpIfZero { target, .. }
         | Instr::SharedIf {
             else_target: target,
             ..
@@ -1069,7 +1075,9 @@ fn successor(ip: usize, block_at: &[usize]) -> Successor {
 
 fn target(instr: &Instr) -> Option<u32> {
     match instr {
-        Instr::Jmp { target } | Instr::JmpIfZero { target, .. } => Some(*target),
+        Instr::Jmp { target }
+        | Instr::JmpIfZero { target, .. }
+        | Instr::IJmpIfZero { target, .. } => Some(*target),
         Instr::SharedIf { else_target, .. } | Instr::SharedIfBit { else_target, .. } => {
             Some(*else_target)
         }
@@ -1080,7 +1088,9 @@ fn target(instr: &Instr) -> Option<u32> {
 
 fn target_mut(instr: &mut Instr) -> Option<&mut u32> {
     match instr {
-        Instr::Jmp { target } | Instr::JmpIfZero { target, .. } => Some(target),
+        Instr::Jmp { target }
+        | Instr::JmpIfZero { target, .. }
+        | Instr::IJmpIfZero { target, .. } => Some(target),
         Instr::SharedIf { else_target, .. } | Instr::SharedIfBit { else_target, .. } => {
             Some(else_target)
         }

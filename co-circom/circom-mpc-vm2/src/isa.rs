@@ -228,6 +228,21 @@ pub enum Instr {
         /// Second operand.
         b: ISrc,
     },
+    /// `iregs[dst] = a - b`, saturating at zero.
+    ///
+    /// Saturation is deliberate: a descending rolled loop's mirror register steps below
+    /// its bound on the final update, conceptually reaching a negative value that
+    /// `usize` cannot represent. That post-final value is never read — loop exit is
+    /// decided by a separate trip counter or the field-domain condition — so clamping
+    /// at zero is safe and keeps the integer unit panic-free.
+    ISub {
+        /// Destination integer register.
+        dst: u8,
+        /// First operand.
+        a: ISrc,
+        /// Second operand.
+        b: ISrc,
+    },
     /// `iregs[dst] = to_index(src)`; errors if `src` is shared.
     ToIndex {
         /// Destination integer register.
@@ -245,6 +260,17 @@ pub enum Instr {
     JmpIfZero {
         /// Condition to test.
         cond: Src,
+        /// Target instruction index.
+        target: u32,
+    },
+    /// Jump to `target` if `iregs[reg] == 0`.
+    ///
+    /// Backs integer-controlled rolled loops: the compiler emits a trip-counter
+    /// register counting down to zero, so loop control never touches the field domain
+    /// (and, since integer registers are always public, never depends on a share).
+    IJmpIfZero {
+        /// Integer register holding the remaining trip count.
+        reg: u8,
         /// Target instruction index.
         target: u32,
     },
@@ -409,6 +435,9 @@ impl fmt::Display for Instr {
             Instr::IMul { dst, a, b } => {
                 write!(f, "IMUL ir{}, {:?}, {:?}", dst, a, b)
             }
+            Instr::ISub { dst, a, b } => {
+                write!(f, "ISUB ir{}, {:?}, {:?}", dst, a, b)
+            }
             Instr::ToIndex { dst, src } => {
                 write!(f, "TOINDEX ir{}, {:?}", dst, src)
             }
@@ -417,6 +446,9 @@ impl fmt::Display for Instr {
             }
             Instr::JmpIfZero { cond, target } => {
                 write!(f, "JMPZ {:?}, {}", cond, target)
+            }
+            Instr::IJmpIfZero { reg, target } => {
+                write!(f, "IJMPZ ir{}, {}", reg, target)
             }
             Instr::SharedIf { cond, else_target } => {
                 write!(f, "SHAREDIF {:?}, {}", cond, else_target)

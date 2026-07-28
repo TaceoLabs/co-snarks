@@ -22,10 +22,16 @@
 //! own front end having already desugared a `for`'s step into an ordinary `Store` at the
 //! *end* of `body` (see `circom`'s `translate_while`/its `for`-to-`while` desugaring).
 //!
-//! Every loop lowers its `continue_condition` + a `JmpIfZero` identically (see
-//! [`emit_loop_head`]/[`finish_loop`], the two paths' only shared code). What differs is
-//! how the *loop variable* is addressed inside the body:
+//! What differs between the lowering strategies is how the *loop variable* is addressed
+//! inside the body and where loop control lives:
 //!
+//! - **Counted, integer-controlled** ([`lower_counted_loop`]): a conforming loop with a
+//!   statically known trip count whose induction variable is never read in *value*
+//!   position ([`body_reads_slot_value`]) keeps no field-domain state at all — the
+//!   variable is an integer mirror, loop exit is an `IJmpIfZero` on a trip counter
+//!   counting down to zero, and a single post-loop `Mov` resyncs the field slot (removed
+//!   by dead-store elimination when nothing reads it). This saves the per-iteration
+//!   field comparison and both counter updates in the field domain.
 //! - **Conforming** ([`detect_conforming`]): when the loop is a simple counted counter
 //!   used only as an array index, its variable is *promoted* — mirrored into a
 //!   persistent integer register for the loop's extent ([`lower_conforming_loop`]). The
@@ -55,9 +61,10 @@
 //! `Affine` path), the body's *last* top-level statement updates the same variable by a
 //! constant step, and `k` is written nowhere else in the
 //! body (including recursively inside nested loop bodies — see
-//! [`instruction_writes_slot`]). Descending loops can be statically unrolled but still use
-//! the ordinary fallback when they must remain rolled, because the integer ISA has no
-//! decrement instruction. Circom sometimes folds a one-iteration loop's trailing update
+//! [`instruction_writes_slot`]). Descending loops mirror through `ISub`; when their bound
+//! is not a representable small constant (a field-negative bound such as `i >= -5`), they
+//! keep the ordinary fallback, since a `usize` mirror cannot follow the counter below
+//! zero. Circom sometimes folds a one-iteration loop's trailing update
 //! to a direct constant assignment; that form is also accepted when the known init and
 //! bound prove the assignment exits after at most one iteration.
 //!
@@ -1011,8 +1018,12 @@ pub(crate) fn lower_loop<F: PrimeField>(cg: &mut CodeGen<'_, F>, lb: &LoopBucket
 }
 
 /// Dispatches a detected-conforming loop to unrolling ([`try_unroll_loop`]) when the size
-/// heuristic (module docs' "Unrolling" section) allows it, falling back to the rolled/
-/// mirror-promoted form ([`lower_conforming_loop`]) otherwise.
+/// heuristic (module docs' "Unrolling" section) allows it. A loop that stays rolled takes
+/// the integer-controlled form ([`lower_counted_loop`]) when its trip count is statically
+/// known and its induction variable is never read in value position — loop control then
+/// lives entirely in the integer unit and the field-side counter maintenance disappears.
+/// Everything else takes the field-controlled mirror-promoted form
+/// ([`lower_conforming_loop`]).
 fn lower_conforming_or_unrolled<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     lb: &LoopBucket,
@@ -1027,8 +1038,11 @@ fn lower_conforming_or_unrolled<F: PrimeField>(
             "loop inside a potentially shared branch must have a statically known finite trip count"
         );
     }
-    if info.direction == LoopDirection::Descending {
-        return lower_fallback_loop(cg, lb);
+    if let Some(trip_count) = trip_count(&info) {
+        let keep_field_counter = body_reads_slot_value(&lb.body[..lb.body.len() - 1], info.slot);
+        if lower_counted_loop(cg, lb, &info, trip_count, keep_field_counter)? {
+            return Ok(());
+        }
     }
     lower_conforming_loop(cg, lb, info)
 }
@@ -1310,16 +1324,8 @@ fn try_unroll_loop<F: PrimeField>(
         // (`tests/kat_progression.rs`, circuit `tests/circuits/loop_final_value.circom`)
         // is still a real end-to-end correctness check of the same source-level scenario —
         // it just wouldn't fail if this `Mov` were deleted.
-        let delta = i64::try_from(trip_count * info.step as usize)?;
-        let final_value = match info.direction {
-            LoopDirection::Ascending => i64::from(info.init) + delta,
-            LoopDirection::Descending => i64::from(info.init) - delta,
-        };
-        let final_value = if final_value >= 0 {
-            F::from(final_value as u64)
-        } else {
-            -F::from(final_value.unsigned_abs())
-        };
+        let final_value = final_induction_value::<F>(info, trip_count)
+            .ok_or_else(|| eyre!("unrolled loop's final induction value overflows"))?;
         let const_id = cg.const_id(final_value)?;
         cg.instrs.push(Instr::Mov {
             dst: Dst::Var(Addr::Const(u32::try_from(info.slot)?)),
@@ -1601,6 +1607,247 @@ fn fuse_binn_pass<F: PrimeField>(cg: &mut CodeGen<'_, F>, body: Vec<Instr>) -> R
     Ok(out)
 }
 
+/// The induction variable's value once a loop with `trip_count` iterations has finished
+/// — `init ± trip_count·step`, the first value failing the continue condition — as a
+/// field element (descending loops can legitimately finish on a negative value, e.g.
+/// `-1` for `i >= 0`). `None` if the computation overflows the intermediate `i64`.
+fn final_induction_value<F: PrimeField>(info: &ConformingLoop, trip_count: usize) -> Option<F> {
+    let delta = i64::try_from(trip_count.checked_mul(info.step as usize)?).ok()?;
+    let final_value = match info.direction {
+        LoopDirection::Ascending => i64::from(info.init).checked_add(delta)?,
+        LoopDirection::Descending => i64::from(info.init).checked_sub(delta)?,
+    };
+    Some(if final_value >= 0 {
+        F::from(final_value as u64)
+    } else {
+        -F::from(final_value.unsigned_abs())
+    })
+}
+
+/// Whether any statement reads variable `slot` in *value* position — anywhere its field
+/// value flows into an expression, as opposed to *index* position (the bare
+/// `ToAddress(Load(slot))` shape, which a promoted loop variable's integer mirror folds
+/// away — see [`crate::codegen::index::eval_index`]'s `folded_index_binding`).
+///
+/// Used by [`lower_conforming_or_unrolled`] to decide whether a rolled loop may drop its
+/// field-side counter maintenance entirely: only sound when nothing in the body observes
+/// the field value. Conservative: any unrecognized shape counts as a value read.
+fn body_reads_slot_value(body: &[Box<Instruction>], slot: usize) -> bool {
+    body.iter()
+        .any(|inst| instruction_reads_slot_value(inst, slot))
+}
+
+fn instruction_reads_slot_value(inst: &Instruction, slot: usize) -> bool {
+    use circom_compiler::intermediate_representation::ir_interface::{
+        LogBucketArg, ReturnType as IrReturnType,
+    };
+    match inst {
+        Instruction::Value(_) | Instruction::CreateCmp(_) => false,
+        Instruction::Load(lb) => {
+            if matches!(lb.address_type, AddressType::Variable)
+                && matches!(&lb.src, LocationRule::Indexed { location, .. }
+                    if static_const_slot(location) == Some(slot))
+            {
+                return true;
+            }
+            location_reads_slot_value(&lb.src, slot)
+                || address_type_reads_slot_value(&lb.address_type, slot)
+        }
+        Instruction::Compute(cb) => match cb.op {
+            // The operand of a `ToAddress` is an index-position read when it is a bare
+            // scalar var load (the integer mirror folds it); any other operand shape is
+            // lowered as an ordinary field expression, i.e. value position.
+            OperatorType::ToAddress => {
+                let operand = cb.stack[0].as_ref();
+                !is_bare_scalar_var_load(operand) && instruction_reads_slot_value(operand, slot)
+            }
+            _ => cb
+                .stack
+                .iter()
+                .any(|inst| instruction_reads_slot_value(inst, slot)),
+        },
+        Instruction::Store(sb) => {
+            instruction_reads_slot_value(&sb.src, slot)
+                || location_reads_slot_value(&sb.dest, slot)
+                || address_type_reads_slot_value(&sb.dest_address_type, slot)
+        }
+        Instruction::Branch(bb) => {
+            instruction_reads_slot_value(&bb.cond, slot)
+                || body_reads_slot_value(&bb.if_branch, slot)
+                || body_reads_slot_value(&bb.else_branch, slot)
+        }
+        Instruction::Loop(inner) => {
+            instruction_reads_slot_value(&inner.continue_condition, slot)
+                || body_reads_slot_value(&inner.body, slot)
+        }
+        Instruction::Call(cb) => {
+            cb.arguments
+                .iter()
+                .any(|arg| instruction_reads_slot_value(arg, slot))
+                || match &cb.return_info {
+                    IrReturnType::Final(final_data) => {
+                        location_reads_slot_value(&final_data.dest, slot)
+                            || address_type_reads_slot_value(&final_data.dest_address_type, slot)
+                    }
+                    // Intermediate calls fail to lower anyway; stay conservative.
+                    IrReturnType::Intermediate { .. } => true,
+                }
+        }
+        Instruction::Return(rb) => instruction_reads_slot_value(&rb.value, slot),
+        Instruction::Assert(ab) => instruction_reads_slot_value(&ab.evaluate, slot),
+        Instruction::Log(lb) => lb.argsprint.iter().any(|arg| match arg {
+            LogBucketArg::LogExp(exp) => instruction_reads_slot_value(exp, slot),
+            LogBucketArg::LogStr(_) => false,
+        }),
+    }
+}
+
+fn location_reads_slot_value(loc: &LocationRule, slot: usize) -> bool {
+    use circom_compiler::intermediate_representation::ir_interface::AccessType;
+    match loc {
+        LocationRule::Indexed { location, .. } => instruction_reads_slot_value(location, slot),
+        LocationRule::Mapped { indexes, .. } => indexes.iter().any(|access| match access {
+            AccessType::Indexed(info) => info
+                .indexes
+                .iter()
+                .any(|inst| instruction_reads_slot_value(inst, slot)),
+            // Bus-style access fails to lower anyway; stay conservative.
+            AccessType::Qualified(_) => true,
+        }),
+    }
+}
+
+fn address_type_reads_slot_value(address_type: &AddressType, slot: usize) -> bool {
+    match address_type {
+        AddressType::SubcmpSignal { cmp_address, .. } => {
+            instruction_reads_slot_value(cmp_address, slot)
+        }
+        AddressType::Variable | AddressType::Signal => false,
+    }
+}
+
+/// Whether `inst` is a bare scalar var load — the exact shape
+/// [`crate::codegen::index::eval_index`]'s `folded_index_binding` resolves without
+/// emitting a value-position read when the slot carries an index binding.
+fn is_bare_scalar_var_load(inst: &Instruction) -> bool {
+    matches!(inst, Instruction::Load(lb)
+        if matches!(lb.address_type, AddressType::Variable)
+            && matches!(&lb.src, LocationRule::Indexed { location, .. }
+                if static_const_slot(location).is_some()))
+}
+
+/// Lowers a conforming loop with a statically known trip count using integer-unit loop
+/// control:
+///
+/// ```text
+///    ISet mirror, init
+///    ISet counter, trip_count
+/// H: IJmpIfZero counter, X
+///    <body>                    ; slot bound to IReg{mirror}
+///    IAdd/ISub mirror, step
+///    ISub counter, 1
+///    Jmp H
+/// X:
+/// ```
+///
+/// No field-domain condition is ever evaluated — loop exit is the trip counter, counting
+/// *down to zero*, which sidesteps descending underflow: exit never depends on the
+/// mirror, whose one conceptually negative post-final value is both saturated and never
+/// read.
+///
+/// The field-side counter has two modes, chosen by whether the body reads the induction
+/// variable in value position (`keep_field_counter`, see [`body_reads_slot_value`]):
+///
+/// - **No value reads**: the body's trailing update statement is not lowered at all — no
+///   field-side counter exists during the loop — and a single post-loop
+///   `Mov Var(slot), Const(init ± trip_count·step)` resyncs the slot for any post-loop
+///   reader (removed by dead-store elimination when there is none).
+/// - **Value reads present**: the trailing update stays in the body, so value-position
+///   reads keep observing the maintained field slot; only the per-iteration field
+///   comparison disappears.
+///
+/// Returns `false` (emitting nothing) when the trip count or final value doesn't fit the
+/// instruction encodings, in which case the caller falls back to the field-controlled
+/// form.
+fn lower_counted_loop<F: PrimeField>(
+    cg: &mut CodeGen<'_, F>,
+    lb: &LoopBucket,
+    info: &ConformingLoop,
+    trip_count: usize,
+    keep_field_counter: bool,
+) -> Result<bool> {
+    if trip_count == 0 {
+        // The loop never runs; the slot keeps the init value the preceding store gave it.
+        return Ok(true);
+    }
+    let Ok(trips) = u32::try_from(trip_count) else {
+        return Ok(false);
+    };
+    // Only the resync path needs the final induction value; a maintained field counter
+    // computes it itself.
+    let resync_value = if keep_field_counter {
+        None
+    } else {
+        match final_induction_value::<F>(info, trip_count) {
+            Some(value) => Some(value),
+            None => return Ok(false),
+        }
+    };
+
+    let mirror = cg.alloc_ireg()?;
+    let counter = cg.alloc_ireg()?;
+    cg.instrs.push(Instr::ISet {
+        dst: mirror,
+        val: info.init,
+    });
+    cg.instrs.push(Instr::ISet {
+        dst: counter,
+        val: trips,
+    });
+    let previous_binding = cg.env.bind(info.slot, Binding::IReg { ireg: mirror });
+
+    let loop_start = u32::try_from(cg.instrs.len())?;
+    let jmp_idx = cg.instrs.len();
+    cg.instrs.push(Instr::IJmpIfZero {
+        reg: counter,
+        target: u32::MAX,
+    });
+
+    let last_idx = lb.body.len() - 1;
+    let lowered_body = if keep_field_counter {
+        &lb.body[..]
+    } else {
+        &lb.body[..last_idx]
+    };
+    for inst in lowered_body {
+        lower_stmt(cg, inst)?;
+    }
+
+    let (a, b) = (ISrc::Reg(mirror), ISrc::Const(info.step));
+    cg.instrs.push(match info.direction {
+        LoopDirection::Ascending => Instr::IAdd { dst: mirror, a, b },
+        LoopDirection::Descending => Instr::ISub { dst: mirror, a, b },
+    });
+    cg.instrs.push(Instr::ISub {
+        dst: counter,
+        a: ISrc::Reg(counter),
+        b: ISrc::Const(1),
+    });
+    cg.instrs.push(Instr::Jmp { target: loop_start });
+    let exit = u32::try_from(cg.instrs.len())?;
+    cg.patch(jmp_idx, exit);
+    cg.env.restore(info.slot, previous_binding);
+
+    if let Some(final_value) = resync_value {
+        let const_id = cg.const_id(final_value)?;
+        cg.instrs.push(Instr::Mov {
+            dst: Dst::Var(Addr::Const(u32::try_from(info.slot)?)),
+            src: Src::Const(const_id),
+        });
+    }
+    Ok(true)
+}
+
 /// Emits the loop head shared by both the conforming and fallback paths: the
 /// (already-lowered) `continue_condition`, followed by a placeholder `JmpIfZero`
 /// (patched to the loop exit by [`finish_loop`] once the body's length is known — see
@@ -1644,6 +1891,16 @@ fn lower_conforming_loop<F: PrimeField>(
     lb: &LoopBucket,
     info: ConformingLoop,
 ) -> Result<()> {
+    // A descending mirror is only sound when the bound is a known small constant: the
+    // condition then keeps the counter non-negative for every executed iteration, so
+    // the `usize` mirror stays exact (its single saturated post-final value is never
+    // read). A descending loop toward an unrepresentable bound — e.g. `i >= -5`, whose
+    // field-signed condition legitimately runs the counter negative — must keep the
+    // fully dynamic fallback rather than silently clamp its addressing at zero.
+    if info.direction == LoopDirection::Descending && info.bound.is_none() {
+        return lower_fallback_loop(cg, lb);
+    }
+
     let ireg = cg.alloc_ireg()?;
     cg.instrs.push(Instr::ISet {
         dst: ireg,
@@ -1662,10 +1919,10 @@ fn lower_conforming_loop<F: PrimeField>(
     for (i, inst) in lb.body.iter().enumerate() {
         lower_stmt(cg, inst)?;
         if i == last_idx {
-            cg.instrs.push(Instr::IAdd {
-                dst: ireg,
-                a: ISrc::Reg(ireg),
-                b: ISrc::Const(info.step),
+            let (a, b) = (ISrc::Reg(ireg), ISrc::Const(info.step));
+            cg.instrs.push(match info.direction {
+                LoopDirection::Ascending => Instr::IAdd { dst: ireg, a, b },
+                LoopDirection::Descending => Instr::ISub { dst: ireg, a, b },
             });
         }
     }

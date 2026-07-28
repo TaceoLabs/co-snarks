@@ -35,6 +35,73 @@ fn multiply_two_signals() {
 }
 
 #[test]
+fn integer_controlled_descending_loop() {
+    // The compiler's counted-loop form for `for (i = n-1; i >= 0; i--) out[i] = in[i]+1`:
+    // an ISub-stepped mirror for addressing, a trip counter tested by IJmpIfZero for
+    // exit, and no field-domain loop state at all. The final mirror update saturates
+    // (0 - 1), which must be harmless because the counter decides the exit.
+    let n = 4u32;
+    // iregs: i0 = i (mirror), i1 = remaining trips
+    // signals: [0]=1, [1..1+n]=out, [1+n..1+2n]=in
+    let program = common::single_template_program(
+        vec![
+            /* 0 */
+            Instr::ISet { dst: 0, val: n - 1 },
+            /* 1 */ Instr::ISet { dst: 1, val: n },
+            /* 2 */
+            Instr::IJmpIfZero { reg: 1, target: 8 },
+            /* 3 */
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 0,
+                a: Src::Signal(Addr::Affine {
+                    ireg: 0,
+                    stride: 1,
+                    offset: n, // component-relative: in[i]
+                }),
+                b: Src::Const(1),
+            },
+            /* 4 */
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Affine {
+                    ireg: 0,
+                    stride: 1,
+                    offset: 0, // component-relative: out[i]
+                }),
+                src: Src::Reg(0),
+            },
+            /* 5 */
+            Instr::ISub {
+                dst: 0,
+                a: ISrc::Reg(0),
+                b: ISrc::Const(1),
+            },
+            /* 6 */
+            Instr::ISub {
+                dst: 1,
+                a: ISrc::Reg(1),
+                b: ISrc::Const(1),
+            },
+            /* 7 */ Instr::Jmp { target: 2 },
+            /* 8 */ Instr::Return,
+        ],
+        1,
+        2,
+        0,
+        n,
+        n,
+        (1 + 2 * n) as usize,
+    );
+
+    let inputs: Vec<Fr> = (0..n as u64).map(Fr::from).collect();
+    let signals =
+        common::run_plain_with_consts(&program, vec![Fr::from(0u64), Fr::from(1u64)], inputs);
+    for k in 0..n as usize {
+        assert_eq!(signals[1 + k], Fr::from(k as u64 + 1), "out[{k}]");
+    }
+}
+
+#[test]
 fn rolled_loop_sums_inputs() {
     let n = 5u64;
     // regs: r0 = acc, r1 = i (field copy), r2 = cond scratch

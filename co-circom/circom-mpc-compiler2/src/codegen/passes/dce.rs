@@ -128,6 +128,7 @@ fn is_removable(instr: &Instr) -> bool {
             | Instr::ISet { .. }
             | Instr::IAdd { .. }
             | Instr::IMul { .. }
+            | Instr::ISub { .. }
             | Instr::ToIndex { .. }
     )
 }
@@ -151,6 +152,7 @@ fn definitions_are_dead(live: &LiveSet, instr: &Instr) -> bool {
         Instr::ISet { dst, .. }
         | Instr::IAdd { dst, .. }
         | Instr::IMul { dst, .. }
+        | Instr::ISub { dst, .. }
         | Instr::ToIndex { dst, .. } => !live.contains_integer(*dst),
         _ => false,
     }
@@ -184,6 +186,7 @@ fn kill_definitions(live: &mut LiveSet, instr: &Instr) {
         Instr::ISet { dst, .. }
         | Instr::IAdd { dst, .. }
         | Instr::IMul { dst, .. }
+        | Instr::ISub { dst, .. }
         | Instr::ToIndex { dst, .. } => live.remove_integer(*dst),
         _ => {}
     }
@@ -222,10 +225,11 @@ fn add_uses(live: &mut LiveSet, instr: &Instr) {
             live.add_field_range(*src, *n);
         }
         Instr::ISet { .. } => {}
-        Instr::IAdd { a, b, .. } | Instr::IMul { a, b, .. } => {
+        Instr::IAdd { a, b, .. } | Instr::IMul { a, b, .. } | Instr::ISub { a, b, .. } => {
             live.add_isrc(*a);
             live.add_isrc(*b);
         }
+        Instr::IJmpIfZero { reg, .. } => live.add_isrc(ISrc::Reg(*reg)),
         Instr::ToIndex { src, .. } => live.add_src(*src, 1),
         Instr::Jmp { .. } => {}
         Instr::JmpIfZero { cond, .. }

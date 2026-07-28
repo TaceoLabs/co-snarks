@@ -378,6 +378,7 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
         match &mut self.instrs[idx] {
             Instr::Jmp { target: t }
             | Instr::JmpIfZero { target: t, .. }
+            | Instr::IJmpIfZero { target: t, .. }
             | Instr::SharedIf { else_target: t, .. }
             | Instr::SharedIfBit { else_target: t, .. }
             | Instr::SharedElse { end_target: t } => *t = target,
