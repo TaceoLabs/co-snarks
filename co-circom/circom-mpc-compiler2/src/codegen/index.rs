@@ -153,10 +153,10 @@ fn eval_operands<F: PrimeField>(
 
 /// Evaluates a `ToAddress` node: converts its single field-valued operand into an index.
 ///
-/// If the operand is a `Load` of a variable already bound to something index position can
-/// fold directly — [`folded_index_binding`] — the result is that folded form (`Affine` for
-/// a mirrored loop variable, `Const` for an unrolled iteration's induction variable) with
-/// no runtime conversion. Otherwise the operand is lowered as an ordinary field expression
+/// If the operand is a linear field expression over at most one bound variable —
+/// [`eval_field_linear`]; a bare `Load` of a mirrored/unrolled loop variable is the
+/// simplest case — the result is the folded form (`Affine`/`Const`) with no runtime
+/// conversion. Otherwise the operand is lowered as an ordinary field expression
 /// and converted at runtime via [`Instr::ToIndex`] into a fresh integer register (the same
 /// `mark`/`free_to` discipline as any other field-register temporary — only the *field*
 /// register used to feed `ToIndex` is freed here; the *integer* register receiving the
@@ -169,9 +169,7 @@ fn eval_to_address<F: PrimeField>(
         bail!("ToAddress expects 1 operand, found {}", cb.stack.len());
     }
     let operand = cb.stack[0].as_ref();
-    if let Instruction::Load(lb) = operand
-        && let Some(idx) = folded_index_binding(cg, lb)
-    {
+    if let Some(idx) = eval_field_linear(cg, operand).and_then(LinearForm::into_index_expr) {
         return Ok(idx);
     }
     let freg_mark = cg.regs.mark();
@@ -180,6 +178,145 @@ fn eval_to_address<F: PrimeField>(
     let dst = cg.alloc_ireg()?;
     cg.instrs.push(Instr::ToIndex { dst, src });
     Ok(IndexExpr::Dynamic(dst))
+}
+
+/// A partially evaluated *field-domain* index expression, linear in at most one bound
+/// loop variable: `var * stride + offset`, with exact signed intermediates.
+///
+/// This is what lets a compound index like `a[t*16 + 41 - k]` in a rolled conforming
+/// loop (with `t` mirror-bound and `k` unrolled to a constant) collapse to a single
+/// [`IndexExpr::Affine`] addressing mode instead of re-evaluating field arithmetic plus
+/// a runtime `ToIndex` on every iteration: circom's O2 pipeline flattens
+/// multi-dimensional accesses into one field expression under a single `ToAddress`, so
+/// the address-domain folding ([`try_fold_const`]) never sees the linear structure.
+///
+/// Soundness: every leaf is either a `u32`-checked field literal or a bound variable
+/// whose integer mirror equals its field value (the invariant [`folded_index_binding`]
+/// already relies on), and `Add`/`Sub`/`Mul` are evaluated over ℤ in checked `i128`, so
+/// the tracked `(stride, offset)` satisfy `field value ≡ stride·m + offset (mod p)` for
+/// the mirror value `m`. [`Self::into_index_expr`] only folds when `stride` and `offset`
+/// are non-negative `u32`s: then `stride·m + offset < 2^65 ≤ p` for any `u32`-ranged
+/// `m`, so no reduction ever applies and the affine integer form is *exactly* the value
+/// the runtime `ToIndex` would have produced — signed intermediates that cancel (field
+/// wraps) fold, while a form that stays negative (e.g. `t*32 - 33`, in range only for
+/// large-enough `t`) conservatively keeps the runtime conversion and its error behavior.
+#[derive(Debug, Clone, Copy)]
+struct LinearForm {
+    /// The single mirrored loop-variable register the form ranges over, if any.
+    /// `None` implies `stride == 0`.
+    ireg: Option<u8>,
+    /// Coefficient of the variable, exact over ℤ.
+    stride: i128,
+    /// Constant term, exact over ℤ.
+    offset: i128,
+}
+
+impl LinearForm {
+    fn constant(value: u32) -> Self {
+        LinearForm {
+            ireg: None,
+            stride: 0,
+            offset: i128::from(value),
+        }
+    }
+
+    /// Combines the variable of two forms: at most one distinct register may appear.
+    fn merge_ireg(a: Option<u8>, b: Option<u8>) -> Option<Option<u8>> {
+        match (a, b) {
+            (Some(a), Some(b)) if a != b => None,
+            (Some(a), _) => Some(Some(a)),
+            (None, b) => Some(b),
+        }
+    }
+
+    fn add(self, other: Self) -> Option<Self> {
+        Some(LinearForm {
+            ireg: Self::merge_ireg(self.ireg, other.ireg)?,
+            stride: self.stride.checked_add(other.stride)?,
+            offset: self.offset.checked_add(other.offset)?,
+        })
+    }
+
+    fn sub(self, other: Self) -> Option<Self> {
+        Some(LinearForm {
+            ireg: Self::merge_ireg(self.ireg, other.ireg)?,
+            stride: self.stride.checked_sub(other.stride)?,
+            offset: self.offset.checked_sub(other.offset)?,
+        })
+    }
+
+    /// `(s₁·x + o₁)(s₂·x + o₂)` stays linear only when at least one side is constant
+    /// (`s == 0`); a product of two variable-carrying forms is quadratic and gives up.
+    fn mul(self, other: Self) -> Option<Self> {
+        if self.ireg.is_some() && other.ireg.is_some() {
+            return None;
+        }
+        Some(LinearForm {
+            ireg: Self::merge_ireg(self.ireg, other.ireg)?,
+            stride: self
+                .stride
+                .checked_mul(other.offset)?
+                .checked_add(other.stride.checked_mul(self.offset)?)?,
+            offset: self.offset.checked_mul(other.offset)?,
+        })
+    }
+
+    /// Converts to a fold-able [`IndexExpr`] when the final coefficients are
+    /// representable (see the type docs for why non-negativity is also what makes the
+    /// fold exact). A form whose variable cancelled (`stride == 0`) is a constant.
+    fn into_index_expr(self) -> Option<IndexExpr> {
+        let offset = u32::try_from(self.offset).ok()?;
+        let stride = u32::try_from(self.stride).ok()?;
+        Some(match self.ireg {
+            Some(ireg) if stride != 0 => IndexExpr::Affine {
+                ireg,
+                stride: stride as usize,
+                offset: offset as usize,
+            },
+            _ => IndexExpr::Const(offset as usize),
+        })
+    }
+}
+
+/// Symbolically evaluates a field expression in address position ([`eval_to_address`]'s
+/// operand) into a [`LinearForm`], without emitting any instruction or allocating any
+/// register. `None` means the expression is not provably linear over a single bound
+/// variable with representable coefficients — the caller falls back to the runtime
+/// `ToIndex` path, so this is purely an optimization gate, never a semantics change.
+fn eval_field_linear<F: PrimeField>(cg: &CodeGen<'_, F>, inst: &Instruction) -> Option<LinearForm> {
+    // The exactness argument (see `LinearForm`) needs `stride·m + offset < p` for any
+    // `u32`-ranged mirror value `m`, i.e. a modulus of more than 65 bits. Both supported
+    // curves are ~254-bit; this guard keeps the fold sound should that ever change.
+    if F::MODULUS_BIT_SIZE <= 65 {
+        return None;
+    }
+    match inst {
+        Instruction::Value(vb) => Some(LinearForm::constant(super::stmt::const_as_u32(cg, vb)?)),
+        Instruction::Load(lb) => match folded_index_binding(cg, lb)? {
+            IndexExpr::Affine {
+                ireg,
+                stride: 1,
+                offset: 0,
+            } => Some(LinearForm {
+                ireg: Some(ireg),
+                stride: 1,
+                offset: 0,
+            }),
+            IndexExpr::Const(value) => Some(LinearForm::constant(u32::try_from(value).ok()?)),
+            _ => None,
+        },
+        Instruction::Compute(cb) if cb.stack.len() == 2 => {
+            let a = eval_field_linear(cg, &cb.stack[0])?;
+            let b = eval_field_linear(cg, &cb.stack[1])?;
+            match cb.op {
+                OperatorType::Add => a.add(b),
+                OperatorType::Sub => a.sub(b),
+                OperatorType::Mul => a.mul(b),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 /// Resolves whether `lb` (the operand of a `ToAddress`) is a `Load` of a variable already
@@ -584,6 +721,93 @@ mod tests {
             }],
             "both operands are already unit-stride/zero-offset registers, so folding \
              is a single IMul with no materialization instructions"
+        );
+    }
+
+    fn var(ireg: u8) -> LinearForm {
+        LinearForm {
+            ireg: Some(ireg),
+            stride: 1,
+            offset: 0,
+        }
+    }
+
+    #[test]
+    fn linear_form_folds_scale_and_shift() {
+        // t*16 + 41 - 5 → Affine { stride: 16, offset: 36 }
+        let form = var(0)
+            .mul(LinearForm::constant(16))
+            .unwrap()
+            .add(LinearForm::constant(41))
+            .unwrap()
+            .sub(LinearForm::constant(5))
+            .unwrap();
+        assert_eq!(
+            form.into_index_expr(),
+            Some(IndexExpr::Affine {
+                ireg: 0,
+                stride: 16,
+                offset: 36,
+            })
+        );
+    }
+
+    #[test]
+    fn linear_form_negative_intermediates_cancel_exactly() {
+        // 41 - t + 2*t → t + 41: the intermediate negative stride is exact over ℤ.
+        let form = LinearForm::constant(41)
+            .sub(var(3))
+            .unwrap()
+            .add(var(3).mul(LinearForm::constant(2)).unwrap())
+            .unwrap();
+        assert_eq!(
+            form.into_index_expr(),
+            Some(IndexExpr::Affine {
+                ireg: 3,
+                stride: 1,
+                offset: 41,
+            })
+        );
+    }
+
+    #[test]
+    fn linear_form_rejects_unrepresentable_final_coefficients() {
+        // t*32 - 33: in range only for large enough t — must keep the runtime ToIndex
+        // (and its range-error behavior), so the fold refuses the negative offset.
+        let negative_offset = var(0)
+            .mul(LinearForm::constant(32))
+            .unwrap()
+            .sub(LinearForm::constant(33))
+            .unwrap();
+        assert_eq!(negative_offset.into_index_expr(), None);
+
+        // 33 - t: negative stride is not an Affine.
+        let negative_stride = LinearForm::constant(33).sub(var(0)).unwrap();
+        assert_eq!(negative_stride.into_index_expr(), None);
+    }
+
+    #[test]
+    fn linear_form_cancelled_variable_is_a_constant() {
+        let form = var(2)
+            .add(LinearForm::constant(7))
+            .unwrap()
+            .sub(var(2))
+            .unwrap();
+        assert_eq!(form.into_index_expr(), Some(IndexExpr::Const(7)));
+    }
+
+    #[test]
+    fn linear_form_rejects_two_variables_and_quadratics() {
+        assert!(var(0).add(var(1)).is_none(), "two distinct registers");
+        assert!(var(0).mul(var(0)).is_none(), "quadratic in one register");
+        assert_eq!(
+            var(0).add(var(0)).unwrap().into_index_expr(),
+            Some(IndexExpr::Affine {
+                ireg: 0,
+                stride: 2,
+                offset: 0,
+            }),
+            "the same register may appear on both sides"
         );
     }
 

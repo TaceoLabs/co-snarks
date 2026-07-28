@@ -747,13 +747,15 @@ fn compute_dst<F: PrimeField>(
 /// find a conforming loop's induction variable's value just before the loop.
 ///
 /// Conservative by construction: a store to a *statically-known* variable slot
-/// (`dst == Dst::Var(Addr::Const(slot))`) with a plain constant source refreshes that
-/// slot's tracked value; a store to a statically-known variable slot with anything else
-/// as its source invalidates *that slot only*. A store whose destination address isn't
-/// statically known (`Addr::Affine`/`Addr::Dynamic` — a computed array index) could,
-/// for all this function can tell, land on any slot, so it conservatively clears the
-/// *whole* map rather than risk leaving some other slot's stale value looking current.
-/// Signal stores never touch `var` slots at all and are ignored outright.
+/// (`dst == Dst::Var(Addr::Const(slot))`) with a statically-evaluable source
+/// ([`eval_const_expr`] — a literal, or an expression over known vars such as
+/// InsertionSort's inner-loop init `j = i - 1` under an unrolled outer loop) refreshes
+/// that slot's tracked value; a store to a statically-known variable slot with anything
+/// else as its source invalidates *that slot only*. A store whose destination address
+/// isn't statically known (`Addr::Affine`/`Addr::Dynamic` — a computed array index)
+/// could, for all this function can tell, land on any slot, so it conservatively clears
+/// the *whole* map rather than risk leaving some other slot's stale value looking
+/// current. Signal stores never touch `var` slots at all and are ignored outright.
 fn track_const_store<F: PrimeField>(
     cg: &mut CodeGen<'_, F>,
     addr_ty: &AddressType,
@@ -770,22 +772,74 @@ fn track_const_store<F: PrimeField>(
         return;
     };
     let slot = *slot as usize;
-    if let Instruction::Value(vb) = src
-        && let Some(v) = const_as_u32(cg, vb)
-    {
+    if let Some(v) = eval_const_u32(cg, src) {
         cg.last_const_store.insert(slot, v);
         return;
     }
     cg.last_const_store.remove(&slot);
 }
 
+/// [`eval_const_expr`] narrowed to the `u32` range the tracking map and loop bounds use;
+/// anything outside is conservatively unknown.
+fn eval_const_u32<F: PrimeField>(cg: &CodeGen<'_, F>, inst: &Instruction) -> Option<u32> {
+    u32::try_from(eval_const_expr(cg, inst)?).ok()
+}
+
+/// Evaluates an expression to a compile-time constant when every leaf is statically
+/// known: a field literal, or a scalar-var load whose value is known either from the
+/// unrolling environment ([`Binding::ConstUsize`] — an enclosing unrolled iteration's
+/// induction variable) or from [`CodeGen::last_const_store`]'s straight-line tracking.
+///
+/// Arithmetic is exact over ℤ in checked `i128`, so negative intermediates that cancel
+/// (field wraps, e.g. `i - 5 + 6`) evaluate exactly — the guard on the modulus size is
+/// what makes any checked-`i128` value's field representative unique. `\`/`%` act on
+/// canonical representatives rather than ring elements, so they additionally require
+/// their operands to be non-negative at that point. Anything else — including a result
+/// a checked step cannot represent — is conservatively `None`.
+fn eval_const_expr<F: PrimeField>(cg: &CodeGen<'_, F>, inst: &Instruction) -> Option<i128> {
+    // Exactness needs distinct i128 values to stay distinct mod p: |v| < 2^127 < p/2.
+    if F::MODULUS_BIT_SIZE <= 128 {
+        return None;
+    }
+    match inst {
+        Instruction::Value(vb) => Some(i128::from(const_as_u32(cg, vb)?)),
+        Instruction::Load(lb) => {
+            if !matches!(lb.address_type, AddressType::Variable) {
+                return None;
+            }
+            let LocationRule::Indexed { location, .. } = &lb.src else {
+                return None;
+            };
+            let slot = static_const_slot(location)?;
+            if let Some(Binding::ConstUsize(v)) = cg.env.get(slot) {
+                return i128::try_from(v).ok();
+            }
+            cg.last_const_store.get(&slot).map(|&v| i128::from(v))
+        }
+        Instruction::Compute(cb) if cb.stack.len() == 2 => {
+            let a = eval_const_expr(cg, &cb.stack[0])?;
+            let b = eval_const_expr(cg, &cb.stack[1])?;
+            match cb.op {
+                OperatorType::Add => a.checked_add(b),
+                OperatorType::Sub => a.checked_sub(b),
+                OperatorType::Mul => a.checked_mul(b),
+                OperatorType::IntDiv if a >= 0 && b > 0 => Some(a / b),
+                OperatorType::Mod if a >= 0 && b > 0 => Some(a % b),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
+}
+
 /// Converts a field constant [`ValueBucket`] (`parse_as == BigInt`, indexing
 /// [`CodeGen::constants`]) to a `u32`, when it fits. Used only for values that end up as
-/// integer-register immediates (`ISet`/`IAdd`'s `u32` payloads) — realistically always
+/// integer-register immediates (`ISet`/`IAdd`'s `u32` payloads) or address-domain
+/// coefficients ([`index::eval_field_linear`](super::index)) — realistically always
 /// small (array bounds/strides), but this is a real conversion, not an assumption, and
 /// returns `None` rather than panicking if it somehow doesn't fit (the caller then
 /// conservatively treats the value as unknown).
-fn const_as_u32<F: PrimeField>(cg: &CodeGen<'_, F>, vb: &ValueBucket) -> Option<u32> {
+pub(super) fn const_as_u32<F: PrimeField>(cg: &CodeGen<'_, F>, vb: &ValueBucket) -> Option<u32> {
     if vb.parse_as != ValueType::BigInt {
         return None;
     }
@@ -886,23 +940,16 @@ fn detect_conforming_inner<F: PrimeField>(
 
     // The bound (the comparison's rhs) must be *loop-invariant*: an expression reading
     // nothing the body writes. Its concrete value is known — enabling counted/unrolled
-    // lowering — for a literal or a scalar var whose pre-loop value is a tracked
-    // constant; otherwise it stays `None` and the loop is still eligible for mirror
-    // promotion (the condition is re-evaluated from the live state each iteration
-    // either way, so only the classification depends on this).
+    // lowering — when it evaluates statically over literals and known vars
+    // (`eval_const_u32`; the invariance check above is what makes the pre-loop values it
+    // reads trustworthy for every iteration); otherwise it stays `None` and the loop is
+    // still eligible for mirror promotion (the condition is re-evaluated from the live
+    // state each iteration either way, so only the classification depends on this).
     let rhs = cond_cb.stack[1].as_ref();
     if !expr_is_loop_invariant(rhs, &lb.body) {
         return Err("bound is not loop-invariant");
     }
-    let bound = match rhs {
-        Instruction::Value(bound_vb) => const_as_u32(cg, bound_vb),
-        Instruction::Load(load) => match &load.src {
-            LocationRule::Indexed { location, .. } => static_const_slot(location)
-                .and_then(|bound_slot| cg.last_const_store.get(&bound_slot).copied()),
-            LocationRule::Mapped { .. } => None,
-        },
-        _ => None,
-    };
+    let bound = eval_const_u32(cg, rhs);
 
     // The value of `slot` immediately before the loop must be a known constant (tracked
     // by `track_const_store` across every preceding `Store` this body has lowered so
@@ -2277,7 +2324,9 @@ mod tests {
             arguments: vec![],
             arena_size: 0,
             return_info: ReturnType::Final(FinalData {
-                context: InstrContext { size: SizeOption::Single(size) },
+                context: InstrContext {
+                    size: SizeOption::Single(size),
+                },
                 dest_is_output: false,
                 dest_address_type: AddressType::Variable,
                 dest: LocationRule::Indexed {

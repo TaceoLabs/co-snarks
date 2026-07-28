@@ -305,6 +305,117 @@ fn loop_ascending_takes_the_affine_path() {
     );
 }
 
+/// Expression-initialized inner loop (`tests/circuits/loop_init_expr.circom`,
+/// InsertionSort's shape): the inner loop's init `j = i - 1` is an expression over the
+/// outer loop's variable, so its tracked value depends on `codegen::stmt::
+/// eval_const_expr` following the store through the unrolling environment. With it, the
+/// inner descending loop conforms, its trip count is known, and the whole nest unrolls —
+/// no loop control of any kind survives; without it the inner loop fell back to runtime
+/// field-domain control (a `JmpIfZero` per iteration on a field comparison). The witness
+/// must be the straightforward interpretation of the source.
+#[test]
+fn loop_init_expr_inner_loop_conforms_and_unrolls() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_init_expr.circom", config).unwrap(),
+    );
+    assert_eq!(
+        jmp_count(&program)
+            + instr_count(&program, |i| matches!(
+                i,
+                Instr::IJmpIfZero { .. } | Instr::JmpIfZero { .. }
+            )),
+        0,
+        "the expression-initialized inner loop must conform and unroll with the nest"
+    );
+
+    let mut inputs = BTreeMap::new();
+    for k in 0..4 {
+        inputs.insert(format!("a[{k}]"), Fr::from(10 + k as u64));
+    }
+    let mut acc = [10u64, 11, 12, 13];
+    for i in 1..4 {
+        for j in (0..i).rev() {
+            acc[j] += acc[j + 1];
+        }
+    }
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    assert_eq!(
+        finalized.get_output("out"),
+        Some(acc.iter().map(|&v| Fr::from(v)).collect::<Vec<_>>())
+    );
+}
+
+/// Compound-index folding (`tests/circuits/loop_compound_index.circom`): an index like
+/// `a[i*4 + 3 - k]` — a rolled loop's mirrored variable `i` combined with an unrolled
+/// inner variable `k` through a *subtraction* — reaches `codegen::index` as one field
+/// expression under a single `ToAddress` (circom's front end only uses address-domain
+/// arithmetic for pure multiply/add shapes), so before `eval_field_linear` it cost a
+/// re-evaluated field expression plus a runtime `ToIndex` on every iteration. The
+/// unroll threshold is picked so the 4-iteration inner loop unrolls (`k` becomes a
+/// constant per expansion) while the outer loop stays rolled (`i` stays mirror-bound):
+/// exactly sha256compression's `inp[t*32+31-k]` shape. The fold must leave no `ToIndex`
+/// behind, address through `Addr::Affine`, and preserve the witness.
+#[test]
+fn loop_compound_index_folds_field_linear_form_to_affine() {
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        unroll: UnrollConfig {
+            threshold: 8,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_compound_index.circom", config)
+            .unwrap(),
+    );
+
+    let instrs = &program.templates[program.main.0 as usize].instrs;
+    assert!(
+        instrs.iter().any(|i| matches!(i, Instr::IJmpIfZero { .. })),
+        "the outer loop must stay rolled for this test to exercise the mirror-bound fold"
+    );
+    assert_eq!(
+        instrs
+            .iter()
+            .filter(|i| matches!(i, Instr::ToIndex { .. }))
+            .count(),
+        0,
+        "a linear field index over one mirrored variable must fold away every runtime \
+         ToIndex"
+    );
+    assert!(
+        instrs.iter().any(instr_uses_affine),
+        "the folded compound index must address through Addr::Affine"
+    );
+
+    let mut inputs = BTreeMap::new();
+    for j in 0..16 {
+        inputs.insert(format!("a[{j}]"), Fr::from(10 + j as u64));
+    }
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    assert_eq!(
+        finalized.get_output("out"),
+        Some(
+            (0..16)
+                .map(|idx| {
+                    let (i, k) = (idx / 4, idx % 4);
+                    Fr::from(10 + (i * 4 + 3 - k) as u64)
+                })
+                .collect()
+        ),
+        "out[i*4 + k] must equal a[i*4 + 3 - k]"
+    );
+}
+
 /// The fallback-correctness milestone test the brief asks for explicitly (`tests/
 /// circuits/loop_descending.circom`): with ordinary unrolling disabled, a descending
 /// `for` loop stays rolled (unrolling disabled) and takes the integer-controlled form:

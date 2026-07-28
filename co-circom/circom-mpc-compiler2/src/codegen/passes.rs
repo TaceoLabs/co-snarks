@@ -14,6 +14,7 @@ use eyre::{Result, bail, eyre};
 use std::collections::{HashMap, VecDeque};
 
 mod batch;
+mod bitness;
 mod copy;
 mod cse;
 mod dce;
@@ -56,6 +57,7 @@ pub(super) fn run<F: PrimeField>(
     let mut removed_dead_var_stores = 0usize;
     let mut reused_common_subexpressions = 0usize;
     let mut resolved_index_constants = 0usize;
+    let mut upgraded_bit_branches = 0usize;
 
     // Every transformation is monotone: operands only become constants or canonical
     // register sources, instructions only simplify, and bytecode only disappears.
@@ -100,6 +102,10 @@ pub(super) fn run<F: PrimeField>(
         instrs = next;
         removed_dead_var_stores += dead_stores_now;
 
+        let (next, bit_branches_now) = bitness::upgrade_shared_if_bits(instrs, constants)?;
+        instrs = next;
+        upgraded_bit_branches += bit_branches_now;
+
         let (next, cse_now) = cse::eliminate_common_subexpressions(instrs, num_field_regs)?;
         instrs = next;
         reused_common_subexpressions += cse_now;
@@ -116,6 +122,7 @@ pub(super) fn run<F: PrimeField>(
             + moves_now
             + forwarded_now
             + dead_stores_now
+            + bit_branches_now
             + cse_now
             + dead_regs_now
             == 0
@@ -142,6 +149,7 @@ pub(super) fn run<F: PrimeField>(
         removed_dead_var_stores,
         reused_common_subexpressions,
         resolved_index_constants,
+        upgraded_bit_branches,
         bin_batches,
         bin_batch_lanes,
         "ran post-lowering bytecode passes"
@@ -856,11 +864,16 @@ fn fold_structured_branch(
     Ok(())
 }
 
-/// Removes unconditional jumps whose remapped target is already the next instruction.
-/// Compaction can expose another such jump, so repeat until the body stabilizes.
+/// Removes unconditional jumps whose remapped target is already the next instruction,
+/// after threading every jump's target through any chain of unconditional `Jmp`s it
+/// lands on (a jump-to-jump costs a dispatch per hop at runtime and hides the real
+/// successor from the CFG). Threading can turn an intermediate `Jmp` unreachable (the
+/// next unreachable-code pass collects it) and compaction can expose another
+/// fall-through, so repeat until the body stabilizes.
 fn remove_fallthrough_jumps(mut instrs: Vec<Instr>) -> Result<(Vec<Instr>, usize)> {
     let mut removed = 0usize;
     loop {
+        removed += thread_jump_targets(&mut instrs);
         let keep = instrs
             .iter()
             .enumerate()
@@ -875,6 +888,41 @@ fn remove_fallthrough_jumps(mut instrs: Vec<Instr>) -> Result<(Vec<Instr>, usize
         removed += count;
         instrs = compact(instrs, &keep)?;
     }
+}
+
+/// Rewrites the target of every `Jmp`/`JmpIfZero`/`IJmpIfZero` that points at an
+/// unconditional `Jmp` to that `Jmp`'s own (transitive) destination. Only plain jumps
+/// are rewritten: the `SharedIf`/`SharedElse` scaffolding targets are structural region
+/// delimiters (see [`fold_structured_branch`]), not jumps to chase through. A chain
+/// longer than the body can only be a `Jmp` cycle (an intentionally infinite loop);
+/// such a target is left untouched — any rewrite within the cycle would be equivalent
+/// but never stable, and the enclosing fixed point must terminate.
+fn thread_jump_targets(instrs: &mut [Instr]) -> usize {
+    let mut threaded = 0usize;
+    for ip in 0..instrs.len() {
+        if !matches!(
+            instrs[ip],
+            Instr::Jmp { .. } | Instr::JmpIfZero { .. } | Instr::IJmpIfZero { .. }
+        ) {
+            continue;
+        }
+        let start = target(&instrs[ip]).expect("plain jumps always carry a target");
+        let mut destination = start;
+        let mut hops = 0usize;
+        while let Some(Instr::Jmp { target: next }) = instrs.get(destination as usize) {
+            hops += 1;
+            if hops > instrs.len() {
+                destination = start;
+                break;
+            }
+            destination = *next;
+        }
+        if destination != start {
+            *target_mut(&mut instrs[ip]).expect("plain jumps always carry a target") = destination;
+            threaded += 1;
+        }
+    }
+    threaded
 }
 
 fn resolve_src(src: Src, known: &HashMap<u16, u32>) -> Src {
@@ -1349,6 +1397,82 @@ mod tests {
                 Instr::Mov {
                     dst: Dst::Signal(Addr::Const(0)),
                     src: Src::Const(2),
+                },
+                Instr::Return,
+            ]
+        );
+    }
+
+    #[test]
+    fn threads_jump_chains_to_their_final_destination() {
+        let mut instrs = vec![
+            Instr::JmpIfZero {
+                cond: Src::Signal(Addr::Const(0)),
+                target: 2,
+            },
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(1)),
+                src: Src::Const(0),
+            },
+            Instr::Jmp { target: 4 },
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(2)),
+                src: Src::Const(0),
+            },
+            Instr::Jmp { target: 6 },
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(3)),
+                src: Src::Const(0),
+            },
+            Instr::Return,
+        ];
+        // The conditional jump chases 2 → 4 → 6; the Jmp at 2 chases 4 → 6; the Jmp at 4
+        // already points at the non-jump destination.
+        assert_eq!(thread_jump_targets(&mut instrs), 2);
+        assert_eq!(target(&instrs[0]), Some(6));
+        assert_eq!(target(&instrs[2]), Some(6));
+        assert_eq!(target(&instrs[4]), Some(6));
+    }
+
+    #[test]
+    fn jmp_cycle_is_left_untouched() {
+        let mut instrs = vec![Instr::Jmp { target: 1 }, Instr::Jmp { target: 0 }];
+        assert_eq!(thread_jump_targets(&mut instrs), 0);
+        assert_eq!(target(&instrs[0]), Some(1));
+        assert_eq!(target(&instrs[1]), Some(0));
+    }
+
+    #[test]
+    fn threaded_intermediate_jump_becomes_unreachable_and_is_removed() {
+        let (out, _) = optimize(
+            vec![
+                Instr::JmpIfZero {
+                    cond: Src::Signal(Addr::Const(0)),
+                    target: 3,
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(1)),
+                    src: Src::Const(0),
+                },
+                Instr::Jmp { target: 4 },
+                // Only reachable as a jump-to-jump: threading retargets instruction 0
+                // straight to 4 and unreachable-code removal then drops this hop.
+                Instr::Jmp { target: 4 },
+                Instr::Return,
+            ],
+            0,
+            vec![Fr::from(7u64)],
+        );
+        assert_eq!(
+            out,
+            vec![
+                Instr::JmpIfZero {
+                    cond: Src::Signal(Addr::Const(0)),
+                    target: 2,
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(1)),
+                    src: Src::Const(0),
                 },
                 Instr::Return,
             ]
