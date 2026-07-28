@@ -12,7 +12,7 @@ use ark_ff::{One, PrimeField};
 use co_circom_types::Rep3InputType;
 use eyre::{Result, bail};
 use mpc_core::MpcState;
-use mpc_core::gadgets::poseidon2::Poseidon2;
+use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations};
 use mpc_core::protocols::rep3::{
     Rep3PrimeFieldShare, Rep3State,
     arithmetic::{self, promote_to_trivial_share},
@@ -71,6 +71,63 @@ impl<F: PrimeField> std::fmt::Debug for Rep3VmType<F> {
     }
 }
 
+/// Pooled S-box precomputation for one Poseidon2 state size.
+///
+/// `precompute_rep3` costs the same three communication rounds however many
+/// permutations it covers, so the pool refills in geometrically growing chunks: a
+/// circuit hashing `N` times pays `O(log N)` precompute round-trips instead of `N`.
+/// Growth starts at one permutation (a single-hash circuit pays exactly what it used
+/// to) and is capped to bound the resident share material.
+struct Poseidon2Pool<F: PrimeField, const T: usize> {
+    poseidon: Poseidon2<F, T, 5>,
+    precomp: Poseidon2Precomputations<Rep3PrimeFieldShare<F>>,
+    /// Number of permutations the next refill will cover.
+    next_permutations: usize,
+}
+
+/// Upper bound on permutations per refill (bounds the pooled share vectors — at T=16
+/// this is roughly a few MB — while still amortizing the three-round refill cost to
+/// negligible).
+const POSEIDON2_MAX_CHUNK: usize = 256;
+
+impl<F: PrimeField, const T: usize> Default for Poseidon2Pool<F, T> {
+    fn default() -> Self {
+        Self {
+            poseidon: Poseidon2::default(),
+            // Default precomputations are empty and immediately `consumed()`, so the
+            // first permutation triggers the first refill.
+            precomp: Poseidon2Precomputations::default(),
+            next_permutations: 1,
+        }
+    }
+}
+
+impl<F: PrimeField, const T: usize> Poseidon2Pool<F, T> {
+    /// Runs one permutation, refilling the precomputation pool first if it is
+    /// exhausted. All parties execute the identical call sequence (they run the same
+    /// compiled program), so their pools refill in lockstep.
+    fn permute<N: Network>(
+        pool: &mut Option<Self>,
+        state_arr: &mut [Rep3PrimeFieldShare<F>; T],
+        net: &N,
+        state: &mut Rep3State,
+    ) -> Result<Vec<Rep3PrimeFieldShare<F>>> {
+        let pool = pool.get_or_insert_default();
+        if pool.precomp.consumed() {
+            pool.precomp = pool
+                .poseidon
+                .precompute_rep3(pool.next_permutations, net, state)?;
+            pool.next_permutations = (pool.next_permutations * 2).min(POSEIDON2_MAX_CHUNK);
+        }
+        pool.poseidon
+            .rep3_permutation_in_place_with_precomputation_intermediate(
+                state_arr,
+                &mut pool.precomp,
+                net,
+            )
+    }
+}
+
 /// Rep3 protocol driver for the register VM.
 ///
 /// Holds two independent `(network, state)` pairs — `0`/`1` — so that operations
@@ -88,6 +145,12 @@ pub struct Rep3Driver<'a, F: PrimeField, N: Network> {
     /// [`PlainDriver::negative_one_boundary`]), reused to shift arithmetic shares the
     /// same way plain values are shifted.
     negative_one: F,
+    /// Pooled Poseidon2 S-box precomputations, one pool per supported state size
+    /// (lazily created on first accelerated permutation of that size).
+    poseidon2_t2: Option<Poseidon2Pool<F, 2>>,
+    poseidon2_t3: Option<Poseidon2Pool<F, 3>>,
+    poseidon2_t4: Option<Poseidon2Pool<F, 4>>,
+    poseidon2_t16: Option<Poseidon2Pool<F, 16>>,
 }
 
 impl<'a, F: PrimeField, N: Network> Rep3Driver<'a, F, N> {
@@ -106,6 +169,10 @@ impl<'a, F: PrimeField, N: Network> Rep3Driver<'a, F, N> {
             state1,
             plain,
             negative_one,
+            poseidon2_t2: None,
+            poseidon2_t3: None,
+            poseidon2_t4: None,
+            poseidon2_t16: None,
         })
     }
 
@@ -861,9 +928,6 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
             .iter()
             .any(|x| matches!(x, Rep3VmType::Arithmetic(_)))
         {
-            let poseidon = Poseidon2::<F, T, 5>::default();
-            let mut precomp = poseidon.precompute_rep3(1, self.net0, &mut self.state0)?;
-
             // Promote all inputs to arithmetic shares.
             let mut iter = inputs.iter();
             let mut state: [Rep3PrimeFieldShare<F>; T] = std::array::from_fn(|_| {
@@ -876,11 +940,36 @@ impl<F: PrimeField, N: Network> VmDriver<F> for Rep3Driver<'_, F, N> {
                 }
             });
 
-            let trace = poseidon.rep3_permutation_in_place_with_precomputation_intermediate(
-                &mut state,
-                &mut precomp,
-                self.net0,
-            )?;
+            // Dispatch to the pool for this state size; the slice→array conversions
+            // are shape proofs for the compiler (each arm's `T` is already matched).
+            let state_slice = &mut state[..];
+            let trace = match T {
+                2 => Poseidon2Pool::permute(
+                    &mut self.poseidon2_t2,
+                    state_slice.try_into().expect("T == 2"),
+                    self.net0,
+                    &mut self.state0,
+                )?,
+                3 => Poseidon2Pool::permute(
+                    &mut self.poseidon2_t3,
+                    state_slice.try_into().expect("T == 3"),
+                    self.net0,
+                    &mut self.state0,
+                )?,
+                4 => Poseidon2Pool::permute(
+                    &mut self.poseidon2_t4,
+                    state_slice.try_into().expect("T == 4"),
+                    self.net0,
+                    &mut self.state0,
+                )?,
+                16 => Poseidon2Pool::permute(
+                    &mut self.poseidon2_t16,
+                    state_slice.try_into().expect("T == 16"),
+                    self.net0,
+                    &mut self.state0,
+                )?,
+                _ => bail!("poseidon2 accelerator supports state sizes 2, 3, 4 and 16, got {T}"),
+            };
 
             let outputs = state.into_iter().map(Rep3VmType::Arithmetic).collect();
             let trace = trace.into_iter().map(Rep3VmType::Arithmetic).collect();

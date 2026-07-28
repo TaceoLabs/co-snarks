@@ -462,6 +462,72 @@ fn rep3_shared_if_bit_skips_condition_normalization_messages() {
     }
 }
 
+/// The Poseidon2 accelerator pools its S-box precomputation: refills happen in growing
+/// chunks (1, 2, 4, ... permutations), so with five sequential permutations calls 3 and
+/// 5 run purely from the pool and must cost strictly fewer messages than the first
+/// (which pays the three-round precompute). Every call's opened outputs must equal the
+/// plain permutation across refill boundaries.
+#[test]
+fn rep3_poseidon2_precomputation_pool_amortizes_rounds() {
+    use circom_mpc_vm2::drivers::plain::PlainDriver;
+
+    let mut rng = rand::thread_rng();
+    let input_vals = [Fr::from(11u64), Fr::from(22u64), Fr::from(33u64)];
+    let shares = rep3::share_field_elements(&input_vals, &mut rng);
+
+    let (expected_out, expected_trace) = {
+        let mut plain = PlainDriver::<Fr>::default();
+        plain
+            .poseidon2_accelerator::<3>(&input_vals)
+            .expect("plain poseidon2")
+    };
+
+    let body = |inputs: Vec<Rep3PrimeFieldShare<Fr>>| {
+        move |net0: &CountingNetwork, net1: &CountingNetwork| -> Vec<(usize, Vec<Fr>, Vec<Fr>)> {
+            let mut driver = Rep3Driver::new(net0, net1, A2BType::default()).expect("driver");
+            let inputs: Vec<Rep3VmType<Fr>> =
+                inputs.iter().map(|s| Rep3VmType::Arithmetic(*s)).collect();
+            (0..5)
+                .map(|_| {
+                    let start = net0.message_count();
+                    let (out, trace) = driver
+                        .poseidon2_accelerator::<3>(&inputs)
+                        .expect("accelerated poseidon2");
+                    let messages = net0.message_count() - start;
+                    let out = driver.open_many(&out).expect("open outputs");
+                    let trace = driver.open_many(&trace).expect("open trace");
+                    (messages, out, trace)
+                })
+                .collect()
+        }
+    };
+
+    let results = run_3_parties_counting(
+        body(shares[0].clone()),
+        body(shares[1].clone()),
+        body(shares[2].clone()),
+    );
+    for (party, calls) in results.into_iter().enumerate() {
+        for (call, (_, out, trace)) in calls.iter().enumerate() {
+            assert_eq!(
+                out, &expected_out,
+                "party {party} call {call}: wrong permutation output"
+            );
+            assert_eq!(
+                trace, &expected_trace,
+                "party {party} call {call}: wrong trace"
+            );
+        }
+        let messages: Vec<usize> = calls.iter().map(|(messages, _, _)| *messages).collect();
+        // Calls 1, 2, and 4 refill (1, 2, 4 permutations); calls 3 and 5 must run
+        // purely from the pool, skipping the precompute rounds entirely.
+        assert!(
+            messages[2] < messages[0] && messages[4] < messages[0],
+            "party {party}: pool-only calls must skip precompute messages: {messages:?}"
+        );
+    }
+}
+
 /// A nested `SharedElse` toggle must not cost communication: the level's else predicate
 /// `outer_acc · ¬cur` is computed locally as `outer_acc - acc` (see
 /// `Predication::toggle`). The two programs below differ only in the inner shared branch
