@@ -73,7 +73,7 @@ pub(super) fn run<F: PrimeField>(
         propagated_register_copies += copies_now;
         removed_redundant_moves += moves_now;
 
-        let (next, forwarded_now) = memory::forward_constant_vars(instrs)?;
+        let (next, forwarded_now) = memory::forward_var_values(instrs)?;
         instrs = next;
         forwarded_var_loads += forwarded_now;
 
@@ -1527,6 +1527,65 @@ mod tests {
                 Instr::Return,
             ]
         );
+    }
+
+    #[test]
+    fn fixed_point_forwards_var_register_and_removes_the_store() {
+        // `var x = a*b; out1 <== x; out2 <== x + x;` — the var slot mirrors r0, every
+        // read forwards to the register, and the store (plus the slot) disappears.
+        let (out, _) = optimize(
+            vec![
+                Instr::Bin {
+                    op: BinOp::Mul,
+                    dst: 0,
+                    a: Src::Signal(Addr::Const(0)),
+                    b: Src::Signal(Addr::Const(1)),
+                },
+                Instr::Mov {
+                    dst: Dst::Var(Addr::Const(0)),
+                    src: Src::Reg(0),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(2)),
+                    src: Src::Var(Addr::Const(0)),
+                },
+                Instr::Bin {
+                    op: BinOp::Add,
+                    dst: 1,
+                    a: Src::Var(Addr::Const(0)),
+                    b: Src::Var(Addr::Const(0)),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(3)),
+                    src: Src::Reg(1),
+                },
+                Instr::Return,
+            ],
+            2,
+            vec![],
+        );
+        assert!(
+            !out.iter().any(|instr| matches!(
+                instr,
+                Instr::Mov {
+                    dst: Dst::Var(_),
+                    ..
+                } | Instr::Mov {
+                    src: Src::Var(_),
+                    ..
+                }
+            )),
+            "no var store or var read should survive: {out:?}"
+        );
+        assert!(out.iter().any(|instr| matches!(
+            instr,
+            Instr::Bin {
+                op: BinOp::Add,
+                a: Src::Reg(0),
+                b: Src::Reg(0),
+                ..
+            }
+        )));
     }
 
     #[test]

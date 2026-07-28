@@ -6,21 +6,49 @@
 //! boundaries deliberately discard forward facts. In particular, writes under a shared
 //! predicate are buffered until a barrier and are not visible to later bytecode in that
 //! region, so forwarding through them would be incorrect.
+//!
+//! Forwarded facts come in two kinds ([`VarValue`]): a slot holds a known interned
+//! constant, or a slot holds *the same value as a field register* (store-to-load
+//! forwarding — the slot was last written from that register and neither has changed
+//! since). Register facts additionally die whenever their register is redefined. A use
+//! is rewritten with the facts holding *before* its instruction executes, matching the
+//! VM's read-operands-then-write-destination order — so `Mov Var(x), r0` followed by
+//! `Bin r0, Var(x), ...` still forwards to `Bin r0, r0, ...` even though the consuming
+//! instruction redefines `r0` itself. Like copy propagation's alias facts, a register
+//! fact is a *sameness* claim, not a value claim, so it survives a CFG join whenever
+//! every incoming path established it, even if the runtime value differs per path.
 
 use super::{ControlFlowGraph, Successor, compact};
 use circom_mpc_vm2::isa::{Addr, Dst, Instr, RetSrc, Src};
 use eyre::Result;
 use std::collections::{HashMap, HashSet, VecDeque};
 
-type KnownVars = HashMap<u32, u32>;
+/// What an exact var slot is known to hold: an interned constant, or the same value as
+/// a field register (valid until either the slot or the register is written again).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum VarValue {
+    Const(u32),
+    Reg(u16),
+}
 
-pub(super) fn forward_constant_vars(mut instrs: Vec<Instr>) -> Result<(Vec<Instr>, usize)> {
+impl VarValue {
+    fn to_src(self) -> Src {
+        match self {
+            VarValue::Const(id) => Src::Const(id),
+            VarValue::Reg(reg) => Src::Reg(reg),
+        }
+    }
+}
+
+type KnownVars = HashMap<u32, VarValue>;
+
+pub(super) fn forward_var_values(mut instrs: Vec<Instr>) -> Result<(Vec<Instr>, usize)> {
     let cfg = ControlFlowGraph::build(&instrs)?;
     if cfg.blocks.is_empty() {
         return Ok((instrs, 0));
     }
     let shared = shared_region_mask(&instrs);
-    let inputs = constant_var_inputs(&instrs, &cfg, &shared);
+    let inputs = var_value_inputs(&instrs, &cfg, &shared);
     let mut forwarded = 0usize;
 
     for (block_id, block) in cfg.blocks.iter().enumerate() {
@@ -37,11 +65,7 @@ pub(super) fn forward_constant_vars(mut instrs: Vec<Instr>) -> Result<(Vec<Instr
     Ok((instrs, forwarded))
 }
 
-fn constant_var_inputs(
-    instrs: &[Instr],
-    cfg: &ControlFlowGraph,
-    shared: &[bool],
-) -> Vec<KnownVars> {
+fn var_value_inputs(instrs: &[Instr], cfg: &ControlFlowGraph, shared: &[bool]) -> Vec<KnownVars> {
     let mut inputs = vec![None; cfg.blocks.len()];
     inputs[0] = Some(KnownVars::new());
     let mut pending = VecDeque::from([0usize]);
@@ -95,7 +119,7 @@ fn transfer_known_vars(instr: &Instr, known: &mut KnownVars) {
             dst: Dst::Var(Addr::Const(slot)),
             src,
         } => {
-            if let Some(value) = known_constant(*src, known) {
+            if let Some(value) = source_value(*src, known) {
                 known.insert(*slot, value);
             } else {
                 known.remove(slot);
@@ -108,19 +132,51 @@ fn transfer_known_vars(instr: &Instr, known: &mut KnownVars) {
             dst: Dst::Var(Addr::Affine { .. } | Addr::Dynamic(_)),
             ..
         } => known.clear(),
+        Instr::Mov {
+            dst: Dst::Reg(reg), ..
+        } => kill_reg_facts(known, *reg, 1),
         Instr::StoreN {
             dst: Dst::Var(Addr::Const(slot)),
+            src,
+            n,
+        } => {
+            // The stored registers are not redefined by the store, so every element
+            // yields a fresh slot ↔ register fact.
+            for k in 0..*n {
+                match (slot.checked_add(k), u16::try_from(u32::from(*src) + k)) {
+                    (Some(slot), Ok(reg)) => {
+                        known.insert(slot, VarValue::Reg(reg));
+                    }
+                    _ => {
+                        known.clear();
+                        break;
+                    }
+                }
+            }
+        }
+        Instr::StoreN {
+            dst: Dst::Reg(reg),
             n,
             ..
-        } => remove_range(known, *slot, *n),
+        } => kill_reg_facts(known, *reg, *n),
+        Instr::Bin { dst, .. } | Instr::Neg { dst, .. } | Instr::EqN { dst, .. } => {
+            kill_reg_facts(known, *dst, 1);
+        }
+        Instr::LoadN { dst, n, .. }
+        | Instr::BinN { dst, n, .. }
+        | Instr::OutputSub { dst, n, .. } => kill_reg_facts(known, *dst, *n),
         Instr::BinBatch { lanes, .. } => {
             for lane in lanes {
+                kill_reg_facts(known, lane.dst, 1);
                 match lane.store {
                     Some(Dst::Var(Addr::Const(slot))) => {
-                        known.remove(&slot);
+                        // The lane writes its scalar temporary and the store from it,
+                        // so the slot holds the temporary's value afterwards.
+                        known.insert(slot, VarValue::Reg(lane.dst));
                     }
                     Some(Dst::Var(_)) => known.clear(),
-                    Some(Dst::Reg(_) | Dst::Signal(_)) | None => {}
+                    Some(Dst::Reg(reg)) => kill_reg_facts(known, reg, 1),
+                    Some(Dst::Signal(_)) | None => {}
                 }
             }
         }
@@ -128,23 +184,25 @@ fn transfer_known_vars(instr: &Instr, known: &mut KnownVars) {
     }
 }
 
-fn known_constant(src: Src, known: &KnownVars) -> Option<u32> {
+fn source_value(src: Src, known: &KnownVars) -> Option<VarValue> {
     match src {
-        Src::Const(id) => Some(id),
+        Src::Const(id) => Some(VarValue::Const(id)),
+        Src::Reg(reg) => Some(VarValue::Reg(reg)),
         Src::Var(Addr::Const(slot)) => known.get(&slot).copied(),
-        Src::Reg(_) | Src::Var(_) | Src::Signal(_) => None,
+        Src::Var(_) | Src::Signal(_) => None,
     }
 }
 
-fn remove_range(known: &mut KnownVars, start: u32, n: u32) {
-    for k in 0..n {
-        if let Some(slot) = start.checked_add(k) {
-            known.remove(&slot);
-        } else {
-            known.clear();
-            break;
+/// Drops every fact claiming a slot holds the same value as one of the `n` registers
+/// starting at `start` — those registers are being redefined.
+fn kill_reg_facts(known: &mut KnownVars, start: u16, n: u32) {
+    known.retain(|_, value| match value {
+        VarValue::Reg(reg) => {
+            let reg = u32::from(*reg);
+            reg < u32::from(start) || reg >= u32::from(start) + n
         }
-    }
+        VarValue::Const(_) => true,
+    });
 }
 
 fn rewrite_sources(instr: &mut Instr, known: &KnownVars) -> usize {
@@ -153,7 +211,7 @@ fn rewrite_sources(instr: &mut Instr, known: &KnownVars) -> usize {
         if let Src::Var(Addr::Const(slot)) = *src
             && let Some(value) = known.get(&slot)
         {
-            *src = Src::Const(*value);
+            *src = value.to_src();
             rewritten += 1;
         }
     };
@@ -177,7 +235,7 @@ fn rewrite_sources(instr: &mut Instr, known: &KnownVars) -> usize {
         | Instr::Assert { cond: src, .. } => rewrite(src),
         Instr::LoadN { dst, src, n } if *n == 1 => {
             rewrite(src);
-            if matches!(src, Src::Const(_)) {
+            if matches!(src, Src::Const(_) | Src::Reg(_)) {
                 *instr = Instr::Mov {
                     dst: Dst::Reg(*dst),
                     src: *src,
@@ -188,6 +246,20 @@ fn rewrite_sources(instr: &mut Instr, known: &KnownVars) -> usize {
             for lane in lanes {
                 rewrite(&mut lane.a);
                 rewrite(&mut lane.b);
+            }
+        }
+        Instr::Ret {
+            src: src @ RetSrc::Var(Addr::Const(_)),
+            n: 1,
+        } => {
+            // A scalar `return v` reading a var that mirrors a register can return the
+            // register directly. `RetSrc` has no constant form, so constant facts stay.
+            let RetSrc::Var(Addr::Const(slot)) = src else {
+                unreachable!("matched above");
+            };
+            if let Some(VarValue::Reg(reg)) = known.get(slot) {
+                *src = RetSrc::Reg(*reg);
+                rewritten += 1;
             }
         }
         _ => {}
@@ -466,13 +538,136 @@ mod tests {
             },
             Instr::Return,
         ];
-        let (out, forwarded) = forward_constant_vars(instrs).unwrap();
+        let (out, forwarded) = forward_var_values(instrs).unwrap();
         assert_eq!(forwarded, 1);
         assert_eq!(
             out[2],
             Instr::Mov {
                 dst: Dst::Signal(Addr::Const(0)),
                 src: Src::Const(7),
+            }
+        );
+    }
+
+    #[test]
+    fn forwards_register_value_stored_to_var() {
+        let instrs = vec![
+            Instr::Mov {
+                dst: Dst::Reg(0),
+                src: Src::Signal(Addr::Const(0)),
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(3)),
+                src: Src::Reg(0),
+            },
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(1)),
+                src: Src::Var(Addr::Const(3)),
+            },
+            Instr::Return,
+        ];
+        let (out, forwarded) = forward_var_values(instrs).unwrap();
+        assert_eq!(forwarded, 1);
+        assert_eq!(
+            out[2],
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(1)),
+                src: Src::Reg(0),
+            }
+        );
+    }
+
+    #[test]
+    fn same_instruction_register_redefinition_still_forwards() {
+        // The consuming Bin redefines r0 itself, but the VM reads operands before
+        // writing the destination, so the pre-instruction fact applies to its uses.
+        let instrs = vec![
+            Instr::Mov {
+                dst: Dst::Reg(0),
+                src: Src::Signal(Addr::Const(0)),
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(3)),
+                src: Src::Reg(0),
+            },
+            Instr::Bin {
+                op: BinOp::Add,
+                dst: 0,
+                a: Src::Var(Addr::Const(3)),
+                b: Src::Const(0),
+            },
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(1)),
+                src: Src::Var(Addr::Const(3)),
+            },
+            Instr::Return,
+        ];
+        let (out, forwarded) = forward_var_values(instrs).unwrap();
+        // The Bin's operand forwards; the later read must NOT (r0 was redefined).
+        assert_eq!(forwarded, 1);
+        assert!(matches!(out[2], Instr::Bin { a: Src::Reg(0), .. }));
+        assert_eq!(
+            out[3],
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(1)),
+                src: Src::Var(Addr::Const(3)),
+            }
+        );
+    }
+
+    #[test]
+    fn storen_records_per_element_register_facts() {
+        let instrs = vec![
+            Instr::LoadN {
+                dst: 0,
+                src: Src::Signal(Addr::Const(0)),
+                n: 3,
+            },
+            Instr::StoreN {
+                dst: Dst::Var(Addr::Const(10)),
+                src: 0,
+                n: 3,
+            },
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(5)),
+                src: Src::Var(Addr::Const(11)),
+            },
+            Instr::Return,
+        ];
+        let (out, forwarded) = forward_var_values(instrs).unwrap();
+        assert_eq!(forwarded, 1);
+        assert_eq!(
+            out[2],
+            Instr::Mov {
+                dst: Dst::Signal(Addr::Const(5)),
+                src: Src::Reg(1),
+            }
+        );
+    }
+
+    #[test]
+    fn scalar_var_return_forwards_to_register() {
+        let instrs = vec![
+            Instr::Mov {
+                dst: Dst::Reg(2),
+                src: Src::Signal(Addr::Const(0)),
+            },
+            Instr::Mov {
+                dst: Dst::Var(Addr::Const(0)),
+                src: Src::Reg(2),
+            },
+            Instr::Ret {
+                src: RetSrc::Var(Addr::Const(0)),
+                n: 1,
+            },
+        ];
+        let (out, forwarded) = forward_var_values(instrs).unwrap();
+        assert_eq!(forwarded, 1);
+        assert_eq!(
+            out[2],
+            Instr::Ret {
+                src: RetSrc::Reg(2),
+                n: 1,
             }
         );
     }
@@ -497,7 +692,7 @@ mod tests {
             },
             Instr::Return,
         ];
-        let (out, forwarded) = forward_constant_vars(instrs.clone()).unwrap();
+        let (out, forwarded) = forward_var_values(instrs.clone()).unwrap();
         assert_eq!(forwarded, 0);
         assert_eq!(out, instrs);
     }
@@ -526,7 +721,7 @@ mod tests {
             Instr::SharedEnd,
             Instr::Return,
         ];
-        let (out, forwarded) = forward_constant_vars(instrs.clone()).unwrap();
+        let (out, forwarded) = forward_var_values(instrs.clone()).unwrap();
         assert_eq!(forwarded, 0);
         assert_eq!(out, instrs);
     }
