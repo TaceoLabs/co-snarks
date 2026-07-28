@@ -462,6 +462,88 @@ fn rep3_shared_if_bit_skips_condition_normalization_messages() {
     }
 }
 
+/// A nested `SharedElse` toggle must not cost communication: the level's else predicate
+/// `outer_acc · ¬cur` is computed locally as `outer_acc - acc` (see
+/// `Predication::toggle`). The two programs below differ only in the inner shared branch
+/// having an (empty) else arm — i.e. exactly one extra `SharedElse` toggle executed at
+/// shared depth 2 — so their message counts must be identical.
+#[test]
+fn rep3_nested_shared_else_toggle_is_communication_free() {
+    fn program(with_else: bool) -> CompiledProgram<Fr> {
+        let instrs = if with_else {
+            vec![
+                Instr::SharedIfBit {
+                    cond: Src::Signal(Addr::Const(0)),
+                    else_target: 4,
+                },
+                Instr::SharedIfBit {
+                    cond: Src::Signal(Addr::Const(1)),
+                    else_target: 3,
+                },
+                Instr::SharedElse { end_target: 3 },
+                Instr::SharedEnd,
+                Instr::SharedEnd,
+                Instr::Return,
+            ]
+        } else {
+            vec![
+                Instr::SharedIfBit {
+                    cond: Src::Signal(Addr::Const(0)),
+                    else_target: 3,
+                },
+                Instr::SharedIfBit {
+                    cond: Src::Signal(Addr::Const(1)),
+                    else_target: 2,
+                },
+                Instr::SharedEnd,
+                Instr::SharedEnd,
+                Instr::Return,
+            ]
+        };
+        common::single_template_program(instrs, 0, 0, 0, 2, 0, 3)
+    }
+
+    let mut rng = rand::thread_rng();
+    let cond_shares = rep3::share_field_elements(&[Fr::from(1u64), Fr::from(1u64)], &mut rng);
+
+    let body = |conds: Vec<Rep3PrimeFieldShare<Fr>>| {
+        move |net0: &CountingNetwork, net1: &CountingNetwork| -> (usize, usize) {
+            let mut driver = Rep3Driver::new(net0, net1, A2BType::default()).expect("driver");
+
+            let mut run = |program: CompiledProgram<Fr>| {
+                let mut machine = Machine::new(&program, &mut driver, VMConfig::default()).unwrap();
+                let offset = program.main_input_list[0].offset;
+                machine.signals[offset] = Rep3VmType::Arithmetic(conds[0]);
+                machine.signals[offset + 1] = Rep3VmType::Arithmetic(conds[1]);
+                let start = net0.message_count();
+                machine.run_main().unwrap();
+                net0.message_count() - start
+            };
+
+            let without_else = run(program(false));
+            let with_else = run(program(true));
+            (without_else, with_else)
+        }
+    };
+
+    let results = run_3_parties_counting(
+        body(cond_shares[0].clone()),
+        body(cond_shares[1].clone()),
+        body(cond_shares[2].clone()),
+    );
+    for (party, (without_else, with_else)) in results.into_iter().enumerate() {
+        assert!(
+            without_else > 0,
+            "party {party}: the nested shared-if push itself must communicate, \
+             otherwise this test measures nothing"
+        );
+        assert_eq!(
+            with_else, without_else,
+            "party {party}: a SharedElse toggle must not add network messages"
+        );
+    }
+}
+
 /// Eight scalar `Mov`s in one shared arm must be merged by one vectorized cmux round,
 /// rather than paying one Rep3 reshare round per destination. `SharedIfBit` removes
 /// condition-normalization traffic, so the VM's message count can be compared directly

@@ -231,6 +231,12 @@ impl<T: Clone> Predication<T> {
     /// `SharedElse` when the top level is the matching shared one, so operating on the
     /// top of the stack (rather than searching for the innermost shared level) is
     /// correct here.
+    ///
+    /// The level maintains the invariant `acc == outer_acc · cur` (both are bits), so
+    /// the else branch's combined condition `outer_acc · ¬cur` is algebraically
+    /// `outer_acc - acc` — a local subtraction of (shares of) field elements. No
+    /// protocol round is spent here, even for nested shared branches where both values
+    /// are secret-shared.
     pub fn toggle<F, C>(&mut self, driver: &mut C) -> Result<()>
     where
         F: PrimeField,
@@ -244,7 +250,7 @@ impl<T: Clone> Predication<T> {
                 ..
             }) => {
                 let ncur = driver.bool_not(cur)?;
-                let nacc = driver.bool_and(outer_acc, &ncur)?;
+                let nacc = driver.sub(outer_acc, acc)?;
                 *cur = ncur;
                 *acc = nacc.clone();
                 self.cached = Some(nacc);
@@ -585,7 +591,10 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
     /// different shared branches return different arities, `circom-mpc-vm/src/mpc_vm.rs:791-795`):
     /// the merged length is the longest entry, and any entry missing a position simply
     /// contributes zero there. Mirrors old `handle_shared_fun_return`
-    /// (`circom-mpc-vm/src/mpc_vm.rs:883-907`).
+    /// (`circom-mpc-vm/src/mpc_vm.rs:883-907`) semantically, but computes every
+    /// `cond · val` product through a single batched [`VmDriver::bin_many`] call — one
+    /// communication round for all shared lanes together, instead of one scalar round
+    /// per accumulated value. The remaining per-position sums are local additions.
     fn merge_ret_acc(
         &mut self,
         ret_acc: Vec<(C::VmType, Vec<C::VmType>)>,
@@ -595,16 +604,34 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
             .map(|(_, vals)| vals.len())
             .max()
             .unwrap_or(0);
-        let mut acc = vec![self.driver.public_zero(); ret_n];
-        for (cond, vals) in ret_acc {
-            for (slot, v) in acc.iter_mut().zip(vals.iter()) {
-                let contribution = self.driver.mul(&cond, v)?;
-                *slot = self.driver.add(slot, &contribution)?;
+        let mut conds = Vec::new();
+        let mut vals = Vec::new();
+        let mut slots = Vec::new();
+        for (cond, entry) in &ret_acc {
+            for (slot, v) in entry.iter().enumerate() {
+                conds.push(cond.clone());
+                vals.push(v.clone());
+                slots.push(slot);
             }
-            // Entries shorter than `ret_n` simply stop contributing past their own
-            // length — the `zip` above already skips them, so nothing else to do.
+        }
+        let products = self.driver.bin_many(BinOp::Mul, &conds, &vals)?;
+        let mut acc = vec![self.driver.public_zero(); ret_n];
+        for (slot, product) in slots.into_iter().zip(products) {
+            acc[slot] = self.driver.add(&acc[slot], &product)?;
         }
         Ok(acc)
+    }
+
+    /// `Σ_i cond_i` over the accumulated shared-return conditions. The entries are
+    /// mutually exclusive bits by construction (each entry's condition already excludes
+    /// every earlier one — see the `Ret` handling in [`step`](Self::step)), so this sum
+    /// is itself a bit and `¬c_1 ∧ … ∧ ¬c_k == 1 - Σ_i c_i`. Local additions only.
+    fn sum_ret_conds(&mut self, ret_acc: &[(C::VmType, Vec<C::VmType>)]) -> Result<C::VmType> {
+        let mut sum = ret_acc[0].0.clone();
+        for (cond, _) in &ret_acc[1..] {
+            sum = self.driver.add(&sum, cond)?;
+        }
+        Ok(sum)
     }
 
     /// Resize `vals` to exactly `ret_n` elements: pad with `public_zero()` if shorter,
@@ -876,29 +903,36 @@ impl<'a, F: PrimeField, C: VmDriver<F>> Machine<'a, F, C> {
                 };
                 let vals: Vec<C::VmType> =
                     (0..*n as usize).map(|k| read_ret(frame, src, k)).collect();
-                // Exact port of old `ReturnFun` (`circom-mpc-vm/src/mpc_vm.rs:752-847`).
+                // Port of old `ReturnFun` (`circom-mpc-vm/src/mpc_vm.rs:752-847`), with
+                // the earlier-return exclusion computed algebraically: the accumulated
+                // conditions are mutually exclusive bits, so `¬c_1 ∧ … ∧ ¬c_k` is
+                // `1 - Σ c_i` (see [`Machine::sum_ret_conds`]) — at most one
+                // multiplication instead of a bool_not/bool_and protocol pair per
+                // accumulated entry.
                 if pred.is_shared() {
                     // This Ret may or may not actually fire (data-dependent): record its
                     // condition (minus every earlier accumulated Ret's condition, so at
                     // most one entry ever contributes) and keep executing.
-                    let mut this_cond =
-                        pred.cond().expect("is_shared implies cond is Some").clone();
-                    for (c, _) in ret_acc.iter() {
-                        let notc = self.driver.bool_not(c)?;
-                        this_cond = self.driver.bool_and(&this_cond, &notc)?;
-                    }
+                    let pred_cond = pred.cond().expect("is_shared implies cond is Some").clone();
+                    let this_cond = if ret_acc.is_empty() {
+                        pred_cond
+                    } else {
+                        // pred_cond · (1 - Σ c_i) == pred_cond - pred_cond · Σ c_i:
+                        // one multiplication round however many entries accumulated.
+                        let excluded = self.sum_ret_conds(ret_acc)?;
+                        let overlap = self.driver.mul(&pred_cond, &excluded)?;
+                        self.driver.sub(&pred_cond, &overlap)?
+                    };
                     ret_acc.push((this_cond, vals));
                     Flow::Continue
                 } else if !ret_acc.is_empty() {
                     // This Ret is unconditional (we're no longer under any shared level),
                     // but earlier shared Rets might have already "returned" — this is the
-                    // final entry (condition = AND of all earlier negations) and we merge
+                    // final entry (condition = `1 - Σ c_i`, entirely local) and we merge
                     // now.
-                    let mut this_cond = self.driver.public_one();
-                    for (c, _) in ret_acc.iter() {
-                        let notc = self.driver.bool_not(c)?;
-                        this_cond = self.driver.bool_and(&this_cond, &notc)?;
-                    }
+                    let excluded = self.sum_ret_conds(ret_acc)?;
+                    let one = self.driver.public_one();
+                    let this_cond = self.driver.sub(&one, &excluded)?;
                     ret_acc.push((this_cond, vals));
                     let acc = std::mem::take(ret_acc);
                     Flow::ReturnFn(self.merge_ret_acc(acc)?)
