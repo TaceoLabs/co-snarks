@@ -387,7 +387,9 @@ fn basic_blocks(instrs: &[Instr]) -> Vec<(usize, usize)> {
     for (ip, instr) in instrs.iter().enumerate() {
         let next = ip + 1;
         match instr {
-            Instr::Jmp { target } | Instr::JmpIfZero { target, .. } => {
+            Instr::Jmp { target }
+            | Instr::JmpIfZero { target, .. }
+            | Instr::IJmpIfZero { target, .. } => {
                 leaders.insert(*target as usize);
                 leaders.insert(next);
             }
@@ -485,6 +487,25 @@ mod tests {
         assert_eq!(report.adjacent_calls_after, 1);
         assert_eq!(report.block_calls_before, 3);
         assert_eq!(report.block_calls_after, 1);
+    }
+
+    #[test]
+    fn integer_branch_splits_profiling_blocks() {
+        // An integer-controlled loop's IJmpIfZero is a control-flow edge: operations on
+        // either side of it must not be reported as one batchable same-block group.
+        let program = program(vec![
+            bin(BinOp::Mul, 0),
+            Instr::IJmpIfZero { reg: 0, target: 3 },
+            bin(BinOp::Mul, 1),
+            Instr::Return,
+        ]);
+        let report = static_batchability(&program);
+        assert_eq!(report.vectorizable_scalar_calls, 2);
+        assert_eq!(
+            report.block_calls_before, 0,
+            "Muls separated by an integer branch must not form a block group"
+        );
+        assert_eq!(report.adjacent_calls_before, 0);
     }
 
     #[test]

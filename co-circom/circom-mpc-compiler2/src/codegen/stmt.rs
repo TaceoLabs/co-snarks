@@ -1390,6 +1390,7 @@ fn fuse_unrolled_binn<F: PrimeField>(cg: &mut CodeGen<'_, F>, unrolled_start: us
             i,
             Instr::Jmp { .. }
                 | Instr::JmpIfZero { .. }
+                | Instr::IJmpIfZero { .. }
                 | Instr::SharedIf { .. }
                 | Instr::SharedIfBit { .. }
                 | Instr::SharedElse { .. }
