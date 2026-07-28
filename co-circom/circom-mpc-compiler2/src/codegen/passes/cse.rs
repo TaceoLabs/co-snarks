@@ -22,14 +22,13 @@
 //! syntactically equal expressions match only when nothing they read could have changed
 //! in between. Remaining bumps are conservative:
 //!
-//! - instructions that can run other bodies (`CallFn`, `CreateCmp`, `InputSub`) clobber
-//!   the signal space — and `CallFn` both spaces, matching the memory pass's
-//!   deliberately conservative call boundary;
-//! - merge barriers (`Assert`, `Log*`, `SharedEnd`) clobber both spaces: under a shared
-//!   predicate they cmux-merge buffered writes, changing memory without a store.
-//!   `SharedEnd` additionally clears every available expression, because popping the
-//!   predicate changes the `Div` zero-guard semantics of otherwise identical
-//!   instructions.
+//! - merge barriers clobber both spaces: under a shared predicate the VM cmux-merges
+//!   buffered var/signal writes at every write barrier, changing memory without a
+//!   store instruction. This covers `Assert`/`Log*`/`SharedEnd` as well as the
+//!   component and call instructions (`CallFn`, `CreateCmp`, `InputSub`, `OutputSub`),
+//!   which additionally may run other bodies that write signal RAM. `SharedEnd` also
+//!   clears every available expression, because popping the predicate changes the
+//!   `Div` zero-guard semantics of otherwise identical instructions.
 //!
 //! Error behavior is preserved: a match requires identical operand values, so if the
 //! first occurrence executed without error (division by zero, unsupported shared
@@ -310,9 +309,18 @@ impl State {
             }
             Instr::EqN { dst, .. } => self.kill_reg(*dst),
             Instr::Mov { dst, .. } => self.kill_dst(*dst),
-            Instr::LoadN { dst, n, .. }
-            | Instr::BinN { dst, n, .. }
-            | Instr::OutputSub { dst, n, .. } => self.kill_reg_range(*dst, *n),
+            Instr::LoadN { dst, n, .. } | Instr::BinN { dst, n, .. } => {
+                self.kill_reg_range(*dst, *n)
+            }
+            Instr::OutputSub { dst, n, .. } => {
+                self.kill_reg_range(*dst, *n);
+                // A write barrier in the VM: under a shared predicate, buffered
+                // var/signal writes are cmux-merged right before it executes — and
+                // unlike `InputSub`, it is legal inside a shared branch — so memory can
+                // change here without any store instruction.
+                self.vars.clobber();
+                self.signals.clobber();
+            }
             Instr::StoreN { dst, n, .. } => match dst {
                 Dst::Reg(reg) => self.kill_reg_range(*reg, *n),
                 Dst::Var(Addr::Const(slot)) => self.vars.write_exact_range(*slot, *n),
@@ -342,7 +350,10 @@ impl State {
                 self.signals.clobber();
             }
             Instr::CreateCmp { .. } | Instr::InputSub { .. } => {
-                // May run a subcomponent body, which writes signal RAM.
+                // May run a subcomponent body, which writes signal RAM — and both are
+                // write barriers in the VM, merging buffered predicated writes before
+                // executing, so conservatively clobber the var space too.
+                self.vars.clobber();
                 self.signals.clobber();
             }
             Instr::SharedEnd
@@ -677,6 +688,28 @@ mod tests {
             Instr::Return,
         ];
         let (out, replaced) = eliminate_common_subexpressions(instrs.clone(), 2).unwrap();
+        assert_eq!(replaced, 0);
+        assert_eq!(out, instrs);
+    }
+
+    #[test]
+    fn output_sub_invalidates_memory_reads() {
+        // OutputSub is a VM write barrier: under a shared predicate it cmux-merges
+        // buffered var/signal writes before executing (and it is legal inside a shared
+        // arm), so a var read before and after it may observe different values.
+        let instrs = vec![
+            mul(0, Src::Var(Addr::Const(0)), sig(1)),
+            Instr::OutputSub {
+                cmp: circom_mpc_vm2::isa::ISrc::Const(0),
+                addr: Addr::Const(0),
+                mapped: None,
+                dst: 5,
+                n: 1,
+            },
+            mul(1, Src::Var(Addr::Const(0)), sig(1)),
+            Instr::Return,
+        ];
+        let (out, replaced) = eliminate_common_subexpressions(instrs.clone(), 6).unwrap();
         assert_eq!(replaced, 0);
         assert_eq!(out, instrs);
     }
