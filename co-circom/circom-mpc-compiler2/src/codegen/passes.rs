@@ -15,6 +15,7 @@ use std::collections::{HashMap, VecDeque};
 
 mod batch;
 mod copy;
+mod cse;
 mod dce;
 mod memory;
 
@@ -40,6 +41,7 @@ pub(super) fn run<F: PrimeField>(
     let mut removed_redundant_moves = 0usize;
     let mut forwarded_var_loads = 0usize;
     let mut removed_dead_var_stores = 0usize;
+    let mut reused_common_subexpressions = 0usize;
 
     // Every transformation is monotone: operands only become constants or canonical
     // register sources, instructions only simplify, and bytecode only disappears.
@@ -79,6 +81,10 @@ pub(super) fn run<F: PrimeField>(
         instrs = next;
         removed_dead_var_stores += dead_stores_now;
 
+        let (next, cse_now) = cse::eliminate_common_subexpressions(instrs, num_field_regs)?;
+        instrs = next;
+        reused_common_subexpressions += cse_now;
+
         let (next, dead_regs_now) = dce::eliminate_dead_register_defs(instrs)?;
         instrs = next;
         removed_dead += dead_regs_now;
@@ -90,6 +96,7 @@ pub(super) fn run<F: PrimeField>(
             + moves_now
             + forwarded_now
             + dead_stores_now
+            + cse_now
             + dead_regs_now
             == 0
         {
@@ -97,8 +104,8 @@ pub(super) fn run<F: PrimeField>(
         }
     }
 
-    let (instrs, mul_batches, mul_batch_lanes) =
-        batch::batch_independent_muls(instrs, max_batch_size)?;
+    let (instrs, bin_batches, bin_batch_lanes) =
+        batch::batch_independent_ops(instrs, max_batch_size)?;
     let cfg = ControlFlowGraph::build(&instrs)
         .map_err(|error| eyre!("invalid optimized bytecode for {body_name}: {error}"))?;
     tracing::trace!(
@@ -113,8 +120,9 @@ pub(super) fn run<F: PrimeField>(
         removed_redundant_moves,
         forwarded_var_loads,
         removed_dead_var_stores,
-        mul_batches,
-        mul_batch_lanes,
+        reused_common_subexpressions,
+        bin_batches,
+        bin_batch_lanes,
         "ran post-lowering bytecode passes"
     );
     Ok(instrs)
@@ -1515,6 +1523,60 @@ mod tests {
                 Instr::Mov {
                     dst: Dst::Signal(Addr::Const(0)),
                     src: Src::Const(2),
+                },
+                Instr::Return,
+            ]
+        );
+    }
+
+    #[test]
+    fn fixed_point_deduplicates_repeated_interactive_multiplication() {
+        // Two identical signal products stored to two different signals: CSE turns the
+        // second Bin into a register Mov, copy propagation folds it into the store, and
+        // DCE removes the Mov — one interactive multiplication remains.
+        let (out, _) = optimize(
+            vec![
+                Instr::Bin {
+                    op: BinOp::Mul,
+                    dst: 0,
+                    a: Src::Signal(Addr::Const(0)),
+                    b: Src::Signal(Addr::Const(1)),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(2)),
+                    src: Src::Reg(0),
+                },
+                Instr::Bin {
+                    op: BinOp::Mul,
+                    dst: 1,
+                    a: Src::Signal(Addr::Const(0)),
+                    b: Src::Signal(Addr::Const(1)),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(3)),
+                    src: Src::Reg(1),
+                },
+                Instr::Return,
+            ],
+            2,
+            vec![],
+        );
+        assert_eq!(
+            out,
+            vec![
+                Instr::Bin {
+                    op: BinOp::Mul,
+                    dst: 0,
+                    a: Src::Signal(Addr::Const(0)),
+                    b: Src::Signal(Addr::Const(1)),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(2)),
+                    src: Src::Reg(0),
+                },
+                Instr::Mov {
+                    dst: Dst::Signal(Addr::Const(3)),
+                    src: Src::Reg(0),
                 },
                 Instr::Return,
             ]
