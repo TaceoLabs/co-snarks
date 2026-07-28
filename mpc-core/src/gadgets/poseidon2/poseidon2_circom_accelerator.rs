@@ -153,7 +153,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             let (squares_, quads_, sbox_0) = if r == self.params.rounds_f_beginning - 1 && T == 16 {
                 self.rep3_external_round_precomp_matmul_intermediate(state, r, precomp, net)?
             } else {
-                let (squares_, quads_, sbox_0, _, _) =
+                let (squares_, quads_, sbox_0, _, _, _) =
                     self.rep3_external_round_precomp_intermediate(state, r, precomp, net)?;
                 (squares_, quads_, sbox_0)
             };
@@ -193,16 +193,18 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
 
         let mut last_matmul_external = None;
+        let mut last_double_in3 = None;
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (squares_, quads_, sbox_0, sbox_1, matmul_external) =
+            let (squares_, quads_, sbox_0, sbox_1, sbox_3, matmul_external) =
                 self.rep3_external_round_precomp_intermediate(state, r, precomp, net)?;
             if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
                 squares_3.push(sbox_0);
                 quads_3.push(sbox_1);
+                last_double_in3 = Some(sbox_3 + sbox_3);
             }
             squares_3.extend(squares_);
             quads_3.extend(quads_);
@@ -271,6 +273,12 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             trace[idx as usize] = val;
         }
 
+        if T == 4
+            && let (Some(idx), Some(val)) = (wtns_indices_iter.next(), last_double_in3)
+        {
+            trace[idx as usize] = val;
+        }
+
         if let Some(last_matmul_external) = last_matmul_external {
             for s in &last_matmul_external {
                 if let Some(idx) = wtns_indices_iter.next() {
@@ -296,6 +304,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Vec<Rep3PrimeFieldShare<F>>,
         Rep3PrimeFieldShare<F>,
         Rep3PrimeFieldShare<F>,
+        Rep3PrimeFieldShare<F>,
         Option<Vec<Rep3PrimeFieldShare<F>>>,
     )> {
         let id = PartyID::try_from(net.id())?;
@@ -303,13 +312,14 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate(state, precomp, net)?;
         let sbox_0 = state[0];
         let sbox_1 = state[1];
+        let sbox_3 = state.get(3).copied().unwrap_or_default();
         let matmul_external = if T == 16 {
             Some(Self::matmul_external_rep3_intermediate_t16(state))
         } else {
             Self::matmul_external_rep3(state);
             None
         };
-        Ok((squares, quads, sbox_0, sbox_1, matmul_external))
+        Ok((squares, quads, sbox_0, sbox_1, sbox_3, matmul_external))
     }
 
     /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
@@ -346,6 +356,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         [Vec<Rep3PrimeFieldShare<F>>; BATCH_SIZE],
         [Rep3PrimeFieldShare<F>; BATCH_SIZE],
         [Rep3PrimeFieldShare<F>; BATCH_SIZE],
+        [Rep3PrimeFieldShare<F>; BATCH_SIZE],
         Option<[Vec<Rep3PrimeFieldShare<F>>; BATCH_SIZE]>,
     )> {
         assert!(state.len().is_multiple_of(T));
@@ -356,6 +367,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_packed(state, precomp, net)?;
         let sboxes_0: [_; BATCH_SIZE] = array::from_fn(|i| state[i * T]);
         let sboxes_1: [_; BATCH_SIZE] = array::from_fn(|i| state[i * T + 1]);
+        let sboxes_3: [_; BATCH_SIZE] =
+            array::from_fn(|i| state.get(i * T + 3).copied().unwrap_or_default());
         let matmul_external = if T == 16 {
             let mut res = Vec::with_capacity(state.len() / T);
             for state_chunk in state.chunks_exact_mut(T) {
@@ -370,7 +383,14 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             }
             None
         };
-        Ok((squares, quads, sboxes_0, sboxes_1, matmul_external))
+        Ok((
+            squares,
+            quads,
+            sboxes_0,
+            sboxes_1,
+            sboxes_3,
+            matmul_external,
+        ))
     }
 
     /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
@@ -421,6 +441,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         Vec<Vec<Rep3PrimeFieldShare<F>>>,
         Vec<Rep3PrimeFieldShare<F>>,
         Vec<Rep3PrimeFieldShare<F>>,
+        Vec<Rep3PrimeFieldShare<F>>,
         Option<Vec<Vec<Rep3PrimeFieldShare<F>>>>,
     )> {
         assert!(state.len().is_multiple_of(T));
@@ -431,6 +452,11 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_vec(state, precomp, net)?;
         let sboxes_0 = state.iter().step_by(T).cloned().collect::<Vec<_>>();
         let sboxes_1 = state.iter().skip(1).step_by(T).cloned().collect::<Vec<_>>();
+        let sboxes_3 = if T >= 4 {
+            state.iter().skip(3).step_by(T).cloned().collect::<Vec<_>>()
+        } else {
+            vec![Rep3PrimeFieldShare::<F>::default(); state.len() / T]
+        };
         let matmul_external = if T == 16 {
             let mut res = Vec::with_capacity(state.len() / T);
             for state_chunk in state.chunks_exact_mut(T) {
@@ -445,7 +471,14 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             }
             None
         };
-        Ok((squares, quads, sboxes_0, sboxes_1, matmul_external))
+        Ok((
+            squares,
+            quads,
+            sboxes_0,
+            sboxes_1,
+            sboxes_3,
+            matmul_external,
+        ))
     }
 
     /// One external round of the Poseidon2 permutation using Poseidon2Precomputations. Implemented for the Rep3 MPC protocol.
@@ -827,22 +860,24 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         }
     }
 
+    #[expect(clippy::type_complexity)]
     fn external_round_intermediate(
         &self,
         state: &mut [F; T],
         r: usize,
-    ) -> (Vec<F>, Vec<F>, F, F, Option<Vec<F>>) {
+    ) -> (Vec<F>, Vec<F>, F, F, F, Option<Vec<F>>) {
         self.add_rc_external(state, r);
         let (squares, quads) = Self::sbox_plain_intermediate(state);
         let sbox_0 = state[0];
         let sbox_1 = state[1];
+        let sbox_3 = state.get(3).copied().unwrap_or_default();
         let matmul_external = if T == 16 {
             Some(Self::matmul_external_intermediate_t16(state))
         } else {
             Self::matmul_external(state);
             None
         };
-        (squares, quads, sbox_0, sbox_1, matmul_external)
+        (squares, quads, sbox_0, sbox_1, sbox_3, matmul_external)
     }
 
     fn external_round_matmul_intermediate(
@@ -992,7 +1027,8 @@ impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F
             let (squares_, quads_, res) = if r == self.params.rounds_f_beginning - 1 && T == 16 {
                 self.external_round_matmul_intermediate(&mut state, r)
             } else {
-                let (squares_, quads_, res, _, _) = self.external_round_intermediate(&mut state, r);
+                let (squares_, quads_, res, _, _, _) =
+                    self.external_round_intermediate(&mut state, r);
                 (squares_, quads_, res)
             };
 
@@ -1030,17 +1066,19 @@ impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F
         }
 
         let mut last_matmul_external = None;
+        let mut last_double_in3 = None;
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (squares_, quads_, sbox_0, sbox_1, matmul_external) =
+            let (squares_, quads_, sbox_0, sbox_1, sbox_3, matmul_external) =
                 self.external_round_intermediate(&mut state, r);
 
             if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
                 squares_3.push(sbox_0);
                 quads_3.push(sbox_1);
+                last_double_in3 = Some(sbox_3 + sbox_3);
             }
             squares_3.extend(squares_);
             quads_3.extend(quads_);
@@ -1105,6 +1143,12 @@ impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F
 
         if T == 4
             && let (Some(idx), Some(val)) = (wtns_indices_iter.next(), final_mul[1])
+        {
+            trace[idx as usize] = val;
+        }
+
+        if T == 4
+            && let (Some(idx), Some(val)) = (wtns_indices_iter.next(), last_double_in3)
         {
             trace[idx as usize] = val;
         }
@@ -1250,7 +1294,7 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                     &mut state, r, precomp, net,
                 )?
             } else {
-                let (squares_, quads_, res, _, _) = self
+                let (squares_, quads_, res, _, _, _) = self
                     .rep3_external_round_precomp_intermediate_packed(&mut state, r, precomp, net)?;
                 (squares_, quads_, res)
             };
@@ -1341,12 +1385,14 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         };
 
         let mut last_matmul_external: Option<[Vec<Rep3PrimeFieldShare<F>>; BATCH_SIZE]> = None;
+        let mut last_double_in3: Option<[Rep3PrimeFieldShare<F>; BATCH_SIZE]> = None;
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (squares_, quads_, sboxes_0, sboxes_1, matmul_external): (
+            let (squares_, quads_, sboxes_0, sboxes_1, sboxes_3, matmul_external): (
+                [_; BATCH_SIZE],
                 [_; BATCH_SIZE],
                 [_; BATCH_SIZE],
                 [_; BATCH_SIZE],
@@ -1361,6 +1407,7 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                 for (quads_3_, sbox_1) in quads_3.iter_mut().zip(sboxes_1.iter()) {
                     quads_3_.push(*sbox_1);
                 }
+                last_double_in3 = Some(array::from_fn(|i| sboxes_3[i] + sboxes_3[i]));
             }
             for (squares_3_, squares__, quads_3_, quads__) in izip!(
                 squares_3.iter_mut(),
@@ -1439,6 +1486,15 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                 if let Some(val) = final_mul_[1] {
                     traces[i][wtns_indices[counter] as usize] = val;
                 }
+            }
+            counter += 1;
+        }
+
+        if T == 4
+            && let Some(last_double_in3) = last_double_in3
+        {
+            for (i, val) in last_double_in3.iter().enumerate() {
+                traces[i][wtns_indices[counter] as usize] = *val;
             }
         }
 
@@ -1533,7 +1589,7 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                     &mut state, r, precomp, net,
                 )?
             } else {
-                let (squares_, quads_, res, _, _) =
+                let (squares_, quads_, res, _, _, _) =
                     self.rep3_external_round_precomp_intermediate_vec(&mut state, r, precomp, net)?;
                 (squares_, quads_, res)
             };
@@ -1624,12 +1680,13 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         };
 
         let mut last_matmul_external = None;
+        let mut last_double_in3: Option<Vec<Rep3PrimeFieldShare<F>>> = None;
 
         // Remaining external rounds
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (squares_, quads_, sboxes_0, sboxes_1, matmul_external) =
+            let (squares_, quads_, sboxes_0, sboxes_1, sboxes_3, matmul_external) =
                 self.rep3_external_round_precomp_intermediate_vec(&mut state, r, precomp, net)?;
             if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
                 for (squares_3_, sbox_0) in squares_3.iter_mut().zip(sboxes_0.iter()) {
@@ -1638,6 +1695,7 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                 for (quads_3_, sbox_1) in quads_3.iter_mut().zip(sboxes_1.iter()) {
                     quads_3_.push(*sbox_1);
                 }
+                last_double_in3 = Some(sboxes_3.iter().map(|s| *s + *s).collect());
             }
             for (squares_3_, squares__, quads_3_, quads__) in izip!(
                 squares_3.iter_mut(),
@@ -1716,6 +1774,15 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
                 if let Some(val) = final_mul_[1] {
                     traces[i][wtns_indices[counter] as usize] = val;
                 }
+            }
+            counter += 1;
+        }
+
+        if T == 4
+            && let Some(last_double_in3) = last_double_in3
+        {
+            for (i, val) in last_double_in3.iter().enumerate() {
+                traces[i][wtns_indices[counter] as usize] = *val;
             }
         }
 

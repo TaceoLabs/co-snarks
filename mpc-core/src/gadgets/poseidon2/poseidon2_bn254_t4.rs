@@ -421,6 +421,12 @@ pub static POSEIDON2_BN254_T4_PARAMS: LazyLock<Poseidon2Params<Scalar, T, D>> =
         )
     });
 
+// NOTE: this list is consumed positionally by the trace writers (in
+// `poseidon2_circom_accelerator.rs` / `poseidon2_shamir_circom_accelerator.rs`), in the fixed
+// value-stream order: states -> matmul_external -> sq1/qu1 -> sq3/qu3 -> sq2/qu2 -> final_mul ->
+// last_double_in3 -> last_matmul_external. It is therefore NOT sorted by witness index: the
+// trailing `813` corresponds to the last full round's `ExternalMatMul4.double_in3` signal, which
+// is only known (and emitted into the trace) after `final_mul`, i.e. last in the stream.
 pub(crate) const WITNESS_INDICES_T4: &[u16] = &[
     0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 19, 23, 27, 31, 35, 39, 43, 47, 51,
     55, 59, 63, 67, 71, 75, 79, 83, 87, 91, 95, 99, 103, 107, 111, 115, 119, 123, 127, 131, 135,
@@ -436,7 +442,7 @@ pub(crate) const WITNESS_INDICES_T4: &[u16] = &[
     1783, 1784, 1816, 1817, 1849, 1850, 1882, 1883, 1915, 1916, 1948, 1949, 1981, 1982, 2014, 2015,
     2047, 2048, 2080, 2081, 2113, 2114, 2146, 2147, 2179, 2180, 2212, 2213, 2245, 2246, 2278, 2279,
     2311, 2312, 2344, 2345, 2377, 2378, 2410, 2411, 2443, 2444, 2476, 2477, 2509, 2510, 2542, 2543,
-    2575, 2576, 2608, 2609, 2641, 2642, 2674, 2675, 2684,
+    2575, 2576, 2608, 2609, 2641, 2642, 2674, 2675, 2684, 813,
 ];
 
 pub(crate) const WITNESS_INDICES_SIZE_T4: usize = 2685;

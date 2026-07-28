@@ -344,6 +344,7 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         Vec<ShamirPrimeFieldShare<F>>,
         ShamirPrimeFieldShare<F>,
         ShamirPrimeFieldShare<F>,
+        ShamirPrimeFieldShare<F>,
         Option<Vec<ShamirPrimeFieldShare<F>>>,
     )> {
         for (s, &rc) in state
@@ -356,13 +357,14 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
             Self::sbox_shamir_precomp_intermediate(state, precomp, net, shamir_state)?;
         let sbox_0 = state[0];
         let sbox_1 = state[1];
+        let sbox_3 = state.get(3).copied().unwrap_or_default();
         let matmul_external = if T == 16 {
             Some(Self::matmul_external_shamir_intermediate_t16(state))
         } else {
             Self::matmul_external_shamir_shares(state);
             None
         };
-        Ok((squares, quads, sbox_0, sbox_1, matmul_external))
+        Ok((squares, quads, sbox_0, sbox_1, sbox_3, matmul_external))
     }
 
     #[expect(clippy::type_complexity)]
@@ -432,6 +434,7 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         [Vec<ShamirPrimeFieldShare<F>>; BATCH_SIZE],
         [ShamirPrimeFieldShare<F>; BATCH_SIZE],
         [ShamirPrimeFieldShare<F>; BATCH_SIZE],
+        [ShamirPrimeFieldShare<F>; BATCH_SIZE],
         Option<[Vec<ShamirPrimeFieldShare<F>>; BATCH_SIZE]>,
     )> {
         assert!(state.len().is_multiple_of(T));
@@ -452,6 +455,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         )?;
         let sboxes_0: [_; BATCH_SIZE] = array::from_fn(|i| state[i * T]);
         let sboxes_1: [_; BATCH_SIZE] = array::from_fn(|i| state[i * T + 1]);
+        let sboxes_3: [_; BATCH_SIZE] =
+            array::from_fn(|i| state.get(i * T + 3).copied().unwrap_or_default());
         let matmul_external = if T == 16 {
             let mut me = Vec::with_capacity(BATCH_SIZE);
             for chunk in state.chunks_exact_mut(T) {
@@ -466,7 +471,14 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
             }
             None
         };
-        Ok((squares, quads, sboxes_0, sboxes_1, matmul_external))
+        Ok((
+            squares,
+            quads,
+            sboxes_0,
+            sboxes_1,
+            sboxes_3,
+            matmul_external,
+        ))
     }
 
     #[expect(clippy::type_complexity)]
@@ -568,6 +580,7 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         Vec<Vec<ShamirPrimeFieldShare<F>>>,
         Vec<ShamirPrimeFieldShare<F>>,
         Vec<ShamirPrimeFieldShare<F>>,
+        Vec<ShamirPrimeFieldShare<F>>,
         Option<Vec<Vec<ShamirPrimeFieldShare<F>>>>,
     )> {
         assert!(state.len().is_multiple_of(T));
@@ -584,6 +597,11 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
             Self::sbox_shamir_precomp_intermediate_vec(state, precomp, net, shamir_state)?;
         let sboxes_0 = state.iter().step_by(T).cloned().collect();
         let sboxes_1 = state.iter().skip(1).step_by(T).cloned().collect();
+        let sboxes_3 = if T >= 4 {
+            state.iter().skip(3).step_by(T).cloned().collect::<Vec<_>>()
+        } else {
+            vec![ShamirPrimeFieldShare::<F>::default(); state.len() / T]
+        };
         let matmul_external = if T == 16 {
             let mut res = Vec::with_capacity(state.len() / T);
             for chunk in state.chunks_exact_mut(T) {
@@ -598,7 +616,14 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
             }
             None
         };
-        Ok((squares, quads, sboxes_0, sboxes_1, matmul_external))
+        Ok((
+            squares,
+            quads,
+            sboxes_0,
+            sboxes_1,
+            sboxes_3,
+            matmul_external,
+        ))
     }
 
     #[expect(clippy::type_complexity)]
@@ -686,7 +711,7 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                     shamir_state,
                 )?
             } else {
-                let (sq, qu, s0, _, _) = self.shamir_external_round_precomp_intermediate(
+                let (sq, qu, s0, _, _, _) = self.shamir_external_round_precomp_intermediate(
                     state,
                     r,
                     precomp,
@@ -735,19 +760,16 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         }
 
         let mut last_matmul_external = None;
+        let mut last_double_in3 = None;
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (sq, qu, sbox_0, sbox_1, me) = self.shamir_external_round_precomp_intermediate(
-                state,
-                r,
-                precomp,
-                net,
-                shamir_state,
-            )?;
+            let (sq, qu, sbox_0, sbox_1, sbox_3, me) = self
+                .shamir_external_round_precomp_intermediate(state, r, precomp, net, shamir_state)?;
             if r == self.params.rounds_f_beginning + self.params.rounds_f_end - 1 {
                 squares_3.push(sbox_0);
                 quads_3.push(sbox_1);
+                last_double_in3 = Some(sbox_3 + sbox_3);
                 squares_3.extend(sq);
                 quads_3.extend(qu);
                 last_matmul_external = me;
@@ -801,6 +823,11 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         }
         if T == 4
             && let (Some(idx), Some(val)) = (it.next(), final_mul[1])
+        {
+            trace[idx as usize] = val;
+        }
+        if T == 4
+            && let (Some(idx), Some(val)) = (it.next(), last_double_in3)
         {
             trace[idx as usize] = val;
         }
@@ -942,7 +969,7 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
                         shamir_state,
                     )?
                 } else {
-                    let (sq, qu, res, _, _) = self
+                    let (sq, qu, res, _, _, _) = self
                         .shamir_external_round_precomp_intermediate_packed::<N, BATCH_SIZE>(
                             state.as_mut_slice(),
                             r,
@@ -1025,10 +1052,11 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
         }
 
         let mut last_matmul_external: Option<[Vec<ShamirPrimeFieldShare<F>>; BATCH_SIZE]> = None;
+        let mut last_double_in3: Option<[ShamirPrimeFieldShare<F>; BATCH_SIZE]> = None;
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (sq_, qu_, sboxes_0, sboxes_1, me) = self
+            let (sq_, qu_, sboxes_0, sboxes_1, sboxes_3, me) = self
                 .shamir_external_round_precomp_intermediate_packed::<N, BATCH_SIZE>(
                     state.as_mut_slice(),
                     r,
@@ -1043,6 +1071,7 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
                 for (qu3, s1) in quads_3.iter_mut().zip(sboxes_1.iter()) {
                     qu3.push(*s1);
                 }
+                last_double_in3 = Some(array::from_fn(|i| sboxes_3[i] + sboxes_3[i]));
                 for (sq3, sq, qu3, qu) in izip!(
                     squares_3.iter_mut(),
                     sq_.iter(),
@@ -1132,6 +1161,14 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
             counter += 1;
         }
 
+        if T == 4
+            && let Some(last_double_in3) = last_double_in3
+        {
+            for (i, val) in last_double_in3.iter().enumerate() {
+                traces[i][wtns_indices[counter] as usize] = *val;
+            }
+        }
+
         if let Some(lme) = last_matmul_external {
             for (i, lme_) in lme.iter().enumerate() {
                 for (j, s) in lme_.iter().enumerate() {
@@ -1218,7 +1255,7 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
                     shamir_state,
                 )?
             } else {
-                let (sq, qu, res, _, _) = self.shamir_external_round_precomp_intermediate_vec(
+                let (sq, qu, res, _, _, _) = self.shamir_external_round_precomp_intermediate_vec(
                     &mut state,
                     r,
                     precomp,
@@ -1300,10 +1337,11 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
         }
 
         let mut last_matmul_external = None;
+        let mut last_double_in3: Option<Vec<ShamirPrimeFieldShare<F>>> = None;
         for r in self.params.rounds_f_beginning
             ..self.params.rounds_f_beginning + self.params.rounds_f_end
         {
-            let (sq_, qu_, sboxes_0, sboxes_1, me) = self
+            let (sq_, qu_, sboxes_0, sboxes_1, sboxes_3, me) = self
                 .shamir_external_round_precomp_intermediate_vec(
                     &mut state,
                     r,
@@ -1318,6 +1356,7 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
                 for (qu3, s1) in quads_3.iter_mut().zip(sboxes_1.iter()) {
                     qu3.push(*s1);
                 }
+                last_double_in3 = Some(sboxes_3.iter().map(|s| *s + *s).collect());
                 for (sq3, sq, qu3, qu) in izip!(
                     squares_3.iter_mut(),
                     sq_.iter(),
@@ -1404,6 +1443,14 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
                 }
             }
             counter += 1;
+        }
+
+        if T == 4
+            && let Some(last_double_in3) = last_double_in3
+        {
+            for (i, val) in last_double_in3.iter().enumerate() {
+                traces[i][wtns_indices[counter] as usize] = *val;
+            }
         }
 
         if let Some(lme) = last_matmul_external {
