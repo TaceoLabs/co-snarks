@@ -17,6 +17,7 @@ mod batch;
 mod copy;
 mod cse;
 mod dce;
+mod iconst;
 mod memory;
 
 /// Which kind of body is being optimized. Templates always start with a fresh, empty
@@ -54,6 +55,7 @@ pub(super) fn run<F: PrimeField>(
     let mut forwarded_var_loads = 0usize;
     let mut removed_dead_var_stores = 0usize;
     let mut reused_common_subexpressions = 0usize;
+    let mut resolved_index_constants = 0usize;
 
     // Every transformation is monotone: operands only become constants or canonical
     // register sources, instructions only simplify, and bytecode only disappears.
@@ -80,6 +82,10 @@ pub(super) fn run<F: PrimeField>(
         instrs = next;
         folded += fallthrough_now;
 
+        let (next, index_consts_now) = iconst::propagate_index_constants(instrs, constants)?;
+        instrs = next;
+        resolved_index_constants += index_consts_now;
+
         let (next, copies_now, moves_now) = copy::propagate_register_copies(instrs)?;
         instrs = next;
         propagated_register_copies += copies_now;
@@ -105,6 +111,7 @@ pub(super) fn run<F: PrimeField>(
         if folded_now
             + unreachable_now
             + fallthrough_now
+            + index_consts_now
             + copies_now
             + moves_now
             + forwarded_now
@@ -134,6 +141,7 @@ pub(super) fn run<F: PrimeField>(
         forwarded_var_loads,
         removed_dead_var_stores,
         reused_common_subexpressions,
+        resolved_index_constants,
         bin_batches,
         bin_batch_lanes,
         "ran post-lowering bytecode passes"

@@ -49,17 +49,18 @@
 //!   old stack-based VM; this is the correctness fallback for anything the conservative
 //!   detector below doesn't recognize.
 //!
-//! ### Conformance detection is deliberately conservative
+//! ### Conformance detection
 //!
 //! [`detect_conforming`] accepts ascending (`<`/`<=` plus a constant add) and descending
-//! (`>`/`>=` plus a constant subtract) counters whose bound is a **constant**
-//! (the brief allows "loop-invariant" more broadly — any expression with no loads of
-//! vars stored inside the body — but circom monomorphizes template parameters into
-//! literal constants before this crate ever sees the IR, so every KAT loop bound is
-//! already a `Value`; restricting to constants keeps the detector simple without losing
-//! any real coverage, confirmed by this task's KAT/end-to-end tests all exercising the
-//! `Affine` path), the body's *last* top-level statement updates the same variable by a
-//! constant step, and `k` is written nowhere else in the
+//! (`>`/`>=` plus a constant subtract) counters whose bound is **loop-invariant**: a
+//! literal, a scalar var the body never writes (statically valued when its pre-loop
+//! value is a tracked constant — real circuits compute bounds like `partial_rounds`
+//! from lookup functions, so a merely-invariant bound still earns mirror promotion
+//! with `bound: None`), or an invariant expression over such vars
+//! ([`expr_is_loop_invariant`]). Exactly one body statement — located, not assumed
+//! last, since anonymous-component desugaring appends statements after the increment —
+//! updates the variable by a constant step ([`ConformingLoop::update_idx`]), and `k` is
+//! written nowhere else in the
 //! body (including recursively inside nested loop bodies — see
 //! [`instruction_writes_slot`]). Descending loops mirror through `ISub`; when their bound
 //! is not a representable small constant (a field-negative bound such as `i >= -5`), they
@@ -811,12 +812,18 @@ struct ConformingLoop {
     direction: LoopDirection,
     /// Whether equality with the bound still executes one iteration (`<=`/`>=`).
     inclusive: bool,
-    /// The loop's constant bound — the comparison's rhs — when its concrete value fits
-    /// `u32`. Used only by [`trip_count`] to decide whether to unroll;
-    /// conformance itself (mirror-`ireg` promotion, [`lower_conforming_loop`]) only needs
-    /// the rhs to *be* a constant, not its value, so `None` here still takes the
-    /// rolled/mirror path, just never the unrolled one.
+    /// The loop's bound — the comparison's rhs — when its concrete value is statically
+    /// known and fits `u32`: a literal, or a scalar var whose value before the loop is a
+    /// tracked constant. Used only by [`trip_count`] to decide whether to
+    /// unroll/count; conformance itself (mirror-`ireg` promotion,
+    /// [`lower_conforming_loop`]) only needs the rhs to be *loop-invariant*, not known,
+    /// so `None` here still takes the rolled/mirror path, just never a counted one.
     bound: Option<u32>,
+    /// Position of the induction update statement in the loop body. Usually the last
+    /// statement (circom's `for` desugaring), but e.g. anonymous-component desugaring
+    /// appends statements after it; the update is wherever the body's *only* write to
+    /// the induction variable sits.
+    update_idx: usize,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -826,73 +833,119 @@ enum LoopDirection {
 }
 
 /// Detects whether `lb` matches the conservative statically-counted loop pattern (see
-/// [`lower_loop`]'s module docs for the full rationale); returns `None` for anything else.
+/// [`lower_loop`]'s module docs for the full rationale); returns `None` for anything
+/// else, tracing the rejection reason (these diagnostics are how detector coverage gaps
+/// get found on real circuits).
 fn detect_conforming<F: PrimeField>(
     cg: &CodeGen<'_, F>,
     lb: &LoopBucket,
 ) -> Option<ConformingLoop> {
+    match detect_conforming_inner(cg, lb) {
+        Ok(info) => Some(info),
+        Err(reason) => {
+            tracing::trace!(reason, line = lb.line, "loop is not conforming");
+            None
+        }
+    }
+}
+
+fn detect_conforming_inner<F: PrimeField>(
+    cg: &CodeGen<'_, F>,
+    lb: &LoopBucket,
+) -> std::result::Result<ConformingLoop, &'static str> {
     // `continue_condition` must be `Lesser(Load(Variable, slot), rhs)` with `rhs` a
     // constant (this task's conservative reading of "loop-invariant" — see the module
     // docs).
     let Instruction::Compute(cond_cb) = lb.continue_condition.as_ref() else {
-        return None;
+        return Err("condition is not a comparison");
     };
     let (direction, inclusive) = match cond_cb.op {
         OperatorType::Lesser => (LoopDirection::Ascending, false),
         OperatorType::LesserEq => (LoopDirection::Ascending, true),
         OperatorType::Greater => (LoopDirection::Descending, false),
         OperatorType::GreaterEq => (LoopDirection::Descending, true),
-        _ => return None,
+        _ => return Err("condition operator is not an order comparison"),
     };
     if cond_cb.stack.len() != 2 {
-        return None;
+        return Err("condition operand count is not 2");
     }
     let Instruction::Load(cond_load) = cond_cb.stack[0].as_ref() else {
-        return None;
+        return Err("condition lhs is not a load");
     };
     if !matches!(cond_load.address_type, AddressType::Variable) {
-        return None;
+        return Err("condition lhs is not a var");
     }
     let LocationRule::Indexed {
         location: cond_loc, ..
     } = &cond_load.src
     else {
-        return None;
+        return Err("condition lhs is a mapped access");
     };
-    let slot = static_const_slot(cond_loc)?;
-    let Instruction::Value(bound_vb) = cond_cb.stack[1].as_ref() else {
-        return None;
+    let slot =
+        static_const_slot(cond_loc).ok_or("condition lhs is not a scalar var (array element?)")?;
+
+    // The bound (the comparison's rhs) must be *loop-invariant*: an expression reading
+    // nothing the body writes. Its concrete value is known — enabling counted/unrolled
+    // lowering — for a literal or a scalar var whose pre-loop value is a tracked
+    // constant; otherwise it stays `None` and the loop is still eligible for mirror
+    // promotion (the condition is re-evaluated from the live state each iteration
+    // either way, so only the classification depends on this).
+    let rhs = cond_cb.stack[1].as_ref();
+    if !expr_is_loop_invariant(rhs, &lb.body) {
+        return Err("bound is not loop-invariant");
+    }
+    let bound = match rhs {
+        Instruction::Value(bound_vb) => const_as_u32(cg, bound_vb),
+        Instruction::Load(load) => match &load.src {
+            LocationRule::Indexed { location, .. } => static_const_slot(location)
+                .and_then(|bound_slot| cg.last_const_store.get(&bound_slot).copied()),
+            LocationRule::Mapped { .. } => None,
+        },
+        _ => None,
     };
 
     // The value of `slot` immediately before the loop must be a known constant (tracked
     // by `track_const_store` across every preceding `Store` this body has lowered so
     // far). The concrete bound is optional for an ordinary additive update, but required
     // to prove that a direct constant update terminates after at most one iteration.
-    let init = *cg.last_const_store.get(&slot)?;
-    let bound = const_as_u32(cg, bound_vb);
+    let init = *cg
+        .last_const_store
+        .get(&slot)
+        .ok_or("init value before the loop is not a tracked constant")?;
 
-    // The body's last top-level statement must update the induction variable. Normally
-    // circom's for-to-while desugaring leaves `slot = slot +/- step`. Its constant
-    // propagation can instead turn a one-iteration loop's update into `slot = next`
-    // (Semaphore's Poseidon(1) emits `j = 2` for `for (j = 1; j < 2; j++)`). Accept that
-    // form only when the known init/bound prove zero or one iterations; treating an
-    // arbitrary constant assignment as a repeated step could otherwise turn a genuinely
+    // Exactly one body statement may write the induction variable: the update. It is
+    // usually last (circom's `for` desugaring), but e.g. anonymous-component
+    // desugaring appends statements after it, so it is located rather than assumed.
+    // Normally the update is `slot = slot +/- step`; circom's constant propagation can
+    // instead turn a one-iteration loop's update into `slot = next` (Semaphore's
+    // Poseidon(1) emits `j = 2` for `for (j = 1; j < 2; j++)`). Accept that form only
+    // when the known init/bound prove zero or one iterations; treating an arbitrary
+    // constant assignment as a repeated step could otherwise turn a genuinely
     // non-terminating shared-branch loop into a fixed schedule.
-    let last = lb.body.last()?;
-    let Instruction::Store(inc_sb) = last.as_ref() else {
-        return None;
-    };
-    if !matches!(inc_sb.dest_address_type, AddressType::Variable) {
-        return None;
+    let mut writes = lb
+        .body
+        .iter()
+        .enumerate()
+        .filter(|(_, inst)| instruction_writes_slot(inst, slot))
+        .map(|(position, _)| position);
+    let update_idx = writes.next().ok_or("body never writes the induction var")?;
+    if writes.next().is_some() {
+        return Err("induction var is written more than once in the body");
     }
-    let LocationRule::Indexed {
-        location: inc_dest, ..
-    } = &inc_sb.dest
-    else {
-        return None;
+    let Instruction::Store(inc_sb) = lb.body[update_idx].as_ref() else {
+        // The single write is nested inside a branch/loop rather than a top-level
+        // store — conditional or repeated updates are not a fixed schedule.
+        return Err("induction update is nested inside a branch or loop");
     };
-    if static_const_slot(inc_dest)? != slot {
-        return None;
+    let LocationRule::Indexed { .. } = &inc_sb.dest else {
+        return Err("update store destination is a mapped access");
+    };
+    // Statements after the update observe the post-update value, which on a descending
+    // loop's final iteration is conceptually negative — unrepresentable in the integer
+    // mirror and in unrolling's `ConstUsize` binding. Ascending loops have no such
+    // final-value hazard.
+    if direction == LoopDirection::Descending && update_idx != lb.body.len() - 1 {
+        return Err("descending loop with statements after the update");
     }
     let step = match inc_sb.src.as_ref() {
         Instruction::Compute(inc_cb) => {
@@ -901,71 +954,95 @@ fn detect_conforming<F: PrimeField>(
                 LoopDirection::Descending => OperatorType::Sub,
             };
             if inc_cb.op != expected_step_op || inc_cb.stack.len() != 2 {
-                return None;
+                return Err("update is not var ± operand in the condition's direction");
             }
             let Instruction::Load(inc_load) = inc_cb.stack[0].as_ref() else {
-                return None;
+                return Err("update lhs is not a load");
             };
             if !matches!(inc_load.address_type, AddressType::Variable) {
-                return None;
+                return Err("update lhs is not a var");
             }
             let LocationRule::Indexed {
                 location: inc_load_loc,
                 ..
             } = &inc_load.src
             else {
-                return None;
+                return Err("update lhs is a mapped access");
             };
-            if static_const_slot(inc_load_loc)? != slot {
-                return None;
+            if static_const_slot(inc_load_loc).ok_or("update lhs is not a scalar var")? != slot {
+                return Err("update does not read the condition's var");
             }
             let Instruction::Value(step_vb) = inc_cb.stack[1].as_ref() else {
-                return None;
+                return Err("step is not a literal constant");
             };
-            const_as_u32(cg, step_vb)?
+            const_as_u32(cg, step_vb).ok_or("step constant does not fit u32")?
         }
         Instruction::Value(next_vb) => {
-            let next = const_as_u32(cg, next_vb)?;
+            let next = const_as_u32(cg, next_vb).ok_or("constant update value does not fit u32")?;
             let step = match direction {
-                LoopDirection::Ascending => next.checked_sub(init)?,
-                LoopDirection::Descending => init.checked_sub(next)?,
-            };
+                LoopDirection::Ascending => next.checked_sub(init),
+                LoopDirection::Descending => init.checked_sub(next),
+            }
+            .ok_or("constant update moves against the loop direction")?;
             let candidate = ConformingLoop {
                 slot,
                 init,
                 step,
                 direction,
                 inclusive,
-                bound: Some(bound?),
+                bound: Some(bound.ok_or("constant update with a non-u32 bound")?),
+                update_idx,
             };
             if !matches!(trip_count(&candidate), Some(0..=1)) {
-                return None;
+                return Err("constant update does not exit after at most one iteration");
             }
             step
         }
-        _ => return None,
+        _ => return Err("update source is neither var ± const nor a constant"),
     };
 
-    // `slot` must be written nowhere else in the body (recursing into nested loop bodies
-    // *and* both arms of any nested `Branch` — see `instruction_writes_slot`: a loop whose
-    // body conditionally re-stores its own induction variable inside an `if`/`else` is
-    // non-conforming, exactly like an unconditional extra store would be, since which arm
-    // runs — and hence whether the extra store happens — isn't known until runtime).
-    let other_writes = lb.body[..lb.body.len() - 1]
-        .iter()
-        .any(|inst| instruction_writes_slot(inst, slot));
-    if other_writes {
-        return None;
-    }
-
-    Some(ConformingLoop {
+    Ok(ConformingLoop {
         slot,
         init,
         step,
         direction,
         inclusive,
         bound,
+        update_idx,
     })
+}
+
+/// Whether an expression's value cannot change while `body` executes: it reads only
+/// literals and scalar vars that `body` never writes. Conservative — array-element and
+/// signal reads (the body may write signals), mapped accesses, and anything
+/// unrecognized count as variant. Used for a conforming loop's bound, which the head
+/// re-evaluates every iteration: invariance is what makes a statically derived trip
+/// count (or mere direction classification) trustworthy.
+fn expr_is_loop_invariant(inst: &Instruction, body: &[Box<Instruction>]) -> bool {
+    match inst {
+        Instruction::Value(_) => true,
+        Instruction::Load(load) => {
+            if !matches!(load.address_type, AddressType::Variable) {
+                return false;
+            }
+            let LocationRule::Indexed { location, .. } = &load.src else {
+                return false;
+            };
+            let Some(slot) = static_const_slot(location) else {
+                return false;
+            };
+            !body.iter().any(|inst| instruction_writes_slot(inst, slot))
+        }
+        Instruction::Compute(cb) => match cb.op {
+            // Address-domain operators cannot appear in a condition's value position.
+            OperatorType::ToAddress | OperatorType::AddAddress | OperatorType::MulAddress => false,
+            _ => cb
+                .stack
+                .iter()
+                .all(|operand| expr_is_loop_invariant(operand, body)),
+        },
+        _ => false,
+    }
 }
 
 /// Returns whether `inst` writes to variable slot `slot`, recursing into nested loop
@@ -1044,7 +1121,12 @@ fn lower_conforming_or_unrolled<F: PrimeField>(
         );
     }
     if let Some(trip_count) = trip_count(&info) {
-        let keep_field_counter = body_reads_slot_value(&lb.body[..lb.body.len() - 1], info.slot);
+        let keep_field_counter = lb
+            .body
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| *i != info.update_idx)
+            .any(|(_, inst)| instruction_reads_slot_value(inst, info.slot));
         if lower_counted_loop(cg, lb, &info, trip_count, keep_field_counter)? {
             return Ok(());
         }
@@ -1173,6 +1255,7 @@ fn estimate_unrolled_body<F: PrimeField>(
     lb: &LoopBucket,
     slot: usize,
     sample: usize,
+    update_idx: usize,
 ) -> Result<usize> {
     #[cfg(test)]
     record_estimate_unrolled_body_call();
@@ -1185,10 +1268,12 @@ fn estimate_unrolled_body<F: PrimeField>(
     let saved_last_const_store = cg.last_const_store.clone();
 
     let previous_binding = cg.env.bind(slot, Binding::ConstUsize(sample));
-    let last_idx = lb.body.len() - 1;
-    let result = lb.body[..last_idx]
+    let result = lb
+        .body
         .iter()
-        .try_for_each(|inst| lower_stmt(cg, inst));
+        .enumerate()
+        .filter(|(i, _)| *i != update_idx)
+        .try_for_each(|(_, inst)| lower_stmt(cg, inst));
     cg.env.restore(slot, previous_binding);
 
     let estimate = cg.instrs.len();
@@ -1251,13 +1336,19 @@ fn try_unroll_loop<F: PrimeField>(
             match cg.unroll_estimate_cache.get(&loop_id) {
                 Some(&cached) => cached,
                 None => {
-                    let estimate = estimate_unrolled_body(cg, lb, info.slot, info.init as usize)?;
+                    let estimate = estimate_unrolled_body(
+                        cg,
+                        lb,
+                        info.slot,
+                        info.init as usize,
+                        info.update_idx,
+                    )?;
                     cg.unroll_estimate_cache.insert(loop_id, estimate);
                     estimate
                 }
             }
         } else {
-            estimate_unrolled_body(cg, lb, info.slot, info.init as usize)?
+            estimate_unrolled_body(cg, lb, info.slot, info.init as usize, info.update_idx)?
         };
         let total = estimate.checked_mul(trip_count);
         let fits = total.is_some_and(|total| total <= cg.config.unroll.threshold);
@@ -1280,7 +1371,6 @@ fn try_unroll_loop<F: PrimeField>(
         }
     }
 
-    let last_idx = lb.body.len() - 1;
     let unrolled_start = cg.instrs.len();
     let rollback = require_full_vectorization.then(|| {
         (
@@ -1290,12 +1380,21 @@ fn try_unroll_loop<F: PrimeField>(
         )
     });
     for i in 0..trip_count {
-        let value = match info.direction {
-            LoopDirection::Ascending => info.init as usize + i * info.step as usize,
-            LoopDirection::Descending => info.init as usize - i * info.step as usize,
+        let induction_value = |iteration: usize| match info.direction {
+            LoopDirection::Ascending => info.init as usize + iteration * info.step as usize,
+            LoopDirection::Descending => info.init as usize - iteration * info.step as usize,
         };
-        let previous_binding = cg.env.bind(info.slot, Binding::ConstUsize(value));
-        for inst in &lb.body[..last_idx] {
+        // Statements before the (skipped) update see iteration `i`'s value; statements
+        // after it see the incremented value, exactly as the rolled execution would.
+        let previous_binding = cg
+            .env
+            .bind(info.slot, Binding::ConstUsize(induction_value(i)));
+        for inst in &lb.body[..info.update_idx] {
+            lower_stmt(cg, inst)?;
+        }
+        cg.env
+            .bind(info.slot, Binding::ConstUsize(induction_value(i + 1)));
+        for inst in &lb.body[info.update_idx + 1..] {
             lower_stmt(cg, inst)?;
         }
         cg.env.restore(info.slot, previous_binding);
@@ -1819,21 +1918,24 @@ fn lower_counted_loop<F: PrimeField>(
         target: u32::MAX,
     });
 
-    let last_idx = lb.body.len() - 1;
-    let lowered_body = if keep_field_counter {
-        &lb.body[..]
-    } else {
-        &lb.body[..last_idx]
-    };
-    for inst in lowered_body {
-        lower_stmt(cg, inst)?;
+    // The mirror steps exactly where the field update sits (statements after it must
+    // observe the post-update value through the mirror); the field update itself is
+    // lowered only when value-position reads need the field slot maintained.
+    for (i, inst) in lb.body.iter().enumerate() {
+        if i == info.update_idx {
+            if keep_field_counter {
+                lower_stmt(cg, inst)?;
+            }
+            let (a, b) = (ISrc::Reg(mirror), ISrc::Const(info.step));
+            cg.instrs.push(match info.direction {
+                LoopDirection::Ascending => Instr::IAdd { dst: mirror, a, b },
+                LoopDirection::Descending => Instr::ISub { dst: mirror, a, b },
+            });
+        } else {
+            lower_stmt(cg, inst)?;
+        }
     }
 
-    let (a, b) = (ISrc::Reg(mirror), ISrc::Const(info.step));
-    cg.instrs.push(match info.direction {
-        LoopDirection::Ascending => Instr::IAdd { dst: mirror, a, b },
-        LoopDirection::Descending => Instr::ISub { dst: mirror, a, b },
-    });
     cg.instrs.push(Instr::ISub {
         dst: counter,
         a: ISrc::Reg(counter),
@@ -1917,14 +2019,13 @@ fn lower_conforming_loop<F: PrimeField>(
 
     let (loop_start, jmp_idx) = emit_loop_head(cg, &lb.continue_condition)?;
 
-    // Conformance requires the increment to be the body's last statement (see
-    // `detect_conforming`); emit the mirror update right there, keeping `ireg` in sync
-    // with the field store the ordinary `lower_stmt` call for that same statement just
-    // emitted.
-    let last_idx = lb.body.len() - 1;
+    // Emit the mirror update right where the body's induction update sits (usually,
+    // but not necessarily, last — see `ConformingLoop::update_idx`), keeping `ireg` in
+    // sync with the field store the ordinary `lower_stmt` call for that same statement
+    // just emitted; statements after it observe the post-update value through both.
     for (i, inst) in lb.body.iter().enumerate() {
         lower_stmt(cg, inst)?;
-        if i == last_idx {
+        if i == info.update_idx {
             let (a, b) = (ISrc::Reg(ireg), ISrc::Const(info.step));
             cg.instrs.push(match info.direction {
                 LoopDirection::Ascending => Instr::IAdd { dst: ireg, a, b },
@@ -2084,6 +2185,77 @@ mod tests {
         let mut loop_bucket = synthetic_loop(slot, bound_const_idx, next_const_idx);
         loop_bucket.body = vec![Box::new(store_var(slot, field_const(next_const_idx)))];
         loop_bucket
+    }
+
+    #[test]
+    fn update_before_trailing_statement_still_conforms() {
+        // Anonymous-component desugaring appends statements after the increment; the
+        // update must be located, not assumed last.
+        let mut cg = cg();
+        cg.constants = vec![ark_bn254::Fr::from(4u64), ark_bn254::Fr::from(1u64)];
+        cg.last_const_store.insert(0, 0);
+        let mut loop_bucket = synthetic_loop(0, 0, 1);
+        // Trailing statement after the increment, writing a different var.
+        loop_bucket
+            .body
+            .push(Box::new(store_var(5, field_const(1))));
+
+        let info = detect_conforming(&cg, &loop_bucket).expect("update-not-last must conform");
+        assert_eq!(info.update_idx, 0);
+        assert_eq!(info.bound, Some(4));
+    }
+
+    #[test]
+    fn invariant_var_bound_conforms_without_a_known_value() {
+        // `for (i = 0; i < n; i++)` where n is a runtime-computed var the body never
+        // writes: conforming (mirror-promoted) with bound: None.
+        let mut cg = cg();
+        cg.constants = vec![ark_bn254::Fr::from(1u64)];
+        cg.last_const_store.insert(0, 0);
+        let mut loop_bucket = synthetic_loop(0, 0, 0);
+        let Instruction::Compute(cond) = loop_bucket.continue_condition.as_mut() else {
+            unreachable!("synthetic loop condition is a compute");
+        };
+        *cond.stack[1] = load_var(7); // slot 7 never tracked, never written
+
+        let info = detect_conforming(&cg, &loop_bucket).expect("invariant var bound conforms");
+        assert_eq!(info.bound, None);
+    }
+
+    #[test]
+    fn tracked_var_bound_yields_a_known_value() {
+        let mut cg = cg();
+        cg.constants = vec![ark_bn254::Fr::from(1u64)];
+        cg.last_const_store.insert(0, 0);
+        cg.last_const_store.insert(7, 9); // the bound var's tracked pre-loop value
+        let mut loop_bucket = synthetic_loop(0, 0, 0);
+        let Instruction::Compute(cond) = loop_bucket.continue_condition.as_mut() else {
+            unreachable!("synthetic loop condition is a compute");
+        };
+        *cond.stack[1] = load_var(7);
+
+        let info = detect_conforming(&cg, &loop_bucket).expect("tracked var bound conforms");
+        assert_eq!(info.bound, Some(9));
+    }
+
+    #[test]
+    fn bound_var_written_in_body_is_not_invariant() {
+        let mut cg = cg();
+        cg.constants = vec![ark_bn254::Fr::from(1u64)];
+        cg.last_const_store.insert(0, 0);
+        let mut loop_bucket = synthetic_loop(0, 0, 0);
+        let Instruction::Compute(cond) = loop_bucket.continue_condition.as_mut() else {
+            unreachable!("synthetic loop condition is a compute");
+        };
+        *cond.stack[1] = load_var(7);
+        loop_bucket
+            .body
+            .insert(0, Box::new(store_var(7, field_const(0))));
+
+        assert!(
+            detect_conforming(&cg, &loop_bucket).is_none(),
+            "a bound var the body writes must not conform"
+        );
     }
 
     #[test]
@@ -2382,6 +2554,7 @@ mod tests {
             direction: LoopDirection::Ascending,
             inclusive: false,
             bound,
+            update_idx: 0,
         }
     }
 
@@ -2393,6 +2566,7 @@ mod tests {
             direction: LoopDirection::Descending,
             inclusive,
             bound,
+            update_idx: 0,
         }
     }
 
