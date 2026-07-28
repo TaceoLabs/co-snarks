@@ -1049,16 +1049,37 @@ fn expr_is_loop_invariant(inst: &Instruction, body: &[Box<Instruction>]) -> bool
 /// bodies (still executed within the outer loop's iteration) and into *both* arms of a
 /// nested `Branch` (a store to `slot` inside either arm is a potential write to it —
 /// conservatively "writes" regardless of which arm actually runs at runtime, since that's
-/// unknowable at compile time) but not into `Call`/`CreateCmp` (any loop body containing
-/// one of those fails to lower regardless — see [`lower_stmt_inner`] — so it's moot
-/// whether conformance is judged correctly for a dead-end case).
+/// unknowable at compile time). A `Call` writes through its result destination: an exact
+/// var destination writes its `size`-slot range, and a computed var destination
+/// conservatively counts as writing *any* slot.
 fn instruction_writes_slot(inst: &Instruction, slot: usize) -> bool {
+    use circom_compiler::intermediate_representation::ir_interface::ReturnType as IrReturnType;
     match inst {
         Instruction::Store(sb) => {
             matches!(sb.dest_address_type, AddressType::Variable)
                 && matches!(&sb.dest, LocationRule::Indexed { location, .. }
                     if static_const_slot(location) == Some(slot))
         }
+        Instruction::Call(cb) => match &cb.return_info {
+            IrReturnType::Final(final_data) => match &final_data.dest_address_type {
+                AddressType::Variable => match &final_data.dest {
+                    LocationRule::Indexed { location, .. } => {
+                        match static_const_slot(location) {
+                            Some(dest) => {
+                                let size = get_size_from_size_option(&final_data.context.size);
+                                (dest..dest + size).contains(&slot)
+                            }
+                            // Computed destination: could land on any slot.
+                            None => true,
+                        }
+                    }
+                    LocationRule::Mapped { .. } => true,
+                },
+                AddressType::Signal | AddressType::SubcmpSignal { .. } => false,
+            },
+            // Fails to lower today; stay conservative should that ever change.
+            IrReturnType::Intermediate { .. } => true,
+        },
         Instruction::Loop(inner) => inner
             .body
             .iter()
@@ -1386,16 +1407,22 @@ fn try_unroll_loop<F: PrimeField>(
         };
         // Statements before the (skipped) update see iteration `i`'s value; statements
         // after it see the incremented value, exactly as the rolled execution would.
+        // The post-update value is only computed when trailing statements exist:
+        // detect_conforming restricts a trailing tail to ascending loops, whose
+        // post-update value cannot underflow — a descending loop's final post-update
+        // value is conceptually negative and must never be evaluated as a usize.
         let previous_binding = cg
             .env
             .bind(info.slot, Binding::ConstUsize(induction_value(i)));
         for inst in &lb.body[..info.update_idx] {
             lower_stmt(cg, inst)?;
         }
-        cg.env
-            .bind(info.slot, Binding::ConstUsize(induction_value(i + 1)));
-        for inst in &lb.body[info.update_idx + 1..] {
-            lower_stmt(cg, inst)?;
+        if info.update_idx + 1 < lb.body.len() {
+            cg.env
+                .bind(info.slot, Binding::ConstUsize(induction_value(i + 1)));
+            for inst in &lb.body[info.update_idx + 1..] {
+                lower_stmt(cg, inst)?;
+            }
         }
         cg.env.restore(info.slot, previous_binding);
     }
@@ -2236,6 +2263,68 @@ mod tests {
 
         let info = detect_conforming(&cg, &loop_bucket).expect("tracked var bound conforms");
         assert_eq!(info.bound, Some(9));
+    }
+
+    fn call_writing_var(slot: usize, size: usize) -> Instruction {
+        use circom_compiler::intermediate_representation::ir_interface::{
+            CallBucket, FinalData, ReturnType,
+        };
+        Instruction::Call(CallBucket {
+            line: 0,
+            message_id: 0,
+            symbol: "f_0".into(),
+            argument_types: vec![],
+            arguments: vec![],
+            arena_size: 0,
+            return_info: ReturnType::Final(FinalData {
+                context: InstrContext { size: SizeOption::Single(size) },
+                dest_is_output: false,
+                dest_address_type: AddressType::Variable,
+                dest: LocationRule::Indexed {
+                    location: Box::new(addr_slot(slot)),
+                    template_header: None,
+                },
+            }),
+        })
+    }
+
+    #[test]
+    fn call_result_into_bound_var_is_not_invariant() {
+        // `n = f(...)` inside the body writes the bound var through a Call, which the
+        // write scan must see — a fixed trip count derived from a mutated bound would
+        // silently miscompile the loop.
+        let mut cg = cg();
+        cg.constants = vec![ark_bn254::Fr::from(1u64)];
+        cg.last_const_store.insert(0, 0);
+        cg.last_const_store.insert(7, 9);
+        let mut loop_bucket = synthetic_loop(0, 0, 0);
+        let Instruction::Compute(cond) = loop_bucket.continue_condition.as_mut() else {
+            unreachable!("synthetic loop condition is a compute");
+        };
+        *cond.stack[1] = load_var(7);
+        loop_bucket.body.insert(0, Box::new(call_writing_var(7, 1)));
+
+        assert!(
+            detect_conforming(&cg, &loop_bucket).is_none(),
+            "a bound var written by a call result must not conform"
+        );
+    }
+
+    #[test]
+    fn call_result_range_covering_induction_var_is_a_write() {
+        // A multi-value call result into slots [4..7) covers the induction var at 5:
+        // the body then writes the induction var twice (call + update), so the loop
+        // must not conform.
+        let mut cg = cg();
+        cg.constants = vec![ark_bn254::Fr::from(9u64), ark_bn254::Fr::from(1u64)];
+        cg.last_const_store.insert(5, 0);
+        let mut loop_bucket = synthetic_loop(5, 0, 1);
+        loop_bucket.body.insert(0, Box::new(call_writing_var(4, 3)));
+
+        assert!(
+            detect_conforming(&cg, &loop_bucket).is_none(),
+            "a call whose result range covers the induction var must count as a write"
+        );
     }
 
     #[test]

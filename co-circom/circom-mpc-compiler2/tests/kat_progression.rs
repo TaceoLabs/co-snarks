@@ -313,6 +313,39 @@ fn loop_ascending_takes_the_affine_path() {
 /// `i` is only ever read in index position, so the field-side counter maintenance
 /// disappears entirely. The witness must be unchanged.
 #[test]
+fn loop_descending_unrolls_without_underflow() {
+    // With the default unroll threshold the descending loop unrolls. The final
+    // iteration's post-update induction value is conceptually negative (i = -1 for
+    // `i >= 0`); computing it as a usize underflows — this must only ever be computed
+    // when trailing statements actually need it (a debug-assertions build panics here
+    // otherwise, which is what CI's dev-profile unit runs use).
+    let config = CompilerConfig {
+        simplification: SimplificationLevel::O2(usize::MAX),
+        ..Default::default()
+    };
+    let program = Arc::new(
+        CoCircomCompiler::<Bn254>::parse("tests/circuits/loop_descending.circom", config).unwrap(),
+    );
+    assert_eq!(
+        jmp_count(&program) + instr_count(&program, |i| matches!(i, Instr::IJmpIfZero { .. })),
+        0,
+        "the loop must have unrolled entirely"
+    );
+
+    let mut inputs = BTreeMap::new();
+    for k in 0..5 {
+        inputs.insert(format!("a[{k}]"), Fr::from(20 + k as u64));
+    }
+    let finalized = PlainWitnessExtension::new_plain(program, VMConfig::default())
+        .run(inputs, 0)
+        .unwrap();
+    assert_eq!(
+        finalized.get_output("out"),
+        Some((0..5).map(|k| Fr::from(21 + k as u64)).collect())
+    );
+}
+
+#[test]
 fn loop_descending_uses_integer_loop_control() {
     let config = CompilerConfig {
         simplification: SimplificationLevel::O2(usize::MAX),
