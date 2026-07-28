@@ -145,7 +145,7 @@
 //! join discipline, which mirrors [`lower_loop`]'s own before/after clears).
 use super::env::Binding;
 use super::index::{self, static_const_slot};
-use super::{CodeGen, expr, instr_kind_name};
+use super::{CodeGen, expr, inline, instr_kind_name};
 use crate::frontend::get_size_from_size_option;
 use ark_ff::PrimeField;
 use circom_compiler::intermediate_representation::ir_interface::{
@@ -489,13 +489,18 @@ fn lower_call<F: PrimeField>(cg: &mut CodeGen<'_, F>, cb: &CallBucket) -> Result
     let ret_n_u32 = u32::try_from(ret_n)?;
     let ret = cg.alloc_freg_n(ret_n_u32)?;
 
-    cg.instrs.push(Instr::CallFn {
-        fn_id,
-        args_start,
-        args_n: args_n_u32,
-        ret,
-        ret_n: ret_n_u32,
-    });
+    // Splice small callees instead of calling them, where sound and not blocked by
+    // accelerator interception — see `codegen::inline`. The spliced code fills the same
+    // `ret` register block a real call would.
+    if !inline::try_inline_call(cg, fn_id, args_start, args_n_u32, ret, ret_n_u32)? {
+        cg.instrs.push(Instr::CallFn {
+            fn_id,
+            args_start,
+            args_n: args_n_u32,
+            ret,
+            ret_n: ret_n_u32,
+        });
+    }
 
     if let AddressType::SubcmpSignal {
         cmp_address,

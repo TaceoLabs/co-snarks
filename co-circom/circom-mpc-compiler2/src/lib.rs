@@ -161,6 +161,47 @@ impl Default for UnrollConfig {
     }
 }
 
+/// Controls function-call inlining during codegen.
+///
+/// A `CallFn` in a template body (outside any branch) whose callee is small enough is
+/// replaced by the callee's already-optimized bytecode, spliced with remapped registers
+/// and a body-local scratch var range. This removes the per-call frame/argument
+/// overhead and — more importantly — the optimization barrier a call imposes on
+/// constant propagation, var forwarding, and common-subexpression elimination.
+///
+/// **Function accelerators intercept calls by name at run time**, so an inlined call can
+/// never be accelerated. Functions named in
+/// [`circom_mpc_vm2::accel::PREDEFINED_FUNCTION_ACCELERATORS`] are never inlined; add
+/// the names of any *custom* function accelerators you register at runtime to
+/// [`Self::no_inline`] (or set [`Self::threshold`] to `0`) to keep their calls
+/// interceptable.
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
+pub struct InlineConfig {
+    /// Maximum callee body size (in instructions) eligible for inlining.
+    ///
+    /// `0` disables inlining outright.
+    #[serde(default = "default_inline_threshold")]
+    pub threshold: usize,
+    /// Function symbols (monomorphized headers, e.g. `"my_func_0"`) that must never be
+    /// inlined — use this for functions you accelerate with custom runtime-registered
+    /// function accelerators.
+    #[serde(default)]
+    pub no_inline: Vec<String>,
+}
+
+fn default_inline_threshold() -> usize {
+    64
+}
+
+impl Default for InlineConfig {
+    fn default() -> Self {
+        Self {
+            threshold: default_inline_threshold(),
+            no_inline: Vec::new(),
+        }
+    }
+}
+
 /// Controls post-lowering batching of independent interactive operations.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub struct BatchingConfig {
@@ -211,6 +252,9 @@ pub struct CompilerConfig {
     /// Loop-unrolling configuration used by codegen.
     #[serde(default)]
     pub unroll: UnrollConfig,
+    /// Function-call inlining configuration used by codegen.
+    #[serde(default)]
+    pub inline: InlineConfig,
     /// Post-lowering interactive-operation batching configuration.
     #[serde(default)]
     pub batching: BatchingConfig,
@@ -235,6 +279,7 @@ impl Default for CompilerConfig {
             inspect: false,
             debug: true,
             unroll: UnrollConfig::default(),
+            inline: InlineConfig::default(),
             batching: BatchingConfig::default(),
         }
     }

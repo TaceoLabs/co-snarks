@@ -33,6 +33,7 @@ use std::collections::HashMap;
 mod env;
 mod expr;
 mod index;
+mod inline;
 mod passes;
 mod regalloc;
 mod stmt;
@@ -82,12 +83,24 @@ pub(crate) fn compile<F: PrimeField>(
 
     // Phase 2: lower every function body first (templates may `Call` into any of them,
     // regardless of declaration order — id assignment above already made every `FnId`
-    // resolvable), then every template body.
-    let functions = circuit
-        .functions
-        .iter()
-        .map(|fun| cg.lower_function(fun))
-        .collect::<Result<Vec<_>>>()?;
+    // resolvable), then every template body. Lowered functions are retained on the
+    // codegen state so later bodies can splice their bytecode when inlining a call
+    // (see `inline`). Two whole-program IR facts feed that decision:
+    //
+    // - `fn_may_inherit`: whether any call chain can reach a function through a branch
+    //   arm — only such functions can ever run under an inherited shared predicate, so
+    //   everything else is safe to inline *into* (see `inline`'s module docs);
+    // - a callee-first topological lowering order, so a function's callees are already
+    //   lowered (and thus spliceable) when its own body is lowered. Circom lists
+    //   callers before callees, which would otherwise defeat function-into-function
+    //   inlining entirely. Recursive cycles simply keep their calls: a not-yet-lowered
+    //   callee falls back to `CallFn`.
+    cg.fn_may_inherit = inline::compute_may_inherit(&circuit, &cg.fn_ids);
+    cg.lowered_functions = vec![None; circuit.functions.len()];
+    for idx in inline::function_lowering_order(&circuit, &cg.fn_ids) {
+        let code = cg.lower_function(&circuit.functions[idx], cg.fn_may_inherit[idx])?;
+        cg.lowered_functions[idx] = Some(code);
+    }
     let templates = circuit
         .templates
         .iter()
@@ -134,7 +147,10 @@ pub(crate) fn compile<F: PrimeField>(
 
     Ok(CompiledProgram {
         templates,
-        functions,
+        functions: std::mem::take(&mut cg.lowered_functions)
+            .into_iter()
+            .map(|code| code.expect("every function is lowered before templates"))
+            .collect(),
         constants: cg.constants,
         strings,
         main,
@@ -170,6 +186,11 @@ impl NameInterner {
         self.names.push(s.to_owned());
         self.ids.insert(s.to_owned(), id);
         id
+    }
+
+    /// The string previously interned under `id`.
+    pub(crate) fn resolve(&self, id: u32) -> &str {
+        &self.names[id as usize]
     }
 
     /// Consumes the interner, returning the name table for [`DebugInfo`].
@@ -219,6 +240,36 @@ pub(crate) struct CodeGen<'c, F> {
     /// so loops nested in one must have a compile-time-fixed schedule rather than emit a
     /// jump whose condition can become predicated/shared.
     pub(crate) branch_depth: usize,
+    /// Every function body lowered so far (indexed by `FnId`, `None` until lowered),
+    /// retained across the whole compilation so later bodies can splice a callee's
+    /// optimized bytecode when inlining a call (see [`inline`]). Taken out at the end
+    /// of [`compile`] to become [`CompiledProgram::functions`] — every function stays
+    /// in the program even when all of its call sites were inlined, so runtime
+    /// accelerator binding (which matches function *names*) keeps working for the calls
+    /// that remain.
+    pub(crate) lowered_functions: Vec<Option<FunctionCode>>,
+    /// Whether the body currently being lowered is a function body (see
+    /// `passes::BodyKind`).
+    pub(crate) in_function: bool,
+    /// Per-`FnId`: whether any call chain can reach the function through a branch arm,
+    /// i.e. whether it can ever run under an inherited shared predicate (computed from
+    /// the IR by [`inline::compute_may_inherit`] before any body is lowered).
+    pub(crate) fn_may_inherit: Vec<bool>,
+    /// Whether the function body currently being lowered may inherit a shared predicate
+    /// — blocks inlining *into* it (see [`inline`]'s module docs). Always `false` for
+    /// templates, which start every activation with an empty predication state.
+    pub(crate) current_body_may_inherit: bool,
+    /// The current body's frontend-assigned var-slot count — the base of the scratch
+    /// var range inlined callees use (see [`inline`]).
+    pub(crate) inline_var_base: u32,
+    /// High-water var-slot count of the shared inline scratch range: the maximum
+    /// `num_vars` over every callee inlined into the current body. Inline sites never
+    /// overlap in time and each site (re-)initializes every slot it reads, so one range
+    /// sized for the largest callee serves all sites. Added to the frontend count to
+    /// form the frame's final `num_vars`.
+    pub(crate) inline_scratch_vars: u32,
+    /// Number of calls inlined into the current body, for tracing.
+    pub(crate) inlined_calls: usize,
     /// Memoizes [`stmt::estimate_unrolled_body`]'s result (one iteration's instruction
     /// count) per *lexical* loop, keyed by the [`LoopBucket`](circom_compiler::
     /// intermediate_representation::ir_interface::LoopBucket)'s own address (`lb as *const
@@ -306,12 +357,21 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             env: Env::default(),
             last_const_store: HashMap::new(),
             branch_depth: 0,
+            lowered_functions: Vec::new(),
+            in_function: false,
+            fn_may_inherit: Vec::new(),
+            current_body_may_inherit: false,
+            inline_var_base: 0,
+            inline_scratch_vars: 0,
+            inlined_calls: 0,
             unroll_estimate_cache: HashMap::new(),
             unroll_estimate_nesting: 0,
         }
     }
 
     /// Resets the per-body state before lowering a new template/function.
+    /// `lowered_functions` deliberately survives — it accumulates across the whole
+    /// compilation.
     fn reset_body(&mut self) {
         self.instrs.clear();
         self.regs = RegAlloc::default();
@@ -319,6 +379,11 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
         self.env = Env::default();
         self.last_const_store.clear();
         self.branch_depth = 0;
+        self.in_function = false;
+        self.current_body_may_inherit = false;
+        self.inline_var_base = 0;
+        self.inline_scratch_vars = 0;
+        self.inlined_calls = 0;
         self.unroll_estimate_cache.clear();
         self.unroll_estimate_nesting = 0;
     }
@@ -396,10 +461,19 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
         mappings: Vec<u32>,
     ) -> Result<TemplateCode> {
         self.reset_body();
+        self.inline_var_base = u32::try_from(templ.var_stack_depth)?;
         for inst in templ.body.iter() {
             stmt::lower_stmt(self, inst)?;
         }
         self.instrs.push(Instr::Return);
+        if self.inlined_calls > 0 {
+            tracing::trace!(
+                body = templ.name,
+                inlined_calls = self.inlined_calls,
+                scratch_vars = self.inline_scratch_vars,
+                "inlined function calls"
+            );
+        }
         let num_field_regs = self
             .regs
             .high_water()
@@ -423,7 +497,10 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             instrs,
             num_field_regs,
             num_int_regs,
-            num_vars: u32::try_from(templ.var_stack_depth)?,
+            num_vars: self
+                .inline_var_base
+                .checked_add(self.inline_scratch_vars)
+                .ok_or_else(|| eyre!("template {} var slots overflow u32", templ.name))?,
             input_signals: u32::try_from(templ.number_of_inputs)?,
             output_signals: u32::try_from(templ.number_of_outputs)?,
             intermediate_signals: u32::try_from(templ.number_of_intermediates)?,
@@ -454,10 +531,25 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
     /// `1`, an array parameter the product of its dimensions) — this is also the number
     /// of `vars[0..num_params]` slots [`circom_mpc_vm2::exec::Machine::run_function`]
     /// overwrites with the call's arguments before running the body.
-    fn lower_function(&mut self, fun: &FunctionCodeInfo) -> Result<FunctionCode> {
+    fn lower_function(
+        &mut self,
+        fun: &FunctionCodeInfo,
+        may_inherit: bool,
+    ) -> Result<FunctionCode> {
         self.reset_body();
+        self.in_function = true;
+        self.current_body_may_inherit = may_inherit;
+        self.inline_var_base = u32::try_from(fun.max_number_of_vars)?;
         for inst in fun.body.iter() {
             stmt::lower_stmt(self, inst)?;
+        }
+        if self.inlined_calls > 0 {
+            tracing::trace!(
+                body = fun.name,
+                inlined_calls = self.inlined_calls,
+                scratch_vars = self.inline_scratch_vars,
+                "inlined function calls"
+            );
         }
         let num_field_regs = self
             .regs
@@ -488,7 +580,10 @@ impl<'c, F: PrimeField> CodeGen<'c, F> {
             instrs,
             num_field_regs,
             num_int_regs,
-            num_vars: u32::try_from(fun.max_number_of_vars)?,
+            num_vars: self
+                .inline_var_base
+                .checked_add(self.inline_scratch_vars)
+                .ok_or_else(|| eyre!("function {} var slots overflow u32", fun.name))?,
             num_params,
             name_id: self.names.intern(&fun.header),
         })

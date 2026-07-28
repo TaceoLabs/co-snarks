@@ -1313,6 +1313,90 @@ fn sqrt_test_kat() {
     common::assert_kats("sqrt_test", CompilerConfig::default());
 }
 
+/// A call to `sqrt_0` must survive inlining as a real `CallFn`: the predefined function
+/// accelerator intercepts calls **by name at run time**, so splicing the body would
+/// silently bypass acceleration. The circuit's other functions may inline, but sqrt's
+/// call site (and its `FunctionCode`) must remain.
+#[test]
+fn sqrt_call_survives_inlining_for_accelerator_dispatch() {
+    let program = common::compile("sqrt_test", CompilerConfig::default());
+    let sqrt_id = program
+        .functions
+        .iter()
+        .position(|f| program.debug.names[f.name_id as usize] == "sqrt_0")
+        .expect("sqrt_test must contain the sqrt_0 function");
+    let calls_sqrt = program
+        .templates
+        .iter()
+        .flat_map(|t| t.instrs.iter())
+        .chain(program.functions.iter().flat_map(|f| f.instrs.iter()))
+        .any(|i| matches!(i, Instr::CallFn { fn_id, .. } if fn_id.0 as usize == sqrt_id));
+    assert!(
+        calls_sqrt,
+        "sqrt_0 exists in the program but no CallFn reaches it — accelerator \
+         dispatch would be bypassed"
+    );
+}
+
+/// The `functions` KAT's `sub(x, y)` is a straight-line single-return function called
+/// at template top level — the exact shape inlining targets. With the default config no
+/// `CallFn` survives (while the `FunctionCode` stays in the program for accelerator
+/// binding); with inlining disabled, or the callee protected via `no_inline`, the call
+/// remains; and the disabled variant still produces the KAT witness.
+#[test]
+fn small_function_call_is_inlined_unless_protected() {
+    let call_count =
+        |program: &CompiledProgram<Fr>| instr_count(program, |i| matches!(i, Instr::CallFn { .. }));
+
+    let inlined = common::compile("functions", CompilerConfig::default());
+    assert_eq!(
+        call_count(&inlined),
+        0,
+        "a small straight-line function at template top level must inline"
+    );
+    assert!(
+        !inlined.functions.is_empty(),
+        "the FunctionCode must stay in the program for accelerator binding"
+    );
+
+    let disabled = common::compile(
+        "functions",
+        CompilerConfig {
+            inline: circom_mpc_compiler2::InlineConfig {
+                threshold: 0,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    assert!(
+        call_count(&disabled) > 0,
+        "threshold 0 must disable inlining"
+    );
+
+    let protected = common::compile(
+        "functions",
+        CompilerConfig {
+            inline: circom_mpc_compiler2::InlineConfig {
+                no_inline: disabled
+                    .functions
+                    .iter()
+                    .map(|f| disabled.debug.names[f.name_id as usize].clone())
+                    .collect(),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        call_count(&protected),
+        call_count(&disabled),
+        "no_inline must keep every protected call a CallFn"
+    );
+
+    common::assert_kats_with("functions", |config| config.inline.threshold = 0);
+}
+
 /// Two more real KAT circuits confirmed (empirically, by compiling every candidate in
 /// `test_vectors/WitnessExtension/kats/`) to now compile *and* produce a matching
 /// witness end to end with function lowering plus everything prior: both call

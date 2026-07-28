@@ -21,6 +21,14 @@ use ark_ff::PrimeField;
 use eyre::{Result, bail};
 use serde::{Deserialize, Serialize};
 
+/// The exact function names the predefined registry ([`MpcAccelerator::from_config`])
+/// can bind *function* accelerators for. Exposed for the compiler: a call to one of
+/// these functions must survive as a `CallFn` instruction — inlining it would silently
+/// bypass accelerator dispatch, which intercepts calls by function name at run time.
+/// (Component accelerators intercept whole templates and are unaffected by function
+/// inlining.)
+pub const PREDEFINED_FUNCTION_ACCELERATORS: &[&str] = &["sqrt_0"];
+
 /// Output of a component accelerator: the component's output-signal values plus any
 /// intermediate signal values the rest of the witness extension still needs (e.g.
 /// Poseidon2's round trace, or the AddBits/IsZero helper signals) — both are written
@@ -200,7 +208,7 @@ impl<F: PrimeField, C: VmDriver<F>> MpcAccelerator<F, C> {
     }
 
     fn register_sqrt(&mut self) {
-        self.register_function("sqrt_0", |driver, args| {
+        self.register_function(PREDEFINED_FUNCTION_ACCELERATORS[0], |driver, args| {
             tracing::debug!("calling pre-defined sqrt accelerator");
             if args.len() != 1 {
                 bail!("Calling SQRT accelerator with more than one argument!");
