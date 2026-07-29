@@ -19,6 +19,7 @@ use mpc_core::{
         network::Rep3NetworkExt,
         yao,
     },
+    uint::FieldUint,
 };
 use mpc_net::Network;
 use num_bigint::BigUint;
@@ -101,7 +102,7 @@ impl<'a, F: PrimeField, N: Network> CircomRep3VmWitnessExtension<'a, F, N> {
     }
 }
 
-impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
+impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
     for CircomRep3VmWitnessExtension<'_, F, N>
 {
     type Public = F;
@@ -481,7 +482,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
-                let binary = binary::xor_public(&a, &b.into_bigint().into(), self.id);
+                let binary = binary::xor_public(&a, &b.to_uint(), self.id);
                 Ok(conversion::b2a_selector(&binary, self.net0, &mut self.state0)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
@@ -502,7 +503,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
-                let binary = binary::or_public(&a, &b.into_bigint().into(), self.id);
+                let binary = binary::or_public(&a, &b.to_uint(), self.id);
                 let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
                 Ok(result.into())
             }
@@ -523,7 +524,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
-                let binary = binary::and_with_public(&a, &b.into_bigint().into());
+                let binary = binary::and_with_public(&a, &b.to_uint());
                 let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
                 Ok(result.into())
             }
@@ -607,7 +608,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
             Rep3VmType::Arithmetic(a) => {
                 let a_bits = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
                 let a_bits_split = (0..bits)
-                    .map(|i| (&a_bits >> i) & BigUint::one())
+                    .map(|i| (a_bits >> i).and_mask(&F::Uint::one()))
                     .collect_vec();
                 Ok(bit_inject_many(&a_bits_split, self.net0, &mut self.state0)?
                     .into_iter()
@@ -641,7 +642,7 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
 
         let sum_bits = conversion::a2b_selector(sum, self.net0, &mut self.state0)?;
         let individual_bits = (0..bitlen + 1)
-            .map(|i| (&sum_bits >> i) & BigUint::one())
+            .map(|i| (sum_bits >> i).and_mask(&F::Uint::one()))
             .collect_vec();
         let mut result = bit_inject_many(&individual_bits, self.net0, &mut self.state0)?;
         let carry = result.pop().unwrap();

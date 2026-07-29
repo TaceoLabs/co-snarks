@@ -18,6 +18,7 @@ use core::panic;
 use eyre::{Result, bail, eyre};
 use itertools::{Itertools, izip};
 use mpc_core::protocols::rep3::conversion::A2BType;
+use mpc_core::uint::FieldUint;
 use mpc_net::Network;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -1204,7 +1205,7 @@ impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
     }
 }
 
-impl<'a, F: PrimeField, N: Network> Rep3WitnessExtension<'a, F, N> {
+impl<'a, F: PrimeField + FieldUint, N: Network> Rep3WitnessExtension<'a, F, N> {
     /// Create a new [Rep3WitnessExtension] VM
     pub fn new(
         net0: &'a N,
@@ -1242,7 +1243,7 @@ impl<'a, F: PrimeField, N: Network> Rep3WitnessExtension<'a, F, N> {
     }
 }
 
-impl<'a, F: PrimeField, N: Network> BatchedRep3WitnessExtension<'a, F, N> {
+impl<'a, F: PrimeField + FieldUint, N: Network> BatchedRep3WitnessExtension<'a, F, N> {
     /// Create a new [BatchedRep3WitnessExtension] VM
     pub fn new(
         net0: &'a N,
