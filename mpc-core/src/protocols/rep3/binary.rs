@@ -123,6 +123,9 @@ pub fn and_with_public<F: FieldUint>(shared: &BinaryShare<F>, public: &F::Uint) 
 
 /// Shifts a share by a public value `F` to the right.
 ///
+/// Shifts of at least `F::Uint::BITS` saturate to zero (in contrast to [`shift_l_public`],
+/// which panics for shifts >= `F::MODULUS_BIT_SIZE`).
+///
 /// # Panics
 /// This method panics if `public` does not fit into a `usize`.
 pub fn shift_r_public<F: FieldUint>(shared: &BinaryShare<F>, public: F) -> BinaryShare<F> {

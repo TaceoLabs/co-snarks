@@ -367,6 +367,7 @@ Landed on `dk/uint_backend` commits `893a16e2..2d3fbf1f`: Phase 3 completed rep3
 - `shift_l_public`: now panics when `shift >= F::MODULUS_BIT_SIZE` (matching `pow_2_public` semantics; prevents silent underuse of shared data).
 - `binary::and` randomness: widened to full `F::Uint` width (was `B` bits, now all bits of padded width; fixes odd-B leakage in BLS12-381 Fr where `is_zero` set bit index B=255).
 - `unsigned_ge_const_rhs(x, 0)` pre-existing panic: **fixed** (low_depth_binary_sub_by_const edge case where `2^B - 0 = 2^B`, feeding bitlen=B Kogge-Stone; now correctly handled).
+- Wire-format break: binary shares serialize as fixed LIMBS*8 LE bytes (was variable-length BigUint) — all parties must run the same version; also removes the value-dependent message-length side channel.
 
 **Characterization suite:** `mpc-core/src/protocols/rep3/port_tests.rs` — 24 tests, glue-isolated (generic over curve, not downstream types); all pass (`cargo test -p mpc-core --all-features --lib` → 92 passed).
 

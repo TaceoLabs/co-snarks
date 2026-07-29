@@ -290,7 +290,9 @@ impl_as_primitive_down!(u8, u16, u32, u64);
 
 impl<const BITS: usize, const LIMBS: usize> AsPrimitive<Bit> for RUint<BITS, LIMBS> {
     fn as_(self) -> Bit {
-        Bit::new(!self.0.is_zero())
+        // LSB truncation — must commute with XOR when applied to share components
+        // (matches Bit::cast_from_uint and the primitive AsPrimitive impls).
+        Bit::new(self.0.as_limbs()[0] & 1 == 1)
     }
 }
 macro_rules! impl_as_primitive_up {
