@@ -1716,7 +1716,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             result.a.set_bit(i - 32, shared.a.bit(i));
             result.b.set_bit(i - 32, shared.b.bit(i));
         }
-        conversion::b2a_selector(&result.clone(), self.net0, &mut self.state0)
+        conversion::b2a_selector(&result, self.net0, &mut self.state0)
     }
 
     fn slice_and_get_sparse_table_with_rotation_values(

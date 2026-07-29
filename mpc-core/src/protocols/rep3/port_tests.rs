@@ -95,7 +95,7 @@ mod glue {
 
     /// Shares a full-width boolean selector (the all-zero or all-ones bit
     /// pattern over `F::MODULUS_BIT_SIZE` bits), as required by `cmux`'s `c`
-    /// input. Cannot reuse `share_biguint` since the all-ones pattern is
+    /// input. Cannot reuse `share_binary` since the all-ones pattern is
     /// generally not a valid field element.
     pub fn share_bool_mask<F: FieldUint, R: Rng + CryptoRng>(
         bit: bool,
@@ -555,7 +555,7 @@ fn case_unsigned_ge_const_rhs_zero_edge<F: FieldUint>() {
     }
 }
 
-/// Test 10: Reconstructing a `share_biguint` sharing via `combine_binary_element`
+/// Test 10: Reconstructing a `share_binary` sharing via `combine_binary_element`
 /// (no network involved) matches the canonical `BigUint` of the shared
 /// value.
 fn case_share_combine_roundtrip<F: FieldUint>() {

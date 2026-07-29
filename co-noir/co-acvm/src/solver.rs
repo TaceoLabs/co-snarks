@@ -12,7 +12,6 @@ use mpc_core::{
         rep3::conversion::A2BType,
         shamir::{ShamirPreprocessing, ShamirState},
     },
-    uint::FieldUint,
 };
 use mpc_net::Network;
 use noirc_abi::Abi;
@@ -253,7 +252,7 @@ impl<'a, N: Network> ShamirCoSolver<'a, ark_bn254::Fr, N> {
     }
 }
 
-impl<F: PrimeField + FieldUint> PlainCoSolver<F> {
+impl<F: PrimeField> PlainCoSolver<F> {
     pub fn convert_to_plain_acvm_witness(
         mut shared_witness: WitnessStack<F>,
     ) -> WitnessStack<GenericFieldElement<F>> {

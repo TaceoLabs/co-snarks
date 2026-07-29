@@ -986,6 +986,10 @@ where
 /// wide-enough intermediate since the divisors used here (field moduli) fit
 /// comfortably within 512 bits.
 fn public_divisor_to_ring<T: IntRing2k>(divisor: &BigUint) -> RingElement<T> {
+    debug_assert!(
+        divisor.bits() <= 512,
+        "divisor wider than the U512 conversion bridge"
+    );
     let mut bytes = [0u8; <U512 as UintBackend>::BYTES];
     let raw = divisor.to_bytes_le();
     let len = raw.len().min(bytes.len());
