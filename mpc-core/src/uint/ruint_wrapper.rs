@@ -329,21 +329,12 @@ impl<const BITS: usize, const LIMBS: usize> UintBackend for RUint<BITS, LIMBS> {
         self.0.set_bit(index, value);
     }
     fn mask(k: usize) -> Self {
-        debug_assert!(k <= BITS);
+        assert!(k <= BITS, "mask width {k} exceeds capacity {BITS}");
         if k == 0 {
             Self(Uint::ZERO)
         } else {
             Self(Uint::MAX >> (BITS - k))
         }
-    }
-    fn wrapping_add(&self, rhs: &Self) -> Self {
-        Self(self.0.wrapping_add(rhs.0))
-    }
-    fn wrapping_sub(&self, rhs: &Self) -> Self {
-        Self(self.0.wrapping_sub(rhs.0))
-    }
-    fn wrapping_neg(&self) -> Self {
-        Self(self.0.wrapping_neg())
     }
     fn as_limbs(&self) -> &[u64] {
         self.0.as_limbs()
@@ -401,11 +392,8 @@ mod tests {
         let max: U256 = RUint(ruint::Uint::MAX);
         let one = U256::one();
         // + is wrapping in ruint
-        // NOTE: disambiguated against `UintBackend::wrapping_add`/`wrapping_sub`,
-        // which have identical signatures to the `num_traits` `WrappingAdd`/
-        // `WrappingSub` traits already implemented for `RUint`.
-        assert_eq!(WrappingAdd::wrapping_add(&max, &one), U256::zero());
-        assert_eq!(WrappingSub::wrapping_sub(&U256::zero(), &one), max);
+        assert_eq!(max.wrapping_add(&one), U256::zero());
+        assert_eq!(U256::zero().wrapping_sub(&one), max);
         assert_eq!(max + one, U256::zero());
     }
 
@@ -520,5 +508,23 @@ mod tests {
         // fewer limbs: zero-extend
         let w = U256::from_limbs_truncating(&[7]);
         assert_eq!(w.as_limbs(), &[7, 0, 0, 0]);
+    }
+
+    #[test]
+    fn uint_backend_misc_conversions() {
+        use crate::uint::UintBackend;
+        use num_traits::WrappingNeg;
+        assert_eq!(U256::from(5u64).to_u64_truncating(), 5);
+        assert_eq!(U256::from(5u64).try_to_usize(), Some(5));
+        let max: U256 = RUint(ruint::Uint::MAX);
+        assert_eq!(max.try_to_usize(), None);
+        assert_eq!(U256::one().wrapping_neg(), max);
+    }
+
+    #[test]
+    #[should_panic(expected = "mask width")]
+    fn uint_backend_mask_oversized_panics() {
+        use crate::uint::UintBackend;
+        let _ = U256::mask(257);
     }
 }
