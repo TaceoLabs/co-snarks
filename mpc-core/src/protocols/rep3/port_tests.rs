@@ -590,7 +590,6 @@ macro_rules! per_field_tests {
             }
 
             #[test]
-            #[ignore = "pre-existing bug, detail.rs:371, fixed in port task"]
             fn unsigned_ge_const_rhs_zero_edge() {
                 case_unsigned_ge_const_rhs_zero_edge::<F>();
             }
