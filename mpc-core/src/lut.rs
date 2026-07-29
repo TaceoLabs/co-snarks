@@ -2,11 +2,23 @@
 //!
 //! This module contains the abstraction to lookup tables
 
-use crate::uint::{FieldUint, UintBackend};
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use mpc_net::Network;
 use std::marker::PhantomData;
+
+/// Converts a public field element to a usize LUT index (`None` if it does
+/// not fit). Plain LUT indices are public values, so this only needs
+/// `PrimeField` — it must not force a `FieldUint` bound onto plain-only
+/// code paths.
+fn field_to_usize<F: PrimeField>(x: F) -> Option<usize> {
+    let bigint = x.into_bigint();
+    let limbs = bigint.as_ref();
+    if limbs[1..].iter().any(|l| *l != 0) {
+        return None;
+    }
+    usize::try_from(limbs[0]).ok()
+}
 
 /// This is some place holder definition. This will change most likely
 pub trait LookupTableProvider<T: Default>: Default {
@@ -77,7 +89,7 @@ pub struct PlainLookupTableProvider<F: PrimeField> {
     phantom_data: PhantomData<F>,
 }
 
-impl<F: FieldUint> LookupTableProvider<F> for PlainLookupTableProvider<F> {
+impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
     type SecretShare = F;
     type IndexSecretShare = F;
     type LutType = Vec<F>;
@@ -100,9 +112,7 @@ impl<F: FieldUint> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         _state0: &mut (),
         _state1: &mut (),
     ) -> eyre::Result<F> {
-        let index = index
-            .to_uint()
-            .try_to_usize()
+        let index = field_to_usize(index)
             .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
         Ok(lut[index])
     }
@@ -117,9 +127,7 @@ impl<F: FieldUint> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         _state0: &mut (),
         _state1: &mut (),
     ) -> eyre::Result<()> {
-        let index = index
-            .to_uint()
-            .try_to_usize()
+        let index = field_to_usize(index)
             .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
 
         lut[index] = value;
@@ -141,10 +149,7 @@ pub struct PlainCurveLookupTableProvider<C: CurveGroup> {
     phantom_data: PhantomData<C>,
 }
 
-impl<C: CurveGroup> LookupTableProvider<C> for PlainCurveLookupTableProvider<C>
-where
-    C::ScalarField: FieldUint,
-{
+impl<C: CurveGroup> LookupTableProvider<C> for PlainCurveLookupTableProvider<C> {
     type SecretShare = C;
 
     type LutType = Vec<C>;
@@ -169,9 +174,7 @@ where
         _state0: &mut Self::State,
         _state1: &mut Self::State,
     ) -> eyre::Result<Self::SecretShare> {
-        let index = index
-            .to_uint()
-            .try_to_usize()
+        let index = field_to_usize(index)
             .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
         Ok(lut[index])
     }
@@ -186,9 +189,7 @@ where
         _state0: &mut Self::State,
         _state1: &mut Self::State,
     ) -> eyre::Result<()> {
-        let index = index
-            .to_uint()
-            .try_to_usize()
+        let index = field_to_usize(index)
             .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
 
         lut[index] = value;
