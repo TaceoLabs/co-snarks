@@ -12,8 +12,8 @@ use mpc_core::{
         id::PartyID,
         network::Rep3NetworkExt,
     },
+    uint::FieldUint,
 };
-use num_bigint::BigUint;
 
 use super::{VmCircomWitnessExtension, batched_plain::BatchedCircomPlainVmWitnessExtension};
 
@@ -112,7 +112,7 @@ impl<F: PrimeField> TryFrom<Vec<Rep3InputType<F>>> for BatchedRep3VmType<F> {
 }
 
 #[expect(unused_variables)]
-impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
+impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
     for BatchedCircomRep3VmWitnessExtension<'_, F, N>
 {
     type Public = Vec<F>;
@@ -402,7 +402,11 @@ impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
         let sum_bits = conversion::a2b_many(&sum, self.net0, &mut self.state0)?;
 
         let individual_bits = (0..bitlen + 1)
-            .flat_map(|i| sum_bits.iter().map(move |bit| (bit >> i) & BigUint::one()))
+            .flat_map(|i| {
+                sum_bits
+                    .iter()
+                    .map(move |bit| (*bit >> i).and_mask(&F::Uint::one()))
+            })
             .collect_vec();
 
         let result = conversion::bit_inject_many(&individual_bits, self.net0, &mut self.state0)?;
