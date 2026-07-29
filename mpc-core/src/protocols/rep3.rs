@@ -535,7 +535,7 @@ where
 }
 
 /// Secret shares a field element using replicated secret sharing and the provided random number generator. The field element is split into three binary shares, where each party holds two. The outputs are of type [Rep3UintShare].
-pub fn share_biguint<F: FieldUint, R: Rng + CryptoRng>(
+pub fn share_binary<F: FieldUint, R: Rng + CryptoRng>(
     val: F,
     rng: &mut R,
 ) -> [Rep3UintShare<F>; 3] {
@@ -548,6 +548,17 @@ pub fn share_biguint<F: FieldUint, R: Rng + CryptoRng>(
     let share2 = Rep3UintShare::new(b, a);
     let share3 = Rep3UintShare::new(c, b);
     [share1, share2, share3]
+}
+
+/// Deprecated name of [`share_binary`] kept through the migration.
+#[deprecated(
+    note = "renamed to share_binary; the shares have been fixed-width uints since the Rep3UintShare port"
+)]
+pub fn share_biguint<F: FieldUint, R: Rng + CryptoRng>(
+    val: F,
+    rng: &mut R,
+) -> [Rep3UintShare<F>; 3] {
+    share_binary(val, rng)
 }
 
 /// Secret shares a curve point using replicated secret sharing and the provided random number generator. The point is split into three additive shares, where each party holds two. The outputs are of type [Rep3PointShare].
