@@ -414,9 +414,14 @@ mod tests {
                 Bit::cast_from_biguint(&BigUint::from(u)),
                 "cast_from_uint({u}) != cast_from_biguint({u})"
             );
+            // Also verify that AsPrimitive<Bit> agrees with LSB truncation
+            let as_prim: Bit = <U256 as num_traits::AsPrimitive<Bit>>::as_(U256::from(u));
+            assert_eq!(as_prim, Bit::new(u & 1 == 1), "AsPrimitive<Bit>({u})");
         }
         // a nonzero value with a clear LSB above 64 bits must still cast to 0
         let high = U256::from_limbs_truncating(&[0, 0, 0, 1]);
         assert_eq!(Bit::cast_from_uint(&high), Bit::new(false));
+        let high_as_prim: Bit = <U256 as num_traits::AsPrimitive<Bit>>::as_(high);
+        assert_eq!(high_as_prim, Bit::new(false));
     }
 }
