@@ -28,6 +28,7 @@ mod field_share {
     use mpc_core::protocols::rep3::Rep3State;
     use mpc_core::protocols::rep3::{self, arithmetic};
     use mpc_core::protocols::rep3_ring;
+    use mpc_core::uint::FieldUint;
     use mpc_core::MpcState as _;
     use mpc_net::local::LocalNetwork;
     use mpc_net::Network;
@@ -479,11 +480,11 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
-        let mut x_shares = rep3::share_biguint(x, &mut rng);
+        let mut x_shares = rep3::share_binary(x, &mut rng);
         // Simulate sharing of just one bit
         for x in x_shares.iter_mut() {
-            x.a &= BigUint::one();
-            x.b &= BigUint::one();
+            x.a &= <ark_bn254::Fr as FieldUint>::Uint::one();
+            x.b &= <ark_bn254::Fr as FieldUint>::Uint::one();
         }
 
         let (tx1, rx1) = mpsc::channel();
@@ -515,11 +516,11 @@ mod field_share {
         for _ in 0..VEC_SIZE {
             let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
             should_result.push(x);
-            let mut x_shares = rep3::share_biguint(x, &mut rng);
+            let mut x_shares = rep3::share_binary(x, &mut rng);
             // Simulate sharing of just one bit
             for x in x_shares.iter_mut() {
-                x.a &= BigUint::one();
-                x.b &= BigUint::one();
+                x.a &= <ark_bn254::Fr as FieldUint>::Uint::one();
+                x.b &= <ark_bn254::Fr as FieldUint>::Uint::one();
             }
             x0_shares.push(x_shares[0].to_owned());
             x1_shares.push(x_shares[1].to_owned());
@@ -653,9 +654,9 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -679,9 +680,9 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -705,9 +706,9 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -747,7 +748,10 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_elements(&result1, &result2, &result3);
-        let is_result_f: Vec<ark_bn254::Fr> = is_result.into_iter().map(|e| e.into()).collect();
+        let is_result_f: Vec<ark_bn254::Fr> = is_result
+            .into_iter()
+            .map(|e| ark_bn254::Fr::from_uint_unchecked(&e))
+            .collect();
         assert_eq!(is_result_f, should_result);
     }
 
@@ -772,9 +776,9 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -799,9 +803,9 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -826,9 +830,9 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -868,7 +872,10 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_elements(&result1, &result2, &result3);
-        let is_result_f: Vec<ark_bn254::Fr> = is_result.into_iter().map(|e| e.into()).collect();
+        let is_result_f: Vec<ark_bn254::Fr> = is_result
+            .into_iter()
+            .map(|e| ark_bn254::Fr::from_uint_unchecked(&e))
+            .collect();
         assert_eq!(is_result_f, should_result);
     }
 
@@ -877,7 +884,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -900,7 +907,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -923,7 +930,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1300,7 +1307,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1343,7 +1350,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1410,9 +1417,9 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -1457,7 +1464,10 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let result = rep3::combine_binary_elements(&result1, &result2, &result3);
-        let result_f: Vec<ark_bn254::Fr> = result.into_iter().map(|b| b.into()).collect();
+        let result_f: Vec<ark_bn254::Fr> = result
+            .into_iter()
+            .map(|b| ark_bn254::Fr::from_uint_unchecked(&b))
+            .collect();
         assert_eq!(result_f, should_result);
     }
 
@@ -2657,23 +2667,27 @@ mod field_share {
                         )
                         .unwrap();
 
-                    let shift_1 = sbox_value.clone() << 1;
-                    let shift_2 = sbox_value.clone() >> 7;
-                    let and = shift_2 & BigUint::one();
+                    let shift_1 = sbox_value << 1;
+                    let shift_2 = sbox_value >> 7;
+                    let and = shift_2.and_mask(&<ark_bn254::Fr as FieldUint>::Uint::one());
 
                     // This is a multiplication by 0x1b in the binary domain
-                    let mut and2a = &and << 4;
-                    and2a = and2a.bitxor(&and << 3);
-                    and2a = and2a.bitxor(&and << 1);
+                    let mut and2a = and << 4;
+                    and2a = and2a.bitxor(and << 3);
+                    and2a = and2a.bitxor(and << 1);
                     and2a = and2a.bitxor(and);
 
                     let swizzled = shift_1.bitxor(and2a);
-                    let value = swizzled.bitxor(sbox_value.clone());
-                    let mut a_bits_split =
-                        (0..8).map(|i| (&value >> i) & BigUint::one()).collect_vec();
+                    let value = swizzled.bitxor(sbox_value);
+                    let mut a_bits_split = (0..8)
+                        .map(|i| (value >> i).and_mask(&<ark_bn254::Fr as FieldUint>::Uint::one()))
+                        .collect_vec();
                     a_bits_split.extend(
                         (0..8)
-                            .map(|i| (&sbox_value >> i) & BigUint::one())
+                            .map(|i| {
+                                (sbox_value >> i)
+                                    .and_mask(&<ark_bn254::Fr as FieldUint>::Uint::one())
+                            })
                             .collect_vec(),
                     );
                     let bin_share =
@@ -3670,16 +3684,16 @@ mod field_share {
 
 mod curve_share {
     use ark_ec::{AffineRepr, CurveGroup};
-    use ark_ff::{One, PrimeField, Zero};
+    use ark_ff::{One, Zero};
     use ark_std::UniformRand;
     use itertools::{izip, Itertools};
     use mpc_core::protocols::rep3::{
         self,
         conversion::{self, A2BType},
-        pointshare, Rep3BigUintShare, Rep3State,
+        pointshare, Rep3State, Rep3UintShare,
     };
+    use mpc_core::uint::FieldUint;
     use mpc_net::local::LocalNetwork;
-    use num_bigint::BigUint;
     use rand::thread_rng;
     use std::sync::mpsc;
 
@@ -3795,9 +3809,8 @@ mod curve_share {
         let (single2, many2) = rx2.recv().unwrap();
         let (single3, many3) = rx3.recv().unwrap();
         let result_single = rep3::combine_binary_element(single1, single2, single3);
-        let result_many =
-            rep3::combine_binary_element(many1[0].clone(), many2[0].clone(), many3[0].clone());
-        assert_eq!(result_many, x.into());
+        let result_many = rep3::combine_binary_element(many1[0], many2[0], many3[0]);
+        assert_eq!(result_many, x.to_uint());
         assert_eq!(result_many, result_single);
     }
 
@@ -3839,13 +3852,13 @@ mod curve_share {
         assert_eq!(single_batch, many_batch);
         assert_eq!(
             many_batch,
-            should_batch.into_iter().map(BigUint::from).collect_vec()
+            should_batch.into_iter().map(|f| f.to_uint()).collect_vec()
         );
     }
 
     fn to_fieldshares<C: CurveGroup>(point: C)
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
     {
         let mut rng = thread_rng();
         let point_shares = rep3::share_curve_point(point, &mut rng);
@@ -3881,7 +3894,7 @@ mod curve_share {
 
     fn to_fieldshares_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
     {
         let mut rng = thread_rng();
         let point_shares = rep3::share_curve_points(points, &mut rng);
@@ -3985,7 +3998,7 @@ mod curve_share {
 
     fn from_fieldshares<C: CurveGroup>(point: C)
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
     {
         let mut rng = thread_rng();
         let (x, y) = point.into_affine().xy().unwrap_or_default();
@@ -4026,7 +4039,7 @@ mod curve_share {
 
     fn from_fieldshares_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
     {
         let mut rng = thread_rng();
         let coords: Vec<_> = points
@@ -4115,7 +4128,8 @@ mod curve_share {
 
     fn point_is_zero<C: CurveGroup>(point: C)
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
+        C::ScalarField: FieldUint,
     {
         let mut rng = thread_rng();
         let shares = rep3::share_curve_point(point, &mut rng);
@@ -4129,9 +4143,9 @@ mod curve_share {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let res = pointshare::is_zero(x, &net, &mut state).unwrap();
-                let res = Rep3BigUintShare::<C::ScalarField>::new(
-                    BigUint::from(res.0),
-                    BigUint::from(res.1),
+                let res = Rep3UintShare::<C::ScalarField>::new(
+                    <C::ScalarField as FieldUint>::Uint::from(res.0),
+                    <C::ScalarField as FieldUint>::Uint::from(res.1),
                 );
                 tx.send(res)
             });
@@ -4140,17 +4154,18 @@ mod curve_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
-        assert!(is_result <= BigUint::one());
+        assert!(is_result <= <C::ScalarField as FieldUint>::Uint::one());
         if point.is_zero() {
-            assert_eq!(is_result, BigUint::one());
+            assert_eq!(is_result, <C::ScalarField as FieldUint>::Uint::one());
         } else {
-            assert_eq!(is_result, BigUint::zero());
+            assert_eq!(is_result, <C::ScalarField as FieldUint>::Uint::zero());
         }
     }
 
     fn point_is_zero_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
+        C::ScalarField: FieldUint,
     {
         let mut rng = thread_rng();
         let mut shares: [Vec<_>; 3] = [
@@ -4176,9 +4191,9 @@ mod curve_share {
                 let res = pointshare::is_zero_many(&x, &net, &mut state).unwrap();
                 let mut res_ = Vec::with_capacity(res.len());
                 for r in res {
-                    res_.push(Rep3BigUintShare::<C::ScalarField>::new(
-                        BigUint::from(r.0),
-                        BigUint::from(r.1),
+                    res_.push(Rep3UintShare::<C::ScalarField>::new(
+                        <C::ScalarField as FieldUint>::Uint::from(r.0),
+                        <C::ScalarField as FieldUint>::Uint::from(r.1),
                     ));
                 }
                 tx.send(res_)
@@ -4190,17 +4205,15 @@ mod curve_share {
         let mut is_results = Vec::with_capacity(result1.len());
         for i in 0..result1.len() {
             is_results.push(rep3::combine_binary_element(
-                result1[i].clone(),
-                result2[i].clone(),
-                result3[i].clone(),
+                result1[i], result2[i], result3[i],
             ));
         }
         for (point, is_result) in points.iter().zip(is_results.iter()) {
-            assert!(is_result <= &BigUint::one());
+            assert!(is_result <= &<C::ScalarField as FieldUint>::Uint::one());
             if point.is_zero() {
-                assert_eq!(*is_result, BigUint::one());
+                assert_eq!(*is_result, <C::ScalarField as FieldUint>::Uint::one());
             } else {
-                assert_eq!(*is_result, BigUint::zero());
+                assert_eq!(*is_result, <C::ScalarField as FieldUint>::Uint::zero());
             }
         }
     }

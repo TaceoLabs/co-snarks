@@ -4,8 +4,7 @@
 
 use super::bit::Bit;
 use crate::uint::{RUint, UintBackend};
-use num_bigint::BigUint;
-use num_traits::{AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
+use num_traits::{One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Debug,
@@ -62,13 +61,6 @@ pub trait IntRing2k:
     /// Returns the effective number of bits (i.e., how many LSBs are set)
     fn bits(&self) -> usize;
 
-    /// Casts this type to a BigUint
-    fn cast_to_biguint(&self) -> BigUint;
-
-    /// Casts a BigUint to this type, removing any excess bits
-    /// Thus if the value is larger than this type, it will be truncated
-    fn cast_from_biguint(biguint: &BigUint) -> Self;
-
     /// Casts this type to a fixed-width uint, zero-extending if the target
     /// is wider and truncating excess bits if it is narrower
     fn cast_to_uint<U: UintBackend>(&self) -> U;
@@ -120,22 +112,14 @@ impl IntRing2k for Bit {
         self.0 as usize
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(self.0 as u64)
-    }
-
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default().as_()
-    }
-
     fn cast_to_uint<U: UintBackend>(&self) -> U {
         U::from(self.convert())
     }
 
     fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
-        // Truncate to the LSB, exactly like `cast_from_biguint` (LSB
-        // truncation commutes with XOR, so casting each share component
-        // yields a valid Bit-sharing; `!is_zero` would not).
+        // Truncate to the LSB (LSB truncation commutes with XOR, so casting
+        // each share component yields a valid Bit-sharing; `!is_zero` would
+        // not).
         Bit::new(u.bit(0))
     }
 }
@@ -159,14 +143,6 @@ impl IntRing2k for u8 {
             return 0;
         }
         self.ilog2() as usize + 1
-    }
-
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
-    }
-
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default() as Self
     }
 
     fn cast_to_uint<U: UintBackend>(&self) -> U {
@@ -199,14 +175,6 @@ impl IntRing2k for u16 {
         self.ilog2() as usize + 1
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
-    }
-
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default() as Self
-    }
-
     fn cast_to_uint<U: UintBackend>(&self) -> U {
         U::from(*self as u64)
     }
@@ -235,14 +203,6 @@ impl IntRing2k for u32 {
             return 0;
         }
         self.ilog2() as usize + 1
-    }
-
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
-    }
-
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default() as Self
     }
 
     fn cast_to_uint<U: UintBackend>(&self) -> U {
@@ -275,14 +235,6 @@ impl IntRing2k for u64 {
         self.ilog2() as usize + 1
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
-    }
-
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default() as Self
-    }
-
     fn cast_to_uint<U: UintBackend>(&self) -> U {
         U::from(*self)
     }
@@ -311,17 +263,6 @@ impl IntRing2k for u128 {
             return 0;
         }
         self.ilog2() as usize + 1
-    }
-
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
-    }
-
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        let mut iter = biguint.iter_u64_digits();
-        let x0 = iter.next().unwrap_or_default();
-        let x1 = iter.next().unwrap_or_default();
-        ((x1 as u128) << 64) | x0 as u128
     }
 
     fn cast_to_uint<U: UintBackend>(&self) -> U {
@@ -361,21 +302,6 @@ impl<const BITS: usize, const LIMBS: usize> IntRing2k for RUint<BITS, LIMBS> {
         self.0.bit_len()
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        // temporary bridge; removed once all BigUint interchange is ported
-        let mut bytes = vec![0u8; <Self as UintBackend>::BYTES];
-        <Self as UintBackend>::to_le_bytes_into(self, &mut bytes);
-        BigUint::from_bytes_le(&bytes)
-    }
-
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        let mut limbs = [0u64; LIMBS];
-        for (limb, digit) in limbs.iter_mut().zip(biguint.iter_u64_digits()) {
-            *limb = digit;
-        }
-        Self(ruint::Uint::from_limbs(limbs))
-    }
-
     fn cast_to_uint<U: UintBackend>(&self) -> U {
         U::from_limbs_truncating(<Self as UintBackend>::as_limbs(self))
     }
@@ -392,11 +318,11 @@ mod tests {
     use rand::{Rng, SeedableRng};
     use rand_chacha::ChaCha12Rng;
 
-    /// `Bit::cast_from_uint` must truncate to the LSB (like the retained
-    /// `cast_from_biguint`), NOT map any nonzero value to 1: LSB truncation
-    /// commutes with XOR, so casting each replicated share component yields
-    /// a valid Bit-sharing of `LSB(x)`; `!is_zero` does not commute with
-    /// XOR and would reconstruct garbage on full-width share components.
+    /// `Bit::cast_from_uint` must truncate to the LSB, NOT map any nonzero
+    /// value to 1: LSB truncation commutes with XOR, so casting each
+    /// replicated share component yields a valid Bit-sharing of `LSB(x)`;
+    /// `!is_zero` does not commute with XOR and would reconstruct garbage on
+    /// full-width share components.
     #[test]
     fn bit_cast_from_uint_truncates_to_lsb() {
         let mut rng = ChaCha12Rng::seed_from_u64(48);
@@ -409,11 +335,6 @@ mod tests {
         for u in vals {
             let cast = Bit::cast_from_uint(&U256::from(u));
             assert_eq!(cast, Bit::new(u & 1 == 1), "cast_from_uint({u})");
-            assert_eq!(
-                cast,
-                Bit::cast_from_biguint(&BigUint::from(u)),
-                "cast_from_uint({u}) != cast_from_biguint({u})"
-            );
             // Also verify that AsPrimitive<Bit> agrees with LSB truncation
             let as_prim: Bit = <U256 as num_traits::AsPrimitive<Bit>>::as_(U256::from(u));
             assert_eq!(as_prim, Bit::new(u & 1 == 1), "AsPrimitive<Bit>({u})");

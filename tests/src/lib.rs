@@ -1,3 +1,12 @@
+/// Converts a fixed-width uint back to a [`num_bigint::BigUint`] for tests
+/// that still compare against an independently computed `BigUint`
+/// expectation.
+pub fn uint_to_biguint<U: mpc_core::uint::UintBackend>(u: &U) -> num_bigint::BigUint {
+    let mut b = vec![0u8; U::BYTES];
+    u.to_le_bytes_into(&mut b);
+    num_bigint::BigUint::from_bytes_le(&b)
+}
+
 pub mod test_utils {
     use std::collections::BTreeMap;
 

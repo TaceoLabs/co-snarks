@@ -13,7 +13,7 @@ use crate::protocols::{
     },
     rep3_ring::conversion,
 };
-use crate::uint::FieldUint;
+use crate::uint::{FieldUint, U512, UintBackend};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
@@ -980,6 +980,19 @@ where
     )
 }
 
+/// Casts a public divisor (a `BigUint` that may be wider than `T`, e.g. a
+/// field modulus) into a ring element, truncating to `T`'s width like the
+/// former `IntRing2k::cast_from_biguint` did. Routed through [`U512`] as a
+/// wide-enough intermediate since the divisors used here (field moduli) fit
+/// comfortably within 512 bits.
+fn public_divisor_to_ring<T: IntRing2k>(divisor: &BigUint) -> RingElement<T> {
+    let mut bytes = [0u8; <U512 as UintBackend>::BYTES];
+    let raw = divisor.to_bytes_le();
+    let len = raw.len().min(bytes.len());
+    bytes[..len].copy_from_slice(&raw[..len]);
+    RingElement(T::cast_from_uint(&U512::from_le_bytes(&bytes)))
+}
+
 /// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
 #[expect(clippy::type_complexity)]
 pub fn ring_div_by_public_to_fr_limbs_and_fq_many<
@@ -999,7 +1012,7 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = input.len();
-    let divisor_as_bits = GCUtils::ring_to_bits::<T>(RingElement(T::cast_from_biguint(divisor)));
+    let divisor_as_bits = GCUtils::ring_to_bits::<T>(public_divisor_to_ring(divisor));
 
     let mut combined_inputs = Vec::with_capacity(input.len());
     combined_inputs.extend_from_slice(input);
@@ -1053,7 +1066,7 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = input.len();
-    let divisor_as_bits = GCUtils::ring_to_bits::<T>(RingElement(T::cast_from_biguint(divisor)));
+    let divisor_as_bits = GCUtils::ring_to_bits::<T>(public_divisor_to_ring(divisor));
     let num_outputs = 2 * num_inputs * num_limbs_per_field;
 
     let mut combined_inputs = Vec::with_capacity(input.len());
