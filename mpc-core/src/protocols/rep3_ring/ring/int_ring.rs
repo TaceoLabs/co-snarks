@@ -133,7 +133,10 @@ impl IntRing2k for Bit {
     }
 
     fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
-        Bit::new(!u.is_zero())
+        // Truncate to the LSB, exactly like `cast_from_biguint` (LSB
+        // truncation commutes with XOR, so casting each share component
+        // yields a valid Bit-sharing; `!is_zero` would not).
+        Bit::new(u.bit(0))
     }
 }
 
@@ -379,5 +382,41 @@ impl<const BITS: usize, const LIMBS: usize> IntRing2k for RUint<BITS, LIMBS> {
 
     fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
         <Self as UintBackend>::from_limbs_truncating(u.as_limbs())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::uint::U256;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha12Rng;
+
+    /// `Bit::cast_from_uint` must truncate to the LSB (like the retained
+    /// `cast_from_biguint`), NOT map any nonzero value to 1: LSB truncation
+    /// commutes with XOR, so casting each replicated share component yields
+    /// a valid Bit-sharing of `LSB(x)`; `!is_zero` does not commute with
+    /// XOR and would reconstruct garbage on full-width share components.
+    #[test]
+    fn bit_cast_from_uint_truncates_to_lsb() {
+        let mut rng = ChaCha12Rng::seed_from_u64(48);
+        let mut vals: Vec<u64> = vec![0, 1, 2, 3];
+        for _ in 0..8 {
+            let r: u64 = rng.r#gen();
+            vals.push(r & !1); // even
+            vals.push(r | 1); // odd
+        }
+        for u in vals {
+            let cast = Bit::cast_from_uint(&U256::from(u));
+            assert_eq!(cast, Bit::new(u & 1 == 1), "cast_from_uint({u})");
+            assert_eq!(
+                cast,
+                Bit::cast_from_biguint(&BigUint::from(u)),
+                "cast_from_uint({u}) != cast_from_biguint({u})"
+            );
+        }
+        // a nonzero value with a clear LSB above 64 bits must still cast to 0
+        let high = U256::from_limbs_truncating(&[0, 0, 0, 1]);
+        assert_eq!(Bit::cast_from_uint(&high), Bit::new(false));
     }
 }
