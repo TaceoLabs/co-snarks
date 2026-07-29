@@ -3005,7 +3005,6 @@ dependencies = [
  "criterion",
  "eyre",
  "fancy-garbling",
- "hex",
  "itertools 0.14.0",
  "mpc-net",
  "nom",
