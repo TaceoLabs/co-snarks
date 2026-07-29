@@ -354,57 +354,6 @@ fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] 
     output
 }
 
-/// Injects a replicated bit, given directly as the two additive `bool` parts
-/// (rather than a [`Rep3UintShare`]), into the arithmetic domain of `F`.
-///
-/// This mirrors `mpc_core::protocols::rep3::conversion::bit_inject`, but only
-/// requires `F: PrimeField`. It exists because `set_point_to_value_if_zero`'s
-/// generic curve parameter `C` carries no `FieldUint` bound on `C::ScalarField`
-/// in the `NoirWitnessExtensionProtocol` trait signature (which must not
-/// change), so the scalar-field arithmetic share for `pointshare::is_zero`'s
-/// `(bool, bool)` result cannot be produced by wrapping into a
-/// `Rep3UintShare<C::ScalarField>` and calling the (now `FieldUint`-bounded)
-/// generic `bit_inject`.
-fn bool_pair_to_arithmetic_share<F: PrimeField, N: Network>(
-    is_zero: (bool, bool),
-    net: &N,
-    state: &mut Rep3State,
-) -> eyre::Result<ArithmeticShare<F>> {
-    match state.id {
-        PartyID::ID0 => {
-            let x0: F = state.rngs.rand.masking_field_element();
-            let y = if is_zero.1 { F::one() } else { F::zero() };
-            let z0 = y * x0;
-            let r0 = x0 + y - z0 - z0;
-            let res_a = r0;
-            net.send_next(res_a)?;
-            let res_b: F = net.recv_prev()?;
-            Ok(ArithmeticShare::<F>::new(res_a, res_b))
-        }
-        PartyID::ID1 => {
-            let x1: F = state.rngs.rand.masking_field_element();
-            let res_a = if is_zero.0 ^ is_zero.1 {
-                x1 + F::one()
-            } else {
-                x1
-            };
-            net.send_next(res_a)?;
-            let res_b: F = net.recv_prev()?;
-            Ok(ArithmeticShare::<F>::new(res_a, res_b))
-        }
-        PartyID::ID2 => {
-            let res_b: F = net.recv_prev()?;
-            let x2: F = state.rngs.rand.masking_field_element();
-            let y = if is_zero.0 { F::one() } else { F::zero() };
-            let z2 = y * (res_b + x2);
-            let r2 = x2 - z2 - z2;
-            let res_a = r2;
-            net.send_next(res_a)?;
-            Ok(ArithmeticShare::<F>::new(res_a, res_b))
-        }
-    }
-}
-
 impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     for Rep3AcvmSolver<'a, F, N>
 {
@@ -1688,11 +1637,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             }
             Rep3AcvmPoint::Shared(point) => {
                 let is_zero = pointshare::is_zero(point.to_owned(), self.net0, &mut self.state0)?;
-                let is_zero = bool_pair_to_arithmetic_share::<C::ScalarField, _>(
-                    is_zero,
-                    self.net0,
-                    &mut self.state0,
-                )?;
+                let is_zero: ArithmeticShare<C::ScalarField> =
+                    conversion::bit_inject_from_bits(is_zero, self.net0, &mut self.state0)?;
 
                 let sub = match value {
                     Rep3AcvmPoint::Public(value) => {

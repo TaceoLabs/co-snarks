@@ -14,6 +14,7 @@ use super::{
     },
 };
 use ark_ec::{AffineRepr as _, CurveGroup};
+use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::{Itertools as _, izip};
 use mpc_net::Network;
@@ -307,22 +308,30 @@ pub fn b2a_many<F: FieldUint, N: Network>(
     Ok(res)
 }
 
-/// Translates one shared bits into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
-pub fn bit_inject<F: FieldUint, N: Network>(
-    x: &Rep3UintShare<F>,
+/// Translates a replicated bit, given directly as its two additive `bool`
+/// parts `(a, b)` (rather than as a [`Rep3UintShare`]), into an arithmetic
+/// sharing of the same bit in `F`.
+///
+/// This is the single source of truth for the bit-inject protocol (party
+/// roles, RNG-draw order, and send/recv order below must stay in lockstep
+/// across all three parties). Unlike [`bit_inject`], this only requires
+/// `F: PrimeField`, not `FieldUint`: callers that only have a `PrimeField`
+/// bound available on their field parameter (e.g. because it comes from an
+/// associated type in a trait signature that cannot be widened to
+/// `FieldUint`) can still use the bit-inject protocol without reimplementing
+/// it, as long as they already have the two bits in hand.
+pub fn bit_inject_from_bits<F: PrimeField, N: Network>(
+    bits: (bool, bool),
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
-    assert!(x.a.bit_len() <= 1);
-    assert!(x.b.bit_len() <= 1);
-
     // Approach: Split the value into x and y and compute an arithmetic xor.
     // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
 
     match state.id {
         PartyID::ID0 => {
             let x0: F = state.rngs.rand.masking_field_element();
-            let y = if x.b.bit(0) { F::one() } else { F::zero() };
+            let y = if bits.1 { F::one() } else { F::zero() };
             let z0 = y * x0;
             let r0 = x0 + y - z0 - z0;
             let res_a = r0;
@@ -335,11 +344,7 @@ pub fn bit_inject<F: FieldUint, N: Network>(
         }
         PartyID::ID1 => {
             let x1: F = state.rngs.rand.masking_field_element();
-            let res_a = if x.a.bit(0) ^ x.b.bit(0) {
-                x1 + F::one()
-            } else {
-                x1
-            };
+            let res_a = if bits.0 ^ bits.1 { x1 + F::one() } else { x1 };
             // Send to P2
             net.send_next(res_a)?;
 
@@ -351,7 +356,7 @@ pub fn bit_inject<F: FieldUint, N: Network>(
             // Receive from P1
             let res_b: F = net.recv_prev()?;
             let x2: F = state.rngs.rand.masking_field_element();
-            let y = if x.a.bit(0) { F::one() } else { F::zero() };
+            let y = if bits.0 { F::one() } else { F::zero() };
             let z2 = y * (res_b + x2);
             let r2 = x2 - z2 - z2;
             let res_a = r2;
@@ -361,6 +366,18 @@ pub fn bit_inject<F: FieldUint, N: Network>(
             Ok(Rep3PrimeFieldShare::new(res_a, res_b))
         }
     }
+}
+
+/// Translates one shared bits into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
+pub fn bit_inject<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Rep3PrimeFieldShare<F>> {
+    assert!(x.a.bit_len() <= 1);
+    assert!(x.b.bit_len() <= 1);
+
+    bit_inject_from_bits((x.a.bit(0), x.b.bit(0)), net, state)
 }
 
 /// Translates a vector of shared bit into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
