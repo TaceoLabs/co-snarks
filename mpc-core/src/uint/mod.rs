@@ -13,6 +13,10 @@ pub use ruint_wrapper::RUint;
 ///
 /// Implementors represent an unsigned integer of a fixed bit width with
 /// wrapping (mod `2^BITS`) arithmetic semantics.
+///
+/// Wrapping arithmetic comes from the `num_traits` supertraits
+/// (`WrappingAdd`, `WrappingSub`, `WrappingNeg`); the `+`/`-` operators on
+/// implementors also wrap.
 pub trait UintBackend:
     Copy
     + Clone
@@ -27,6 +31,11 @@ pub trait UintBackend:
     + 'static
     + num_traits::Zero
     + num_traits::One
+    + num_traits::WrappingAdd
+    + num_traits::WrappingSub
+    + num_traits::WrappingNeg
+    + From<bool>
+    + From<u64>
     + std::ops::Not<Output = Self>
     + std::ops::BitXor<Output = Self>
     + std::ops::BitXorAssign
@@ -59,13 +68,10 @@ pub trait UintBackend:
     fn set_bit(&mut self, index: usize, value: bool);
     /// Returns a value with the lowest `k` bits set to one and all other
     /// bits set to zero.
+    ///
+    /// # Panics
+    /// Panics if `k > Self::BITS`.
     fn mask(k: usize) -> Self;
-    /// Adds `rhs` to `self`, wrapping around at the type's boundary.
-    fn wrapping_add(&self, rhs: &Self) -> Self;
-    /// Subtracts `rhs` from `self`, wrapping around at the type's boundary.
-    fn wrapping_sub(&self, rhs: &Self) -> Self;
-    /// Negates `self`, wrapping around at the type's boundary.
-    fn wrapping_neg(&self) -> Self;
     /// Returns the underlying limbs as a little-endian slice of `u64`.
     fn as_limbs(&self) -> &[u64];
     /// Constructs a value from a slice of little-endian `u64` limbs,
