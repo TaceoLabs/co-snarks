@@ -7,11 +7,11 @@
 use super::{
     GCInputs, GCUtils, bristol_fashion::BristolFashionEvaluator, circuits::FancyBinaryConstant,
 };
+use crate::uint::FieldUint;
 use crate::{
     RngType,
     protocols::rep3::{Rep3State, id::PartyID, network::Rep3NetworkExt},
 };
-use ark_ff::PrimeField;
 use core::panic;
 use fancy_garbling::{
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::GarblerError, util::output_tweak,
@@ -101,7 +101,7 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
     }
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-    pub fn encode_field<F: PrimeField>(&mut self, field: F) -> GCInputs<WireMod2> {
+    pub fn encode_field<F: FieldUint>(&mut self, field: F) -> GCInputs<WireMod2> {
         GCUtils::encode_field(field, &mut self.rng, self.delta)
     }
 

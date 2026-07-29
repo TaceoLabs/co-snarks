@@ -4,29 +4,28 @@
 
 use core::panic;
 use mpc_net::Network;
-use num_traits::cast::ToPrimitive;
 
 use ark_ff::PrimeField;
 use itertools::{Itertools, izip};
-use num_bigint::BigUint;
 use num_traits::One;
 use num_traits::Zero;
 
 use crate::protocols::rep3::detail;
+use crate::uint::{FieldUint, UintBackend};
 use rayon::prelude::*;
 
 use super::PartyID;
 use super::Rep3State;
 use super::network::Rep3NetworkExt;
-use super::{Rep3BigUintShare, Rep3PrimeFieldShare, binary, conversion};
+use super::{Rep3PrimeFieldShare, Rep3UintShare, binary, conversion};
 
 mod ops;
 pub(super) mod types;
 
 /// Type alias for a [`Rep3PrimeFieldShare`]
 pub type FieldShare<F> = Rep3PrimeFieldShare<F>;
-/// Type alias for a [`Rep3BigUintShare`]
-pub type BinaryShare<F> = Rep3BigUintShare<F>;
+/// Type alias for a [`Rep3UintShare`]
+pub type BinaryShare<F> = Rep3UintShare<F>;
 
 /// Performs addition between two shared values.
 pub fn add<F: PrimeField>(a: FieldShare<F>, b: FieldShare<F>) -> FieldShare<F> {
@@ -253,11 +252,8 @@ pub fn open<F: PrimeField, N: Network>(a: FieldShare<F>, net: &N) -> eyre::Resul
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open_bit<F: PrimeField, N: Network>(
-    a: Rep3BigUintShare<F>,
-    net: &N,
-) -> eyre::Result<BigUint> {
-    let c = net.reshare(a.b.to_owned())?;
+pub fn open_bit<F: FieldUint, N: Network>(a: Rep3UintShare<F>, net: &N) -> eyre::Result<F::Uint> {
+    let c = net.reshare(a.b)?;
     Ok(a.a ^ a.b ^ c)
 }
 
@@ -407,7 +403,7 @@ pub fn sqrt<F: PrimeField, N: Network>(
 }
 
 /// Performs a pow operation using a shared value as base and a public value as exponent.
-pub fn pow_public<F: PrimeField, N: Network>(
+pub fn pow_public<F: FieldUint, N: Network>(
     shared: FieldShare<F>,
     public: F,
     net: &N,
@@ -415,7 +411,7 @@ pub fn pow_public<F: PrimeField, N: Network>(
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
     // TODO: are negative exponents allowed in circom?
     let mut res = promote_to_trivial_share(state.id, F::one());
-    let mut public: BigUint = public.into_bigint().into();
+    let mut public = public.to_uint();
     let mut shared: FieldShare<F> = shared;
     while !public.is_zero() {
         if public.bit(0) {
@@ -428,7 +424,7 @@ pub fn pow_public<F: PrimeField, N: Network>(
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if one shared value is less than another shared value. The result is a shared value that has value 1 if the first shared value is less than the second shared value and 0 otherwise.
-pub fn lt<F: PrimeField, N: Network>(
+pub fn lt<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     net: &N,
@@ -440,7 +436,7 @@ pub fn lt<F: PrimeField, N: Network>(
 }
 
 /// Returns 1 if lhs < rhs and 0 otherwise. Checks if a shared value is less than the public value. The result is a shared value that has value 1 if the shared value is less than the public value and 0 otherwise.
-pub fn lt_public<F: PrimeField, N: Network>(
+pub fn lt_public<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
     net: &N,
@@ -452,7 +448,7 @@ pub fn lt_public<F: PrimeField, N: Network>(
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if one shared value is less than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is less than or equal to the second shared value and 0 otherwise.
-pub fn le<F: PrimeField, N: Network>(
+pub fn le<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     net: &N,
@@ -463,7 +459,7 @@ pub fn le<F: PrimeField, N: Network>(
 }
 
 /// Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
-pub fn le_public<F: PrimeField, N: Network>(
+pub fn le_public<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
     net: &N,
@@ -474,7 +470,7 @@ pub fn le_public<F: PrimeField, N: Network>(
 }
 
 /// Same as le_public but without using bit_inject on the result. Returns 1 if lhs <= rhs and 0 otherwise. Checks if a shared value is less than or equal to a public value. The result is a shared value that has value 1 if the shared value is less than or equal to the public value and 0 otherwise.
-pub fn le_public_bit<F: PrimeField, N: Network>(
+pub fn le_public_bit<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
     net: &N,
@@ -484,7 +480,7 @@ pub fn le_public_bit<F: PrimeField, N: Network>(
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if one shared value is greater than another shared value. The result is a shared value that has value 1 if the first shared value is greater than the second shared value and 0 otherwise.
-pub fn gt<F: PrimeField, N: Network>(
+pub fn gt<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     net: &N,
@@ -496,7 +492,7 @@ pub fn gt<F: PrimeField, N: Network>(
 }
 
 /// Returns 1 if lhs > rhs and 0 otherwise. Checks if a shared value is greater than the public value. The result is a shared value that has value 1 if the shared value is greater than the public value and 0 otherwise.
-pub fn gt_public<F: PrimeField, N: Network>(
+pub fn gt_public<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
     net: &N,
@@ -508,7 +504,7 @@ pub fn gt_public<F: PrimeField, N: Network>(
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
-pub fn ge<F: PrimeField, N: Network>(
+pub fn ge<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     net: &N,
@@ -519,7 +515,7 @@ pub fn ge<F: PrimeField, N: Network>(
 }
 
 /// Same as ge but without using bit_inject on the result. Returns 1 if lhs >= rhs and 0 otherwise. Checks if one shared value is greater than or equal to another shared value. The result is a shared value that has value 1 if the first shared value is greater than or equal to the second shared value and 0 otherwise.
-pub fn ge_bit<F: PrimeField, N: Network>(
+pub fn ge_bit<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: FieldShare<F>,
     net: &N,
@@ -529,7 +525,7 @@ pub fn ge_bit<F: PrimeField, N: Network>(
 }
 
 /// Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
-pub fn ge_public<F: PrimeField, N: Network>(
+pub fn ge_public<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
     net: &N,
@@ -540,7 +536,7 @@ pub fn ge_public<F: PrimeField, N: Network>(
 }
 
 /// Same as ge_public but without using bit_inject on the result. Returns 1 if lhs >= rhs and 0 otherwise. Checks if a shared value is greater than or equal to a public value. The result is a shared value that has value 1 if the shared value is greater than or equal to the public value and 0 otherwise.
-pub fn ge_public_bit<F: PrimeField, N: Network>(
+pub fn ge_public_bit<F: FieldUint, N: Network>(
     lhs: FieldShare<F>,
     rhs: F,
     net: &N,
@@ -557,7 +553,7 @@ pub fn ge_public_bit<F: PrimeField, N: Network>(
 //We leave it like that and come back to that later. Maybe it doesn't matter...
 
 /// Checks if two shared values are equal. The result is a shared value that has value 1 if the two shared values are equal and 0 otherwise.
-pub fn eq<F: PrimeField, N: Network>(
+pub fn eq<F: FieldUint, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     net: &N,
@@ -569,7 +565,7 @@ pub fn eq<F: PrimeField, N: Network>(
 
 /// Checks if two slices of shared values are equal element-wise.
 /// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
-pub fn eq_many<F: PrimeField, N: Network>(
+pub fn eq_many<F: FieldUint, N: Network>(
     a: &[FieldShare<F>],
     b: &[FieldShare<F>],
     net: &N,
@@ -587,7 +583,7 @@ pub fn eq_many<F: PrimeField, N: Network>(
 }
 
 /// Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
-pub fn eq_public<F: PrimeField, N: Network>(
+pub fn eq_public<F: FieldUint, N: Network>(
     shared: FieldShare<F>,
     public: F,
     net: &N,
@@ -599,7 +595,7 @@ pub fn eq_public<F: PrimeField, N: Network>(
 
 /// Checks if a slice of shared values is equal to a slice of public values element-wise.
 /// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
-pub fn eq_public_many<F: PrimeField, N: Network>(
+pub fn eq_public_many<F: FieldUint, N: Network>(
     shared: &[FieldShare<F>],
     public: &[F],
     net: &N,
@@ -617,7 +613,7 @@ pub fn eq_public_many<F: PrimeField, N: Network>(
 }
 
 /// Same as eq_bit but without using bit_inject on the result. Checks if a shared value is equal to a public value. The result is a shared value that has value 1 if the two values are equal and 0 otherwise.
-pub fn eq_bit_public<F: PrimeField, N: Network>(
+pub fn eq_bit_public<F: FieldUint, N: Network>(
     shared: FieldShare<F>,
     public: F,
     net: &N,
@@ -629,7 +625,7 @@ pub fn eq_bit_public<F: PrimeField, N: Network>(
 
 /// Same as eq_bit_many but without using bit_inject on the result. Checks if a slice of shared values is equal to a slice of public values element-wise.
 /// Returns a vector of shared values, where each element is 1 if the corresponding elements are equal and 0 otherwise.
-pub fn eq_bit_public_many<F: PrimeField, N: Network>(
+pub fn eq_bit_public_many<F: FieldUint, N: Network>(
     shared: &[FieldShare<F>],
     public: &[F],
     net: &N,
@@ -650,7 +646,7 @@ pub fn eq_bit_public_many<F: PrimeField, N: Network>(
 }
 
 /// Same as eq but without using bit_inject on the result. Checks whether two prime field shares are equal and return a binary share of 0 or 1. 1 means they are equal.
-pub fn eq_bit<F: PrimeField, N: Network>(
+pub fn eq_bit<F: FieldUint, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     net: &N,
@@ -663,7 +659,7 @@ pub fn eq_bit<F: PrimeField, N: Network>(
 }
 
 /// Same as eq_many but without using bit_inject on the result. Checks whether two slice of prime field shares are equal and returns a Vec of binary shares of 0 or 1. 1 means they are equal.
-pub fn eq_bit_many<F: PrimeField, N: Network>(
+pub fn eq_bit_many<F: FieldUint, N: Network>(
     a: &[FieldShare<F>],
     b: &[FieldShare<F>],
     net: &N,
@@ -686,7 +682,7 @@ pub fn eq_bit_many<F: PrimeField, N: Network>(
 }
 
 /// Checks if two shared values are not equal. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
-pub fn neq<F: PrimeField, N: Network>(
+pub fn neq<F: FieldUint, N: Network>(
     a: FieldShare<F>,
     b: FieldShare<F>,
     net: &N,
@@ -697,7 +693,7 @@ pub fn neq<F: PrimeField, N: Network>(
 }
 
 /// Checks if a shared value is not equal to a public value. The result is a shared value that has value 1 if the two values are not equal and 0 otherwise.
-pub fn neq_public<F: PrimeField, N: Network>(
+pub fn neq_public<F: FieldUint, N: Network>(
     shared: FieldShare<F>,
     public: F,
     net: &N,
@@ -708,7 +704,7 @@ pub fn neq_public<F: PrimeField, N: Network>(
 }
 
 /// Outputs whether a shared value is zero (true) or not (false).
-pub fn is_zero<F: PrimeField, N: Network>(
+pub fn is_zero<F: FieldUint, N: Network>(
     a: FieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -723,12 +719,15 @@ pub fn is_zero<F: PrimeField, N: Network>(
 ///
 /// #Panics
 /// If public is larger than the bit size of the modulus of the underlying `PrimeField`.
-pub fn pow_2_public<F: PrimeField>(shared: FieldShare<F>, public: F) -> FieldShare<F> {
+pub fn pow_2_public<F: FieldUint>(shared: FieldShare<F>, public: F) -> FieldShare<F> {
     if public.is_zero() {
         shared
     } else {
-        let shift: BigUint = public.into();
-        let shift = shift.to_u32().expect("can cast shift operand to u32");
+        let shift = public
+            .to_uint()
+            .try_to_usize()
+            .and_then(|s| u32::try_from(s).ok())
+            .expect("can cast shift operand to u32");
         if shift >= F::MODULUS_BIT_SIZE {
             panic!(
                 "Expected left shift to be maximal {}, but was {}",

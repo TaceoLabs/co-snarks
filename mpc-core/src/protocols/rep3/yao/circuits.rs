@@ -4,11 +4,12 @@
 
 use super::bristol_fashion::BristolFashionEvaluator;
 use crate::protocols::rep3::yao::{GCUtils, bristol_fashion::BristolFashionCircuit};
-use ark_ff::PrimeField;
+use crate::uint::FieldUint;
+use ark_ff::One;
 use core::panic;
 use fancy_garbling::{BinaryBundle, FancyBinary, FancyError};
 use itertools::izip;
-use num_bigint::BigUint;
+use num_traits::WrappingSub;
 use std::ops::Not;
 
 /// This trait allows to lazily initialize the constants 0 and 1 for the garbled circuit, such that these constants are only send at most once each.
@@ -577,7 +578,7 @@ impl GarbledCircuits {
 
     /// Subtracts p from wires (with carry) and returns the result and the overflow bit.
     #[expect(clippy::type_complexity)]
-    fn sub_p<G: FancyBinary, F: PrimeField>(
+    fn sub_p<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires: &[G::Item],
         carry: G::Item,
@@ -587,8 +588,8 @@ impl GarbledCircuits {
 
         // Prepare p for subtraction
         let new_bitlen = bitlen + 1;
-        let p_ = (BigUint::from(1u64) << new_bitlen) - F::MODULUS.into();
-        let p_bits = GCUtils::biguint_to_bits(&p_, new_bitlen);
+        let p_ = (F::Uint::one() << new_bitlen).wrapping_sub(&F::modulus_uint());
+        let p_bits = GCUtils::uint_to_bits(&p_, new_bitlen);
 
         // manual_rca:
         let mut subtracted = Vec::with_capacity(bitlen);
@@ -614,7 +615,7 @@ impl GarbledCircuits {
         Ok((subtracted, ov))
     }
 
-    fn sub_p_and_mux_with_output_size<G: FancyBinary, F: PrimeField>(
+    fn sub_p_and_mux_with_output_size<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires: &[G::Item],
         carry: G::Item,
@@ -634,7 +635,7 @@ impl GarbledCircuits {
     }
 
     /// Adds two shared field elements mod p. The field elements are encoded as Yao shared wires. The output is only of size outlen.
-    fn adder_mod_p_with_output_size<G: FancyBinary, F: PrimeField>(
+    fn adder_mod_p_with_output_size<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -652,7 +653,7 @@ impl GarbledCircuits {
     }
 
     /// Adds two shared field elements mod p. The field elements are encoded as Yao shared wires.
-    pub fn adder_mod_p<G: FancyBinary, F: PrimeField>(
+    pub fn adder_mod_p<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -669,7 +670,7 @@ impl GarbledCircuits {
     }
 
     /// Adds two vectors of shared field elements mod p. The field elements are encoded as Yao shared wires.
-    pub fn adder_mod_p_many<G: FancyBinary, F: PrimeField>(
+    pub fn adder_mod_p_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -732,7 +733,7 @@ impl GarbledCircuits {
         Ok(result)
     }
 
-    fn compose_field_element<G: FancyBinary, F: PrimeField>(
+    fn compose_field_element<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         field_wires: &[G::Item],
         rand_wires: &[G::Item],
@@ -772,7 +773,7 @@ impl GarbledCircuits {
     }
 
     /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition ring elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
-    fn decompose_field_element_to_rings<G: FancyBinary, F: PrimeField>(
+    fn decompose_field_element_to_rings<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -839,7 +840,7 @@ impl GarbledCircuits {
     }
 
     /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition ring elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
-    pub(crate) fn decompose_field_element_to_rings_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn decompose_field_element_to_rings_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -886,7 +887,7 @@ impl GarbledCircuits {
     }
 
     /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition field elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
-    fn decompose_field_element<G: FancyBinary, F: PrimeField>(
+    fn decompose_field_element<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -919,7 +920,7 @@ impl GarbledCircuits {
     }
 
     /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition field elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
-    pub(crate) fn decompose_field_element_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn decompose_field_element_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -962,7 +963,7 @@ impl GarbledCircuits {
     }
 
     /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition field elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
-    fn decompose_field_element_to_other_field<G: FancyBinary, F: PrimeField, K: PrimeField>(
+    fn decompose_field_element_to_other_field<G: FancyBinary, F: FieldUint, K: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -998,8 +999,8 @@ impl GarbledCircuits {
     /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition field elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
     pub(crate) fn decompose_field_element_to_other_field_many<
         G: FancyBinary,
-        F: PrimeField,
-        K: PrimeField,
+        F: FieldUint,
+        K: FieldUint,
     >(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -1046,7 +1047,7 @@ impl GarbledCircuits {
     }
 
     /// Slices a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (lo, mid), into lo and hi, where lo has all bits from lsb to (excluding) msb and hi all bits from msb up to bitsize.. For the bitcomposition, wires_c are used.
-    fn slice_field_element<G: FancyBinary, F: PrimeField>(
+    fn slice_field_element<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -1078,7 +1079,7 @@ impl GarbledCircuits {
     }
 
     /// Slices a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) at given indices (lo, mid), into lo and hi, where lo has all bits from lsb to (excluding) msb and hi all bits from msb up to bitsize.. For the bitcomposition, wires_c are used.
-    pub(crate) fn slice_field_element_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn slice_field_element_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -1206,7 +1207,7 @@ impl GarbledCircuits {
     }
 
     /// Sorts a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first). Thereby, only bitsize bits are used in sorting. Finally, the sorted vector is composed to shared field elements using wires_c.
-    pub(crate) fn batcher_odd_even_merge_sort<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn batcher_odd_even_merge_sort<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -1250,7 +1251,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a field_sharing (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing of a ring. The ring share is composed using wires_c.
-    fn field_to_ring<G: FancyBinary, F: PrimeField>(
+    fn field_to_ring<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -1269,7 +1270,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a vector of field_sharings (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing vector of rings. The ring shares are composed using wires_c.
-    pub(crate) fn field_to_ring_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn field_to_ring_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -1301,7 +1302,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a ring_sharing (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing of a field. The field share is composed using wires_c.
-    fn ring_to_field<G: FancyBinary, F: PrimeField>(
+    fn ring_to_field<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -1318,7 +1319,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a vector of ring_sharings (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing vector of fields. The field shares are composed using wires_c.
-    pub(crate) fn ring_to_field_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn ring_to_field_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -1473,7 +1474,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a field element by a power of 2. The field element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b.
-    fn field_int_div_power_2<G: FancyBinary, F: PrimeField>(
+    fn field_int_div_power_2<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -1614,7 +1615,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a field element by another. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
-    fn field_int_div<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    fn field_int_div<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
@@ -1644,7 +1645,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a field element by another public field element. The field elements is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
-    fn field_int_div_by_public<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    fn field_int_div_by_public<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
@@ -1670,7 +1671,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a public field element by another shared field element. The field elements is represented as bitdecompositions x1s and x2s which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as the input wires.
-    fn field_int_div_by_shared<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    fn field_int_div_by_shared<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
@@ -1734,7 +1735,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a field element by a power of 2. The field element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b.
-    pub(crate) fn field_int_div_power_2_many<G: FancyBinary, F: PrimeField>(
+    pub(crate) fn field_int_div_power_2_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -1812,8 +1813,8 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub fn ring_div_by_public_to_fr_limbs_and_fq_many<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
-        K: PrimeField,
+        F: FieldUint,
+        K: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -1863,8 +1864,8 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     fn ring_div_by_public_to_fr_limbs_and_fq<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
-        K: PrimeField,
+        F: FieldUint,
+        K: FieldUint,
     >(
         g: &mut G,
         x1s: &[G::Item],
@@ -1911,7 +1912,7 @@ impl GarbledCircuits {
 
     /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
     #[expect(clippy::too_many_arguments)]
-    pub fn ring_div_by_public_to_limbs_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    pub fn ring_div_by_public_to_limbs_many<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -1956,7 +1957,7 @@ impl GarbledCircuits {
 
     /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
     #[expect(clippy::too_many_arguments)]
-    fn ring_div_by_public_to_limbs<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    fn ring_div_by_public_to_limbs<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         x1s: &[G::Item],
         x2s: &[G::Item],
@@ -2071,7 +2072,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a field element by another. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.
-    pub(crate) fn field_int_div_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    pub(crate) fn field_int_div_many<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -2110,10 +2111,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a field element by another public. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.
-    pub(crate) fn field_int_div_by_public_many<
-        G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
-    >(
+    pub(crate) fn field_int_div_by_public_many<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -2152,10 +2150,7 @@ impl GarbledCircuits {
     }
 
     /// Divides public field elements by another shared. The field elements are represented as two bitdecompositions wires_a, wires_b which need to be split first to get the two inputs. The output is composed using wires_c, whereas wires_c is half the size as wires_a and wires_b.
-    pub(crate) fn field_int_div_by_shared_many<
-        G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
-    >(
+    pub(crate) fn field_int_div_by_shared_many<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -2196,7 +2191,7 @@ impl GarbledCircuits {
     /// Slices field elements in chunks, then XORs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
     pub(crate) fn slice_and_get_xor_rotate_values_from_key_many<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -2248,7 +2243,7 @@ impl GarbledCircuits {
     /// Slices field elements in chunks, then XORs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
     pub(crate) fn slice_and_get_xor_rotate_values_from_key_with_filter_many<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -2292,7 +2287,7 @@ impl GarbledCircuits {
     /// Slices field elements in chunks, then ANDs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as two bitdecompositions wires_x1, wires_x2 which need to be split first to get the two sets of inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
     pub(crate) fn slice_and_get_and_rotate_values_from_key_many<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -2345,7 +2340,7 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_get_xor_rotate_values_from_key<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         x1s: &[G::Item],
@@ -2419,7 +2414,7 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_get_xor_rotate_values_from_key_with_filter<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         x1s: &[G::Item],
@@ -2528,7 +2523,7 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_get_and_rotate_values_from_key<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         x1s: &[G::Item],
@@ -2601,7 +2596,7 @@ impl GarbledCircuits {
     /// Slice two field elements in chunks, then ANDs the slices and rotates them (over u64), a specific circuit for the plookup accumulator in the builder. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first get the two inputs. The output is composed using wires_c. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits the output field elements have.
     pub(crate) fn slice_and_get_sparse_table_with_rotation_values_many<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -2656,7 +2651,7 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_get_sparse_table_with_rotation_values<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         x1s: &[G::Item],
@@ -2757,7 +2752,7 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_get_sparse_normalization_values_many<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -2812,7 +2807,7 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_get_sparse_normalization_values<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         x1s: &[G::Item],
@@ -2960,7 +2955,7 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_map_from_sparse_form_many<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -3023,7 +3018,7 @@ impl GarbledCircuits {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn slice_and_map_from_sparse_form<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         x1s: &[G::Item],
@@ -3207,7 +3202,7 @@ impl GarbledCircuits {
     /// A custom circuit for the AES blackbox function. Slices the input in base chunks and then composes these together into one element.
     pub(crate) fn accumulate_from_sparse_bytes<
         G: FancyBinary + FancyBinaryConstant,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -3374,7 +3369,7 @@ impl GarbledCircuits {
     /// Computes the SHA256 compression using a Bristol fashion circuit which is first parsed from a .txt file. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first to get the two inputs. The output is composed using wires_c.
     pub(crate) fn sha256_compression<
         G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -3442,7 +3437,7 @@ impl GarbledCircuits {
     }
 
     /// Computes the BLAKE2s hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The inputs are given as two bitdecompositions wires_a and wires_b, and the output is composed using wires_c. The output is then compose into size 32 Vec of field elements.
-    pub(crate) fn blake2s<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    pub(crate) fn blake2s<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -3715,7 +3710,7 @@ impl GarbledCircuits {
     ];
 
     /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The inputs are given as two bitdecompositions wires_a and wires_b, and the output is composed using wires_c. The output is then compose into size 32 Vec of field elements.
-    pub(crate) fn blake3<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    pub(crate) fn blake3<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
@@ -4060,7 +4055,7 @@ impl GarbledCircuits {
     /// Computes AES ct with given pt, iv and key which are represented as wires_x1 and wires_x2 which need to be added first get the inputs. The output is composed using wires_c. If the plaintext is not of size 0 mod 16 it is padded using PKCS7 padding.
     pub(crate) fn aes128<
         G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
-        F: PrimeField,
+        F: FieldUint,
     >(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
@@ -4202,7 +4197,7 @@ impl GarbledCircuits {
     }
 
     /// Computes wnaf digits and rows needed in the ECCVM builder.
-    pub(crate) fn compute_wnaf_digits_many<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    pub(crate) fn compute_wnaf_digits_many<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -4242,7 +4237,7 @@ impl GarbledCircuits {
     }
 
     /// Computes wnaf digits and rows needed in the ECCVM builder.
-    fn compute_wnaf_digits<G: FancyBinary + FancyBinaryConstant, F: PrimeField>(
+    fn compute_wnaf_digits<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
@@ -4437,7 +4432,7 @@ mod test {
     const TESTRUNS: usize = 5;
 
     // This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-    fn encode_field<F: PrimeField, C: AbstractChannel, R: Rng + CryptoRng>(
+    fn encode_field<F: FieldUint, C: AbstractChannel, R: Rng + CryptoRng>(
         field: F,
         garbler: &mut Garbler<C, R, WireMod2>,
     ) -> GCInputs<WireMod2> {
@@ -4456,7 +4451,7 @@ mod test {
         }
     }
 
-    fn gc_test<F: PrimeField>() {
+    fn gc_test<F: FieldUint>() {
         let mut rng = thread_rng();
 
         let a = F::rand(&mut rng);
@@ -4529,10 +4524,11 @@ mod test {
         }
     }
 
-    fn gc_test_div_int<F: PrimeField>()
+    fn gc_test_div_int<F: FieldUint>()
     where
         num_bigint::BigUint: std::convert::From<F>,
     {
+        use num_bigint::BigUint;
         let mut rng = thread_rng();
 
         let a = F::rand(&mut rng);

@@ -11,9 +11,15 @@
 //!   construct or inspect the raw share representation directly.
 //!
 //! Run with: `cargo test -p mpc-core --all-features --lib port_tests`
+//!
+//! The share type is now `Copy`; the pre-port test bodies (which must stay
+//! unchanged) still call `.clone()` on it in a few places.
+#![allow(clippy::clone_on_copy)]
 
 use super::*;
+use crate::uint::{FieldUint, UintBackend};
 use ark_ff::{One, PrimeField, Zero};
+use glue::{binary, combine_binary_element};
 use mpc_net::Network;
 use mpc_net::local::LocalNetwork;
 use num_bigint::BigUint;
@@ -24,24 +30,47 @@ const SEED: u64 = 0xdead_beef;
 const SHIFTS: [usize; 4] = [0, 1, 7, 63];
 
 /// The ONLY module the uint-port task may touch. Converts between the test
-/// bodies' canonical types (`F`, `BigUint`, `bool`) and the current
-/// `BigUint`-backed share representation (`Rep3BigUintShare<F>`). Every spot
+/// bodies' canonical types (`F`, `BigUint`, `bool`) and the fixed-width
+/// `F::Uint`-backed share representation (`Rep3UintShare<F>`). Every spot
 /// in this file that directly reads/writes a share's `.a`/`.b` fields, or
 /// constructs a "public mask" value in the share's native domain, lives here.
+///
+/// Since the ported production API speaks `F::Uint` at the public-mask and
+/// combine boundaries while the test bodies keep their canonical `BigUint`
+/// expectations, this module also provides thin canonical<->native shims for
+/// exactly those boundaries (`binary::{and_with_public, xor_public,
+/// or_public}` and `combine_binary_element`); the explicit
+/// `use glue::{binary, combine_binary_element}` at the top of the file makes
+/// the unchanged test bodies resolve to them instead of the glob-imported
+/// production items. Everything else in `glue::binary` is a plain re-export
+/// of the production module.
 mod glue {
     use super::*;
 
     /// Secret-shares a field element as a binary (rep3 XOR) sharing.
-    pub fn share_binary<F: PrimeField, R: Rng + CryptoRng>(
+    pub fn share_binary<F: FieldUint, R: Rng + CryptoRng>(
         x: F,
         rng: &mut R,
-    ) -> [Rep3BigUintShare<F>; 3] {
+    ) -> [Rep3UintShare<F>; 3] {
         share_biguint(x, rng)
     }
 
+    /// Canonical `BigUint` representation of a fixed-width uint.
+    pub fn uint_to_biguint<U: UintBackend>(x: &U) -> BigUint {
+        let mut bytes = vec![0u8; U::BYTES];
+        x.to_le_bytes_into(&mut bytes);
+        BigUint::from_bytes_le(&bytes)
+    }
+
+    /// Native `F::Uint` representation of a canonical `BigUint` mask value
+    /// (must fit the backend width).
+    pub fn biguint_to_uint<U: UintBackend>(x: &BigUint) -> U {
+        U::from_limbs_truncating(&x.to_u64_digits())
+    }
+
     /// Opens a binary share to its canonical [`BigUint`] value via the network.
-    pub fn open_binary<F: PrimeField, N: Network>(share: &Rep3BigUintShare<F>, net: &N) -> BigUint {
-        binary::open(share, net).unwrap()
+    pub fn open_binary<F: FieldUint, N: Network>(share: &Rep3UintShare<F>, net: &N) -> BigUint {
+        uint_to_biguint(&super::binary::open(share, net).unwrap())
     }
 
     /// Canonical `BigUint` representation of a field element.
@@ -54,11 +83,8 @@ mod glue {
     /// throughout the tests-package harness: `bit_inject` requires that each
     /// party's two additive components are themselves 0/1, not merely that
     /// their XOR is.
-    pub fn mask_to_single_bit<F: PrimeField>(
-        mut share: Rep3BigUintShare<F>,
-    ) -> Rep3BigUintShare<F> {
-        share.a &= BigUint::one();
-        share.b &= BigUint::one();
+    pub fn mask_to_single_bit<F: FieldUint>(mut share: Rep3UintShare<F>) -> Rep3UintShare<F> {
+        share.and_mask_assign(&F::Uint::one());
         share
     }
 
@@ -71,21 +97,68 @@ mod glue {
     /// pattern over `F::MODULUS_BIT_SIZE` bits), as required by `cmux`'s `c`
     /// input. Cannot reuse `share_biguint` since the all-ones pattern is
     /// generally not a valid field element.
-    pub fn share_bool_mask<F: PrimeField, R: Rng + CryptoRng>(
+    pub fn share_bool_mask<F: FieldUint, R: Rng + CryptoRng>(
         bit: bool,
         rng: &mut R,
-    ) -> [Rep3BigUintShare<F>; 3] {
-        let limbsize = F::MODULUS_BIT_SIZE.div_ceil(32);
-        let mask = (BigUint::one() << F::MODULUS_BIT_SIZE) - BigUint::one();
-        let val = if bit { mask.clone() } else { BigUint::ZERO };
-        let a = BigUint::new((0..limbsize).map(|_| rng.r#gen()).collect()) & &mask;
-        let b = BigUint::new((0..limbsize).map(|_| rng.r#gen()).collect()) & &mask;
-        let c = val ^ &a ^ &b;
+    ) -> [Rep3UintShare<F>; 3] {
+        let mask = F::Uint::mask(F::MODULUS_BIT_SIZE as usize);
+        let val = if bit { mask } else { F::Uint::zero() };
+        let a = F::Uint::random_bits(rng, F::MODULUS_BIT_SIZE as usize);
+        let b = F::Uint::random_bits(rng, F::MODULUS_BIT_SIZE as usize);
+        let c = val ^ a ^ b;
         [
-            Rep3BigUintShare::new(a.to_owned(), c.to_owned()),
-            Rep3BigUintShare::new(b.to_owned(), a),
-            Rep3BigUintShare::new(c, b),
+            Rep3UintShare::new(a, c),
+            Rep3UintShare::new(b, a),
+            Rep3UintShare::new(c, b),
         ]
+    }
+
+    /// Reconstructs a binary sharing to its canonical `BigUint` value
+    /// (shim over the production `combine_binary_element`, which now
+    /// returns `F::Uint`).
+    pub fn combine_binary_element<F: FieldUint>(
+        share1: Rep3UintShare<F>,
+        share2: Rep3UintShare<F>,
+        share3: Rep3UintShare<F>,
+    ) -> BigUint {
+        uint_to_biguint(&crate::protocols::rep3::combine_binary_element(
+            share1, share2, share3,
+        ))
+    }
+
+    /// Facade over the production `binary` module for the test bodies: a
+    /// plain re-export of everything, with the three public-mask entry
+    /// points shadowed by canonical-`BigUint`-taking shims (the production
+    /// versions now take `&F::Uint`).
+    pub mod binary {
+        use super::*;
+        pub use crate::protocols::rep3::binary::*;
+
+        /// Shim: canonical `BigUint` mask -> native `F::Uint` mask.
+        pub fn and_with_public<F: FieldUint>(
+            shared: &Rep3UintShare<F>,
+            public: &BigUint,
+        ) -> Rep3UintShare<F> {
+            crate::protocols::rep3::binary::and_with_public(shared, &biguint_to_uint(public))
+        }
+
+        /// Shim: canonical `BigUint` mask -> native `F::Uint` mask.
+        pub fn xor_public<F: FieldUint>(
+            shared: &Rep3UintShare<F>,
+            public: &BigUint,
+            id: PartyID,
+        ) -> Rep3UintShare<F> {
+            crate::protocols::rep3::binary::xor_public(shared, &biguint_to_uint(public), id)
+        }
+
+        /// Shim: canonical `BigUint` mask -> native `F::Uint` mask.
+        pub fn or_public<F: FieldUint>(
+            shared: &Rep3UintShare<F>,
+            public: &BigUint,
+            id: PartyID,
+        ) -> Rep3UintShare<F> {
+            crate::protocols::rep3::binary::or_public(shared, &biguint_to_uint(public), id)
+        }
     }
 }
 
@@ -125,7 +198,7 @@ fn edge_field_values<F: PrimeField>() -> Vec<F> {
 
 /// Test 1: Arithmetic share -> a2b -> b2a -> combine, roundtrips to the original
 /// value. Edges: 0, 1, p-1.
-fn case_a2b_b2a_roundtrip<F: PrimeField>() {
+fn case_a2b_b2a_roundtrip<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 1);
     let mut xs: Vec<F> = (0..8).map(|_| F::rand(&mut rng)).collect();
     xs.extend(edge_field_values::<F>());
@@ -143,7 +216,7 @@ fn case_a2b_b2a_roundtrip<F: PrimeField>() {
 
 /// Test 2: a2b, opened via the network, matches the plain `BigUint` value of `x`.
 /// Edges: 0, p-1.
-fn case_a2b_opens_to_value<F: PrimeField>() {
+fn case_a2b_opens_to_value<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 2);
     let mut xs: Vec<F> = (0..8).map(|_| F::rand(&mut rng)).collect();
     xs.push(F::zero());
@@ -164,7 +237,7 @@ fn case_a2b_opens_to_value<F: PrimeField>() {
 
 /// Test 3: A binary sharing of `x`, run through b2a, combines back to `x`.
 /// Edges: 0, p-1.
-fn case_b2a_of_shared_bits<F: PrimeField>() {
+fn case_b2a_of_shared_bits<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 3);
     let mut xs: Vec<F> = (0..8).map(|_| F::rand(&mut rng)).collect();
     xs.push(F::zero());
@@ -182,7 +255,7 @@ fn case_b2a_of_shared_bits<F: PrimeField>() {
 
 /// Test 4: Binary xor/and/or between two shares, and and/xor/or against public
 /// masks, all match plain `BigUint` bitwise arithmetic.
-fn case_binary_xor_and_public_ops<F: PrimeField>() {
+fn case_binary_xor_and_public_ops<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 4);
     let bit_len = F::MODULUS_BIT_SIZE as usize;
     let mask_ks = [1usize, 63, bit_len - 1];
@@ -240,7 +313,7 @@ fn case_binary_xor_and_public_ops<F: PrimeField>() {
 
 /// Test 5: Public left/right shifts of a bounded (< 2^64) shared value match
 /// plain `BigUint` shifts, for a handful of shift amounts.
-fn case_binary_shifts<F: PrimeField>() {
+fn case_binary_shifts<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 5);
     let mut vs: Vec<u64> = (0..8).map(|_| rng.r#gen()).collect();
     vs.extend([0u64, 1, u64::MAX]);
@@ -274,7 +347,7 @@ fn case_binary_shifts<F: PrimeField>() {
 /// nonzero shares and for a share of p-1. Exercises the odd-bitlen (bls
 /// 12-381, B=255) padding branch of the AND tree just as much as the
 /// even-bitlen (bn254, B=254) one.
-fn case_is_zero_both_parities<F: PrimeField>() {
+fn case_is_zero_both_parities<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 6);
     let mut cases: Vec<(F, bool)> = vec![(F::zero(), true)];
     for _ in 0..8 {
@@ -305,7 +378,7 @@ fn case_is_zero_both_parities<F: PrimeField>() {
 
 /// Test 7: `cmux(c, x_t, x_f)` opens to `x_t` when `c` is an all-ones selector,
 /// and to `x_f` when `c` is an all-zero selector.
-fn case_cmux_selects<F: PrimeField>() {
+fn case_cmux_selects<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 7);
     let xs: Vec<F> = (0..8).map(|_| F::rand(&mut rng)).collect();
 
@@ -342,7 +415,7 @@ fn case_cmux_selects<F: PrimeField>() {
 /// Test 8: `bit_inject` of a single shared bit (0 or 1) recovers that bit
 /// arithmetically. `bit_inject_many` does the same for a batch of 8 random
 /// bits.
-fn case_bit_inject_bits<F: PrimeField>() {
+fn case_bit_inject_bits<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 8);
 
     for &bit in &[false, true] {
@@ -384,7 +457,7 @@ fn expected_ge(a: BigUint, b: BigUint) -> BigUint {
 /// `BigUint` values. The `unsigned_ge_const_rhs(x, 0)` edge is covered
 /// separately below (see `case_unsigned_ge_const_rhs_zero_edge`), since it
 /// is the suspected pre-port bug called out in the task brief.
-fn case_unsigned_ge_semantics<F: PrimeField>() {
+fn case_unsigned_ge_semantics<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 9);
 
     // shared >= shared
@@ -463,7 +536,7 @@ fn case_unsigned_ge_semantics<F: PrimeField>() {
 /// the Kogge-Stone adder, tripping `debug_assert!(a.a.bits() <= bitlen as
 /// u64)` in `detail::and_twice` (detail.rs:272) rather than silently
 /// returning a wrong bit. See the task report for the exact panic output.
-fn case_unsigned_ge_const_rhs_zero_edge<F: PrimeField>() {
+fn case_unsigned_ge_const_rhs_zero_edge<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 90);
     let mut xs: Vec<F> = (0..8).map(|_| F::rand(&mut rng)).collect();
     xs.push(F::zero());
@@ -485,7 +558,7 @@ fn case_unsigned_ge_const_rhs_zero_edge<F: PrimeField>() {
 /// Test 10: Reconstructing a `share_biguint` sharing via `combine_binary_element`
 /// (no network involved) matches the canonical `BigUint` of the shared
 /// value.
-fn case_share_combine_roundtrip<F: PrimeField>() {
+fn case_share_combine_roundtrip<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 10);
     let mut xs: Vec<F> = (0..8).map(|_| F::rand(&mut rng)).collect();
     xs.extend(edge_field_values::<F>());
@@ -503,7 +576,7 @@ fn case_share_combine_roundtrip<F: PrimeField>() {
 
 /// Test 11: Yao bridge round trips: `a2y2b` opens to the plain value of `x`, and
 /// `b2y2a` of a binary sharing of `x` combines back to `x`.
-fn case_y2b_b2y_roundtrip<F: PrimeField>() {
+fn case_y2b_b2y_roundtrip<F: FieldUint>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 11);
     let mut xs: Vec<F> = (0..8).map(|_| F::rand(&mut rng)).collect();
     xs.extend(edge_field_values::<F>());

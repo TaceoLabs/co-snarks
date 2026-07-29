@@ -4,7 +4,7 @@
 
 use crate::protocols::rep3::id::PartyID;
 use crate::protocols::rep3::{
-    Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network::Rep3NetworkExt,
+    Rep3PrimeFieldShare, Rep3State, Rep3UintShare, network::Rep3NetworkExt,
 };
 use crate::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use crate::protocols::rep3_ring::ring::ring_impl::RingElement;
@@ -13,9 +13,9 @@ use crate::protocols::{
     rep3::{self, arithmetic::FieldShare},
     rep3_ring::Rep3RingShare,
 };
-use ark_ff::{One, PrimeField, Zero};
+use crate::uint::{FieldUint, UintBackend};
+use ark_ff::{One, Zero};
 use mpc_net::Network;
-use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 
@@ -24,7 +24,7 @@ type PermRing = u32;
 
 /// Sorts the inputs (both public and shared, where shared is inputted *before* public) using an oblivious radix sort algorithm. Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
-pub fn radix_sort_fields<F: PrimeField, N: Network>(
+pub fn radix_sort_fields<F: FieldUint, N: Network>(
     mut priv_inputs: Vec<FieldShare<F>>,
     pub_inputs: Vec<F>,
     bitsize: usize,
@@ -64,7 +64,7 @@ pub fn radix_sort_fields<F: PrimeField, N: Network>(
 /// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). The values public/shared values need to be organized to match the order given in `order` (false means a public value, true means a private value). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
 #[expect(clippy::too_many_arguments)]
-pub fn radix_sort_fields_vec_by<F: PrimeField, N: Network>(
+pub fn radix_sort_fields_vec_by<F: FieldUint, N: Network>(
     priv_key: &[FieldShare<F>],
     pub_key: &[F],
     order: &[bool],
@@ -93,16 +93,16 @@ pub fn radix_sort_fields_vec_by<F: PrimeField, N: Network>(
     Ok(results)
 }
 
-fn decompose<F: PrimeField, N: Network>(
+fn decompose<F: FieldUint, N: Network>(
     priv_inputs: &[FieldShare<F>],
     bitsize: usize,
     net0: &N,
     net1: &N,
     state0: &mut Rep3State,
     state1: &mut Rep3State,
-) -> eyre::Result<Vec<Rep3BigUintShare<F>>> {
-    let mask = (BigUint::one() << bitsize) - BigUint::one();
-    let mut priv_bits = vec![Rep3BigUintShare::zero_share(); priv_inputs.len()];
+) -> eyre::Result<Vec<Rep3UintShare<F>>> {
+    let mask = F::Uint::mask(bitsize);
+    let mut priv_bits = vec![Rep3UintShare::zero_share(); priv_inputs.len()];
     let (split1, split2) = priv_bits.split_at_mut(priv_inputs.len() / 2);
     let mut result1 = None;
     let mut result2 = None;
@@ -117,7 +117,7 @@ fn decompose<F: PrimeField, N: Network>(
                     break;
                 }
                 let mut binary = binary.unwrap();
-                binary &= &mask;
+                binary.and_mask_assign(&mask);
                 split1[i] = binary;
             }
         },
@@ -129,7 +129,7 @@ fn decompose<F: PrimeField, N: Network>(
                     break;
                 }
                 let mut binary = binary.unwrap();
-                binary &= &mask;
+                binary.and_mask_assign(&mask);
                 split2[i] = binary;
             }
         },
@@ -145,7 +145,7 @@ fn decompose<F: PrimeField, N: Network>(
     Ok(priv_bits)
 }
 
-fn gen_perm<F: PrimeField, N: Network>(
+fn gen_perm<F: FieldUint, N: Network>(
     priv_inputs: &[FieldShare<F>],
     pub_inputs: &[F],
     bitsize: usize,
@@ -196,7 +196,7 @@ fn order_and_promote_inputs(
 }
 
 #[expect(clippy::too_many_arguments)]
-fn gen_perm_ordered<F: PrimeField, N: Network>(
+fn gen_perm_ordered<F: FieldUint, N: Network>(
     priv_inputs: &[FieldShare<F>],
     pub_inputs: &[F],
     order: &[bool],
@@ -226,18 +226,18 @@ fn gen_perm_ordered<F: PrimeField, N: Network>(
     Ok(perm)
 }
 
-fn inject_public_bit<F: PrimeField>(inputs: &[F], bit: usize) -> Vec<RingElement<PermRing>> {
+fn inject_public_bit<F: FieldUint>(inputs: &[F], bit: usize) -> Vec<RingElement<PermRing>> {
     let len = inputs.len();
     let mut bits = Vec::with_capacity(len);
-    for inp in inputs.iter().cloned() {
-        let inp: BigUint = inp.into();
-        bits.push(RingElement(inp.bit(bit as u64) as PermRing));
+    for inp in inputs.iter() {
+        let inp = inp.to_uint();
+        bits.push(RingElement(inp.bit(bit) as PermRing));
     }
     bits
 }
 
-fn inject_bit<F: PrimeField, N: Network>(
-    inputs: &[Rep3BigUintShare<F>],
+fn inject_bit<F: FieldUint, N: Network>(
+    inputs: &[Rep3UintShare<F>],
     bit: usize,
     net: &N,
     state: &mut Rep3State,
@@ -245,8 +245,8 @@ fn inject_bit<F: PrimeField, N: Network>(
     let len = inputs.len();
     let mut bits = Vec::with_capacity(len);
     for inp in inputs {
-        let a = inp.a.bit(bit as u64) as PermRing;
-        let b = inp.b.bit(bit as u64) as PermRing;
+        let a = inp.a.bit(bit) as PermRing;
+        let b = inp.b.bit(bit) as PermRing;
         bits.push(Rep3RingShare::new_ring(a.into(), b.into()));
     }
     conversion::bit_inject_many(&bits, net, state)
@@ -355,7 +355,7 @@ where
     Ok(result)
 }
 
-fn apply_inv_field<F: PrimeField, N: Network>(
+fn apply_inv_field<F: FieldUint, N: Network>(
     rho: &[Rep3RingShare<PermRing>],
     bits: &[Rep3PrimeFieldShare<F>],
     net0: &N,
@@ -547,7 +547,7 @@ where
     Ok(result)
 }
 
-fn shuffle_field<F: PrimeField, N: Network>(
+fn shuffle_field<F: FieldUint, N: Network>(
     pi: &[Rep3RingShare<PermRing>],
     input: &[Rep3PrimeFieldShare<F>],
     net: &N,

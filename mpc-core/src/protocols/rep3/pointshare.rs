@@ -2,6 +2,7 @@
 //!
 //! This module contains operations with point shares
 
+use crate::uint::FieldUint;
 use ark_ec::CurveGroup;
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ff::{PrimeField, Zero};
@@ -229,7 +230,7 @@ pub fn is_zero<C: CurveGroup, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<(bool, bool)>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: FieldUint,
 {
     let (a_x, _, b_x, _) = conversion::point_share_to_fieldshares_pre::<C, N>(x, net, state)?;
     let is_equal = arithmetic::eq_bit(a_x, b_x, net, state)?;
@@ -247,7 +248,7 @@ pub fn is_zero_many<C: CurveGroup, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<(bool, bool)>>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: FieldUint,
 {
     let input_len = x.len();
     let (a_x, _, b_x, _) = conversion::point_share_to_fieldshares_pre_many::<C, N>(x, net, state)?;

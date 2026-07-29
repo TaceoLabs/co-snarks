@@ -3,22 +3,22 @@
 //! This module contains some oblivious lookup table algorithms for the Rep3 protocol.
 
 use crate::protocols::{
-    rep3::{Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, network::Rep3NetworkExt},
+    rep3::{Rep3PrimeFieldShare, Rep3State, Rep3UintShare, network::Rep3NetworkExt},
     rep3_ring::{Rep3RingShare, binary, conversion, gadgets, ring::int_ring::IntRing2k},
 };
+use crate::uint::FieldUint;
 use ark_ff::PrimeField;
 use mpc_net::Network;
-use num_bigint::BigUint;
 use rand::{distributions::Standard, prelude::Distribution};
 
 /// Takes a public lookup table containing field elements, and a replicated binary share of an index and returns a replicated binary sharing of the looked up value lut`\[`index`\]`. The table size needs to be a power of two. If this is not the case, the table is implicitly padded with 0.
 /// The algorithm is a rewrite of Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
-pub fn read_public_lut<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn read_public_lut<F: FieldUint, T: IntRing2k, N: Network>(
     lut: &[F],
     index: Rep3RingShare<T>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Rep3BigUintShare<F>>
+) -> eyre::Result<Rep3UintShare<F>>
 where
     Standard: Distribution<T>,
 {
@@ -36,16 +36,16 @@ where
             .expect("This transformation should work, otherwise we have another issue")
             & ((1 << k) - 1); // Mask potential overflows from non-well-defined input
 
-    let mut t = Rep3BigUintShare::<F>::default();
+    let mut t = Rep3UintShare::<F>::default();
     for (j, e) in e.into_iter().enumerate() {
         let index = j ^ c;
         if index >= n {
             // The pad with 0 case
             continue;
         }
-        let lut_val: BigUint = lut[index].into();
+        let lut_val = lut[index].to_uint();
         if e.a.0.convert() {
-            t.a ^= &lut_val;
+            t.a ^= lut_val;
         }
         if e.b.0.convert() {
             t.b ^= lut_val;
@@ -56,14 +56,14 @@ where
 
 /// Takes a public lookup table containing field elements, and a replicated binary share of an index and returns a non-replicated binary sharing of the looked up value lut`\[`index`\]`. The table size needs to be a power of two where the power is even. If this is not the case, the table is implicitly padded with 0.
 /// The algorithm is a rewrite of Protocol 10 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
-pub fn read_public_lut_low_depth<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn read_public_lut_low_depth<F: FieldUint, T: IntRing2k, N: Network>(
     lut: &[F],
     index: Rep3RingShare<T>,
     net0: &N,
     net1: &N,
     state0: &mut Rep3State,
     state1: &mut Rep3State,
-) -> eyre::Result<BigUint>
+) -> eyre::Result<F::Uint>
 where
     Standard: Distribution<T>,
 {
@@ -100,7 +100,7 @@ where
     let (mut t, mask_b) = state0
         .rngs
         .rand
-        .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
+        .random_uint::<F::Uint>(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
     t ^= mask_b;
     let mut j = 0;
     for f0 in e.into_iter() {
@@ -111,16 +111,16 @@ where
                 // The pad with 0 case
                 continue;
             }
-            let lut_val: BigUint = lut[index].into();
-            let mut g = Rep3BigUintShare::<F>::default();
+            let lut_val = lut[index].to_uint();
+            let mut g = Rep3UintShare::<F>::default();
             if f0.a.0.convert() {
-                g.a ^= &lut_val;
+                g.a ^= lut_val;
             }
             if f0.b.0.convert() {
                 g.b ^= lut_val;
             }
             if f1.a.0.convert() {
-                t ^= &g.a;
+                t ^= g.a;
                 t ^= g.b;
             }
             if f1.b.0.convert() {
@@ -133,14 +133,14 @@ where
 
 /// Takes many public lookup tables containing field elements, and a replicated binary share of an index and returns a non-replicated binary sharing of the looked up value lut`\[`index`\]`. The table sizes needs to be a power of two where the power is even. If this is not the case, the table is implicitly padded with 0.
 /// The algorithm is a rewrite of Protocol 10 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf) for rep3.
-pub fn read_multiple_public_lut_low_depth<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn read_multiple_public_lut_low_depth<F: FieldUint, T: IntRing2k, N: Network>(
     luts: &[Vec<F>],
     index: Rep3RingShare<T>,
     net0: &N,
     net1: &N,
     state0: &mut Rep3State,
     state1: &mut Rep3State,
-) -> eyre::Result<Vec<BigUint>>
+) -> eyre::Result<Vec<F::Uint>>
 where
     Standard: Distribution<T>,
 {
@@ -176,10 +176,9 @@ where
     let mut results = Vec::with_capacity(luts.len());
     for lut in luts {
         // Start the result with a random mask (for potential resharing later)
-        let (mut t, mask_b) = state0
-            .rngs
-            .rand
-            .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
+        let (mut t, mask_b) = state0.rngs.rand.random_uint::<F::Uint>(
+            usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"),
+        );
         t ^= mask_b;
         let mut j = 0;
         for f0 in e.iter().cloned() {
@@ -190,16 +189,16 @@ where
                     // The pad with 0 case
                     continue;
                 }
-                let lut_val: BigUint = lut[index].into();
-                let mut g = Rep3BigUintShare::<F>::default();
+                let lut_val = lut[index].to_uint();
+                let mut g = Rep3UintShare::<F>::default();
                 if f0.a.0.convert() {
-                    g.a ^= &lut_val;
+                    g.a ^= lut_val;
                 }
                 if f0.b.0.convert() {
                     g.b ^= lut_val;
                 }
                 if f1.a.0.convert() {
-                    t ^= &g.a;
+                    t ^= g.a;
                     t ^= g.b;
                 }
                 if f1.b.0.convert() {
@@ -214,7 +213,7 @@ where
 
 /// Takes a secret-shared lookup table containing field elements, and a replicated binary share of an index and returns a non-replicated additive sharing of the looked up value lut`\[`index`\]`.
 /// The algorithm is inspired by Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf).
-pub fn read_shared_lut<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn read_shared_lut<F: FieldUint, T: IntRing2k, N: Network>(
     lut: &[Rep3PrimeFieldShare<F>],
     index: Rep3RingShare<T>,
     net: &N,
@@ -240,7 +239,7 @@ where
 
 /// Takes a secret-shared lookup table containing field elements, and a replicated binary share of an index and puts another secret-shared field element (value) and puts it at lut`\[`index`\]`.
 /// The algorithm is inspired by Protocol 4 from [https://eprint.iacr.org/2024/1317.pdf](https://eprint.iacr.org/2024/1317.pdf).
-pub fn write_lut<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn write_lut<F: FieldUint, T: IntRing2k, N: Network>(
     value: &Rep3PrimeFieldShare<F>,
     lut: &mut [Rep3PrimeFieldShare<F>],
     index: Rep3RingShare<T>,
