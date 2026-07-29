@@ -43,6 +43,7 @@ hex = "0.4.3"
 
 [dev-dependencies]
 ark-std = { workspace = true }
+bincode = { workspace = true }
 paste.workspace = true
 criterion.workspace = true
 

@@ -2998,6 +2998,7 @@ dependencies = [
  "ark-grumpkin",
  "ark-serialize 0.6.0",
  "ark-std 0.6.0",
+ "bincode",
  "bytes",
  "criterion",
  "eyre",
