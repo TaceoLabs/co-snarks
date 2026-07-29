@@ -307,7 +307,7 @@ fn case_is_zero_both_parities<F: PrimeField>() {
 /// and to `x_f` when `c` is an all-zero selector.
 fn case_cmux_selects<F: PrimeField>() {
     let mut rng = ChaCha12Rng::seed_from_u64(SEED + 7);
-    let xs: Vec<F> = (0..4).map(|_| F::rand(&mut rng)).collect();
+    let xs: Vec<F> = (0..8).map(|_| F::rand(&mut rng)).collect();
 
     for x in xs {
         let y = F::rand(&mut rng);
@@ -357,11 +357,11 @@ fn case_bit_inject_bits<F: PrimeField>() {
 
     // bit_inject_many over 8 random bits.
     let bits: Vec<bool> = (0..8).map(|_| rng.r#gen()).collect();
-    let shares_per_bit: Vec<[Rep3BigUintShare<F>; 3]> = bits
+    let shares_per_bit: Vec<_> = bits
         .iter()
         .map(|&b| glue::share_binary(F::from(b as u64), &mut rng).map(glue::mask_to_single_bit))
         .collect();
-    let inputs: [Vec<Rep3BigUintShare<F>>; 3] =
+    let inputs: [Vec<_>; 3] =
         std::array::from_fn(|i| shares_per_bit.iter().map(|s| s[i].clone()).collect());
     let results = run3(inputs, |vec, net, state| {
         conversion::bit_inject_many(&vec, net, state).unwrap()
