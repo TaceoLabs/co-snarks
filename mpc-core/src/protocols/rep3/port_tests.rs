@@ -52,7 +52,7 @@ mod glue {
         x: F,
         rng: &mut R,
     ) -> [Rep3UintShare<F>; 3] {
-        share_biguint(x, rng)
+        super::share_binary(x, rng)
     }
 
     /// Canonical `BigUint` representation of a fixed-width uint.
