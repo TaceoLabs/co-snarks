@@ -14,6 +14,7 @@ use figment::{
     Figment,
     providers::{Env, Format, Serialized, Toml},
 };
+use mpc_core::uint::FieldUint;
 use mpc_net::{
     config::{NetworkConfig, NetworkConfigFile},
     tcp::TcpNetwork,
@@ -849,7 +850,10 @@ fn run_merge_input_shares<P: Pairing + CircomArkworksPairingBridge>(
 #[instrument(level = "debug", skip(config))]
 fn run_generate_witness<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateWitnessConfig,
-) -> color_eyre::Result<ExitCode> {
+) -> color_eyre::Result<ExitCode>
+where
+    P::ScalarField: FieldUint,
+{
     let input = config.input;
     let circuit = config.circuit;
     let protocol = config.protocol;

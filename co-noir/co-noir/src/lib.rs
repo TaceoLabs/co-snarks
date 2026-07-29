@@ -28,6 +28,7 @@ use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
     shamir::{self, ShamirPreprocessing, ShamirState},
 };
+use mpc_core::uint::FieldUint;
 use mpc_net::Network;
 use noirc_abi::Abi;
 use std::{array, collections::BTreeMap, fs::File, io::Write, path::Path, sync::Arc};
@@ -132,7 +133,11 @@ pub fn translate_witness<F: PrimeField, N: Network>(
 pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
     proving_key: Rep3ProvingKey<P>,
     net: &N,
-) -> Result<ShamirProvingKey<P>> {
+) -> Result<ShamirProvingKey<P>>
+where
+    P::ScalarField: FieldUint,
+    P::BaseField: FieldUint<Uint = <P::ScalarField as FieldUint>::Uint>,
+{
     // extract shares
     let shares = proving_key
         .polynomials
@@ -340,7 +345,11 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 /// Split a proving key into RPE3 shares
 pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
     proving_key: PlainProvingKey<P>,
-) -> Result<[Rep3ProvingKey<P>; 3]> {
+) -> Result<[Rep3ProvingKey<P>; 3]>
+where
+    P::ScalarField: FieldUint,
+    P::BaseField: FieldUint<Uint = <P::ScalarField as FieldUint>::Uint>,
+{
     let mut rng = rand::thread_rng();
     let witness_entities = proving_key
         .polynomials

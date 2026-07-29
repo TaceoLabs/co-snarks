@@ -13,6 +13,7 @@ use mpc_core::protocols::{
     rep3::{self, Rep3ShareVecType},
     shamir::{ShamirPreprocessing, ShamirState},
 };
+use mpc_core::uint::FieldUint;
 use mpc_net::Network;
 
 pub use ark_bls12_381::Bls12_381;
@@ -115,7 +116,7 @@ pub fn translate_witness<F: PrimeField, N: Network>(
 }
 
 /// Generate a REP3 shared witness
-pub fn generate_witness_rep3<F: PrimeField, N: Network>(
+pub fn generate_witness_rep3<F: PrimeField + FieldUint, N: Network>(
     circuit: &CoCircomCompilerParsed<F>,
     input: Rep3SharedInput<F>,
     config: VMConfig,
