@@ -25,7 +25,11 @@ pub trait FieldUint: PrimeField {
     fn from_uint_reduced(u: &Self::Uint) -> Self;
 
     /// Converts an integer known to be `< p` to a field element.
-    /// Panics (debug: asserts) if the value is not reduced.
+    ///
+    /// The caller must guarantee the value is reduced. Unreduced values that
+    /// fit in the field's `BigInt` width panic; values with set limbs beyond
+    /// that width panic only in debug builds — release builds silently
+    /// truncate them, which can yield a wrong field element.
     fn from_uint_unchecked(u: &Self::Uint) -> Self;
 
     /// The field modulus `p` as a uint.
