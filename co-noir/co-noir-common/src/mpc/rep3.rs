@@ -6,8 +6,9 @@ use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
 use itertools::izip;
-use mpc_core::protocols::rep3::Rep3BigUintShare;
+use mpc_core::protocols::rep3::Rep3UintShare;
 use mpc_core::protocols::rep3::conversion;
+use mpc_core::uint::{FieldUint, UintBackend};
 use mpc_core::{
     MpcState,
     protocols::rep3::{
@@ -15,13 +16,16 @@ use mpc_core::{
     },
 };
 use mpc_net::Network;
-use num_bigint::BigUint;
 use rayon::prelude::*;
 use std::any::TypeId;
 #[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
-impl<P: HonkCurve<TranscriptFieldType>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: HonkCurve<TranscriptFieldType>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver
+where
+    P::ScalarField: FieldUint,
+    P::BaseField: FieldUint<Uint = <P::ScalarField as FieldUint>::Uint>,
+{
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
@@ -348,15 +352,15 @@ impl<P: HonkCurve<TranscriptFieldType>> NoirUltraHonkProver<P> for Rep3UltraHonk
         rhs.extend_from_slice(&mul);
         let res = arithmetic::mul_vec(&lhs, &rhs, net, state)?;
         let res = conversion::a2b_many(&res, net, state)?;
-        let lower_mask = (BigUint::one() << LOWER_BITS) - BigUint::one();
+        let lower_mask = <P::BaseField as FieldUint>::Uint::mask(LOWER_BITS);
         let res: Vec<_> = res
             .iter()
             .flat_map(|x| {
-                let res0 = x & &lower_mask;
+                let res0 = x.and_mask(&lower_mask);
                 let res1 = x >> LOWER_BITS;
                 [
-                    Rep3BigUintShare::<P::ScalarField>::new(res0.a, res0.b),
-                    Rep3BigUintShare::<P::ScalarField>::new(res1.a, res1.b),
+                    Rep3UintShare::<P::ScalarField>::new(res0.a, res0.b),
+                    Rep3UintShare::<P::ScalarField>::new(res1.a, res1.b),
                 ]
             })
             .collect();
