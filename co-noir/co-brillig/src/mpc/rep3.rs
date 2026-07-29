@@ -1,5 +1,5 @@
 use super::{BrilligDriver, PlainBrilligDriver};
-use ark_ff::{One as _, PrimeField};
+use ark_ff::One as _;
 use brillig::{BitSize, IntegerBitSize};
 use core::panic;
 use mpc_core::MpcState;
@@ -9,6 +9,7 @@ use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{self, Rep3BitShare, Rep3RingShare};
+use mpc_core::uint::FieldUint;
 use mpc_net::Network;
 use num_bigint::BigUint;
 use num_traits::AsPrimitive;
@@ -18,7 +19,7 @@ use std::marker::PhantomData;
 use super::PlainBrilligType as Public;
 
 /// A driver for the coBrillig-VM that uses replicated secret sharing.
-pub struct Rep3BrilligDriver<'a, F: PrimeField, N: Network> {
+pub struct Rep3BrilligDriver<'a, F: FieldUint, N: Network> {
     id: PartyID,
     net: &'a N,
     state: Rep3State,
@@ -29,7 +30,7 @@ pub struct Rep3BrilligDriver<'a, F: PrimeField, N: Network> {
 /// The types for the coBrillig Rep3 driver. The values
 /// can either be shared or public.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Rep3BrilligType<F: PrimeField> {
+pub enum Rep3BrilligType<F: FieldUint> {
     /// A public value
     Public(Public<F>),
     /// A shared value
@@ -38,7 +39,7 @@ pub enum Rep3BrilligType<F: PrimeField> {
 
 /// The potential shared values of the co-Brillig Rep3 driver.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Shared<F: PrimeField> {
+pub enum Shared<F: FieldUint> {
     Field(Rep3PrimeFieldShare<F>),
     Ring128(Rep3RingShare<u128>),
     Ring64(Rep3RingShare<u64>),
@@ -48,19 +49,19 @@ pub enum Shared<F: PrimeField> {
     Ring1(Rep3BitShare),
 }
 
-impl<F: PrimeField> From<F> for Rep3BrilligType<F> {
+impl<F: FieldUint> From<F> for Rep3BrilligType<F> {
     fn from(value: F) -> Self {
         Rep3BrilligType::Public(Public::Field(value))
     }
 }
 
-impl<F: PrimeField> Default for Rep3BrilligType<F> {
+impl<F: FieldUint> Default for Rep3BrilligType<F> {
     fn default() -> Self {
         Self::from(F::default())
     }
 }
 
-impl<'a, F: PrimeField, N: Network> Rep3BrilligDriver<'a, F, N> {
+impl<'a, F: FieldUint, N: Network> Rep3BrilligDriver<'a, F, N> {
     /// Creates a new instance of the rep3 driver
     pub fn new(net: &'a N, state: Rep3State) -> Self {
         Self {
@@ -73,7 +74,7 @@ impl<'a, F: PrimeField, N: Network> Rep3BrilligDriver<'a, F, N> {
     }
 }
 
-impl<F: PrimeField> Rep3BrilligType<F> {
+impl<F: FieldUint> Rep3BrilligType<F> {
     /// Creates a new public field element from the provided field
     pub fn public_field(val: F) -> Self {
         Self::Public(Public::Field(val))
@@ -152,7 +153,7 @@ macro_rules! bit_from_u128 {
     }};
 }
 
-fn cast_ring<T, F: PrimeField, N: Network>(
+fn cast_ring<T, F: FieldUint, N: Network>(
     share: Rep3RingShare<T>,
     integer_bit_size: IntegerBitSize,
     net: &N,
@@ -190,7 +191,7 @@ where
     }
 }
 
-impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> {
+impl<F: FieldUint, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> {
     type BrilligType = Rep3BrilligType<F>;
 
     fn fork(&mut self) -> eyre::Result<(Self, Self)> {
@@ -1092,8 +1093,8 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
                             &mut self.state,
                         )?;
                         let result = Rep3RingShare::new(
-                            Bit::cast_from_biguint(&eq.a),
-                            Bit::cast_from_biguint(&eq.b),
+                            Bit::cast_from_uint(&eq.a),
+                            Bit::cast_from_uint(&eq.b),
                         );
                         Rep3BrilligType::shared_u1(result)
                     }
@@ -1153,10 +1154,8 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
             (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
                 (Shared::Field(s1), Shared::Field(s2)) => {
                     let eq = rep3::arithmetic::eq_bit(s1, s2, self.net, &mut self.state)?;
-                    let result = Rep3RingShare::new(
-                        Bit::cast_from_biguint(&eq.a),
-                        Bit::cast_from_biguint(&eq.b),
-                    );
+                    let result =
+                        Rep3RingShare::new(Bit::cast_from_uint(&eq.a), Bit::cast_from_uint(&eq.b));
                     Rep3BrilligType::shared_u1(result)
                 }
                 (Shared::Ring128(s1), Shared::Ring128(s2)) => Rep3BrilligType::shared_u1(
@@ -1201,8 +1200,8 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
                         let ge =
                             rep3::arithmetic::le_public_bit(rhs, lhs, self.net, &mut self.state)?;
                         let result = !Rep3RingShare::new(
-                            Bit::cast_from_biguint(&ge.a),
-                            Bit::cast_from_biguint(&ge.b),
+                            Bit::cast_from_uint(&ge.a),
+                            Bit::cast_from_uint(&ge.b),
                         );
                         Rep3BrilligType::shared_u1(result)
                     }
@@ -1265,8 +1264,8 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
                         let ge =
                             rep3::arithmetic::ge_public_bit(lhs, rhs, self.net, &mut self.state)?;
                         let result = !Rep3RingShare::new(
-                            Bit::cast_from_biguint(&ge.a),
-                            Bit::cast_from_biguint(&ge.b),
+                            Bit::cast_from_uint(&ge.a),
+                            Bit::cast_from_uint(&ge.b),
                         );
                         Rep3BrilligType::shared_u1(result)
                     }
@@ -1326,10 +1325,8 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
             (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
                 (Shared::Field(s1), Shared::Field(s2)) => {
                     let ge = rep3::arithmetic::ge_bit(s1, s2, self.net, &mut self.state)?;
-                    let result = !Rep3RingShare::new(
-                        Bit::cast_from_biguint(&ge.a),
-                        Bit::cast_from_biguint(&ge.b),
-                    );
+                    let result =
+                        !Rep3RingShare::new(Bit::cast_from_uint(&ge.a), Bit::cast_from_uint(&ge.b));
                     Rep3BrilligType::shared_u1(result)
                 }
                 (Shared::Ring128(s1), Shared::Ring128(s2)) => Rep3BrilligType::shared_u1(
@@ -1374,8 +1371,8 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
                         let le =
                             rep3::arithmetic::ge_public_bit(rhs, lhs, self.net, &mut self.state)?;
                         let result = Rep3RingShare::new(
-                            Bit::cast_from_biguint(&le.a),
-                            Bit::cast_from_biguint(&le.b),
+                            Bit::cast_from_uint(&le.a),
+                            Bit::cast_from_uint(&le.b),
                         );
                         Rep3BrilligType::shared_u1(result)
                     }
@@ -1438,8 +1435,8 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
                         let le =
                             rep3::arithmetic::le_public_bit(lhs, rhs, self.net, &mut self.state)?;
                         let result = Rep3RingShare::new(
-                            Bit::cast_from_biguint(&le.a),
-                            Bit::cast_from_biguint(&le.b),
+                            Bit::cast_from_uint(&le.a),
+                            Bit::cast_from_uint(&le.b),
                         );
                         Rep3BrilligType::shared_u1(result)
                     }
@@ -1499,10 +1496,8 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N>
             (Rep3BrilligType::Shared(s1), Rep3BrilligType::Shared(s2)) => match (s1, s2) {
                 (Shared::Field(s1), Shared::Field(s2)) => {
                     let le = rep3::arithmetic::ge_bit(s2, s1, self.net, &mut self.state)?;
-                    let result = Rep3RingShare::new(
-                        Bit::cast_from_biguint(&le.a),
-                        Bit::cast_from_biguint(&le.b),
-                    );
+                    let result =
+                        Rep3RingShare::new(Bit::cast_from_uint(&le.a), Bit::cast_from_uint(&le.b));
                     Rep3BrilligType::shared_u1(result)
                 }
                 (Shared::Ring128(s1), Shared::Ring128(s2)) => Rep3BrilligType::shared_u1(
