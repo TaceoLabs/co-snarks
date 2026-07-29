@@ -69,6 +69,14 @@ pub trait IntRing2k:
     /// Thus if the value is larger than this type, it will be truncated
     fn cast_from_biguint(biguint: &BigUint) -> Self;
 
+    /// Casts this type to a fixed-width uint, zero-extending if the target
+    /// is wider and truncating excess bits if it is narrower
+    fn cast_to_uint<U: UintBackend>(&self) -> U;
+
+    /// Casts a fixed-width uint to this type, removing any excess bits
+    /// Thus if the value is larger than this type, it will be truncated
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self;
+
     /// a += b
     #[inline(always)]
     fn wrapping_add_assign(&mut self, rhs: &Self) {
@@ -119,6 +127,14 @@ impl IntRing2k for Bit {
     fn cast_from_biguint(biguint: &BigUint) -> Self {
         biguint.iter_u64_digits().next().unwrap_or_default().as_()
     }
+
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(self.convert())
+    }
+
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        Bit::new(!u.is_zero())
+    }
 }
 
 impl IntRing2k for u8 {
@@ -148,6 +164,14 @@ impl IntRing2k for u8 {
 
     fn cast_from_biguint(biguint: &BigUint) -> Self {
         biguint.iter_u64_digits().next().unwrap_or_default() as Self
+    }
+
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(*self as u64)
+    }
+
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        u.to_u64_truncating() as Self
     }
 }
 
@@ -179,6 +203,14 @@ impl IntRing2k for u16 {
     fn cast_from_biguint(biguint: &BigUint) -> Self {
         biguint.iter_u64_digits().next().unwrap_or_default() as Self
     }
+
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(*self as u64)
+    }
+
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        u.to_u64_truncating() as Self
+    }
 }
 
 impl IntRing2k for u32 {
@@ -209,6 +241,14 @@ impl IntRing2k for u32 {
     fn cast_from_biguint(biguint: &BigUint) -> Self {
         biguint.iter_u64_digits().next().unwrap_or_default() as Self
     }
+
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(*self as u64)
+    }
+
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        u.to_u64_truncating() as Self
+    }
 }
 
 impl IntRing2k for u64 {
@@ -238,6 +278,14 @@ impl IntRing2k for u64 {
 
     fn cast_from_biguint(biguint: &BigUint) -> Self {
         biguint.iter_u64_digits().next().unwrap_or_default() as Self
+    }
+
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(*self)
+    }
+
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        u.to_u64_truncating() as Self
     }
 }
 
@@ -270,6 +318,17 @@ impl IntRing2k for u128 {
         let mut iter = biguint.iter_u64_digits();
         let x0 = iter.next().unwrap_or_default();
         let x1 = iter.next().unwrap_or_default();
+        ((x1 as u128) << 64) | x0 as u128
+    }
+
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from_limbs_truncating(&[*self as u64, (*self >> 64) as u64])
+    }
+
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        let limbs = u.as_limbs();
+        let x0 = limbs.first().copied().unwrap_or_default();
+        let x1 = limbs.get(1).copied().unwrap_or_default();
         ((x1 as u128) << 64) | x0 as u128
     }
 }
@@ -312,5 +371,13 @@ impl<const BITS: usize, const LIMBS: usize> IntRing2k for RUint<BITS, LIMBS> {
             *limb = digit;
         }
         Self(ruint::Uint::from_limbs(limbs))
+    }
+
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from_limbs_truncating(<Self as UintBackend>::as_limbs(self))
+    }
+
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        <Self as UintBackend>::from_limbs_truncating(u.as_limbs())
     }
 }

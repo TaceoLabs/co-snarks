@@ -3,9 +3,10 @@
 //! This module contains conversions between share types
 
 use crate::protocols::rep3::{PartyID, arithmetic::BinaryShare};
+use crate::uint::{FieldUint, UintBackend};
 
 use super::{
-    Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, arithmetic, detail,
+    Rep3PointShare, Rep3PrimeFieldShare, Rep3State, Rep3UintShare, arithmetic, detail,
     network::Rep3NetworkExt,
     yao::{
         self, GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator, garbler::Rep3Garbler,
@@ -13,11 +14,9 @@ use super::{
     },
 };
 use ark_ec::{AffineRepr as _, CurveGroup};
-use ark_ff::PrimeField;
 use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::{Itertools as _, izip};
 use mpc_net::Network;
-use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
 
 /// This enum defines which arithmetic-to-binary (and vice-versa) implementation of [ABY3](https://eprint.iacr.org/2018/403.pdf) is used.
@@ -33,11 +32,11 @@ pub enum A2BType {
 }
 
 /// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the arithmetic-to-binary conversion.
-pub fn a2b_selector<F: PrimeField, N: Network>(
+pub fn a2b_selector<F: FieldUint, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Rep3BigUintShare<F>> {
+) -> eyre::Result<Rep3UintShare<F>> {
     match state.a2b_type {
         A2BType::Direct => a2b(x, net, state),
         A2BType::Yao => a2y2b(x, net, state),
@@ -45,8 +44,8 @@ pub fn a2b_selector<F: PrimeField, N: Network>(
 }
 
 /// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the binary-to-arithmetic conversion.
-pub fn b2a_selector<F: PrimeField, N: Network>(
-    x: &Rep3BigUintShare<F>,
+pub fn b2a_selector<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
@@ -57,71 +56,77 @@ pub fn b2a_selector<F: PrimeField, N: Network>(
 }
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
-pub fn a2b<F: PrimeField, N: Network>(
+pub fn a2b<F: FieldUint, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Rep3BigUintShare<F>> {
-    let mut x01 = Rep3BigUintShare::zero_share();
-    let mut x2 = Rep3BigUintShare::zero_share();
+) -> eyre::Result<Rep3UintShare<F>> {
+    let mut x01 = Rep3UintShare::zero_share();
+    let mut x2 = Rep3UintShare::zero_share();
 
-    let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
+    let (mut r, r2) = state
+        .rngs
+        .rand
+        .random_uint::<F::Uint>(F::MODULUS_BIT_SIZE as usize);
     r ^= r2;
 
     match state.id {
         PartyID::ID0 => {
             x01.a = r;
-            x2.b = x.b.into();
+            x2.b = x.b.to_uint();
         }
         PartyID::ID1 => {
-            let val: BigUint = (x.a + x.b).into();
+            let val = (x.a + x.b).to_uint();
             x01.a = val ^ r;
         }
         PartyID::ID2 => {
             x01.a = r;
-            x2.a = x.a.into();
+            x2.a = x.a.to_uint();
         }
     }
 
     // reshare x01
-    let local_b = net.reshare(x01.a.to_owned())?;
+    let local_b = net.reshare(x01.a)?;
     x01.b = local_b;
 
     detail::low_depth_binary_add_mod_p::<F, N>(&x01, &x2, net, state, F::MODULUS_BIT_SIZE as usize)
 }
 
 /// A variant of [a2b] that operates on vectors of shared values instead.
-pub fn a2b_many<F: PrimeField, N: Network>(
+pub fn a2b_many<F: FieldUint, N: Network>(
     x: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Vec<Rep3BigUintShare<F>>> {
-    let mut x2 = vec![Rep3BigUintShare::zero_share(); x.len()];
+) -> eyre::Result<Vec<Rep3UintShare<F>>> {
+    let mut x2 = vec![Rep3UintShare::zero_share(); x.len()];
 
     let mut r_vec = Vec::with_capacity(x.len());
     for _ in 0..x.len() {
-        let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
-        r ^= &r2;
+        let (mut r, r2) = state
+            .rngs
+            .rand
+            .random_uint::<F::Uint>(F::MODULUS_BIT_SIZE as usize);
+        r ^= r2;
         r_vec.push(r);
     }
 
     let x01_a = match state.id {
         PartyID::ID0 => {
             for (x2, x) in izip!(x2.iter_mut(), x) {
-                x2.b = x.b.into();
+                x2.b = x.b.to_uint();
             }
             r_vec
         }
 
         PartyID::ID1 => izip!(x, r_vec)
             .map(|(x, r)| {
-                let tmp: BigUint = (x.a + x.b).into();
+                let tmp = (x.a + x.b).to_uint();
                 tmp ^ r
             })
             .collect(),
         PartyID::ID2 => {
             for (x2, x) in izip!(x2.iter_mut(), x) {
-                x2.a = x.a.into();
+                x2.a = x.a.to_uint();
             }
             r_vec
         }
@@ -130,7 +135,7 @@ pub fn a2b_many<F: PrimeField, N: Network>(
     // reshare x01
     let x01_b = net.reshare_many(&x01_a)?;
     let x01 = izip!(x01_a, x01_b)
-        .map(|(a, b)| Rep3BigUintShare::new(a, b))
+        .map(|(a, b)| Rep3UintShare::new(a, b))
         .collect_vec();
 
     detail::low_depth_binary_add_mod_p_many::<F, N>(
@@ -146,15 +151,18 @@ pub fn a2b_many<F: PrimeField, N: Network>(
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
-pub fn b2a<F: PrimeField, N: Network>(
-    x: &Rep3BigUintShare<F>,
+pub fn b2a<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
-    let mut y = Rep3BigUintShare::zero_share();
+    let mut y = Rep3UintShare::zero_share();
     let mut res = Rep3PrimeFieldShare::zero_share();
 
-    let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
+    let (mut r, r2) = state
+        .rngs
+        .rand
+        .random_uint::<F::Uint>(F::MODULUS_BIT_SIZE as usize);
     r ^= r2;
 
     match state.id {
@@ -176,7 +184,7 @@ pub fn b2a<F: PrimeField, N: Network>(
 
             let k2_comp = k2.0 + k2.1 + k2.2;
             let k3_comp = k3.0 + k3.1 + k3.2;
-            let val: BigUint = (k2_comp + k3_comp).into();
+            let val = (k2_comp + k3_comp).to_uint();
             y.a = val ^ r;
             res.a = k3_comp.neg();
             res.b = k2_comp.neg();
@@ -184,7 +192,7 @@ pub fn b2a<F: PrimeField, N: Network>(
     }
 
     // reshare y
-    let local_b = net.reshare(y.a.to_owned())?;
+    let local_b = net.reshare(y.a)?;
     y.b = local_b;
 
     let z = detail::low_depth_binary_add_mod_p::<F, N>(
@@ -197,12 +205,12 @@ pub fn b2a<F: PrimeField, N: Network>(
 
     match state.id {
         PartyID::ID0 => {
-            let rcv: BigUint = net.reshare(z.b.to_owned())?;
-            res.a = (z.a ^ z.b ^ rcv).into();
+            let rcv: F::Uint = net.reshare(z.b)?;
+            res.a = F::from_uint_unchecked(&(z.a ^ z.b ^ rcv));
         }
         PartyID::ID1 => {
-            let rcv: BigUint = net.recv_prev()?;
-            res.b = (z.a ^ z.b ^ rcv).into();
+            let rcv: F::Uint = net.recv_prev()?;
+            res.b = F::from_uint_unchecked(&(z.a ^ z.b ^ rcv));
         }
         PartyID::ID2 => {
             net.send_next(z.b)?;
@@ -212,8 +220,8 @@ pub fn b2a<F: PrimeField, N: Network>(
 }
 
 /// A variant of [b2a] that operates on vectors of shared values instead.
-pub fn b2a_many<F: PrimeField, N: Network>(
-    x: &[Rep3BigUintShare<F>],
+pub fn b2a_many<F: FieldUint, N: Network>(
+    x: &[Rep3UintShare<F>],
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
@@ -221,7 +229,10 @@ pub fn b2a_many<F: PrimeField, N: Network>(
 
     let mut r_vec = Vec::with_capacity(x.len());
     for _ in 0..x.len() {
-        let (mut r, r2) = state.rngs.rand.random_biguint(F::MODULUS_BIT_SIZE as usize);
+        let (mut r, r2) = state
+            .rngs
+            .rand
+            .random_uint::<F::Uint>(F::MODULUS_BIT_SIZE as usize);
         r ^= r2;
         r_vec.push(r);
     }
@@ -247,7 +258,7 @@ pub fn b2a_many<F: PrimeField, N: Network>(
 
                 let k2_comp = k2.0 + k2.1 + k2.2;
                 let k3_comp = k3.0 + k3.1 + k3.2;
-                let val: BigUint = (k2_comp + k3_comp).into();
+                let val = (k2_comp + k3_comp).to_uint();
                 *y ^= val;
                 res.a = k3_comp.neg();
                 res.b = k2_comp.neg();
@@ -274,18 +285,18 @@ pub fn b2a_many<F: PrimeField, N: Network>(
 
     match state.id {
         PartyID::ID0 => {
-            let z_b = z.iter().cloned().map(|z| z.b).collect::<Vec<_>>();
+            let z_b = z.iter().map(|z| z.b).collect::<Vec<_>>();
             net.send_next_many(&z_b)?;
-            let rcv: Vec<BigUint> = net.recv_prev_many()?;
+            let rcv: Vec<F::Uint> = net.recv_prev_many()?;
 
             for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
-                res.a = (z.a ^ z.b ^ rcv).into();
+                res.a = F::from_uint_unchecked(&(z.a ^ z.b ^ *rcv));
             }
         }
         PartyID::ID1 => {
-            let rcv: Vec<BigUint> = net.recv_prev_many()?;
+            let rcv: Vec<F::Uint> = net.recv_prev_many()?;
             for (res, z, rcv) in izip!(res.iter_mut(), z, rcv.iter()) {
-                res.b = (z.a ^ z.b ^ rcv).into();
+                res.b = F::from_uint_unchecked(&(z.a ^ z.b ^ *rcv));
             }
         }
         PartyID::ID2 => {
@@ -297,13 +308,13 @@ pub fn b2a_many<F: PrimeField, N: Network>(
 }
 
 /// Translates one shared bits into an arithmetic sharing of the same bit. I.e., the shared bit x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3, with x being either 0 or 1.
-pub fn bit_inject<F: PrimeField, N: Network>(
-    x: &Rep3BigUintShare<F>,
+pub fn bit_inject<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
-    assert!(x.a.bits() <= 1);
-    assert!(x.b.bits() <= 1);
+    assert!(x.a.bit_len() <= 1);
+    assert!(x.b.bit_len() <= 1);
 
     // Approach: Split the value into x and y and compute an arithmetic xor.
     // The multiplication in the arithmetic xor is done in a special way according to https://eprint.iacr.org/2025/919.pdf
@@ -353,13 +364,13 @@ pub fn bit_inject<F: PrimeField, N: Network>(
 }
 
 /// Translates a vector of shared bit into a vector of arithmetic sharings of the same bits. See [bit_inject] for details.
-pub fn bit_inject_many<F: PrimeField, N: Network>(
-    x: &[Rep3BigUintShare<F>],
+pub fn bit_inject_many<F: FieldUint, N: Network>(
+    x: &[Rep3UintShare<F>],
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-    assert!(x.iter().all(|a| a.a.bits() <= 1));
-    assert!(x.iter().all(|a| a.b.bits() <= 1));
+    assert!(x.iter().all(|a| a.a.bit_len() <= 1));
+    assert!(x.iter().all(|a| a.b.bit_len() <= 1));
 
     let mut res_a = Vec::with_capacity(x.len());
 
@@ -433,7 +444,7 @@ pub fn bit_inject_many<F: PrimeField, N: Network>(
 }
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a yao sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x.
-pub fn a2y<F: PrimeField, N: Network>(
+pub fn a2y<F: FieldUint, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     net: &N,
@@ -462,7 +473,7 @@ pub fn a2y<F: PrimeField, N: Network>(
 }
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a yao sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into wires, such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x. Uses the Streaming Garbler/Evaluator.
-pub fn a2y_streaming<F: PrimeField, N: Network>(
+pub fn a2y_streaming<F: FieldUint, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     net: &N,
@@ -492,7 +503,7 @@ pub fn a2y_streaming<F: PrimeField, N: Network>(
 }
 
 /// A variant of [a2y] that operates on vectors of shared values instead.
-pub fn a2y_many<F: PrimeField, N: Network>(
+pub fn a2y_many<F: FieldUint, N: Network>(
     x: &[Rep3PrimeFieldShare<F>],
     delta: Option<WireMod2>,
     net: &N,
@@ -561,7 +572,7 @@ macro_rules! y2a_impl_p2 {
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
-pub fn y2a<F: PrimeField, N: Network>(
+pub fn y2a<F: FieldUint, N: Network>(
     x: BinaryBundle<WireMod2>,
     delta: Option<WireMod2>,
     net: &N,
@@ -597,7 +608,7 @@ pub fn y2a<F: PrimeField, N: Network>(
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
-pub fn y2a_streaming<F: PrimeField, N: Network>(
+pub fn y2a_streaming<F: FieldUint, N: Network>(
     x: BinaryBundle<WireMod2>,
     delta: Option<WireMod2>,
     net: &N,
@@ -632,8 +643,8 @@ pub fn y2a_streaming<F: PrimeField, N: Network>(
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
-pub fn b2y<F: PrimeField, N: Network>(
-    x: &Rep3BigUintShare<F>,
+pub fn b2y<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
     delta: Option<WireMod2>,
     net: &N,
     state: &mut Rep3State,
@@ -663,31 +674,31 @@ pub fn b2y<F: PrimeField, N: Network>(
 }
 
 /// Transforms the shared value x from a yao sharing to a binary sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
-pub fn y2b<F: PrimeField, N: Network>(
+pub fn y2b<F: FieldUint, N: Network>(
     x: BinaryBundle<WireMod2>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Rep3BigUintShare<F>> {
+) -> eyre::Result<Rep3UintShare<F>> {
     let bitlen = x.size();
-    let collapsed = GCUtils::collapse_bundle_to_lsb_bits_as_biguint(x);
+    let collapsed = GCUtils::collapse_bundle_to_lsb_bits_as_uint::<F::Uint>(x);
 
     let converted = match state.id {
         PartyID::ID0 => {
             let x_xor_px = collapsed;
-            let r = state.rngs.rand.random_biguint_rng1(bitlen);
-            let r_xor_x_xor_px = x_xor_px ^ &r;
-            net.send_to(PartyID::ID2, r_xor_x_xor_px.to_owned())?;
-            Rep3BigUintShare::new(r, r_xor_x_xor_px)
+            let r = state.rngs.rand.random_uint_rng1::<F::Uint>(bitlen);
+            let r_xor_x_xor_px = x_xor_px ^ r;
+            net.send_to(PartyID::ID2, r_xor_x_xor_px)?;
+            Rep3UintShare::new(r, r_xor_x_xor_px)
         }
         PartyID::ID1 => {
             let px = collapsed;
-            let r = state.rngs.rand.random_biguint_rng2(bitlen);
-            Rep3BigUintShare::new(px, r)
+            let r = state.rngs.rand.random_uint_rng2::<F::Uint>(bitlen);
+            Rep3UintShare::new(px, r)
         }
         PartyID::ID2 => {
             let px = collapsed;
             let r_xor_x_xor_px = net.recv_from(PartyID::ID0)?;
-            Rep3BigUintShare::new(r_xor_x_xor_px, px)
+            Rep3UintShare::new(r_xor_x_xor_px, px)
         }
     };
 
@@ -695,18 +706,20 @@ pub fn y2b<F: PrimeField, N: Network>(
 }
 
 /// Transforms the shared values x from yao sharings to binary sharings. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 xor x_2 xor x_3.
-pub fn y2b_many<F: PrimeField, N: Network>(
+pub fn y2b_many<F: FieldUint, N: Network>(
     x: Vec<BinaryBundle<WireMod2>>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Vec<Rep3BigUintShare<F>>> {
+) -> eyre::Result<Vec<Rep3UintShare<F>>> {
     let mut collapsed = Vec::with_capacity(x.len());
     let mut input_bitlengths = Vec::with_capacity(x.len());
     for chunk in x.iter() {
         input_bitlengths.push(chunk.size());
     }
     for chunk in x {
-        collapsed.push(GCUtils::collapse_bundle_to_lsb_bits_as_biguint(chunk));
+        collapsed.push(GCUtils::collapse_bundle_to_lsb_bits_as_uint::<F::Uint>(
+            chunk,
+        ));
     }
 
     let mut result = Vec::with_capacity(collapsed.len());
@@ -716,21 +729,21 @@ pub fn y2b_many<F: PrimeField, N: Network>(
             let mut r_xor_x_xor_px = Vec::with_capacity(collapsed.len());
 
             for (bitlen, x_xor_px) in izip!(input_bitlengths, collapsed) {
-                let r_ = state.rngs.rand.random_biguint_rng1(bitlen);
-                r_xor_x_xor_px.push(x_xor_px ^ &r_);
+                let r_ = state.rngs.rand.random_uint_rng1::<F::Uint>(bitlen);
+                r_xor_x_xor_px.push(x_xor_px ^ r_);
                 r.push(r_);
             }
 
             net.send_many(PartyID::ID2, &r_xor_x_xor_px)?;
             for (r_xor_x_xor_px_, r_) in izip!(r_xor_x_xor_px, r) {
-                result.push(Rep3BigUintShare::new(r_, r_xor_x_xor_px_));
+                result.push(Rep3UintShare::new(r_, r_xor_x_xor_px_));
             }
         }
         PartyID::ID1 => {
             for (bitlen, px) in izip!(input_bitlengths, collapsed) {
-                result.push(Rep3BigUintShare::new(
+                result.push(Rep3UintShare::new(
                     px,
-                    state.rngs.rand.random_biguint_rng2(bitlen),
+                    state.rngs.rand.random_uint_rng2::<F::Uint>(bitlen),
                 ));
             }
         }
@@ -738,7 +751,7 @@ pub fn y2b_many<F: PrimeField, N: Network>(
             let r_xor_x_xor_px = net.recv_many(PartyID::ID0)?;
 
             for (px, r_xor_x_xor_px_) in izip!(collapsed, r_xor_x_xor_px) {
-                result.push(Rep3BigUintShare::new(r_xor_x_xor_px_, px));
+                result.push(Rep3UintShare::new(r_xor_x_xor_px_, px));
             }
         }
     };
@@ -747,33 +760,33 @@ pub fn y2b_many<F: PrimeField, N: Network>(
 }
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3.
-pub fn a2y2b<F: PrimeField, N: Network>(
+pub fn a2y2b<F: FieldUint, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Rep3BigUintShare<F>> {
+) -> eyre::Result<Rep3UintShare<F>> {
     let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = a2y(x, delta, net, state)?;
     y2b(y, net, state)
 }
 
 /// Transforms the replicated shared value x from an arithmetic sharing to a binary sharing. I.e., x = x_1 + x_2 + x_3 gets transformed into x = x'_1 xor x'_2 xor x'_3. Uses the Streaming Garbler/Evaluator.
-pub fn a2y2b_streaming<F: PrimeField, N: Network>(
+pub fn a2y2b_streaming<F: FieldUint, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Rep3BigUintShare<F>> {
+) -> eyre::Result<Rep3UintShare<F>> {
     let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = a2y_streaming(x, delta, net, state)?;
     y2b(y, net, state)
 }
 
 /// A variant of [a2y2b] that operates on vectors of shared values instead.
-pub fn a2y2b_many<F: PrimeField, N: Network>(
+pub fn a2y2b_many<F: FieldUint, N: Network>(
     x: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Vec<Rep3BigUintShare<F>>> {
+) -> eyre::Result<Vec<Rep3UintShare<F>>> {
     let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = a2y_many(x, delta, net, state)?;
     y2b_many(y, net, state)
@@ -783,8 +796,8 @@ pub fn a2y2b_many<F: PrimeField, N: Network>(
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
-pub fn b2y2a<F: PrimeField, N: Network>(
-    x: &Rep3BigUintShare<F>,
+pub fn b2y2a<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
@@ -797,8 +810,8 @@ pub fn b2y2a<F: PrimeField, N: Network>(
 ///
 /// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
-pub fn b2y2a_streaming<F: PrimeField, N: Network>(
-    x: &Rep3BigUintShare<F>,
+pub fn b2y2a_streaming<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
@@ -820,7 +833,7 @@ pub(crate) fn point_share_to_fieldshares_pre<C: CurveGroup, N: Network>(
     Rep3PrimeFieldShare<C::BaseField>,
 )>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: FieldUint,
 {
     assert!(
         !(x.a.is_zero() || x.b.is_zero()),
@@ -887,7 +900,7 @@ pub(crate) fn point_share_to_fieldshares_pre_many<C: CurveGroup, N: Network>(
     Vec<Rep3PrimeFieldShare<C::BaseField>>,
 )>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: FieldUint,
 {
     assert!(
         x.iter()
@@ -984,7 +997,7 @@ pub fn point_share_to_fieldshares<C: CurveGroup, N: Network>(
     Rep3PrimeFieldShare<C::BaseField>,
 )>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: FieldUint,
 {
     let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre(x, net, state)?;
     detail::point_addition(x01_x, x01_y, x2_x, x2_y, net, state)
@@ -1003,7 +1016,7 @@ pub fn point_share_to_fieldshares_many<C: CurveGroup, N: Network>(
     Vec<Rep3PrimeFieldShare<C::BaseField>>,
 )>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: FieldUint,
 {
     let (x01_x, x01_y, x2_x, x2_y) = point_share_to_fieldshares_pre_many(x, net, state)?;
     detail::point_addition_many(&x01_x, &x01_y, &x2_x, &x2_y, net, state)
@@ -1018,7 +1031,7 @@ pub fn fieldshares_to_pointshare<C: CurveGroup, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<Rep3PointShare<C>>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: FieldUint,
 {
     let mut y_x = Rep3PrimeFieldShare::zero_share();
     let mut y_y = Rep3PrimeFieldShare::zero_share();
@@ -1120,7 +1133,7 @@ pub fn fieldshares_to_pointshare_many<C: CurveGroup, N: Network>(
     state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PointShare<C>>>
 where
-    C::BaseField: PrimeField,
+    C::BaseField: FieldUint,
 {
     let mut y_x = vec![Rep3PrimeFieldShare::zero_share(); x.len()];
     let mut y_y = vec![Rep3PrimeFieldShare::zero_share(); x.len()];

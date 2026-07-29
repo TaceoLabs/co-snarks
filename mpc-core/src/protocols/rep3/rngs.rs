@@ -6,9 +6,8 @@ use super::{id::PartyID, yao::GCUtils};
 use crate::RngType;
 use crate::uint::UintBackend;
 use ark_ec::CurveGroup;
-use ark_ff::{One, PrimeField};
+use ark_ff::PrimeField;
 use fancy_garbling::WireMod2;
-use num_bigint::BigUint;
 use rand::{
     Rng, RngCore, SeedableRng, distributions::Standard, prelude::Distribution, seq::SliceRandom,
 };
@@ -185,31 +184,6 @@ impl Rep3Rand {
         let a = C::rand(&mut self.rng1);
         let b = C::rand(&mut self.rng2);
         (a, b)
-    }
-
-    /// Generate two random [`BigUint`]s with given `bitlen`
-    pub fn random_biguint(&mut self, bitlen: usize) -> (BigUint, BigUint) {
-        let limbsize = bitlen.div_ceil(32);
-        let a = BigUint::new((0..limbsize).map(|_| self.rng1.r#gen()).collect());
-        let b = BigUint::new((0..limbsize).map(|_| self.rng2.r#gen()).collect());
-        let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
-        (a & &mask, b & mask)
-    }
-
-    /// Generate a random [`BigUint`] with given `bitlen` from rng1
-    pub fn random_biguint_rng1(&mut self, bitlen: usize) -> BigUint {
-        let limbsize = bitlen.div_ceil(32);
-        let val = BigUint::new((0..limbsize).map(|_| self.rng1.r#gen()).collect());
-        let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
-        val & &mask
-    }
-
-    /// Generate a random [`BigUint`] with given `bitlen` from rng2
-    pub fn random_biguint_rng2(&mut self, bitlen: usize) -> BigUint {
-        let limbsize = bitlen.div_ceil(32);
-        let val = BigUint::new((0..limbsize).map(|_| self.rng2.r#gen()).collect());
-        let mask = (BigUint::from(1u32) << bitlen) - BigUint::one();
-        val & &mask
     }
 
     /// Generate two random fixed-width uints with given `bitlen`

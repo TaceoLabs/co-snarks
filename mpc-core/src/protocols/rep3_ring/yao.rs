@@ -4,7 +4,7 @@
 
 use crate::protocols::{
     rep3::{
-        self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State,
+        self, Rep3PrimeFieldShare, Rep3State, Rep3UintShare,
         id::PartyID,
         yao::{
             GCInputs, GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator,
@@ -13,7 +13,7 @@ use crate::protocols::{
     },
     rep3_ring::conversion,
 };
-use ark_ff::PrimeField;
+use crate::uint::FieldUint;
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
@@ -358,7 +358,7 @@ pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
 }
 
 /// A cast of a vector of Rep3RingShare to a vector of Rep3PrimeFieldShare
-pub fn ring_to_field_many<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_many<T: IntRing2k, F: FieldUint, N: Network>(
     inputs: &[Rep3RingShare<T>],
     net: &N,
     state: &mut Rep3State,
@@ -371,17 +371,17 @@ where
         // SAFETY: We already checked that the type matches
         let shares =
             unsafe { &*(inputs as *const [Rep3RingShare<T>] as *const [Rep3RingShare<Bit>]) };
-        let biguint_shares = shares
+        let uint_shares = shares
             .iter()
             .map(|share| {
-                Rep3BigUintShare::new(
-                    BigUint::from(share.a.0.convert() as u64),
-                    BigUint::from(share.b.0.convert() as u64),
+                Rep3UintShare::new(
+                    F::Uint::from(share.a.0.convert()),
+                    F::Uint::from(share.b.0.convert()),
                 )
             })
             .collect::<Vec<_>>();
 
-        return rep3::conversion::bit_inject_many(&biguint_shares, net, state);
+        return rep3::conversion::bit_inject_many(&uint_shares, net, state);
     }
 
     // The actual garbled circuit implementation
@@ -470,7 +470,7 @@ where
 }
 
 /// A cast of a vector of Rep3PrimeFieldShare to a vector of Rep3RingShare. Truncates the excess bits.
-pub fn field_to_ring_many<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn field_to_ring_many<F: FieldUint, T: IntRing2k, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -985,8 +985,8 @@ where
 pub fn ring_div_by_public_to_fr_limbs_and_fq_many<
     T: IntRing2k,
     N: Network,
-    F: PrimeField,
-    K: PrimeField,
+    F: FieldUint,
+    K: FieldUint,
 >(
     input: &[Rep3RingShare<T>],
     limb_size: usize,
@@ -1018,12 +1018,7 @@ where
 }
 
 /// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
-pub fn ring_div_by_public_to_fr_limbs_and_fq<
-    T: IntRing2k,
-    N: Network,
-    F: PrimeField,
-    K: PrimeField,
->(
+pub fn ring_div_by_public_to_fr_limbs_and_fq<T: IntRing2k, N: Network, F: FieldUint, K: FieldUint>(
     input: Rep3RingShare<T>,
     limb_size: usize,
     divisor: &BigUint,
@@ -1046,7 +1041,7 @@ where
 }
 
 /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
-pub fn ring_div_by_public_to_limbs_many<T: IntRing2k, N: Network, F: PrimeField>(
+pub fn ring_div_by_public_to_limbs_many<T: IntRing2k, N: Network, F: FieldUint>(
     input: &[Rep3RingShare<T>],
     divisor: &BigUint,
     limb_size: usize,
@@ -1076,7 +1071,7 @@ where
 }
 
 /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
-pub fn ring_div_by_public_to_limbs<T: IntRing2k, N: Network, F: PrimeField>(
+pub fn ring_div_by_public_to_limbs<T: IntRing2k, N: Network, F: FieldUint>(
     input: Rep3RingShare<T>,
     divisor: &BigUint,
     limb_size: usize,
@@ -1196,7 +1191,7 @@ where
 }
 
 /// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, there will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
-pub fn decompose_field_to_rings_many<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn decompose_field_to_rings_many<F: FieldUint, T: IntRing2k, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1325,7 +1320,7 @@ where
 }
 
 /// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, there will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
-pub fn decompose_field_to_rings<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn decompose_field_to_rings<F: FieldUint, T: IntRing2k, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,

@@ -19,15 +19,15 @@ pub mod yao;
 use std::marker::PhantomData;
 
 use crate::serde_compat::{ark_de, ark_se};
+use crate::uint::{FieldUint, UintBackend};
 use crate::{MpcState, RngType};
 use ark_ec::CurveGroup;
-use ark_ff::{One as _, PrimeField};
+use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use conversion::A2BType;
 use id::PartyID;
 use mpc_net::Network;
 use network::Rep3NetworkExt;
-use num_bigint::BigUint;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
 use rand::{CryptoRng, Rng, SeedableRng};
@@ -35,7 +35,7 @@ use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
 use serde::{Deserialize, Serialize};
 
 pub use arithmetic::types::Rep3PrimeFieldShare;
-pub use binary::types::{Rep3BigUintShare, Rep3UintShare};
+pub use binary::types::Rep3UintShare;
 pub use pointshare::types::Rep3PointShare;
 
 /// The Rng used for expanding compressed Shares
@@ -534,21 +534,19 @@ where
     [a, b, c]
 }
 
-/// Secret shares a field element using replicated secret sharing and the provided random number generator. The field element is split into three binary shares, where each party holds two. The outputs are of type [Rep3BigUintShare].
-pub fn share_biguint<F: PrimeField, R: Rng + CryptoRng>(
+/// Secret shares a field element using replicated secret sharing and the provided random number generator. The field element is split into three binary shares, where each party holds two. The outputs are of type [Rep3UintShare].
+pub fn share_biguint<F: FieldUint, R: Rng + CryptoRng>(
     val: F,
     rng: &mut R,
-) -> [Rep3BigUintShare<F>; 3] {
-    let val: BigUint = val.into();
-    let limbsize = F::MODULUS_BIT_SIZE.div_ceil(32);
-    let mask = (BigUint::from(1u32) << F::MODULUS_BIT_SIZE) - BigUint::one();
-    let a = BigUint::new((0..limbsize).map(|_| rng.r#gen()).collect()) & &mask;
-    let b = BigUint::new((0..limbsize).map(|_| rng.r#gen()).collect()) & mask;
+) -> [Rep3UintShare<F>; 3] {
+    let val = val.to_uint();
+    let a = F::Uint::random_bits(rng, F::MODULUS_BIT_SIZE as usize);
+    let b = F::Uint::random_bits(rng, F::MODULUS_BIT_SIZE as usize);
 
-    let c = val ^ &a ^ &b;
-    let share1 = Rep3BigUintShare::new(a.to_owned(), c.to_owned());
-    let share2 = Rep3BigUintShare::new(b.to_owned(), a);
-    let share3 = Rep3BigUintShare::new(c, b);
+    let c = val ^ a ^ b;
+    let share1 = Rep3UintShare::new(a, c);
+    let share2 = Rep3UintShare::new(b, a);
+    let share3 = Rep3UintShare::new(c, b);
     [share1, share2, share3]
 }
 
@@ -608,26 +606,26 @@ pub fn combine_field_elements<F: PrimeField>(
         .collect::<Vec<_>>()
 }
 
-/// Reconstructs a value (represented as [BigUint]) from its binary replicated shares. Since binary operations can lead to results >= p, the result is not guaranteed to be a valid field element.
-pub fn combine_binary_element<F: PrimeField>(
-    share1: Rep3BigUintShare<F>,
-    share2: Rep3BigUintShare<F>,
-    share3: Rep3BigUintShare<F>,
-) -> BigUint {
+/// Reconstructs a value (represented as `F::Uint`) from its binary replicated shares. Since binary operations can lead to results >= p, the result is not guaranteed to be a valid field element.
+pub fn combine_binary_element<F: FieldUint>(
+    share1: Rep3UintShare<F>,
+    share2: Rep3UintShare<F>,
+    share3: Rep3UintShare<F>,
+) -> F::Uint {
     share1.a ^ share2.a ^ share3.a
 }
 
-/// Reconstructs a vector of values (represented as [BigUint]) from its binary replicated shares. Since binary operations can lead to results >= p, the results are not guaranteed to be valid field elements.
-pub fn combine_binary_elements<F: PrimeField>(
-    share1: &[Rep3BigUintShare<F>],
-    share2: &[Rep3BigUintShare<F>],
-    share3: &[Rep3BigUintShare<F>],
-) -> Vec<BigUint> {
+/// Reconstructs a vector of values (represented as `F::Uint`) from its binary replicated shares. Since binary operations can lead to results >= p, the results are not guaranteed to be valid field elements.
+pub fn combine_binary_elements<F: FieldUint>(
+    share1: &[Rep3UintShare<F>],
+    share2: &[Rep3UintShare<F>],
+    share3: &[Rep3UintShare<F>],
+) -> Vec<F::Uint> {
     assert_eq!(share1.len(), share2.len());
     assert_eq!(share2.len(), share3.len());
 
     itertools::multizip((share1, share2, share3))
-        .map(|(x1, x2, x3)| &x1.a ^ &x2.a ^ &x3.a)
+        .map(|(x1, x2, x3)| x1.a ^ x2.a ^ x3.a)
         .collect::<Vec<_>>()
 }
 

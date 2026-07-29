@@ -4,12 +4,11 @@
 
 use super::{Rep3RingShare, conversion, ring::int_ring::IntRing2k, yao};
 use crate::protocols::{
-    rep3::{self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, conversion::A2BType},
+    rep3::{self, Rep3PrimeFieldShare, Rep3State, Rep3UintShare, conversion::A2BType},
     rep3_ring::ring::{bit::Bit, ring_impl::RingElement},
 };
-use ark_ff::PrimeField;
+use crate::uint::{FieldUint, UintBackend};
 use mpc_net::Network;
-use num_bigint::BigUint;
 use num_traits::AsPrimitive;
 use rand::{distributions::Standard, prelude::Distribution};
 use std::any::TypeId;
@@ -33,7 +32,7 @@ where
 }
 
 /// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the ring_to_field cast.
-pub fn ring_to_field_selector<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_selector<T: IntRing2k, F: FieldUint, N: Network>(
     x: Rep3RingShare<T>,
     net: &N,
     state: &mut Rep3State,
@@ -48,7 +47,7 @@ where
 }
 
 /// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the field_to_ring cast.
-pub fn field_to_ring_selector<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn field_to_ring_selector<F: FieldUint, T: IntRing2k, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -145,7 +144,7 @@ where
 }
 
 /// A cast of a Rep3PrimeFieldShare to a Rep3RingShare. Truncates the excess bits.
-pub fn field_to_ring_a2b<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn field_to_ring_a2b<F: FieldUint, T: IntRing2k, N: Network>(
     share: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -155,14 +154,14 @@ where
 {
     let binary = rep3::conversion::a2b(share, net, state)?;
     let ring_share = Rep3RingShare {
-        a: RingElement(T::cast_from_biguint(&binary.a)),
-        b: RingElement(T::cast_from_biguint(&binary.b)),
+        a: RingElement(T::cast_from_uint(&binary.a)),
+        b: RingElement(T::cast_from_uint(&binary.b)),
     };
     conversion::b2a(&ring_share, net, state)
 }
 
 /// A cast of a Rep3PrimeFieldShare to a Rep3RingShare. Truncates the excess bits.
-pub fn field_to_ring_a2b_many<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn field_to_ring_a2b_many<F: FieldUint, T: IntRing2k, N: Network>(
     shares: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -174,15 +173,15 @@ where
     let ring_shares = binary
         .into_iter()
         .map(|binary| Rep3RingShare {
-            a: RingElement(T::cast_from_biguint(&binary.a)),
-            b: RingElement(T::cast_from_biguint(&binary.b)),
+            a: RingElement(T::cast_from_uint(&binary.a)),
+            b: RingElement(T::cast_from_uint(&binary.b)),
         })
         .collect::<Vec<_>>();
     conversion::b2a_many(&ring_shares, net, state)
 }
 
 /// A cast of a Rep3RingShare to a Rep3PrimeFieldShare
-pub fn ring_to_field_a2b<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_a2b<T: IntRing2k, F: FieldUint, N: Network>(
     share: Rep3RingShare<T>,
     net: &N,
     state: &mut Rep3State,
@@ -194,24 +193,21 @@ where
     if TypeId::of::<T>() == TypeId::of::<Bit>() {
         let share =
             crate::downcast::<_, Rep3RingShare<Bit>>(&share).expect("We already checked types");
-        let biguint_share = Rep3BigUintShare::new(
-            BigUint::from(share.a.0.convert() as u64),
-            BigUint::from(share.b.0.convert() as u64),
+        let uint_share = Rep3UintShare::new(
+            F::Uint::from(share.a.0.convert()),
+            F::Uint::from(share.b.0.convert()),
         );
 
-        return rep3::conversion::bit_inject(&biguint_share, net, state);
+        return rep3::conversion::bit_inject(&uint_share, net, state);
     }
 
     let binary = conversion::a2b(share, net, state)?;
-    let biguint_share = Rep3BigUintShare::new(
-        T::cast_to_biguint(&binary.a.0),
-        T::cast_to_biguint(&binary.b.0),
-    );
-    rep3::conversion::b2a(&biguint_share, net, state)
+    let uint_share = Rep3UintShare::new(T::cast_to_uint(&binary.a.0), T::cast_to_uint(&binary.b.0));
+    rep3::conversion::b2a(&uint_share, net, state)
 }
 
 /// A cast of a Rep3RingShare to a Rep3PrimeFieldShare
-pub fn ring_to_field_a2b_many<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_a2b_many<T: IntRing2k, F: FieldUint, N: Network>(
     shares: &[Rep3RingShare<T>],
     net: &N,
     state: &mut Rep3State,
@@ -228,34 +224,31 @@ where
             })
             .collect::<Vec<_>>();
 
-        let biguint_shares = bit_shares
+        let uint_shares = bit_shares
             .into_iter()
             .map(|share| {
-                Rep3BigUintShare::new(
-                    BigUint::from(share.a.0.convert() as u64),
-                    BigUint::from(share.b.0.convert() as u64),
+                Rep3UintShare::new(
+                    F::Uint::from(share.a.0.convert()),
+                    F::Uint::from(share.b.0.convert()),
                 )
             })
             .collect::<Vec<_>>();
 
-        return rep3::conversion::bit_inject_many(&biguint_shares, net, state);
+        return rep3::conversion::bit_inject_many(&uint_shares, net, state);
     }
 
     let binary = conversion::a2b_many(shares, net, state)?;
-    let biguint_shares = binary
+    let uint_shares = binary
         .into_iter()
         .map(|binary| {
-            Rep3BigUintShare::new(
-                T::cast_to_biguint(&binary.a.0),
-                T::cast_to_biguint(&binary.b.0),
-            )
+            Rep3UintShare::new(T::cast_to_uint(&binary.a.0), T::cast_to_uint(&binary.b.0))
         })
         .collect::<Vec<_>>();
-    rep3::conversion::b2a_many(&biguint_shares, net, state)
+    rep3::conversion::b2a_many(&uint_shares, net, state)
 }
 
 /// A cast of a Rep3RingShare to a Rep3PrimeFieldShare. This is intended to be used for ring shares of bit size larger than the field size (so U512, U1024). Therefore the excess bits are truncated and one should be certain that the element actually fits into the field, otherwise the result will be incorrect.
-pub fn ring_to_field_a2b_big_ring<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_a2b_big_ring<T: IntRing2k, F: FieldUint, N: Network>(
     share: Rep3RingShare<T>,
     net: &N,
     state: &mut Rep3State,
@@ -267,18 +260,15 @@ where
     debug_assert!(T::K > modulus);
 
     let mut binary = conversion::a2b(share, net, state)?;
-    let mask = T::cast_from_biguint(&((BigUint::from(1u64) << modulus) - BigUint::from(1u64)));
+    let mask = T::cast_from_uint(&F::Uint::mask(modulus));
     binary &= RingElement(mask);
 
-    let biguint_share = Rep3BigUintShare::new(
-        T::cast_to_biguint(&binary.a.0),
-        T::cast_to_biguint(&binary.b.0),
-    );
-    rep3::conversion::b2a(&biguint_share, net, state)
+    let uint_share = Rep3UintShare::new(T::cast_to_uint(&binary.a.0), T::cast_to_uint(&binary.b.0));
+    rep3::conversion::b2a(&uint_share, net, state)
 }
 
 /// A cast of a Rep3RingShare to a Rep3PrimeFieldShare. This is intended to be used for ring shares of bit size larger than the field size (so U512, U1024). Therefore the excess bits are truncated and one should be certain that the element actually fits into the field, otherwise the result will be incorrect.
-pub fn ring_to_field_a2b_big_ring_many<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_a2b_big_ring_many<T: IntRing2k, F: FieldUint, N: Network>(
     shares: &[Rep3RingShare<T>],
     net: &N,
     state: &mut Rep3State,
@@ -290,16 +280,13 @@ where
     debug_assert!(T::K > modulus);
 
     let binary = conversion::a2b_many(shares, net, state)?;
-    let mask = T::cast_from_biguint(&((BigUint::from(1u64) << modulus) - BigUint::from(1u64)));
-    let biguint_shares = binary
+    let mask = T::cast_from_uint(&F::Uint::mask(modulus));
+    let uint_shares = binary
         .into_iter()
         .map(|binary| {
             let binary = binary & RingElement(mask);
-            Rep3BigUintShare::new(
-                T::cast_to_biguint(&binary.a.0),
-                T::cast_to_biguint(&binary.b.0),
-            )
+            Rep3UintShare::new(T::cast_to_uint(&binary.a.0), T::cast_to_uint(&binary.b.0))
         })
         .collect::<Vec<_>>();
-    rep3::conversion::b2a_many(&biguint_shares, net, state)
+    rep3::conversion::b2a_many(&uint_shares, net, state)
 }

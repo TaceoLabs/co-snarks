@@ -3,11 +3,12 @@
 //! This module contains implementation of a LUT
 
 use super::{Rep3RingShare, ring::int_ring::IntRing2k};
+use crate::uint::FieldUint;
 use crate::{
     lut::LookupTableProvider,
     protocols::{
         rep3::{
-            self, Rep3BigUintShare, Rep3PointShare, Rep3PrimeFieldShare, Rep3State,
+            self, Rep3PointShare, Rep3PrimeFieldShare, Rep3State, Rep3UintShare,
             network::Rep3NetworkExt, pointshare,
         },
         rep3_ring::{gadgets, lut_field::Rep3FieldLookupTable, ring::bit::Bit},
@@ -63,7 +64,10 @@ impl<C: CurveGroup> Default for Rep3CurveLookupTable<C> {
     }
 }
 
-impl<C: CurveGroup> Rep3CurveLookupTable<C> {
+impl<C: CurveGroup> Rep3CurveLookupTable<C>
+where
+    C::ScalarField: FieldUint,
+{
     /// Construct a new [`Rep3CurveLookupTable`]
     pub fn new() -> Self {
         Self::default()
@@ -97,7 +101,7 @@ impl<C: CurveGroup> Rep3CurveLookupTable<C> {
     }
 
     fn get_from_public_luts_internal<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<C::ScalarField>,
+        index: Rep3UintShare<C::ScalarField>,
         luts: &[Vec<C>],
         net: &N,
         state: &mut Rep3State,
@@ -105,15 +109,15 @@ impl<C: CurveGroup> Rep3CurveLookupTable<C> {
     where
         Standard: Distribution<T>,
     {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
+        let a = T::cast_from_uint(&index.a);
+        let b = T::cast_from_uint(&index.b);
         let share = Rep3RingShare::new(a, b);
 
         gadgets::lut_curve::read_public_luts(luts, share, net, state)
     }
 
     fn get_from_lut_internal<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<C::ScalarField>,
+        index: Rep3UintShare<C::ScalarField>,
         lut: &PublicPrivateLut<C>,
         net: &N,
         state: &mut Rep3State,
@@ -121,8 +125,8 @@ impl<C: CurveGroup> Rep3CurveLookupTable<C> {
     where
         Standard: Distribution<T>,
     {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
+        let a = T::cast_from_uint(&index.a);
+        let b = T::cast_from_uint(&index.b);
         let share = Rep3RingShare::new(a, b);
         let val = match lut {
             PublicPrivateLut::Public(vec) => {
@@ -139,7 +143,7 @@ impl<C: CurveGroup> Rep3CurveLookupTable<C> {
     }
 
     fn write_to_lut_internal<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<C::ScalarField>,
+        index: Rep3UintShare<C::ScalarField>,
         lut: &mut PublicPrivateLut<C>,
         value: &Rep3PointShare<C>,
         net: &N,
@@ -148,8 +152,8 @@ impl<C: CurveGroup> Rep3CurveLookupTable<C> {
     where
         Standard: Distribution<T>,
     {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
+        let a = T::cast_from_uint(&index.a);
+        let b = T::cast_from_uint(&index.b);
         let share = Rep3RingShare::new(a, b);
         match lut {
             PublicPrivateLut::Public(vec) => {
@@ -207,7 +211,10 @@ impl<C: CurveGroup> Rep3CurveLookupTable<C> {
     }
 }
 
-impl<C: CurveGroup> LookupTableProvider<C> for Rep3CurveLookupTable<C> {
+impl<C: CurveGroup> LookupTableProvider<C> for Rep3CurveLookupTable<C>
+where
+    C::ScalarField: FieldUint,
+{
     type SecretShare = Rep3PointShare<C>;
     type IndexSecretShare = Rep3PrimeFieldShare<C::ScalarField>;
     type LutType = PublicPrivateLut<C>;

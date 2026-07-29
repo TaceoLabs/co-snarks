@@ -2,45 +2,45 @@
 //!
 //! This module contains operations with binary shares
 
-use ark_ff::{One, PrimeField};
+use ark_ff::One;
 use itertools::{Itertools as _, izip};
 use mpc_net::Network;
-use num_bigint::BigUint;
+use num_traits::Zero;
 
-use super::{PartyID, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmetic, conversion};
+use super::{PartyID, Rep3PrimeFieldShare, Rep3State, Rep3UintShare, arithmetic, conversion};
 use crate::protocols::rep3::network::Rep3NetworkExt;
-use num_traits::cast::ToPrimitive;
+use crate::uint::{FieldUint, UintBackend};
 
 mod ops;
 pub(super) mod types;
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
-type BinaryShare<F> = Rep3BigUintShare<F>;
+type BinaryShare<F> = Rep3UintShare<F>;
 
 /// Performs a bitwise XOR operation on two shared values.
-pub fn xor<F: PrimeField>(a: &BinaryShare<F>, b: &BinaryShare<F>) -> BinaryShare<F> {
+pub fn xor<F: FieldUint>(a: &BinaryShare<F>, b: &BinaryShare<F>) -> BinaryShare<F> {
     a ^ b
 }
 
 /// Performs a bitwise XOR operation on a shared value and a public value.
-pub fn xor_public<F: PrimeField>(
+pub fn xor_public<F: FieldUint>(
     shared: &BinaryShare<F>,
-    public: &BigUint,
+    public: &F::Uint,
     id: PartyID,
 ) -> BinaryShare<F> {
     let mut res = shared.to_owned();
     match id {
-        PartyID::ID0 => res.a ^= public,
-        PartyID::ID1 => res.b ^= public,
+        PartyID::ID0 => res.a ^= *public,
+        PartyID::ID1 => res.b ^= *public,
         PartyID::ID2 => {}
     }
     res
 }
 
 /// Performs element-wise bitwise XOR operation on the provided public and shared values.
-pub fn xor_public_vec<F: PrimeField>(
+pub fn xor_public_vec<F: FieldUint>(
     shared: &[BinaryShare<F>],
-    public: &[BigUint],
+    public: &[F::Uint],
     id: PartyID,
 ) -> Vec<BinaryShare<F>> {
     shared
@@ -49,8 +49,8 @@ pub fn xor_public_vec<F: PrimeField>(
         .map(|(shared, public)| {
             let mut res = shared.to_owned();
             match id {
-                PartyID::ID0 => res.a ^= public,
-                PartyID::ID1 => res.b ^= public,
+                PartyID::ID0 => res.a ^= *public,
+                PartyID::ID1 => res.b ^= *public,
                 PartyID::ID2 => {}
             }
             res
@@ -59,7 +59,7 @@ pub fn xor_public_vec<F: PrimeField>(
 }
 
 /// Performs a bitwise OR operation on two shared values.
-pub fn or<F: PrimeField, N: Network>(
+pub fn or<F: FieldUint, N: Network>(
     a: &BinaryShare<F>,
     b: &BinaryShare<F>,
     net: &N,
@@ -71,37 +71,32 @@ pub fn or<F: PrimeField, N: Network>(
 }
 
 /// Performs a bitwise OR operation on a shared value and a public value.
-pub fn or_public<F: PrimeField>(
+pub fn or_public<F: FieldUint>(
     shared: &BinaryShare<F>,
-    public: &BigUint,
+    public: &F::Uint,
     id: PartyID,
 ) -> BinaryShare<F> {
-    let tmp = shared & public;
+    let tmp = shared.and_mask(public);
     let xor = xor_public(shared, public, id);
     xor ^ tmp
 }
 
 /// Performs a bitwise AND operation on two shared values.
-pub fn and<F: PrimeField, N: Network>(
+pub fn and<F: FieldUint, N: Network>(
     a: &BinaryShare<F>,
     b: &BinaryShare<F>,
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<BinaryShare<F>> {
-    debug_assert!(a.a.bits() <= u64::from(F::MODULUS_BIT_SIZE));
-    debug_assert!(b.a.bits() <= u64::from(F::MODULUS_BIT_SIZE));
-    let (mut mask, mask_b) = state
-        .rngs
-        .rand
-        .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
+    let (mut mask, mask_b) = state.rngs.rand.random_uint::<F::Uint>(F::Uint::BITS);
     mask ^= mask_b;
     let local_a = (a & b) ^ mask;
-    let local_b = net.reshare(local_a.clone())?;
+    let local_b = net.reshare(local_a)?;
     Ok(BinaryShare::new(local_a, local_b))
 }
 
 /// Performs element-wise bitwise AND operation on the provided shared values.
-pub fn and_vec<F: PrimeField, N: Network>(
+pub fn and_vec<F: FieldUint, N: Network>(
     a: &[BinaryShare<F>],
     b: &[BinaryShare<F>],
     net: &N,
@@ -109,10 +104,7 @@ pub fn and_vec<F: PrimeField, N: Network>(
 ) -> eyre::Result<Vec<BinaryShare<F>>> {
     let local_a = izip!(a, b)
         .map(|(a, b)| {
-            let (mut mask, mask_b) = state
-                .rngs
-                .rand
-                .random_biguint(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
+            let (mut mask, mask_b) = state.rngs.rand.random_uint::<F::Uint>(F::Uint::BITS);
 
             mask ^= mask_b;
             (a & b) ^ mask
@@ -125,42 +117,41 @@ pub fn and_vec<F: PrimeField, N: Network>(
 }
 
 /// Performs a bitwise AND operation on a shared value and a public value.
-pub fn and_with_public<F: PrimeField>(shared: &BinaryShare<F>, public: &BigUint) -> BinaryShare<F> {
-    shared & public
+pub fn and_with_public<F: FieldUint>(shared: &BinaryShare<F>, public: &F::Uint) -> BinaryShare<F> {
+    shared.and_mask(public)
 }
 
 /// Shifts a share by a public value `F` to the right.
 ///
 /// # Panics
-/// This method panics if `public` is larger than the of bits of
-/// the underlying `PrimeField`'s modulus'.
-pub fn shift_r_public<F: PrimeField>(shared: &BinaryShare<F>, public: F) -> BinaryShare<F> {
-    // some special casing
-    if public.is_zero() {
-        return shared.to_owned();
-    }
-    let shift: BigUint = public.into();
-    let shift = shift.to_usize().expect("can cast shift operand to usize");
+/// This method panics if `public` does not fit into a `usize`.
+pub fn shift_r_public<F: FieldUint>(shared: &BinaryShare<F>, public: F) -> BinaryShare<F> {
+    let shift: usize = public
+        .to_uint()
+        .try_to_usize()
+        .expect("shift is in usize range");
     shared >> shift
 }
 
 /// Shifts a share by a public value `F` to the left.
 ///
 /// # Panics
-/// This method panics if `public` is larger than the of bits of
-/// the underlying `PrimeField`'s modulus'.
-pub fn shift_l_public<F: PrimeField>(shared: &BinaryShare<F>, public: F) -> BinaryShare<F> {
-    // some special casing
-    if public.is_zero() {
-        return shared.to_owned();
-    }
-    let shift: BigUint = public.into();
-    let shift = shift.to_usize().expect("can cast shift operand to usize");
+/// This method panics if `public` is larger than the number of bits of
+/// the underlying `PrimeField`'s modulus.
+pub fn shift_l_public<F: FieldUint>(shared: &BinaryShare<F>, public: F) -> BinaryShare<F> {
+    let shift: usize = public
+        .to_uint()
+        .try_to_usize()
+        .expect("shift is in usize range");
+    assert!(
+        (shift as u32) < F::MODULUS_BIT_SIZE,
+        "shifting by {shift} >= MODULUS_BIT_SIZE is not supported"
+    );
     shared << shift
 }
 
 /// Shifts a public value `F` by a share to the left.
-pub fn shift_l_public_by_shared<F: PrimeField, N: Network>(
+pub fn shift_l_public_by_shared<F: FieldUint, N: Network>(
     public: F,
     shared: &BinaryShare<F>,
     net: &N,
@@ -171,9 +162,9 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Network>(
     // bit-decompose b into bits b_i
     let mut individual_bit_shares = Vec::with_capacity(8);
     for i in 0..8 {
-        let bit = Rep3BigUintShare::new(
-            (shared.a.clone() >> i) & BigUint::one(),
-            (shared.b.clone() >> i) & BigUint::one(),
+        let bit = Rep3UintShare::new(
+            (shared.a >> i) & F::Uint::one(),
+            (shared.b >> i) & F::Uint::one(),
         );
         individual_bit_shares.push(conversion::b2a_selector(&bit, net, state)?);
     }
@@ -201,25 +192,25 @@ pub fn shift_l_public_by_shared<F: PrimeField, N: Network>(
 }
 
 /// Performs the opening of a shared value and returns the equivalent public value.
-pub fn open<F: PrimeField, N: Network>(a: &BinaryShare<F>, net: &N) -> eyre::Result<BigUint> {
-    let c = net.reshare(a.b.clone())?;
-    Ok(&a.a ^ &a.b ^ c)
+pub fn open<F: FieldUint, N: Network>(a: &BinaryShare<F>, net: &N) -> eyre::Result<F::Uint> {
+    let c = net.reshare(a.b)?;
+    Ok(a.a ^ a.b ^ c)
 }
 
 /// Transforms a public value into a shared value: \[a\] = a.
-pub fn promote_to_trivial_share<F: PrimeField>(
+pub fn promote_to_trivial_share<F: FieldUint>(
     id: PartyID,
-    public_value: &BigUint,
+    public_value: &F::Uint,
 ) -> BinaryShare<F> {
     match id {
-        PartyID::ID0 => BinaryShare::new(public_value.to_owned(), BigUint::ZERO),
-        PartyID::ID1 => BinaryShare::new(BigUint::ZERO, public_value.to_owned()),
+        PartyID::ID0 => BinaryShare::new(*public_value, F::Uint::zero()),
+        PartyID::ID1 => BinaryShare::new(F::Uint::zero(), *public_value),
         PartyID::ID2 => BinaryShare::zero_share(),
     }
 }
 
 /// Computes a CMUX: If `c` is `1`, returns `x_t`, otherwise returns `x_f`.
-pub fn cmux<F: PrimeField, N: Network>(
+pub fn cmux<F: FieldUint, N: Network>(
     c: &BinaryShare<F>,
     x_t: &BinaryShare<F>,
     x_f: &BinaryShare<F>,
@@ -233,7 +224,7 @@ pub fn cmux<F: PrimeField, N: Network>(
 }
 
 /// Computes an element-wise CMUX: If `$c_i$` is `1`, returns `$x^t_i$`, otherwise returns `$x^f_i$`.
-pub fn cmux_many<F: PrimeField, N: Network>(
+pub fn cmux_many<F: FieldUint, N: Network>(
     c: &[BinaryShare<F>],
     x_t: &[BinaryShare<F>],
     x_f: &[BinaryShare<F>],
@@ -255,7 +246,7 @@ pub fn cmux_many<F: PrimeField, N: Network>(
 //but only one bit.
 //Do we want that to be configurable? Semms like a waste?
 /// Compute a OR tree of the input vec
-pub fn or_tree<F: PrimeField, N: Network>(
+pub fn or_tree<F: FieldUint, N: Network>(
     mut inputs: Vec<BinaryShare<F>>,
     net: &N,
     state: &mut Rep3State,
@@ -283,22 +274,22 @@ pub fn or_tree<F: PrimeField, N: Network>(
 
         num += mod_;
     }
-    let result = inputs[0].clone();
+    let result = inputs[0];
     tracing::debug!("we did it!");
     Ok(result)
 }
 
 /// Computes a binary circuit to check whether the replicated binary-shared input x is zero or not. The output is a binary sharing of one bit.
-pub fn is_zero<F: PrimeField, N: Network>(
+pub fn is_zero<F: FieldUint, N: Network>(
     x: &BinaryShare<F>,
     net: &N,
     state: &mut Rep3State,
 ) -> eyre::Result<BinaryShare<F>> {
     let bit_len = F::MODULUS_BIT_SIZE as usize;
-    let mask = (BigUint::from(1u64) << bit_len) - BigUint::one();
+    let mask = F::Uint::mask(bit_len);
 
     // negate
-    let mut x = x ^ &mask;
+    let mut x = x.xor_mask(&mask);
 
     // do AND operations in a tree
     // TODO: Make AND tree more communication efficient, ATM we send the full element for each level, even though they halve in size
@@ -308,31 +299,31 @@ pub fn is_zero<F: PrimeField, N: Network>(
             len += 1;
             // pad with a 1 (= 1 xor 1 xor 1) in MSB position
             // since this is publicly known we just set the bit in each party's share and its replication
-            x.a.set_bit(len as u64 - 1, true);
-            x.b.set_bit(len as u64 - 1, true);
+            x.a.set_bit(len - 1, true);
+            x.b.set_bit(len - 1, true);
         }
         len /= 2;
-        let mask = (BigUint::from(1u64) << len) - BigUint::one();
-        let y = &x >> len;
-        x = and(&(&x & &mask), &(&y & &mask), net, state)?;
+        let mask = F::Uint::mask(len);
+        let y = x >> len;
+        x = and(&x.and_mask(&mask), &y.and_mask(&mask), net, state)?;
     }
     // extract LSB
-    Ok(x & BigUint::one())
+    Ok(x.and_mask(&F::Uint::one()))
 }
 
 /// Computes a binary circuit to check whether each of the replicated binary-shared inputs in the vector x is zero or not. The output is a vector of binary sharings of one bit.
-pub fn is_zero_many<F: PrimeField, N: Network>(
-    mut x: Vec<Rep3BigUintShare<F>>,
+pub fn is_zero_many<F: FieldUint, N: Network>(
+    mut x: Vec<Rep3UintShare<F>>,
     net: &N,
     state: &mut Rep3State,
-) -> eyre::Result<Vec<Rep3BigUintShare<F>>> {
+) -> eyre::Result<Vec<Rep3UintShare<F>>> {
     let bit_len = F::MODULUS_BIT_SIZE as usize;
-    let mask = (BigUint::from(1u64) << bit_len) - BigUint::one();
+    let mask = F::Uint::mask(bit_len);
 
     // mask negate
     for x_ in x.iter_mut() {
-        *x_ ^= &mask; // Negate bits
-        *x_ &= &mask; // remove additional bits
+        x_.xor_mask_assign(&mask); // Negate bits
+        x_.and_mask_assign(&mask); // remove additional bits
     }
     let mut y = x.clone();
 
@@ -345,23 +336,23 @@ pub fn is_zero_many<F: PrimeField, N: Network>(
             // pad with a 1 (= 1 xor 1 xor 1) in MSB position
             // since this is publicly known we just set the bit in each party's share and its replication
             for x in x.iter_mut() {
-                x.a.set_bit(len as u64 - 1, true);
-                x.b.set_bit(len as u64 - 1, true);
+                x.a.set_bit(len - 1, true);
+                x.b.set_bit(len - 1, true);
             }
         }
         len /= 2;
-        let mask = (BigUint::from(1u64) << len) - BigUint::one();
+        let mask = F::Uint::mask(len);
         for (x_, y_) in izip!(x.iter_mut(), y.iter_mut()) {
-            y_.a = (&x_.a >> len) & &mask;
-            y_.b = (&x_.b >> len) & &mask;
-            x_.a &= &mask;
-            x_.b &= &mask;
+            y_.a = (x_.a >> len) & mask;
+            y_.b = (x_.b >> len) & mask;
+            x_.a &= mask;
+            x_.b &= mask;
         }
         x = and_vec(&x, &y, net, state)?;
     }
     // extract LSB
     for x_ in x.iter_mut() {
-        *x_ &= BigUint::one();
+        x_.and_mask_assign(&F::Uint::one());
     }
     Ok(x)
 }
