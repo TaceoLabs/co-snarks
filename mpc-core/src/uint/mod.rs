@@ -1,8 +1,10 @@
 //! Stack-allocated fixed-width unsigned integers used as the backend for
 //! binary-domain shares and ring/field interchange.
 
+mod field_uint;
 mod ruint_wrapper;
 
+pub use field_uint::FieldUint;
 pub use ruint_wrapper::RUint;
 
 /// A common interface for stack-allocated, fixed-width unsigned integer
