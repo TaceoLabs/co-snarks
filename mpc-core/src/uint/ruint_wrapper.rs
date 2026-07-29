@@ -310,6 +310,80 @@ impl<const BITS: usize, const LIMBS: usize> AsPrimitive<RUint<BITS, LIMBS>> for 
     }
 }
 
+// --- UintBackend ---
+
+use crate::uint::UintBackend;
+
+impl<const BITS: usize, const LIMBS: usize> UintBackend for RUint<BITS, LIMBS> {
+    const BITS: usize = BITS;
+    const LIMBS: usize = LIMBS;
+    const BYTES: usize = LIMBS * 8;
+
+    fn bit_len(&self) -> usize {
+        self.0.bit_len()
+    }
+    fn bit(&self, index: usize) -> bool {
+        self.0.bit(index)
+    }
+    fn set_bit(&mut self, index: usize, value: bool) {
+        self.0.set_bit(index, value);
+    }
+    fn mask(k: usize) -> Self {
+        debug_assert!(k <= BITS);
+        if k == 0 {
+            Self(Uint::ZERO)
+        } else {
+            Self(Uint::MAX >> (BITS - k))
+        }
+    }
+    fn wrapping_add(&self, rhs: &Self) -> Self {
+        Self(self.0.wrapping_add(rhs.0))
+    }
+    fn wrapping_sub(&self, rhs: &Self) -> Self {
+        Self(self.0.wrapping_sub(rhs.0))
+    }
+    fn wrapping_neg(&self) -> Self {
+        Self(self.0.wrapping_neg())
+    }
+    fn as_limbs(&self) -> &[u64] {
+        self.0.as_limbs()
+    }
+    fn from_limbs_truncating(limbs: &[u64]) -> Self {
+        let mut out = [0u64; LIMBS];
+        let n = limbs.len().min(LIMBS);
+        out[..n].copy_from_slice(&limbs[..n]);
+        Self(Uint::from_limbs(out))
+    }
+    fn to_le_bytes_into(&self, out: &mut [u8]) {
+        assert_eq!(out.len(), Self::BYTES);
+        for (chunk, limb) in out.chunks_exact_mut(8).zip(self.0.as_limbs()) {
+            chunk.copy_from_slice(&limb.to_le_bytes());
+        }
+    }
+    fn from_le_bytes(bytes: &[u8]) -> Self {
+        assert_eq!(bytes.len(), Self::BYTES);
+        let mut limbs = [0u64; LIMBS];
+        for (limb, chunk) in limbs.iter_mut().zip(bytes.chunks_exact(8)) {
+            *limb = u64::from_le_bytes(chunk.try_into().expect("chunk is 8 bytes"));
+        }
+        Self(Uint::from_limbs(limbs))
+    }
+    fn random_bits<R: rand::Rng>(rng: &mut R, bitlen: usize) -> Self {
+        debug_assert!(bitlen <= BITS);
+        let mut limbs = [0u64; LIMBS];
+        for limb in &mut limbs {
+            *limb = rng.r#gen();
+        }
+        Self(Uint::from_limbs(limbs)) & Self::mask(bitlen)
+    }
+    fn try_to_usize(&self) -> Option<usize> {
+        self.0.try_into().ok()
+    }
+    fn to_u64_truncating(&self) -> u64 {
+        self.0.as_limbs()[0]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -327,8 +401,11 @@ mod tests {
         let max: U256 = RUint(ruint::Uint::MAX);
         let one = U256::one();
         // + is wrapping in ruint
-        assert_eq!(max.wrapping_add(&one), U256::zero());
-        assert_eq!(U256::zero().wrapping_sub(&one), max);
+        // NOTE: disambiguated against `UintBackend::wrapping_add`/`wrapping_sub`,
+        // which have identical signatures to the `num_traits` `WrappingAdd`/
+        // `WrappingSub` traits already implemented for `RUint`.
+        assert_eq!(WrappingAdd::wrapping_add(&max, &one), U256::zero());
+        assert_eq!(WrappingSub::wrapping_sub(&U256::zero(), &one), max);
         assert_eq!(max + one, U256::zero());
     }
 
@@ -384,5 +461,64 @@ mod tests {
         assert_eq!(usize::try_from(U256::from(17u64)), Ok(17usize));
         let max: U256 = RUint(ruint::Uint::MAX);
         assert!(usize::try_from(max).is_err());
+    }
+
+    #[test]
+    fn uint_backend_mask_edges() {
+        use crate::uint::UintBackend;
+        assert_eq!(U256::mask(0), U256::zero());
+        assert_eq!(U256::mask(1), U256::one());
+        let max: U256 = RUint(ruint::Uint::MAX);
+        assert_eq!(U256::mask(256), max);
+        // mask(8) = 0xff
+        assert_eq!(U256::mask(8), U256::from(0xffu64));
+    }
+
+    #[test]
+    fn uint_backend_bits() {
+        use crate::uint::UintBackend;
+        let mut v = U256::zero();
+        assert_eq!(v.bit_len(), 0);
+        v.set_bit(255, true);
+        assert!(v.bit(255));
+        assert_eq!(v.bit_len(), 256);
+        v.set_bit(255, false);
+        assert_eq!(v, U256::zero());
+    }
+
+    #[test]
+    fn uint_backend_random_bits_masks() {
+        use crate::uint::UintBackend;
+        let mut rng = ChaCha12Rng::seed_from_u64(44);
+        for _ in 0..100 {
+            let v = U256::random_bits(&mut rng, 100);
+            assert!(v.bit_len() <= 100);
+        }
+        // full width and zero width
+        let z = U256::random_bits(&mut rng, 0);
+        assert_eq!(z, U256::zero());
+        let f = U256::random_bits(&mut rng, 256);
+        assert!(f.bit_len() <= 256);
+    }
+
+    #[test]
+    fn uint_backend_le_bytes_roundtrip() {
+        use crate::uint::UintBackend;
+        let mut rng = ChaCha12Rng::seed_from_u64(45);
+        let v: U512 = rng.r#gen();
+        let mut bytes = vec![0u8; U512::BYTES];
+        v.to_le_bytes_into(&mut bytes);
+        assert_eq!(U512::from_le_bytes(&bytes), v);
+    }
+
+    #[test]
+    fn uint_backend_limbs_truncating() {
+        use crate::uint::UintBackend;
+        // more limbs than capacity: truncate
+        let v = U256::from_limbs_truncating(&[1, 2, 3, 4, 5, 6]);
+        assert_eq!(v.as_limbs(), &[1, 2, 3, 4]);
+        // fewer limbs: zero-extend
+        let w = U256::from_limbs_truncating(&[7]);
+        assert_eq!(w.as_limbs(), &[7, 0, 0, 0]);
     }
 }
