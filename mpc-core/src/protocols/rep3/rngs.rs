@@ -4,6 +4,7 @@
 
 use super::{id::PartyID, yao::GCUtils};
 use crate::RngType;
+use crate::uint::UintBackend;
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField};
 use fancy_garbling::WireMod2;
@@ -211,6 +212,23 @@ impl Rep3Rand {
         val & &mask
     }
 
+    /// Generate two random fixed-width uints with given `bitlen`
+    pub fn random_uint<U: UintBackend>(&mut self, bitlen: usize) -> (U, U) {
+        let a = U::random_bits(&mut self.rng1, bitlen);
+        let b = U::random_bits(&mut self.rng2, bitlen);
+        (a, b)
+    }
+
+    /// Generate a random fixed-width uint with given `bitlen` from rng1
+    pub fn random_uint_rng1<U: UintBackend>(&mut self, bitlen: usize) -> U {
+        U::random_bits(&mut self.rng1, bitlen)
+    }
+
+    /// Generate a random fixed-width uint with given `bitlen` from rng2
+    pub fn random_uint_rng2<U: UintBackend>(&mut self, bitlen: usize) -> U {
+        U::random_bits(&mut self.rng2, bitlen)
+    }
+
     /// Generate a random field_element from rng1
     pub fn random_field_element_rng1<F: PrimeField>(&mut self) -> F {
         F::rand(&mut self.rng1)
@@ -333,5 +351,36 @@ impl Rep3RandBitComp {
             .as_mut()
             .map(|rng| RngType::from_seed(rng.r#gen()));
         Self { rng1, rng2, rng3 }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::uint::U256;
+
+    fn seeds() -> ([u8; crate::SEED_SIZE], [u8; crate::SEED_SIZE]) {
+        ([1u8; crate::SEED_SIZE], [2u8; crate::SEED_SIZE])
+    }
+
+    #[test]
+    fn random_uint_masks_and_derives_from_both_rngs() {
+        let (seed1, seed2) = seeds();
+        let mut rand = Rep3Rand::new(seed1, seed2);
+        for _ in 0..100 {
+            let (a, b): (U256, U256) = rand.random_uint(100);
+            assert!(a.bit_len() <= 100);
+            assert!(b.bit_len() <= 100);
+        }
+
+        // rng1/rng2 single draws equal the pair components drawn from
+        // equal-seeded clones.
+        let mut rand_pair = Rep3Rand::new(seed1, seed2);
+        let mut rand_single = Rep3Rand::new(seed1, seed2);
+        let (pair_a, pair_b): (U256, U256) = rand_pair.random_uint(64);
+        let single_a: U256 = rand_single.random_uint_rng1(64);
+        let single_b: U256 = rand_single.random_uint_rng2(64);
+        assert_eq!(pair_a, single_a);
+        assert_eq!(pair_b, single_b);
     }
 }

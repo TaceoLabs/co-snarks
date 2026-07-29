@@ -35,7 +35,7 @@ use rngs::{Rep3CorrelatedRng, Rep3Rand, Rep3RandBitComp};
 use serde::{Deserialize, Serialize};
 
 pub use arithmetic::types::Rep3PrimeFieldShare;
-pub use binary::types::Rep3BigUintShare;
+pub use binary::types::{Rep3BigUintShare, Rep3UintShare};
 pub use pointshare::types::Rep3PointShare;
 
 /// The Rng used for expanding compressed Shares
