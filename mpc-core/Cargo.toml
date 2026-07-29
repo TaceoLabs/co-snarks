@@ -45,6 +45,7 @@ ruint = { workspace = true }
 [dev-dependencies]
 ark-std = { workspace = true }
 bincode = { workspace = true }
+mpc-net = { version = "0.5.0", path = "../mpc-net", features = ["local"] }
 paste.workspace = true
 criterion.workspace = true
 
