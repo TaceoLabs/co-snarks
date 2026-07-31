@@ -79,7 +79,7 @@ libaes = "0.7"
 sha2 = { version = "0.10", features = ["compress"] }
 sha3 = "0.10"
 nom = "7"
-ruint = "1.17"
+ruint = "1.20"
 subtle = "2.6"
 thiserror = "2"
 toml = "0.8"
