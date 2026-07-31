@@ -4,7 +4,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_groth16::{Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_relations::r1cs::ConstraintMatrices;
+use taceo_groth16::ConstraintMatrices;
 use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
 use mpc_core::MpcState;

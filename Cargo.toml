@@ -38,24 +38,24 @@ brillig = { version = "1.0.0-beta.20", git = "https://github.com/noir-lang/noir/
 noirc-abi = { version = "1.0.0-beta.20", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.20", package = "noirc_abi" }
 noirc-artifacts = { version = "1.0.0-beta.20", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-beta.20", package = "noirc_artifacts" }
 
-ark-bls12-377 = "0.5"
-ark-bls12-381 = "0.5"
-ark-bn254 = "0.5"
-ark-ec = { version = "0.5", default-features = false }
-ark-groth16 = { version = "0.5" }
-ark-ff = "0.5"
-ark-grumpkin = "0.5"
-ark-poly = "0.5"
-ark-relations = "0.5"
-ark-serialize = { version = "0.5", features = ["derive", "std"] }
-ark-std = { version = "0.5", features = ["std"] }
+ark-bls12-377 = "0.6"
+ark-bls12-381 = "0.6"
+ark-bn254 = "0.6"
+ark-ec = { version = "0.6", default-features = false }
+ark-groth16 = { version = "0.6" }
+ark-ff = "0.6"
+ark-grumpkin = "0.6"
+ark-poly = "0.6"
+ark-relations = "0.6"
+ark-serialize = { version = "0.6", features = ["derive", "std"] }
+ark-std = { version = "0.6", features = ["std"] }
 bincode = "1.3"
 blake2 = "0.10"
 blake3 = "1.6"
 bytemuck = { version = "1.25", features = ["derive"] }
 byteorder = "1.5"
 bytes = "1.11"
-circom-types = { package = "taceo-circom-types", version = "0.2" }
+circom-types = { package = "taceo-circom-types", git = "https://github.com/TaceoLabs/circom-helpers.git", rev = "e0122f8738f48a3e330e1df58558a909736c11cb", version = "0.2.5" }
 clap = { version = "4.5", features = ["derive"] }
 color-eyre = "0.6"
 criterion = { version = "0.5", features = ["async_tokio"] }
