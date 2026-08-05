@@ -69,7 +69,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
     where
         C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
     {
-        C::msm_unchecked(points, scalars)
+        mpc_core::msm::msm_unchecked::<C>(points, scalars)
     }
 
     fn promote_to_trivial_shares(

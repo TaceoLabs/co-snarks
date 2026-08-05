@@ -185,7 +185,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
 
         let (priv_acc, pub_acc) = rayon::join(
             || T::msm_public_points_hs(&query[1 + pub_len..], aux_assignment),
-            || C::msm_unchecked(&query[1..=pub_len], input_assignment),
+            || mpc_core::msm::msm_unchecked::<C>(&query[1..=pub_len], input_assignment),
         );
 
         let mut res = initial;

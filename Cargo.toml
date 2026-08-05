@@ -43,7 +43,7 @@ ark-bls12-381 = "0.6"
 ark-bn254 = "0.6"
 ark-ec = { version = "0.6", default-features = false }
 ark-groth16 = { version = "0.6" }
-ark-ff = "0.6"
+ark-ff = { version = "0.6", features = ["asm"] }
 ark-grumpkin = "0.6"
 ark-poly = "0.6"
 ark-relations = "0.6"

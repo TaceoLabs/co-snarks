@@ -35,7 +35,7 @@ impl Utils {
         if poly.len() > crs.len() {
             return Err(HonkProofError::CrsTooSmall);
         }
-        Ok(P::msm_unchecked(crs, poly))
+        Ok(mpc_core::msm::msm_unchecked::<P>(crs, poly))
     }
 
     pub fn get_msb32(inp: u32) -> u32 {
