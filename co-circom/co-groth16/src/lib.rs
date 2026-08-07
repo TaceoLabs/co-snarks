@@ -23,7 +23,6 @@ mod tests {
     use ark_bn254::Bn254;
     use ark_groth16::{ProvingKey, VerifyingKey};
     use ark_relations::utils::matrix::Matrix;
-    use taceo_groth16::ConstraintMatrices;
     use ark_serialize::CanonicalDeserialize;
     use circom_types::{
         CheckElement, Witness,
@@ -34,6 +33,7 @@ mod tests {
     };
     use co_circom_types::SharedWitness;
     use std::fs::{self, File};
+    use taceo_groth16::ConstraintMatrices;
 
     use crate::{CircomReduction, LibSnarkReduction, groth16::Groth16};
 

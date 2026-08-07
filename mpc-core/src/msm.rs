@@ -92,7 +92,7 @@ fn msm_bigint_wnaf_parallel<V: VariableBaseMSM>(
 
     // We're traversing windows from high to low.
     lowest
-        + (&window_sums[1..])
+        + window_sums[1..]
             .iter()
             .rev()
             .fold(V::ZERO, |mut total, sum_i| {
