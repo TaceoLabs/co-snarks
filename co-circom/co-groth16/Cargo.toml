@@ -22,7 +22,7 @@ ark-ff = { workspace = true }
 ark-groth16 = { workspace = true }
 ark-poly = { workspace = true }
 ark-relations = { workspace = true }
-taceo-groth16 = { package = "taceo-groth16", git = "https://github.com/TaceoLabs/circom-helpers.git", rev = "e0122f8738f48a3e330e1df58558a909736c11cb", version = "0.1.3" }
+taceo-groth16 = { package = "taceo-groth16", version = "0.2.0" }
 ark-serialize = { workspace = true }
 co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
 eyre = { workspace = true }

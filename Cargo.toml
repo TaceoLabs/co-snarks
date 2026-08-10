@@ -55,7 +55,7 @@ blake3 = "1.6"
 bytemuck = { version = "1.25", features = ["derive"] }
 byteorder = "1.5"
 bytes = "1.11"
-circom-types = { package = "taceo-circom-types", git = "https://github.com/TaceoLabs/circom-helpers.git", rev = "e0122f8738f48a3e330e1df58558a909736c11cb", version = "0.2.5" }
+circom-types = { package = "taceo-circom-types", version = "0.3.1" }
 clap = { version = "4.5", features = ["derive"] }
 color-eyre = "0.6"
 criterion = { version = "0.5", features = ["async_tokio"] }
