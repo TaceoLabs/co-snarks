@@ -208,8 +208,8 @@ pub fn msm_public_points<C: CurveGroup>(
         .map(|share| (share.a.into_bigint(), share.b.into_bigint()))
         .collect::<(Vec<_>, Vec<_>)>();
     let (res_a, res_b) = rayon::join(
-        || C::msm_bigint(points, &a_bigints),
-        || C::msm_bigint(points, &b_bigints),
+        || crate::msm::msm_bigint::<C>(points, &a_bigints),
+        || crate::msm::msm_bigint::<C>(points, &b_bigints),
     );
     tracing::trace!("< MSM public points for {} elements", points.len());
     PointShare::new(res_a, res_b)

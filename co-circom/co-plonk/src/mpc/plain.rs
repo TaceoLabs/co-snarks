@@ -1,5 +1,4 @@
 use ark_ec::pairing::Pairing;
-use ark_ec::scalar_mul::variable_base::VariableBaseMSM;
 use ark_ff::Field;
 use ark_ff::UniformRand;
 use ark_poly::Polynomial;
@@ -176,7 +175,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        P::G1::msm_unchecked(points, scalars)
+        mpc_core::msm::msm_unchecked::<P::G1>(points, scalars)
     }
 
     fn evaluate_poly_public(

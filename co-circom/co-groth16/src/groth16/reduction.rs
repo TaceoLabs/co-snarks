@@ -1,12 +1,13 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{FftField, Field, One};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_relations::r1cs::{ConstraintMatrices, Matrix};
+use ark_relations::utils::matrix::Matrix;
 use eyre::Result;
 use mpc_core::MpcState;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
+use taceo_groth16::ConstraintMatrices;
 use tracing::instrument;
 
 use crate::mpc::CircomGroth16Prover;

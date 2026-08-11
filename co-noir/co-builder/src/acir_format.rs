@@ -2,7 +2,7 @@ use acir::{
     acir_field::GenericFieldElement,
     circuit::{
         Circuit,
-        opcodes::{BlackBoxFuncCall, FunctionInput, MemOp as AcirMemOp},
+        opcodes::{BlackBoxFuncCall, FunctionInput, MemOp as AcirMemOp, MemOpKind},
     },
     native_types::{Expression, Witness, WitnessMap},
 };
@@ -331,9 +331,8 @@ impl<F: PrimeField> AcirFormat<F> {
                 }
             }
             acir::circuit::Opcode::MemoryOp { op, .. } => {
-                self.update_max_witness_index_from_expression(&op.index);
-                self.update_max_witness_index_from_expression(&op.value);
-                self.update_max_witness_index_from_expression(&op.operation);
+                update_max_witness_index_from_witness(self, &op.index);
+                update_max_witness_index_from_witness(self, &op.value);
             }
             acir::circuit::Opcode::BrilligCall {
                 inputs,
@@ -911,74 +910,9 @@ impl<F: PrimeField> AcirFormat<F> {
         mem_op: AcirMemOp<GenericFieldElement<F>>,
         block: &mut BlockConstraint<F>,
     ) {
-        // Convert an Acir expression to witness index
-        let acir_expression_to_witness_or_constant =
-            |expr: &Expression<GenericFieldElement<F>>| -> WitnessOrConstant<F> {
-                // Noir gives us witnesses or constants for read/write operations. We use the following assertions to ensure
-                // that the data coming from Noir is in the correct form.
-                assert!(
-                    expr.mul_terms.is_empty(),
-                    "MemoryOp should not have multiplication terms"
-                );
-                assert!(
-                    expr.linear_combinations.len() <= 1,
-                    "MemoryOp should have at most one linear term"
-                );
-
-                let a_scaling = if expr.linear_combinations.len() == 1 {
-                    expr.linear_combinations[0].0.into_repr()
-                } else {
-                    F::zero()
-                };
-                let constant_term = expr.q_c.into_repr();
-
-                let is_witness = a_scaling.is_one() && constant_term.is_zero();
-                let is_constant = a_scaling.is_zero();
-                assert!(
-                    is_witness || is_constant,
-                    "MemoryOp expression must be a witness or a constant"
-                );
-
-                WitnessOrConstant {
-                    index: if is_witness {
-                        expr.linear_combinations[0].1.0
-                    } else {
-                        u32::MAX
-                    },
-                    value: if is_constant {
-                        constant_term
-                    } else {
-                        F::zero()
-                    },
-                    is_constant,
-                }
-            };
-
-        // Determine whether this op is read or write.
-        let is_read_operation = |expr: &Expression<GenericFieldElement<F>>| -> bool {
-            assert!(
-                expr.mul_terms.is_empty(),
-                "MemoryOp expression should not have multiplication terms"
-            );
-            assert!(
-                expr.linear_combinations.is_empty(),
-                "MemoryOp expression should not have linear terms"
-            );
-
-            let const_term = expr.q_c.into_repr();
-            assert!(
-                const_term.is_one() || const_term.is_zero(),
-                "MemoryOp expression should be either zero or one"
-            );
-
-            // A read operation is encoded by a zero expression.
-            const_term.is_zero()
-        };
-
-        let access_type = if is_read_operation(&mem_op.operation) {
-            0 // Read
-        } else {
-            1 // Write
+        let access_type = match mem_op.operation {
+            MemOpKind::Read => 0,
+            MemOpKind::Write => 1,
         };
 
         if access_type == 1 {
@@ -988,8 +922,8 @@ impl<F: PrimeField> AcirFormat<F> {
             block.type_ = BlockType::RAM;
         }
 
-        let index = acir_expression_to_witness_or_constant(&mem_op.index);
-        let value = acir_expression_to_witness_or_constant(&mem_op.value);
+        let index = WitnessOrConstant::from_index(mem_op.index.0);
+        let value = WitnessOrConstant::from_index(mem_op.value.0);
 
         let acir_mem_op = MemOp {
             access_type,

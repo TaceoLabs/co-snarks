@@ -13,7 +13,7 @@ pub use groth16::{
 };
 
 pub use ark_groth16::{Proof, ProvingKey, VerifyingKey};
-pub use ark_relations::r1cs::ConstraintMatrices;
+pub use taceo_groth16::ConstraintMatrices;
 
 #[cfg(test)]
 #[cfg(feature = "verifier")]
@@ -22,7 +22,7 @@ mod tests {
     use ark_bls12_381::Bls12_381;
     use ark_bn254::Bn254;
     use ark_groth16::{ProvingKey, VerifyingKey};
-    use ark_relations::r1cs::{ConstraintMatrices, Matrix};
+    use ark_relations::utils::matrix::Matrix;
     use ark_serialize::CanonicalDeserialize;
     use circom_types::{
         CheckElement, Witness,
@@ -33,6 +33,7 @@ mod tests {
     };
     use co_circom_types::SharedWitness;
     use std::fs::{self, File};
+    use taceo_groth16::ConstraintMatrices;
 
     use crate::{CircomReduction, LibSnarkReduction, groth16::Groth16};
 

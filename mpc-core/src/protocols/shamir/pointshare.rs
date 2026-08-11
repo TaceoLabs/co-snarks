@@ -209,7 +209,8 @@ pub fn msm_public_points<C: CurveGroup>(
 ) -> PointShare<C> {
     tracing::trace!("> MSM public points for {} elements", points.len());
     debug_assert_eq!(points.len(), scalars.len());
-    let res = C::msm_unchecked(points, &scalars.iter().map(|s| s.a).collect::<Vec<_>>());
+    let res =
+        crate::msm::msm_unchecked::<C>(points, &scalars.iter().map(|s| s.a).collect::<Vec<_>>());
     tracing::trace!("< MSM public points for {} elements", points.len());
     PointShare::<C> { a: res }
 }

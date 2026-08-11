@@ -4,7 +4,6 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_groth16::{Proof, ProvingKey};
 use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
-use ark_relations::r1cs::ConstraintMatrices;
 use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
 use mpc_core::MpcState;
@@ -14,6 +13,7 @@ use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirState};
 use mpc_net::Network;
 use num_traits::ToPrimitive;
 use std::marker::PhantomData;
+use taceo_groth16::ConstraintMatrices;
 use tracing::instrument;
 
 pub use crate::mpc::CircomGroth16Prover;
@@ -185,7 +185,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
 
         let (priv_acc, pub_acc) = rayon::join(
             || T::msm_public_points_hs(&query[1 + pub_len..], aux_assignment),
-            || C::msm_unchecked(&query[1..=pub_len], input_assignment),
+            || mpc_core::msm::msm_unchecked::<C>(&query[1..=pub_len], input_assignment),
         );
 
         let mut res = initial;

@@ -268,7 +268,7 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
-        P::msm_unchecked(points, scalars)
+        mpc_core::msm::msm_unchecked::<P>(points, scalars)
     }
 
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {

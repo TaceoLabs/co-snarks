@@ -114,7 +114,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
     where
         C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
     {
-        C::msm_unchecked(points, scalars)
+        mpc_core::msm::msm_unchecked::<C>(points, scalars)
     }
 
     fn scalar_mul_public_point_hs<C>(a: &C, b: Self::ArithmeticHalfShare) -> Self::PointHalfShare<C>

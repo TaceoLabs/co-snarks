@@ -1,12 +1,10 @@
 use crate::mpc::NoirWitnessExtensionProtocol;
 use acir::{
     acir_field::GenericFieldElement,
-    circuit::opcodes::{BlockId, MemOp},
+    circuit::opcodes::{BlockId, MemOp, MemOpKind},
     native_types::Witness,
 };
 use ark_ff::PrimeField;
-
-use crate::solver::solver_utils;
 
 use super::{CoAcvmResult, CoSolver};
 
@@ -49,59 +47,37 @@ where
         op: &MemOp<GenericFieldElement<F>>,
     ) -> CoAcvmResult<()> {
         tracing::trace!("solving memory op {:?}", op);
-        let index = self.evaluate_expression(&op.index)?;
+        let index = Self::witness_to_value(self.witness(), op.index)?.to_owned();
         tracing::trace!("index is {}", index);
-        let value = self.simplify_expression(&op.value)?;
-        tracing::trace!("value is {}", solver_utils::expr_to_string(&value));
-        let read_write = op.operation.q_c.into_repr();
-        if read_write.is_zero() {
-            // read the value from the LUT
-            tracing::trace!("reading value from LUT");
-            // this is the to_witness method. We cannot call it on AcvmType because
-            // of AcirField trait bound - maybe put it at some utils method
-            // if we need it more than once
-            let witness = if value.is_degree_one_univariate() {
-                //we can get the witness
-                let (coef, witness) = &value.linear_combinations[0];
-                if T::is_public_one(coef) && T::is_public_zero(&value.q_c) {
-                    Ok(*witness)
-                } else {
-                    Err(eyre::eyre!(
-                        "value for mem op must be a degree one univariate polynomial with coef 1 and constant 0"
-                    ))
-                }
-            } else {
-                Err(eyre::eyre!(
-                    "value for mem op must be a degree one univariate polynomial"
-                ))
-            }?;
-            let lut = self
-                .memory_access
-                .get(block_id.0.into())
-                .ok_or(eyre::eyre!(
-                    "tried to access block {} but not present",
-                    block_id.0
-                ))?;
-            let value = self.driver.read_lut_by_acvm_type(index, lut)?;
+        match op.operation {
+            MemOpKind::Read => {
+                // read the value from the LUT
+                tracing::trace!("reading value from LUT");
+                let lut = self
+                    .memory_access
+                    .get(block_id.0.into())
+                    .ok_or(eyre::eyre!(
+                        "tried to access block {} but not present",
+                        block_id.0
+                    ))?;
+                let value = self.driver.read_lut_by_acvm_type(index, lut)?;
 
-            self.witness().insert(witness, value);
-        } else if read_write.is_one() {
-            // write value to LUT
-            tracing::trace!("writing value to LUT");
-            let lut = self
-                .memory_access
-                .get_mut(block_id.0.into())
-                .ok_or(eyre::eyre!(
-                    "tried to access block {} but not present",
-                    block_id.0
-                ))?;
+                self.witness().insert(op.value, value);
+            }
+            MemOpKind::Write => {
+                // write value to LUT
+                tracing::trace!("writing value to LUT");
+                let value = Self::witness_to_value(self.witness(), op.value)?.to_owned();
+                let lut = self
+                    .memory_access
+                    .get_mut(block_id.0.into())
+                    .ok_or(eyre::eyre!(
+                        "tried to access block {} but not present",
+                        block_id.0
+                    ))?;
 
-            self.driver.write_lut_by_acvm_type(index, value.q_c, lut)?;
-        } else {
-            Err(eyre::eyre!(
-                "Got unknown operation {} for mem op - this is a bug",
-                op.operation.q_c
-            ))?
+                self.driver.write_lut_by_acvm_type(index, value, lut)?;
+            }
         }
         Ok(())
     }
