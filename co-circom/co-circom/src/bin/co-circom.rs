@@ -1140,7 +1140,10 @@ where
 #[instrument(level = "debug", skip(config))]
 fn run_verify<P: Pairing + CircomArkworksPairingBridge>(
     config: VerifyConfig,
-) -> color_eyre::Result<ExitCode> {
+) -> color_eyre::Result<ExitCode>
+where
+    P::G1: SwCurveGroup,
+{
     let proofsystem = config.proof_system;
     let proof = config.proof;
     let vk = config.vk;

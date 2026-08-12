@@ -2,6 +2,7 @@ use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use ark_poly::Polynomial;
 use ark_poly::univariate::DensePolynomial;
+use mpc_core::msm::SwCurveGroup;
 
 use mpc_core::MpcState;
 use mpc_core::protocols::shamir::network::ShamirNetworkExt;
@@ -15,7 +16,10 @@ use super::CircomPlonkProver;
 /// A Plonk driver using shamir secret sharing
 pub struct ShamirPlonkDriver;
 
-impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver {
+impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver
+where
+    P::G1: SwCurveGroup,
+{
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShareG1 = ShamirPointShare<P::G1>;
     type PointShareG2 = ShamirPointShare<P::G2>;
@@ -168,7 +172,7 @@ impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver {
         points: &[<P as Pairing>::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        pointshare::msm_public_points_generic(points, scalars)
+        pointshare::msm_public_points(points, scalars)
     }
 
     fn evaluate_poly_public(

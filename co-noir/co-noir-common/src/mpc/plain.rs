@@ -10,6 +10,7 @@ use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
 use mpc_core::MpcState;
 use mpc_core::PlainState;
+use mpc_core::msm::SwCurveGroup;
 use mpc_net::Network;
 use num_traits::Zero;
 use rand::thread_rng;
@@ -24,7 +25,7 @@ fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
 #[derive(Clone, Debug)]
 pub struct PlainUltraHonkDriver;
 
-impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
+impl<P: CurveGroup + SwCurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type ArithmeticShare = P::ScalarField;
     type PointShare = P;
     type State = PlainState;
@@ -268,7 +269,7 @@ impl<P: CurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
-        mpc_core::msm::msm_unchecked_generic::<P>(points, scalars)
+        mpc_core::msm::msm_unchecked::<P>(points, scalars)
     }
 
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {

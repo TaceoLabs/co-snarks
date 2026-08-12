@@ -13,6 +13,7 @@ use crate::utils::Utils;
 use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use eyre::Result;
+use mpc_core::msm::SwCurveGroup;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -120,7 +121,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
         &self,
         prover_crs: &ProverCrs<C>,
         verifier_crs: P::G2Affine,
-    ) -> Result<VerifyingKey<P>> {
+    ) -> Result<VerifyingKey<P>>
+    where
+        C: SwCurveGroup,
+    {
         let mut commitments = PrecomputedEntities::default();
         for (des, src) in commitments
             .iter_mut()

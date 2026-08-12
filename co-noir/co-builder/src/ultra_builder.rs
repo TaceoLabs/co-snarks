@@ -48,6 +48,7 @@ use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::utils::Utils;
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
+use mpc_core::msm::SwCurveGroup;
 use num_bigint::BigUint;
 use std::collections::HashMap;
 use std::{array, collections::BTreeMap, sync::Arc};
@@ -104,7 +105,10 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         prover_crs: Arc<ProverCrs<C>>,
         verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKey<P>)> {
+    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKey<P>)>
+    where
+        C: SwCurveGroup,
+    {
         let pk: PlainProvingKey<C> = create_prover_instance::<C>(&mut self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
@@ -135,7 +139,10 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         mut self,
         crs: Arc<ProverCrs<C>>,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKeyBarretenberg<C>)> {
+    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKeyBarretenberg<C>)>
+    where
+        C: SwCurveGroup,
+    {
         let pk: PlainProvingKey<C> = create_prover_instance::<C>(&mut self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 

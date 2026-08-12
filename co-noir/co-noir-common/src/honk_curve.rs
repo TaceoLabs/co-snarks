@@ -1,11 +1,12 @@
-use ark_ec::{CurveGroup, short_weierstrass};
-use ark_ff::{BigInt, Field, One, PrimeField};
+use ark_ec::{AffineRepr, CurveGroup, short_weierstrass};
+use ark_ff::{AdditiveGroup, BigInt, Field, One, PrimeField};
 use ark_grumpkin::GrumpkinConfig;
+use mpc_core::msm::SwCurveGroup;
 use num_bigint::BigUint;
 use std::str::FromStr;
 
 // Des describes the PrimeField used for the Transcript
-pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
+pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> + SwCurveGroup {
     type CycleGroup: CurveGroup<BaseField = Self::ScalarField>;
 
     const NUM_BASEFIELD_ELEMENTS: usize;
@@ -13,8 +14,25 @@ pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
     const SUBGROUP_SIZE: usize;
     const LIBRA_UNIVARIATES_LENGTH: usize;
 
-    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine;
-    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField);
+    /// Builds a G1 point from its coordinates.
+    ///
+    /// Every caller parses the coordinates out of a proof or a verification key, so this stays
+    /// checked: rejecting off-curve and wrong-subgroup points here is load-bearing. Use
+    /// [`SwCurveGroup::affine_from_xy_unchecked`] for coordinates that are already trusted.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the coordinates are not a point of the prime-order subgroup.
+    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine {
+        Self::affine_from_xy(x, y)
+            .expect("coordinates are on the curve and in the correct subgroup")
+    }
+
+    /// The coordinates of a G1 point, `(0, 0)` for the point at infinity.
+    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
+        p.xy()
+            .unwrap_or((Self::BaseField::ZERO, Self::BaseField::ZERO))
+    }
 
     fn convert_scalarfield_into(src: &Self::ScalarField) -> Vec<Des>;
     fn convert_scalarfield_back(src: &[Des]) -> Self::ScalarField;
@@ -49,14 +67,6 @@ impl HonkCurve<ark_bn254::Fr> for ark_ec::short_weierstrass::Projective<ark_bn25
     const NUM_SCALARFIELD_ELEMENTS: usize = 1;
     const SUBGROUP_SIZE: usize = 256;
     const LIBRA_UNIVARIATES_LENGTH: usize = 9;
-
-    fn g1_affine_from_xy(x: ark_bn254::Fq, y: ark_bn254::Fq) -> ark_bn254::G1Affine {
-        ark_bn254::G1Affine::new(x, y)
-    }
-
-    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
-        (p.x, p.y)
-    }
 
     fn convert_scalarfield_into(src: &ark_bn254::Fr) -> Vec<ark_bn254::Fr> {
         vec![src.to_owned()]
@@ -143,14 +153,6 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
     const NUM_SCALARFIELD_ELEMENTS: usize = 1;
     const SUBGROUP_SIZE: usize = 87;
     const LIBRA_UNIVARIATES_LENGTH: usize = 3;
-
-    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine {
-        ark_grumpkin::Affine::new(x, y)
-    }
-
-    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
-        (p.x, p.y)
-    }
 
     fn convert_scalarfield_into(src: &Self::ScalarField) -> Vec<ark_bn254::Fr> {
         let (a, b) = convert_grumpkin_fr_to_bn254_frs(src);

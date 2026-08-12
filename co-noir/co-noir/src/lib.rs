@@ -24,6 +24,7 @@ use co_noir_common::polynomials::polynomial::Polynomial;
 use co_noir_types::{Rep3SharedInput, Rep3SharedWitness, ShamirType};
 use co_noir_types::{Rep3Type, ShamirSharedWitness};
 use color_eyre::eyre::{self, Context, Result};
+use mpc_core::msm::SwCurveGroup;
 use mpc_core::protocols::{
     rep3::{self, conversion::A2BType, id::PartyID},
     shamir::{self, ShamirPreprocessing, ShamirState},
@@ -129,7 +130,7 @@ pub fn translate_witness<F: PrimeField, N: Network>(
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
 #[allow(clippy::complexity)]
-pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
+pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField> + SwCurveGroup, N: Network>(
     proving_key: Rep3ProvingKey<P>,
     net: &N,
 ) -> Result<ShamirProvingKey<P>> {
@@ -338,7 +339,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Split a proving key into RPE3 shares
-pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
+pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField> + SwCurveGroup>(
     proving_key: PlainProvingKey<P>,
 ) -> Result<[Rep3ProvingKey<P>; 3]> {
     let mut rng = rand::thread_rng();
@@ -365,7 +366,7 @@ pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
 }
 
 /// Split a proving key into shamir shares
-pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>>(
+pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField> + SwCurveGroup>(
     proving_key: PlainProvingKey<P>,
     degree: usize,
     num_parties: usize,

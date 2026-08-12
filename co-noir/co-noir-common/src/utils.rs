@@ -1,3 +1,4 @@
+use mpc_core::msm::SwCurveGroup;
 use std::any::Any;
 
 use crate::crs::ProverCrs;
@@ -24,18 +25,18 @@ impl Utils {
         let projective_elements: Vec<C> = elements.iter().map(|e| e.into_group()).collect();
         C::normalize_batch(&projective_elements)
     }
-    pub fn commit<P: CurveGroup>(
+    pub fn commit<P: SwCurveGroup>(
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<P> {
         Self::msm::<P>(poly, crs.monomials.as_slice())
     }
 
-    pub fn msm<P: CurveGroup>(poly: &[P::ScalarField], crs: &[P::Affine]) -> HonkProofResult<P> {
+    pub fn msm<P: SwCurveGroup>(poly: &[P::ScalarField], crs: &[P::Affine]) -> HonkProofResult<P> {
         if poly.len() > crs.len() {
             return Err(HonkProofError::CrsTooSmall);
         }
-        Ok(mpc_core::msm::msm_unchecked_generic::<P>(crs, poly))
+        Ok(mpc_core::msm::msm_unchecked::<P>(crs, poly))
     }
 
     pub fn get_msb32(inp: u32) -> u32 {

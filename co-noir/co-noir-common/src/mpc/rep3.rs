@@ -6,6 +6,7 @@ use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
 use itertools::izip;
+use mpc_core::msm::SwCurveGroup;
 use mpc_core::protocols::rep3::Rep3BigUintShare;
 use mpc_core::protocols::rep3::conversion;
 use mpc_core::{
@@ -21,7 +22,9 @@ use std::any::TypeId;
 #[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
-impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField> + SwCurveGroup> NoirUltraHonkProver<P>
+    for Rep3UltraHonkDriver
+{
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
@@ -256,7 +259,7 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
-        pointshare::msm_public_points_generic(points, scalars)
+        pointshare::msm_public_points(points, scalars)
     }
 
     fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {

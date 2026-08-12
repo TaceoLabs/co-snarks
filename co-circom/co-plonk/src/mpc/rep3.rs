@@ -1,5 +1,6 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
+use mpc_core::msm::SwCurveGroup;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
@@ -13,7 +14,10 @@ use super::CircomPlonkProver;
 /// A Plonk driver for REP3 secret sharing
 pub struct Rep3PlonkDriver;
 
-impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
+impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver
+where
+    P::G1: SwCurveGroup,
+{
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShareG1 = Rep3PointShare<P::G1>;
     type PointShareG2 = Rep3PointShare<P::G2>;
@@ -166,7 +170,7 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        pointshare::msm_public_points_generic(points, scalars)
+        pointshare::msm_public_points(points, scalars)
     }
 
     fn evaluate_poly_public(

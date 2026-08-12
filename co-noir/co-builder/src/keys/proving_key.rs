@@ -22,6 +22,7 @@ use co_noir_common::{
     polynomials::entities::Polynomials,
 };
 use mpc_core::MpcState;
+use mpc_core::msm::SwCurveGroup;
 
 pub type Rep3ProvingKey<P> = ProvingKey<Rep3UltraHonkDriver, P>;
 pub type ShamirProvingKey<P> = ProvingKey<ShamirUltraHonkDriver, P>;
@@ -235,7 +236,7 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<
 }
 
 pub fn create_keys_barretenberg<
-    C: CurveGroup,
+    C: SwCurveGroup,
     T: NoirUltraHonkProver<C>,
     U: NoirWitnessExtensionProtocol<C::ScalarField, ArithmeticShare = T::ArithmeticShare>,
 >(

@@ -5,6 +5,7 @@ use ark_ff::Field;
 use ark_ff::PrimeField;
 use itertools::izip;
 use mpc_core::MpcState;
+use mpc_core::msm::SwCurveGroup;
 use mpc_core::protocols::shamir::ShamirState;
 use mpc_core::protocols::shamir::network::ShamirNetworkExt;
 use mpc_core::protocols::shamir::{
@@ -18,7 +19,9 @@ use rayon::prelude::*;
 #[derive(Debug)]
 pub struct ShamirUltraHonkDriver;
 
-impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
+impl<P: CurveGroup<BaseField: PrimeField> + SwCurveGroup> NoirUltraHonkProver<P>
+    for ShamirUltraHonkDriver
+{
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;
@@ -251,7 +254,7 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltr
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
-        pointshare::msm_public_points_generic(points, scalars)
+        pointshare::msm_public_points(points, scalars)
     }
 
     fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {

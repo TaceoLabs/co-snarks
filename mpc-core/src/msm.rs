@@ -41,13 +41,24 @@ pub trait SwCurveGroup: CurveGroup {
     /// Builds the affine point with the given coordinates.
     ///
     /// The point is not checked to be on the curve or in the correct subgroup; callers are
-    /// expected to have derived the coordinates from points that were.
+    /// expected to have derived the coordinates from points that were. Use
+    /// [`SwCurveGroup::affine_from_xy`] for coordinates that come from outside, such as a proof or
+    /// a verification key.
     fn affine_from_xy_unchecked(x: Self::BaseField, y: Self::BaseField) -> Self::Affine;
+
+    /// Builds the affine point with the given coordinates, returning `None` unless it is on the
+    /// curve and in the prime-order subgroup.
+    fn affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Option<Self::Affine>;
 }
 
 impl<P: SWCurveConfig> SwCurveGroup for Projective<P> {
     fn affine_from_xy_unchecked(x: P::BaseField, y: P::BaseField) -> Affine<P> {
         Affine::new_unchecked(x, y)
+    }
+
+    fn affine_from_xy(x: P::BaseField, y: P::BaseField) -> Option<Affine<P>> {
+        let point = Affine::new_unchecked(x, y);
+        (point.is_on_curve() && point.is_in_correct_subgroup_assuming_on_curve()).then_some(point)
     }
 }
 
@@ -83,31 +94,9 @@ pub fn msm_bigint<C: SwCurveGroup>(bases: &[C::Affine], scalars: &[BigIntOf<C>])
     })
 }
 
-/// Like [`msm_unchecked`], for curves that cannot name the [`SwCurveGroup`] bound.
-///
-/// This keeps the window scheduling but always accumulates into extended-Jacobian buckets, so it
-/// is slower than [`msm_unchecked`] for large inputs. It exists for callers that are generic over
-/// a curve group without the short-Weierstrass bound; prefer [`msm_unchecked`] where the bound can
-/// be threaded through.
-pub fn msm_unchecked_generic<C: CurveGroup>(bases: &[C::Affine], scalars: &[C::ScalarField]) -> C {
-    let bigints = scalars
-        .par_iter()
-        .map(|scalar| scalar.into_bigint())
-        .collect::<Vec<_>>();
-    msm_bigint_generic::<C>(bases, &bigints)
-}
-
-/// Like [`msm_bigint`], for curves that cannot name the [`SwCurveGroup`] bound. See
-/// [`msm_unchecked_generic`].
-pub fn msm_bigint_generic<C: CurveGroup>(bases: &[C::Affine], scalars: &[BigIntOf<C>]) -> C {
-    msm_windows::<C>(bases, scalars, |bases, digits, _, num_buckets| {
-        extended_jacobian_window_sum::<C>(bases, digits, num_buckets)
-    })
-}
-
 /// Splits the scalars into signed digits and sums one window per Rayon task, combining the window
 /// sums from the highest window down.
-fn msm_windows<C: CurveGroup>(
+fn msm_windows<C: SwCurveGroup>(
     bases: &[C::Affine],
     scalars: &[BigIntOf<C>],
     window_sum: impl Fn(&[C::Affine], &[u32], usize, usize) -> C + Send + Sync,
@@ -171,7 +160,7 @@ fn msm_windows<C: CurveGroup>(
 ///
 /// A digit is `0` if it does not contribute, and `(|digit| << 1) | is_negative` otherwise, so the
 /// bucket index of a non-zero digit is `(encoded >> 1) - 1`.
-fn window_major_digits<C: CurveGroup>(
+fn window_major_digits<C: SwCurveGroup>(
     scalars: &[BigIntOf<C>],
     window_size: usize,
     num_bits: usize,
@@ -242,7 +231,7 @@ fn batch_affine_window_sum<C: SwCurveGroup>(
 }
 
 /// The sum of one window, with buckets in arkworks' extended Jacobian representation.
-fn extended_jacobian_window_sum<C: CurveGroup>(
+fn extended_jacobian_window_sum<C: SwCurveGroup>(
     bases: &[C::Affine],
     digits: &[u32],
     num_buckets: usize,
@@ -525,7 +514,7 @@ mod tests {
     use super::*;
     use ark_bn254::{Fr, G1Affine, G1Projective, G2Projective};
     use ark_ec::VariableBaseMSM;
-    use ark_ff::{One, UniformRand, Zero};
+    use ark_ff::{AdditiveGroup, One, UniformRand, Zero};
     use rand::{Rng, SeedableRng, rngs::StdRng};
 
     fn random_bases(size: usize, rng: &mut StdRng) -> Vec<G1Affine> {
@@ -672,6 +661,55 @@ mod tests {
                 assert_eq!(actual, expected, "bls12-381, size {size}");
             }
         }
+    }
+
+    #[test]
+    fn affine_from_xy_accepts_valid_points() {
+        let mut rng = StdRng::seed_from_u64(0x7000);
+        for point in random_bases(16, &mut rng) {
+            let (x, y) = point.xy().unwrap();
+            assert_eq!(
+                G1Projective::affine_from_xy(x, y),
+                Some(point),
+                "valid point rejected"
+            );
+            assert_eq!(G1Projective::affine_from_xy_unchecked(x, y), point);
+        }
+    }
+
+    #[test]
+    fn affine_from_xy_rejects_points_off_the_curve() {
+        let mut rng = StdRng::seed_from_u64(0x7001);
+        let point = random_bases(1, &mut rng)[0];
+        let (x, y) = point.xy().unwrap();
+        assert!(G1Projective::affine_from_xy(x, y.double()).is_none());
+        assert!(G1Projective::affine_from_xy(x.double(), y).is_none());
+    }
+
+    #[test]
+    fn affine_from_xy_rejects_points_outside_the_prime_order_subgroup() {
+        // BN254 G1 has cofactor one, so every point on the curve is in the subgroup. BLS12-381 G1
+        // does not, and a point built straight from an x coordinate almost never lands in it.
+        type BlsG1 = ark_bls12_381::G1Projective;
+        let mut rng = StdRng::seed_from_u64(0x7002);
+        let mut rejected = 0;
+        for _ in 0..16 {
+            let x = ark_bls12_381::Fq::rand(&mut rng);
+            let Some(point) = ark_bls12_381::G1Affine::get_point_from_x_unchecked(x, true) else {
+                continue;
+            };
+            assert!(point.is_on_curve());
+            let (x, y) = point.xy().unwrap();
+            if BlsG1::affine_from_xy(x, y).is_none() {
+                rejected += 1;
+            }
+            // the unchecked constructor accepts it either way
+            assert_eq!(BlsG1::affine_from_xy_unchecked(x, y), point);
+        }
+        assert!(
+            rejected > 0,
+            "expected at least one point outside the prime-order subgroup"
+        );
     }
 
     #[test]

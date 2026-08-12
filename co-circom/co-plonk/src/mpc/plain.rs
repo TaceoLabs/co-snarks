@@ -5,6 +5,7 @@ use ark_poly::Polynomial;
 use ark_poly::univariate::DensePolynomial;
 use itertools::izip;
 use mpc_core::MpcState;
+use mpc_core::msm::SwCurveGroup;
 use mpc_net::Network;
 use num_traits::Zero;
 
@@ -14,7 +15,10 @@ use rand::thread_rng;
 /// A plain Plonk driver
 pub struct PlainPlonkDriver;
 
-impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
+impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver
+where
+    P::G1: SwCurveGroup,
+{
     type ArithmeticShare = P::ScalarField;
 
     type PointShareG1 = P::G1;
@@ -175,7 +179,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        mpc_core::msm::msm_unchecked_generic::<P::G1>(points, scalars)
+        mpc_core::msm::msm_unchecked::<P::G1>(points, scalars)
     }
 
     fn evaluate_poly_public(

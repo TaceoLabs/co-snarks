@@ -215,19 +215,3 @@ pub fn msm_public_points<C: SwCurveGroup>(
     tracing::trace!("< MSM public points for {} elements", points.len());
     PointShare::<C> { a: res }
 }
-
-/// Performs MSM between curve points and field shares, for curves that cannot name the
-/// [`SwCurveGroup`] bound. See [`crate::msm::msm_unchecked_generic`].
-pub fn msm_public_points_generic<C: CurveGroup>(
-    points: &[C::Affine],
-    scalars: &[FieldShare<C::ScalarField>],
-) -> PointShare<C> {
-    tracing::trace!("> MSM public points for {} elements", points.len());
-    debug_assert_eq!(points.len(), scalars.len());
-    let res = crate::msm::msm_unchecked_generic::<C>(
-        points,
-        &scalars.iter().map(|s| s.a).collect::<Vec<_>>(),
-    );
-    tracing::trace!("< MSM public points for {} elements", points.len());
-    PointShare::<C> { a: res }
-}

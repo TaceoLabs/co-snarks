@@ -13,6 +13,7 @@ use mpc::CircomPlonkProver;
 use mpc::plain::PlainPlonkDriver;
 use mpc::rep3::Rep3PlonkDriver;
 use mpc::shamir::ShamirPlonkDriver;
+use mpc_core::msm::SwCurveGroup;
 use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::shamir::ShamirPreprocessing;
@@ -213,7 +214,10 @@ mod plonk_utils {
     }
 }
 
-impl<P: Pairing> Rep3CoPlonk<P> {
+impl<P: Pairing> Rep3CoPlonk<P>
+where
+    P::G1: SwCurveGroup,
+{
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
         nets: &[N; 8],
@@ -229,7 +233,10 @@ impl<P: Pairing> Rep3CoPlonk<P> {
     }
 }
 
-impl<P: Pairing> ShamirCoPlonk<P> {
+impl<P: Pairing> ShamirCoPlonk<P>
+where
+    P::G1: SwCurveGroup,
+{
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
         nets: &[N; 8],
@@ -254,6 +261,7 @@ impl<P: Pairing> ShamirCoPlonk<P> {
 impl<P: Pairing> Plonk<P>
 where
     P: CircomArkworksPairingBridge,
+    P::G1: SwCurveGroup,
 {
     /// *Locally* create a `Plonk` proof. This is just the [`CoPlonk`] prover
     /// initialized with the [`PlainPlonkDriver`].

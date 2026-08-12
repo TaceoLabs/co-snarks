@@ -3,6 +3,7 @@ use ark_ec::pairing::Pairing;
 use circom_types::plonk::Zkey;
 use co_circom_types::SharedWitness;
 use mpc_core::MpcState;
+use mpc_core::msm::SwCurveGroup;
 use mpc_net::Network;
 use tracing::instrument;
 
@@ -84,7 +85,10 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
     }
 }
 
-impl<P: Pairing> Round1Challenges<P, PlainPlonkDriver> {
+impl<P: Pairing> Round1Challenges<P, PlainPlonkDriver>
+where
+    P::G1: SwCurveGroup,
+{
     #[cfg(test)]
     pub(super) fn deterministic() -> Self {
         Self {

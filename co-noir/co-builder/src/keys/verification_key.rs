@@ -6,6 +6,7 @@ use co_noir_common::{
 use std::sync::Arc;
 
 use crate::prelude::UltraCircuitBuilder;
+use mpc_core::msm::SwCurveGroup;
 
 pub trait VerifyingKeyTrait<P: Pairing> {
     fn create(
@@ -18,7 +19,10 @@ pub trait VerifyingKeyTrait<P: Pairing> {
         Self: std::marker::Sized;
 }
 
-impl<P: Pairing> VerifyingKeyTrait<P> for VerifyingKey<P> {
+impl<P: Pairing> VerifyingKeyTrait<P> for VerifyingKey<P>
+where
+    P::G1: SwCurveGroup,
+{
     fn create(
         circuit: UltraCircuitBuilder<P::G1>,
         prover_crs: Arc<ProverCrs<P::G1>>,

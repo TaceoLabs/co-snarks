@@ -216,27 +216,6 @@ pub fn msm_public_points<C: SwCurveGroup>(
     PointShare::new(res_a, res_b)
 }
 
-/// Perform msm between `points` and `scalars`, for curves that cannot name the [`SwCurveGroup`]
-/// bound. See [`crate::msm::msm_unchecked_generic`].
-pub fn msm_public_points_generic<C: CurveGroup>(
-    points: &[C::Affine],
-    scalars: &[FieldShare<C::ScalarField>],
-) -> PointShare<C> {
-    tracing::trace!("> MSM public points for {} elements", points.len());
-    debug_assert_eq!(points.len(), scalars.len());
-    let (a_bigints, b_bigints) = scalars
-        .into_par_iter()
-        .with_min_len(1 << 14)
-        .map(|share| (share.a.into_bigint(), share.b.into_bigint()))
-        .collect::<(Vec<_>, Vec<_>)>();
-    let (res_a, res_b) = rayon::join(
-        || crate::msm::msm_bigint_generic::<C>(points, &a_bigints),
-        || crate::msm::msm_bigint_generic::<C>(points, &b_bigints),
-    );
-    tracing::trace!("< MSM public points for {} elements", points.len());
-    PointShare::new(res_a, res_b)
-}
-
 /// Checks whether the shared point is zero/infinity.
 /// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underlying value is not zero.
 /// Returns a replicated boolean share in two separate parts.
