@@ -49,6 +49,8 @@ pub trait UintBackend:
     + std::ops::ShrAssign<usize>
     + std::ops::Div<Output = Self>
     + std::ops::Rem<Output = Self>
+    + Into<num_bigint::BigUint>
+    + for<'a> TryFrom<&'a num_bigint::BigUint>
     + ark_serialize::CanonicalSerialize
     + ark_serialize::CanonicalDeserialize
     + serde::Serialize

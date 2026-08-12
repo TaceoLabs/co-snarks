@@ -57,15 +57,13 @@ mod glue {
 
     /// Canonical `BigUint` representation of a fixed-width uint.
     pub fn uint_to_biguint<U: UintBackend>(x: &U) -> BigUint {
-        let mut bytes = vec![0u8; U::BYTES];
-        x.to_le_bytes_into(&mut bytes);
-        BigUint::from_bytes_le(&bytes)
+        (*x).into()
     }
 
     /// Native `F::Uint` representation of a canonical `BigUint` mask value
     /// (must fit the backend width).
     pub fn biguint_to_uint<U: UintBackend>(x: &BigUint) -> U {
-        U::from_limbs_truncating(&x.to_u64_digits())
+        U::try_from(x).ok().expect("value fits the backend width")
     }
 
     /// Opens a binary share to its canonical [`BigUint`] value via the network.

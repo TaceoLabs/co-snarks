@@ -73,6 +73,54 @@ impl<const BITS: usize, const LIMBS: usize> TryFrom<RUint<BITS, LIMBS>> for usiz
     }
 }
 
+// --- ark-ff bridge (delegates to ruint's `ark-ff-06` support; limb counts
+// must match, wider-than-`BigInt` backends need explicit widening) ---
+
+impl<const BITS: usize, const LIMBS: usize> From<ark_ff::BigInt<LIMBS>> for RUint<BITS, LIMBS> {
+    fn from(v: ark_ff::BigInt<LIMBS>) -> Self {
+        Self(v.into())
+    }
+}
+impl<const BITS: usize, const LIMBS: usize> From<RUint<BITS, LIMBS>> for ark_ff::BigInt<LIMBS> {
+    fn from(v: RUint<BITS, LIMBS>) -> Self {
+        v.0.into()
+    }
+}
+impl<P: ark_ff::FpConfig<LIMBS>, const BITS: usize, const LIMBS: usize> From<ark_ff::Fp<P, LIMBS>>
+    for RUint<BITS, LIMBS>
+{
+    fn from(v: ark_ff::Fp<P, LIMBS>) -> Self {
+        Self(v.into())
+    }
+}
+impl<P: ark_ff::FpConfig<LIMBS>, const BITS: usize, const LIMBS: usize> TryFrom<RUint<BITS, LIMBS>>
+    for ark_ff::Fp<P, LIMBS>
+{
+    type Error = ruint::ToFieldError;
+    fn try_from(v: RUint<BITS, LIMBS>) -> Result<Self, Self::Error> {
+        v.0.try_into()
+    }
+}
+
+// --- num-bigint bridge (delegates to ruint's `num-bigint` support) ---
+
+impl<const BITS: usize, const LIMBS: usize> From<RUint<BITS, LIMBS>> for num_bigint::BigUint {
+    fn from(v: RUint<BITS, LIMBS>) -> Self {
+        v.0.into()
+    }
+}
+impl<const BITS: usize, const LIMBS: usize> From<&RUint<BITS, LIMBS>> for num_bigint::BigUint {
+    fn from(v: &RUint<BITS, LIMBS>) -> Self {
+        (&v.0).into()
+    }
+}
+impl<const BITS: usize, const LIMBS: usize> TryFrom<&num_bigint::BigUint> for RUint<BITS, LIMBS> {
+    type Error = ruint::ToUintError<ruint::Uint<BITS, LIMBS>>;
+    fn try_from(v: &num_bigint::BigUint) -> Result<Self, Self::Error> {
+        Ok(Self(v.try_into()?))
+    }
+}
+
 // --- bit operations (all delegate to ruint, which wraps mod 2^BITS) ---
 
 impl<const BITS: usize, const LIMBS: usize> Not for RUint<BITS, LIMBS> {
