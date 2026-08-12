@@ -11,8 +11,6 @@ pub mod id;
 pub mod network;
 pub mod pointshare;
 pub mod poly;
-#[cfg(test)]
-mod port_tests;
 pub mod rngs;
 pub mod yao;
 

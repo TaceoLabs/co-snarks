@@ -131,7 +131,6 @@ mod tests {
     use super::*;
     use crate::uint::UintBackend;
     use ark_ff::{PrimeField, UniformRand, Zero};
-    use num_bigint::BigUint;
     use paste::paste;
     use rand::SeedableRng;
     use rand_chacha::ChaCha12Rng;
@@ -150,7 +149,7 @@ mod tests {
             }
 
             #[test]
-            fn [<field_uint_reduced_matches_biguint_ $name>]() {
+            fn [<field_uint_reduced_matches_mod_order_ $name>]() {
                 let mut rng = ChaCha12Rng::seed_from_u64(47);
                 for _ in 0..50 {
                     // random full-width value, possibly >= p
@@ -160,7 +159,7 @@ mod tests {
                     );
                     let mut bytes = vec![0u8; <$field as FieldUint>::Uint::BYTES];
                     u.to_le_bytes_into(&mut bytes);
-                    let expected = <$field>::from(BigUint::from_bytes_le(&bytes));
+                    let expected = <$field>::from_le_bytes_mod_order(&bytes);
                     assert_eq!(<$field>::from_uint_reduced(&u), expected);
                 }
             }
@@ -168,10 +167,9 @@ mod tests {
             #[test]
             fn [<field_uint_modulus_ $name>]() {
                 let m = <$field>::modulus_uint();
-                let expected: BigUint = <$field>::MODULUS.into();
-                let mut bytes = vec![0u8; <$field as FieldUint>::Uint::BYTES];
-                m.to_le_bytes_into(&mut bytes);
-                assert_eq!(BigUint::from_bytes_le(&bytes), expected);
+                let n = <$field as PrimeField>::MODULUS.0.len();
+                assert_eq!(m.as_limbs()[..n], <$field as PrimeField>::MODULUS.0);
+                assert!(m.as_limbs()[n..].iter().all(|l| *l == 0));
                 // reducing the modulus itself gives zero
                 assert!(<$field>::from_uint_reduced(&m).is_zero());
             }

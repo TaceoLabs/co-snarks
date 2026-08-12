@@ -1,11 +1,3 @@
-/// Converts a fixed-width uint back to a [`num_bigint::BigUint`] (via ruint's
-/// num-bigint bridge) for tests that still compare against an independently
-/// computed `BigUint`
-/// expectation.
-pub fn uint_to_biguint<U: mpc_core::uint::UintBackend>(u: &U) -> num_bigint::BigUint {
-    (*u).into()
-}
-
 pub mod test_utils {
     use std::collections::BTreeMap;
 
