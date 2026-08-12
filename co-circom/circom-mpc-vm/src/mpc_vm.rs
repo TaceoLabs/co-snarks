@@ -416,9 +416,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                 }
                 op_codes::MpcOpCode::Call(symbol, return_vals) => {
                     tracing::debug!("Calling {symbol}");
-                    let fun_decl = ctx.fun_decls.get(symbol).ok_or(eyre!(
-                        "{symbol} not found in function declaration. This must be a bug.."
-                    ))?;
+                    let fun_decl = ctx.fun_decls.get(symbol).ok_or_else(|| {
+                        eyre!("{symbol} not found in function declaration. This must be a bug..")
+                    })?;
                     let to_copy = self.field_stack.frame_len() - fun_decl.num_params;
                     if ctx.mpc_accelerator.has_fn_accelerator(symbol) {
                         tracing::debug!("calling accelerator for {symbol}");
@@ -464,9 +464,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                     let new_components = {
                         let offset_jump = self.pop_index();
                         let relative_offset = self.pop_index();
-                        let templ_decl = ctx.templ_decls.get(symbol).ok_or(eyre!(
-                            "{symbol} not found in template declarations. This must be a bug"
-                        ))?;
+                        let templ_decl = ctx.templ_decls.get(symbol).ok_or_else(|| {
+                            eyre!("{symbol} not found in template declarations. This must be a bug")
+                        })?;
                         let mut offset = self.my_offset + relative_offset;
                         (0..*amount)
                             .map(|i| {
@@ -991,7 +991,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
             .ctx
             .templ_decls
             .get(&self.main)
-            .ok_or(eyre!("cannot find main template: {}", self.main))?;
+            .ok_or_else(|| eyre!("cannot find main template: {}", self.main))?;
         let mut main_component = Component::init(main_templ, 1);
         main_component.run(&mut self.driver, &mut self.ctx, &self.config, &mut None)?;
         Ok(())
@@ -1006,7 +1006,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
             .ctx
             .templ_decls
             .get(&self.main)
-            .ok_or(eyre!("cannot find main template: {}", self.main))?;
+            .ok_or_else(|| eyre!("cannot find main template: {}", self.main))?;
         let mut main_component = Component::init(main_templ, 1);
         main_component.run(&mut self.driver, &mut self.ctx, &self.config, traces)?;
         Ok(())

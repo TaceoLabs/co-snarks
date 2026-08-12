@@ -477,7 +477,7 @@ pub fn a2y<F: FieldUint, N: Network>(
             GCUtils::garbled_circuits_error(res)?
         }
         PartyID::ID1 | PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2);
             let res = GCUtils::garbled_circuits_error(res)?;
@@ -507,7 +507,7 @@ pub fn a2y_streaming<F: FieldUint, N: Network>(
             res
         }
         PartyID::ID1 | PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler = StreamingRep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &x01, &x2);
             let res = GCUtils::garbled_circuits_error(res)?;
@@ -536,7 +536,7 @@ pub fn a2y_many<F: FieldUint, N: Network>(
             GCUtils::garbled_circuits_error(res)?
         }
         PartyID::ID1 | PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::adder_mod_p_many::<_, F>(&mut garbler, &x01, &x2);
             let res = GCUtils::garbled_circuits_error(res)?;
@@ -549,7 +549,7 @@ pub fn a2y_many<F: FieldUint, N: Network>(
 
 macro_rules! y2a_impl_p1 {
     ($garbler:ty,$x:expr,$delta:expr,$net:expr,$state:expr,$res:expr) => {{
-        let delta = $delta.ok_or(eyre::eyre!("No delta provided"))?;
+        let delta = $delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
         let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
         $res.a = (k2.0 + k2.1 + k2.2).neg();
         let x23 = yao::input_field_id2::<F, _>(None, None, $net, $state)?;
@@ -558,14 +558,14 @@ macro_rules! y2a_impl_p1 {
         let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &$x, &x23);
         let x1 = GCUtils::garbled_circuits_error(x1)?;
         let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-        let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+        let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
         $res.b = GCUtils::bits_to_field(&x1)?;
     }};
 }
 
 macro_rules! y2a_impl_p2 {
     ($garbler:ty,$x:expr,$delta:expr,$net:expr,$state:expr,$res:expr) => {{
-        let delta = $delta.ok_or(eyre::eyre!("No delta provided"))?;
+        let delta = $delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
         let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
         let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
         let k2_comp = k2.0 + k2.1 + k2.2;
@@ -679,7 +679,7 @@ pub fn b2y<F: FieldUint, N: Network>(
         }
         PartyID::ID1 | PartyID::ID2 => {
             // There is no code difference between Rep3Garbler and StreamingRep3Garbler
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
             let res = GarbledCircuits::xor_many(&mut garbler, &x01, &x2);
             GCUtils::garbled_circuits_error(res)?

@@ -58,7 +58,7 @@ impl<'a, N: Network> StreamingRep3Evaluator<'a, N> {
 
     /// Outputs the values to the evaluator.
     fn output_evaluator(&mut self, x: &[WireMod2]) -> eyre::Result<Vec<bool>> {
-        let result = self.outputs(x).or(Err(eyre::eyre!("Output failed")))?;
+        let result = self.outputs(x).map_err(|_| eyre::eyre!("Output failed"))?;
         match result {
             Some(outputs) => {
                 let mut res = Vec::with_capacity(outputs.len());

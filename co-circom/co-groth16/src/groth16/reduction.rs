@@ -55,7 +55,7 @@ impl R1CSToQAP for CircomReduction {
         let num_inputs = matrices.num_instance_variables;
         let mut domain =
             GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
-                .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+                .ok_or_else(|| eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
         let power = domain_size.ilog2() as usize;
         let id = state.id();
@@ -226,7 +226,7 @@ impl R1CSToQAP for LibSnarkReduction {
         let num_constraints = matrices.num_constraints;
         let num_inputs = matrices.num_instance_variables;
         let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
-            .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+            .ok_or_else(|| eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
         let party_id = state.id();
 

@@ -119,7 +119,9 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
     }
 
     fn sqrt(&mut self, a: Self::VmType) -> Result<Self::VmType> {
-        let sqrt = a.sqrt().ok_or(eyre!("cannot compute sqrt for {a}"))?;
+        let sqrt = a
+            .sqrt()
+            .ok_or_else(|| eyre!("cannot compute sqrt for {a}"))?;
         if self.is_negative(sqrt) {
             Ok(-sqrt)
         } else {
