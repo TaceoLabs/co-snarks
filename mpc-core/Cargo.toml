@@ -41,7 +41,7 @@ sha3 = { workspace = true }
 tracing.workspace = true
 thiserror = { workspace = true }
 nom = { workspace = true }
-ruint = { workspace = true, features = ["ark-ff-06"] }
+ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"] }
 
 [dev-dependencies]
 ark-bls12-381 = { workspace = true }

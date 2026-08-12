@@ -1,7 +1,7 @@
 //! Maps prime fields to a wide-enough stack-allocated uint backend.
 
 use crate::uint::{U256, U320, U384, UintBackend};
-use ark_ff::{AdditiveGroup, Field, PrimeField};
+use ark_ff::PrimeField;
 
 /// Associates a prime field with the fixed-width uint used for its
 /// binary-domain shares.
@@ -36,8 +36,50 @@ pub trait FieldUint: PrimeField {
     fn modulus_uint() -> Self::Uint;
 }
 
+/// Reduces an integer of arbitrary width modulo `p` via Horner evaluation
+/// over its 64-bit limbs. The ruint ark-ff bridge only converts values `< p`,
+/// so full reduction (the `F::from(BigUint)` replacement) stays hand-rolled.
+fn reduce_from_limbs<F: PrimeField, U: UintBackend>(u: &U) -> F {
+    let shift = F::from(u64::MAX) + F::ONE;
+    let mut acc = F::ZERO;
+    for limb in u.as_limbs().iter().rev() {
+        acc = acc * shift + F::from(*limb);
+    }
+    acc
+}
+
 macro_rules! impl_field_uint {
+    // Backend with the same limb count as the field's `BigInt`: conversions
+    // delegate to ruint's `ark-ff-06` bridge.
     ($field:ty, $uint:ty) => {
+        // Width contract: BITS >= MODULUS_BIT_SIZE + 2 (see trait docs).
+        const _: () = assert!(
+            <$uint as UintBackend>::BITS >= <$field as PrimeField>::MODULUS_BIT_SIZE as usize + 2
+        );
+
+        impl FieldUint for $field {
+            type Uint = $uint;
+
+            fn to_uint(&self) -> Self::Uint {
+                (*self).into()
+            }
+
+            fn from_uint_reduced(u: &Self::Uint) -> Self {
+                reduce_from_limbs(u)
+            }
+
+            fn from_uint_unchecked(u: &Self::Uint) -> Self {
+                (*u).try_into().expect("value is smaller than the modulus")
+            }
+
+            fn modulus_uint() -> Self::Uint {
+                <Self as PrimeField>::MODULUS.into()
+            }
+        }
+    };
+    // Backend wider (more limbs) than the field's `BigInt`: the limb-matched
+    // bridge impls do not apply, so widen/narrow via limb slices.
+    ($field:ty, $uint:ty, widened) => {
         // Width contract: BITS >= MODULUS_BIT_SIZE + 2 (see trait docs).
         const _: () = assert!(
             <$uint as UintBackend>::BITS >= <$field as PrimeField>::MODULUS_BIT_SIZE as usize + 2
@@ -51,13 +93,7 @@ macro_rules! impl_field_uint {
             }
 
             fn from_uint_reduced(u: &Self::Uint) -> Self {
-                // Horner over 64-bit limbs; u may be >= p or wider than BigInt.
-                let shift = Self::from(u64::MAX) + Self::ONE;
-                let mut acc = Self::ZERO;
-                for limb in u.as_limbs().iter().rev() {
-                    acc = acc * shift + Self::from(*limb);
-                }
-                acc
+                reduce_from_limbs(u)
             }
 
             fn from_uint_unchecked(u: &Self::Uint) -> Self {
@@ -81,7 +117,7 @@ macro_rules! impl_field_uint {
 impl_field_uint!(ark_bn254::Fr, U256);
 impl_field_uint!(ark_bn254::Fq, U256);
 impl_field_uint!(ark_bls12_377::Fr, U256);
-impl_field_uint!(ark_bls12_381::Fr, U320);
+impl_field_uint!(ark_bls12_381::Fr, U320, widened);
 impl_field_uint!(ark_bls12_377::Fq, U384);
 impl_field_uint!(ark_bls12_381::Fq, U384);
 

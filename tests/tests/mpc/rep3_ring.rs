@@ -25,7 +25,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::ring::int_ring::U512;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
-    use mpc_core::uint::{FieldUint, UintBackend, U256};
+    use mpc_core::uint::{FieldUint, U256};
     use mpc_core::MpcState;
     use mpc_net::local::LocalNetwork;
     use num_bigint::BigUint;
@@ -52,10 +52,10 @@ mod ring_share {
         T::cast_from_uint(&biguint_to_u512(b))
     }
 
-    /// Converts a canonical `BigUint` (assumed to fit within 512 bits) into
-    /// the [`U512`] divisor type used by the ring division protocols.
+    /// Converts a canonical `BigUint` (must fit within 512 bits) into the
+    /// [`U512`] divisor type used by the ring division protocols.
     fn biguint_to_u512(b: &BigUint) -> U512 {
-        U512::from_limbs_truncating(&b.to_u64_digits())
+        U512::try_from(b).expect("divisor fits in 512 bits")
     }
 
     macro_rules! apply_to_all {
