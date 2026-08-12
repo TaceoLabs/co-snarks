@@ -13,7 +13,6 @@ use mpc_core::{
     },
 };
 use mpc_net::Network;
-use num_bigint::BigUint;
 
 type ArithmeticShare<F> = ShamirPrimeFieldShare<F>;
 

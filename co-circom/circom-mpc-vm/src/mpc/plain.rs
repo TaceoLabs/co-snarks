@@ -8,12 +8,17 @@ use mpc_core::gadgets::poseidon2::Poseidon2;
 use num_bigint::BigUint;
 
 /// Transforms a field element into an usize if possible.
+///
+/// Allocation-free: reads the limbs of the stack-allocated `BigInt` repr and
+/// only constructs an error if the value exceeds `u64`/`usize` range.
 macro_rules! to_usize {
     ($field: expr) => {{
-        use eyre::eyre;
-        use num_traits::cast::ToPrimitive;
-        let a: BigUint = $field.into();
-        usize::try_from(a.to_u64().ok_or(eyre!("Cannot convert var into usize"))?)?
+        let bigint = ark_ff::PrimeField::into_bigint($field);
+        let limbs: &[u64] = bigint.as_ref();
+        if limbs[1..].iter().any(|&limb| limb != 0) {
+            eyre::bail!("Cannot convert var into usize");
+        }
+        usize::try_from(limbs[0])?
     }};
 }
 pub(crate) use to_usize;
