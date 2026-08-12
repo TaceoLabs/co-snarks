@@ -1,7 +1,6 @@
-use ark_ff::One;
 use ark_ff::PrimeField;
 use itertools::Itertools as _;
-use num_bigint::BigUint;
+use mpc_core::uint::{FieldUint, UintBackend};
 
 use crate::mpc::plain::to_usize;
 
@@ -19,13 +18,6 @@ macro_rules! bool_comp_op {
        }
     }};
 }
-macro_rules! to_bigint {
-    ($field: expr) => {{
-        let a: BigUint = $field.into();
-        a
-    }};
-}
-
 pub struct BatchedCircomPlainVmWitnessExtension<F: PrimeField> {
     negative_one: F,
     plain_wts_ext: CircomPlainVmWitnessExtension<F>,
@@ -34,12 +26,10 @@ pub struct BatchedCircomPlainVmWitnessExtension<F: PrimeField> {
 
 impl<F: PrimeField> BatchedCircomPlainVmWitnessExtension<F> {
     pub(crate) fn new(batch_size: usize) -> Self {
-        let modulus = to_bigint!(F::MODULUS);
-        let one = BigUint::one();
-        let two = BigUint::from(2u64);
+        let plain_wts_ext = CircomPlainVmWitnessExtension::default();
         Self {
-            negative_one: F::from(modulus / two + one),
-            plain_wts_ext: CircomPlainVmWitnessExtension::default(),
+            negative_one: plain_wts_ext.negative_one,
+            plain_wts_ext,
             batch_size,
         }
     }
@@ -65,7 +55,9 @@ impl<F: PrimeField> BatchedCircomPlainVmWitnessExtension<F> {
 
 #[allow(dead_code)]
 #[expect(unused_variables)]
-impl<F: PrimeField> VmCircomWitnessExtension<F> for BatchedCircomPlainVmWitnessExtension<F> {
+impl<F: PrimeField + FieldUint> VmCircomWitnessExtension<F>
+    for BatchedCircomPlainVmWitnessExtension<F>
+{
     type Public = Vec<F>;
     type ArithmeticShare = Vec<F>;
 
@@ -258,20 +250,12 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for BatchedCircomPlainVmWitnessE
         let sum = acc_a
             .into_iter()
             .zip(acc_b)
-            .map(|(a, b)| to_bigint!(a + b))
+            .map(|(a, b)| (a + b).to_uint())
             .collect_vec();
-        let carry_mask = BigUint::one() << bitlen;
-        let carry = sum
-            .iter()
-            .map(|sum| F::from((sum & &carry_mask) >> bitlen))
-            .collect_vec();
+        let carry = sum.iter().map(|sum| F::from(sum.bit(bitlen))).collect_vec();
         let mut res = Vec::with_capacity(bitlen);
         for i in 0..bitlen {
-            res.push(
-                sum.iter()
-                    .map(|sum| F::from((sum >> i) & BigUint::one()))
-                    .collect_vec(),
-            );
+            res.push(sum.iter().map(|sum| F::from(sum.bit(i))).collect_vec());
         }
         res.reverse();
         Ok((res, carry))

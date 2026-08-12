@@ -19,10 +19,14 @@ use mpc_core::{
         network::Rep3NetworkExt,
         yao,
     },
-    uint::FieldUint,
+    uint::{FieldUint, UintBackend},
 };
 use mpc_net::Network;
-use num_bigint::BigUint;
+
+/// Whether the (non-zero) value is a power of two, i.e. has exactly one set bit.
+fn is_power_of_two<U: UintBackend>(v: &U) -> bool {
+    !v.is_zero() && (*v & v.wrapping_sub(&U::from(1u64))).is_zero()
+}
 
 type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
@@ -94,11 +98,7 @@ impl<'a, F: PrimeField, N: Network> CircomRep3VmWitnessExtension<'a, F, N> {
     /// While this could be done easier by just comparing the numbers as BigInt, we do it this way because this is easier to replicate in MPC later.
     #[inline(always)]
     fn val(&mut self, z: ArithmeticShare<F>) -> ArithmeticShare<F> {
-        let modulus: BigUint = F::MODULUS.into();
-        let one = BigUint::one();
-        let two = BigUint::from(2u64);
-        let p_half_plus_one = F::from(modulus / two + one);
-        arithmetic::sub_shared_by_public(z, p_half_plus_one, self.id)
+        arithmetic::sub_shared_by_public(z, self.plain.negative_one, self.id)
     }
 }
 
@@ -180,10 +180,9 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 Ok(divided.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let divisor: BigUint = b.into();
-                let divided = if divisor.count_ones() == 1 {
-                    // is power-of-2
-                    let divisor_bit = divisor.bits() as usize - 1;
+                let divisor = b.to_uint();
+                let divided = if is_power_of_two(&divisor) {
+                    let divisor_bit = divisor.bit_len() - 1;
                     yao::field_int_div_power_2(a, self.net0, &mut self.state0, divisor_bit)?
                 } else {
                     yao::field_int_div_by_public(a, b, self.net0, &mut self.state0)?
@@ -220,10 +219,9 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let divisor: BigUint = b.into();
-                let result = if divisor.count_ones() == 1 {
-                    // is power-of-2
-                    let divisor_bit = divisor.bits() as usize - 1;
+                let divisor = b.to_uint();
+                let result = if is_power_of_two(&divisor) {
+                    let divisor_bit = divisor.bit_len() - 1;
                     yao::field_mod_power_2(a, self.net0, &mut self.state0, divisor_bit)?
                 } else {
                     let divided = yao::field_int_div_by_public(a, b, self.net0, &mut self.state0)?;

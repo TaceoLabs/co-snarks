@@ -11,8 +11,8 @@ use serde::ser::SerializeTuple;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use std::ops::{
-    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Mul, Neg, Not,
-    Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
+    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Div, DivAssign,
+    Mul, Neg, Not, Rem, RemAssign, Shl, ShlAssign, Shr, ShrAssign, Sub, SubAssign,
 };
 
 /// A fixed-width unsigned integer with wrapping (mod `2^BITS`) semantics,
@@ -102,6 +102,9 @@ impl_binop!(BitAnd, bitand, BitAndAssign, bitand_assign, &, &=);
 impl_binop!(BitOr, bitor, BitOrAssign, bitor_assign, |, |=);
 impl_binop!(Add, add, AddAssign, add_assign, +, +=);
 impl_binop!(Sub, sub, SubAssign, sub_assign, -, -=);
+// Integer (floor) division and remainder; panics on division by zero.
+impl_binop!(Div, div, DivAssign, div_assign, /, /=);
+impl_binop!(Rem, rem, RemAssign, rem_assign, %, %=);
 
 impl<const BITS: usize, const LIMBS: usize> Mul for RUint<BITS, LIMBS> {
     type Output = Self;

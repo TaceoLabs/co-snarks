@@ -13,11 +13,10 @@ use crate::protocols::{
     },
     rep3_ring::conversion,
 };
-use crate::uint::{FieldUint, U512, UintBackend};
+use crate::uint::{FieldUint, U512};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
-use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::{CryptoRng, Rng, distributions::Standard, prelude::Distribution};
 use std::{any::TypeId, ops::Neg};
@@ -980,21 +979,11 @@ where
     )
 }
 
-/// Casts a public divisor (a `BigUint` that may be wider than `T`, e.g. a
-/// field modulus) into a ring element, truncating to `T`'s width like the
-/// former `IntRing2k::cast_from_biguint` did. Routed through [`U512`] as a
-/// wide-enough intermediate since the divisors used here (field moduli) fit
-/// comfortably within 512 bits.
-fn public_divisor_to_ring<T: IntRing2k>(divisor: &BigUint) -> RingElement<T> {
-    debug_assert!(
-        divisor.bits() <= 512,
-        "divisor wider than the U512 conversion bridge"
-    );
-    let mut bytes = [0u8; <U512 as UintBackend>::BYTES];
-    let raw = divisor.to_bytes_le();
-    let len = raw.len().min(bytes.len());
-    bytes[..len].copy_from_slice(&raw[..len]);
-    RingElement(T::cast_from_uint(&U512::from_le_bytes(&bytes)))
+/// Casts a public divisor (a [`U512`], wide enough for any divisor used here,
+/// e.g. a field modulus) into a ring element, truncating to `T`'s width like
+/// the former `IntRing2k::cast_from_biguint` did.
+fn public_divisor_to_ring<T: IntRing2k>(divisor: &U512) -> RingElement<T> {
+    RingElement(T::cast_from_uint(divisor))
 }
 
 /// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
@@ -1007,7 +996,7 @@ pub fn ring_div_by_public_to_fr_limbs_and_fq_many<
 >(
     input: &[Rep3RingShare<T>],
     limb_size: usize,
-    divisor: &BigUint,
+    divisor: &U512,
     num_limbs_per_field: usize,
     net: &N,
     state: &mut Rep3State,
@@ -1038,7 +1027,7 @@ where
 pub fn ring_div_by_public_to_fr_limbs_and_fq<T: IntRing2k, N: Network, F: FieldUint, K: FieldUint>(
     input: Rep3RingShare<T>,
     limb_size: usize,
-    divisor: &BigUint,
+    divisor: &U512,
     num_limbs_per_field: usize,
     net: &N,
     state: &mut Rep3State,
@@ -1060,7 +1049,7 @@ where
 /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
 pub fn ring_div_by_public_to_limbs_many<T: IntRing2k, N: Network, F: FieldUint>(
     input: &[Rep3RingShare<T>],
-    divisor: &BigUint,
+    divisor: &U512,
     limb_size: usize,
     num_limbs_per_field: usize,
     net: &N,
@@ -1090,7 +1079,7 @@ where
 /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
 pub fn ring_div_by_public_to_limbs<T: IntRing2k, N: Network, F: FieldUint>(
     input: Rep3RingShare<T>,
-    divisor: &BigUint,
+    divisor: &U512,
     limb_size: usize,
     num_limbs_per_field: usize,
     net: &N,

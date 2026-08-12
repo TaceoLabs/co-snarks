@@ -145,7 +145,7 @@ pub fn generate_witness_rep3<F: PrimeField + FieldUint, N: Network>(
 }
 
 /// Generate a Shamir shared witness
-pub fn generate_witness_shamir<F: PrimeField, N: Network>(
+pub fn generate_witness_shamir<F: PrimeField + FieldUint, N: Network>(
     circuit: &CoCircomCompilerParsed<F>,
     input: ShamirSharedInput<F>,
     config: VMConfig,

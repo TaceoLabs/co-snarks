@@ -1146,7 +1146,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> FinalizedWitnessExtension<F,
     }
 }
 
-impl<F: PrimeField> PlainWitnessExtension<F> {
+impl<F: PrimeField + FieldUint> PlainWitnessExtension<F> {
     pub(crate) fn new(parser: &CoCircomCompilerParsed<F>, config: VMConfig) -> Self {
         let mut signals = vec![F::default(); parser.amount_signals];
         signals[0] = F::one();
@@ -1171,7 +1171,7 @@ impl<F: PrimeField> PlainWitnessExtension<F> {
     }
 }
 
-impl<F: PrimeField> BatchedPlainWitnessExtension<F> {
+impl<F: PrimeField + FieldUint> BatchedPlainWitnessExtension<F> {
     pub(crate) fn new(
         parser: &CoCircomCompilerParsed<F>,
         config: VMConfig,
@@ -1285,7 +1285,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> BatchedRep3WitnessExtension<'a, 
     }
 }
 
-impl<'a, F: PrimeField, N: Network> ShamirWitnessExtension<'a, F, N> {
+impl<'a, F: PrimeField + FieldUint, N: Network> ShamirWitnessExtension<'a, F, N> {
     /// Create a new [ShamirWitnessExtension] VM
     pub fn new(
         net: &'a N,

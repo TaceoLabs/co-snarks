@@ -172,7 +172,10 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
     pub fn to_plain_vm(
         self,
         vm_config: VMConfig,
-    ) -> WitnessExtension<F, CircomPlainVmWitnessExtension<F>> {
+    ) -> WitnessExtension<F, CircomPlainVmWitnessExtension<F>>
+    where
+        F: mpc_core::uint::FieldUint,
+    {
         PlainWitnessExtension::new(&self, vm_config)
     }
 
@@ -192,7 +195,10 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         self,
         vm_config: VMConfig,
         batch_size: usize,
-    ) -> WitnessExtension<F, BatchedCircomPlainVmWitnessExtension<F>> {
+    ) -> WitnessExtension<F, BatchedCircomPlainVmWitnessExtension<F>>
+    where
+        F: mpc_core::uint::FieldUint,
+    {
         BatchedPlainWitnessExtension::new(&self, vm_config, batch_size)
     }
 
