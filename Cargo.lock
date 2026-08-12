@@ -1318,6 +1318,7 @@ dependencies = [
  "ark-serialize 0.6.0",
  "co-circom-types",
  "eyre",
+ "itertools 0.14.0",
  "mpc-core",
  "mpc-net",
  "num-traits",
