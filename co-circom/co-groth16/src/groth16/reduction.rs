@@ -91,7 +91,7 @@ impl R1CSToQAP for CircomReduction {
         // of twice the size as the coset shift.
         let (group_gen, coset_shift) = groth16_roots_of_unity::<P::ScalarField>(power);
         let domain = Domain::with_group_gen(domain_size, group_gen)
-            .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+            .ok_or_else(|| eyre::eyre!("Polynomial Degree too large"))?;
         let id = state.id();
 
         let eval_constraint_span =
@@ -247,7 +247,7 @@ impl R1CSToQAP for LibSnarkReduction {
         let num_constraints = matrices.num_constraints;
         let num_inputs = matrices.num_instance_variables;
         let domain = Domain::<P::ScalarField>::new(num_constraints + num_inputs)
-            .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
+            .ok_or_else(|| eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
         let party_id = state.id();
 

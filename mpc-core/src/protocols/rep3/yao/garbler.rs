@@ -126,7 +126,7 @@ impl<'a, N: Network> Rep3Garbler<'a, N> {
 
     /// Outputs the values to the evaluator.
     fn output_evaluator(&mut self, x: &[WireMod2]) -> eyre::Result<()> {
-        self.outputs(x).or(Err(eyre::eyre!("Output failed")))?;
+        self.outputs(x).map_err(|_| eyre::eyre!("Output failed"))?;
         Ok(())
     }
 

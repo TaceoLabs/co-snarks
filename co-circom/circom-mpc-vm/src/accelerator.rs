@@ -282,7 +282,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         let fun = self
             .registered_component
             .get(name)
-            .ok_or(eyre::eyre!("cannot find accelerator {name}"))?;
+            .ok_or_else(|| eyre::eyre!("cannot find accelerator {name}"))?;
         fun(protocol, args, amount_outputs)
     }
 
@@ -295,7 +295,7 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> MpcAccelerator<F, C> {
         let fun = self
             .registered_functions
             .get(name)
-            .ok_or(eyre::eyre!("cannot find accelerator {name}"))?;
+            .ok_or_else(|| eyre::eyre!("cannot find accelerator {name}"))?;
         fun(protocol, args)
     }
 }

@@ -116,7 +116,7 @@ impl GCUtils {
     }
 
     pub(crate) fn garbled_circuits_error<G, T>(input: Result<T, G>) -> eyre::Result<T> {
-        input.or(Err(eyre::eyre!("Garbled Circuit failed")))
+        input.map_err(|_| eyre::eyre!("Garbled Circuit failed"))
     }
 
     pub(crate) fn collapse_bundle_to_lsb_bits_as_uint<U: UintBackend>(
@@ -374,7 +374,7 @@ pub fn joint_input_arithmetic<F: FieldUint, N: Network>(
             (x0, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Modify x1
             let x1_bits = GCUtils::field_to_bits_as_u16(x.a);
@@ -394,7 +394,7 @@ pub fn joint_input_arithmetic<F: FieldUint, N: Network>(
             (x0, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Modify x1
             let x1_bits = GCUtils::field_to_bits_as_u16(x.b);
@@ -450,7 +450,7 @@ pub fn joint_input_arithmetic_added_many<F: FieldUint, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
@@ -475,7 +475,7 @@ pub fn joint_input_arithmetic_added_many<F: FieldUint, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
@@ -521,7 +521,7 @@ pub fn joint_input_binary_xored<F: FieldUint, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Input x01
             let xor = x.a ^ x.b;
@@ -536,7 +536,7 @@ pub fn joint_input_binary_xored<F: FieldUint, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Input x2
             let x2 = GCUtils::encode_uint(&x.a, bitlen, &mut state.rng, delta);
@@ -571,8 +571,8 @@ pub fn input_field_id2_many<F: FieldUint, N: Network>(
             GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
-            let x = x.ok_or(eyre::eyre!("No input provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
+            let x = x.ok_or_else(|| eyre::eyre!("No input provided"))?;
 
             if x.len() != n_inputs {
                 eyre::bail!(
@@ -627,9 +627,9 @@ pub fn input_two_field_id2_many<F: FieldUint, K: FieldUint, N: Network>(
             GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
-            let x_f = x_f.ok_or(eyre::eyre!("No input provided"))?;
-            let x_k = x_k.ok_or(eyre::eyre!("No input provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
+            let x_f = x_f.ok_or_else(|| eyre::eyre!("No input provided"))?;
+            let x_k = x_k.ok_or_else(|| eyre::eyre!("No input provided"))?;
 
             if x_f.len() != n_inputs_1 {
                 eyre::bail!(
@@ -973,7 +973,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
@@ -1065,7 +1065,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_other_field {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {

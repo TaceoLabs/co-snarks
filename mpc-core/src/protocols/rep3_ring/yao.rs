@@ -125,7 +125,7 @@ pub fn joint_input_arithmetic_added_many<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
 
@@ -149,7 +149,7 @@ pub fn joint_input_arithmetic_added_many<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
 
@@ -193,8 +193,8 @@ pub fn input_ring_id2_many<T: IntRing2k, N: Network>(
             GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
-            let x = x.ok_or(eyre::eyre!("No input provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
+            let x = x.ok_or_else(|| eyre::eyre!("No input provided"))?;
 
             if x.len() != n_inputs {
                 eyre::bail!("Invalid number of inputs");
@@ -251,7 +251,7 @@ pub fn joint_input_binary_xored<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Input x01
             let xor = x.a ^ x.b;
@@ -266,7 +266,7 @@ pub fn joint_input_binary_xored<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Input x2
             let x2 = GCUtils::encode_ring(x.a, &mut state.rng, delta);
@@ -305,7 +305,7 @@ pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
@@ -330,7 +330,7 @@ pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
 
@@ -431,7 +431,7 @@ where
                 GarbledCircuits::ring_to_field_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-            let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+            let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
             // Compose the bits
             for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
@@ -530,7 +530,7 @@ where
                 GarbledCircuits::field_to_ring_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-            let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+            let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
             // Compose the bits
             for (res, x1) in izip!(res.iter_mut(), x1.chunks(T::K)) {
@@ -625,7 +625,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
@@ -714,7 +714,7 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
@@ -820,7 +820,7 @@ macro_rules! decompose_circuit_compose_to_two_fields_blueprint {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, res_other, x1) in izip!(res.chunks_mut($output_size), res_other.chunks_mut($output_size_other), x1.chunks(F::MODULUS_BIT_SIZE as usize * $output_size + $output_size_other * K::MODULUS_BIT_SIZE as usize)) {
@@ -1285,7 +1285,7 @@ where
             );
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-            let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+            let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
             // Compose the bits
             for (res, x1) in izip!(res.iter_mut(), x1.chunks(T::K)) {
@@ -1408,7 +1408,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                 let x1 = $circuit(&mut garbler,  &x01, &x2,&y01, &y2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
