@@ -4524,16 +4524,12 @@ mod test {
         }
     }
 
-    fn gc_test_div_int<F: FieldUint>()
-    where
-        num_bigint::BigUint: std::convert::From<F>,
-    {
-        use num_bigint::BigUint;
+    fn gc_test_div_int<F: FieldUint>() {
         let mut rng = thread_rng();
 
         let a = F::rand(&mut rng);
         let b = F::rand(&mut rng);
-        let is_result = F::from(BigUint::from(a) / BigUint::from(b));
+        let is_result = F::from_uint_unchecked(&(a.to_uint() / b.to_uint()));
         let (sender, receiver) = UnixStream::pair().unwrap();
 
         std::thread::spawn(move || {
