@@ -3,10 +3,10 @@ use ark_ec::pairing::Pairing;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_groth16::{Proof, ProvingKey};
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
 use mpc_core::MpcState;
+use mpc_core::msm::SwCurveGroup;
 use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirState};
@@ -84,27 +84,19 @@ calculate smallest quadratic non residue q (by checking q^((p-1)/2)=-1 mod p) al
 use g=q^t (this is a 2^s-th root of unity) as (some kind of) generator and compute another domain by repeatedly squaring g, should get to 1 in the s+1-th step.
 then if log2(domain_size) equals s we take as root of unity q^2, and else we take the log2(domain_size) + 1-th element of the domain created above
 */
+/// Returns the generator of the domain of size `2^pow` and the shift onto the coset, both as
+/// snarkjs computes them. The coset shift is the generator of the domain of twice the size, i.e.
+/// a square root of the domain generator.
 #[instrument(level = "debug", name = "root of unity", skip_all)]
-fn root_of_unity_for_groth16<F: PrimeField + FftField>(
-    pow: usize,
-    domain: &mut GeneralEvaluationDomain<F>,
-) -> F {
+fn groth16_roots_of_unity<F: PrimeField + FftField>(pow: usize) -> (F, F) {
     let (q, roots) = roots_of_unity::<F>();
-    match domain {
-        GeneralEvaluationDomain::Radix2(domain) => {
-            domain.group_gen = roots[pow];
-            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
-        }
-        GeneralEvaluationDomain::MixedRadix(domain) => {
-            domain.group_gen = roots[pow];
-            domain.group_gen_inv = domain.group_gen.inverse().expect("can compute inverse");
-        }
-    };
-    if F::TWO_ADICITY.to_u64().unwrap() == domain.log_size_of_group() {
+    let group_gen = roots[pow];
+    let coset_shift = if F::TWO_ADICITY.to_usize().unwrap() == pow {
         q.square()
     } else {
-        roots[domain.log_size_of_group().to_usize().unwrap() + 1]
-    }
+        roots[pow + 1]
+    };
+    (group_gen, coset_shift)
 }
 
 /// A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
@@ -112,7 +104,11 @@ pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
     phantom_data: PhantomData<(P, T)>,
 }
 
-impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
+impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T>
+where
+    P::G1: SwCurveGroup,
+    P::G2: SwCurveGroup,
+{
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
@@ -179,7 +175,7 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
         aux_assignment: &[T::ArithmeticHalfShare],
     ) -> T::PointHalfShare<C>
     where
-        C: CurveGroup<ScalarField = P::ScalarField>,
+        C: SwCurveGroup<ScalarField = P::ScalarField>,
     {
         let pub_len = input_assignment.len();
 
@@ -332,7 +328,11 @@ impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T> {
     }
 }
 
-impl<P: Pairing> Rep3CoGroth16<P> {
+impl<P: Pairing> Rep3CoGroth16<P>
+where
+    P::G1: SwCurveGroup,
+    P::G2: SwCurveGroup,
+{
     /// Create a [`Proof`].
     pub fn prove<N: Network, R: R1CSToQAP>(
         net0: &N,
@@ -356,7 +356,11 @@ impl<P: Pairing> Rep3CoGroth16<P> {
     }
 }
 
-impl<P: Pairing> ShamirCoGroth16<P> {
+impl<P: Pairing> ShamirCoGroth16<P>
+where
+    P::G1: SwCurveGroup,
+    P::G2: SwCurveGroup,
+{
     /// Create a [`Proof`].
     pub fn prove<N: Network, R: R1CSToQAP>(
         net0: &N,
@@ -385,7 +389,11 @@ impl<P: Pairing> ShamirCoGroth16<P> {
     }
 }
 
-impl<P: Pairing> Groth16<P> {
+impl<P: Pairing> Groth16<P>
+where
+    P::G1: SwCurveGroup,
+    P::G2: SwCurveGroup,
+{
     /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
     /// initialized with the [`PlainGroth16Driver`].
     ///

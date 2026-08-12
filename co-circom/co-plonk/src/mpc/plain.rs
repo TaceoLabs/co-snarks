@@ -175,7 +175,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        mpc_core::msm::msm_unchecked::<P::G1>(points, scalars)
+        mpc_core::msm::msm_unchecked_generic::<P::G1>(points, scalars)
     }
 
     fn evaluate_poly_public(

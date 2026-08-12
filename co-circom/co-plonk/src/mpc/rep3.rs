@@ -166,7 +166,7 @@ impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        pointshare::msm_public_points(points, scalars)
+        pointshare::msm_public_points_generic(points, scalars)
     }
 
     fn evaluate_poly_public(

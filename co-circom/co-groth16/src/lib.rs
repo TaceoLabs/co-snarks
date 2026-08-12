@@ -13,6 +13,9 @@ pub use groth16::{
 };
 
 pub use ark_groth16::{Proof, ProvingKey, VerifyingKey};
+// The prover's MSM requires curve points that can be built from their coordinates, so this bound
+// shows up in the public signatures of this crate.
+pub use mpc_core::msm::SwCurveGroup;
 pub use taceo_groth16::ConstraintMatrices;
 
 #[cfg(test)]

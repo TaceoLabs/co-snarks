@@ -2992,10 +2992,12 @@ dependencies = [
 name = "mpc-core"
 version = "0.10.0"
 dependencies = [
+ "ark-bls12-381",
  "ark-bn254",
  "ark-ec",
  "ark-ff 0.6.0",
  "ark-grumpkin",
+ "ark-poly",
  "ark-serialize 0.6.0",
  "ark-std 0.6.0",
  "bytes",

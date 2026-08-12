@@ -2,6 +2,7 @@ use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use ark_ff::UniformRand;
 use mpc_core::MpcState;
+use mpc_core::msm::SwCurveGroup;
 use mpc_net::Network;
 use rand::thread_rng;
 
@@ -67,7 +68,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         scalars: &[Self::ArithmeticHalfShare],
     ) -> Self::PointHalfShare<C>
     where
-        C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+        C: SwCurveGroup<ScalarField = <P as Pairing>::ScalarField>,
     {
         mpc_core::msm::msm_unchecked::<C>(points, scalars)
     }

@@ -251,7 +251,7 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltr
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
-        pointshare::msm_public_points(points, scalars)
+        pointshare::msm_public_points_generic(points, scalars)
     }
 
     fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {

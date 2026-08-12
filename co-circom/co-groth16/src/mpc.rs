@@ -6,6 +6,7 @@ use std::{
 use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_poly::domain::DomainCoeff;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
+use mpc_core::msm::SwCurveGroup;
 
 pub(crate) mod plain;
 pub(crate) mod rep3;
@@ -101,7 +102,7 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         scalars: &[Self::ArithmeticHalfShare],
     ) -> Self::PointHalfShare<C>
     where
-        C: CurveGroup<ScalarField = P::ScalarField>;
+        C: SwCurveGroup<ScalarField = P::ScalarField>;
 
     /// Multiplies a public point B to the shared point A in place: \[A\] *= B
     fn scalar_mul_public_point_hs<C>(

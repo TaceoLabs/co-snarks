@@ -2,6 +2,7 @@
 //!
 //! This module contains operations with point shares
 
+use crate::msm::SwCurveGroup;
 use ark_ec::CurveGroup;
 use ark_ff::{PrimeField, Zero};
 use itertools::{Itertools, izip};
@@ -196,7 +197,7 @@ pub fn open_point_and_field<C: CurveGroup, N: Network>(
 }
 
 /// Perform msm between `points` and `scalars`
-pub fn msm_public_points<C: CurveGroup>(
+pub fn msm_public_points<C: SwCurveGroup>(
     points: &[C::Affine],
     scalars: &[FieldShare<C::ScalarField>],
 ) -> PointShare<C> {
@@ -210,6 +211,27 @@ pub fn msm_public_points<C: CurveGroup>(
     let (res_a, res_b) = rayon::join(
         || crate::msm::msm_bigint::<C>(points, &a_bigints),
         || crate::msm::msm_bigint::<C>(points, &b_bigints),
+    );
+    tracing::trace!("< MSM public points for {} elements", points.len());
+    PointShare::new(res_a, res_b)
+}
+
+/// Perform msm between `points` and `scalars`, for curves that cannot name the [`SwCurveGroup`]
+/// bound. See [`crate::msm::msm_unchecked_generic`].
+pub fn msm_public_points_generic<C: CurveGroup>(
+    points: &[C::Affine],
+    scalars: &[FieldShare<C::ScalarField>],
+) -> PointShare<C> {
+    tracing::trace!("> MSM public points for {} elements", points.len());
+    debug_assert_eq!(points.len(), scalars.len());
+    let (a_bigints, b_bigints) = scalars
+        .into_par_iter()
+        .with_min_len(1 << 14)
+        .map(|share| (share.a.into_bigint(), share.b.into_bigint()))
+        .collect::<(Vec<_>, Vec<_>)>();
+    let (res_a, res_b) = rayon::join(
+        || crate::msm::msm_bigint_generic::<C>(points, &a_bigints),
+        || crate::msm::msm_bigint_generic::<C>(points, &b_bigints),
     );
     tracing::trace!("< MSM public points for {} elements", points.len());
     PointShare::new(res_a, res_b)

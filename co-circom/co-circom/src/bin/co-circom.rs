@@ -8,7 +8,7 @@ use co_circom::{
     VMConfig, Witness,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
-use co_groth16::CircomReduction;
+use co_groth16::{CircomReduction, SwCurveGroup};
 use color_eyre::eyre::{self, Context, ContextCompat, eyre};
 use figment::{
     Figment,
@@ -960,7 +960,11 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
 #[instrument(level = "debug", skip(config))]
 fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
     config: GenerateProofConfig,
-) -> color_eyre::Result<ExitCode> {
+) -> color_eyre::Result<ExitCode>
+where
+    P::G1: SwCurveGroup,
+    P::G2: SwCurveGroup,
+{
     let proof_system = config.proof_system;
     let witness = config.witness;
     let zkey = config.zkey;

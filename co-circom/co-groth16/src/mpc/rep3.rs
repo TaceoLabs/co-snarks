@@ -1,4 +1,5 @@
 use ark_ec::{CurveGroup, pairing::Pairing};
+use mpc_core::msm::SwCurveGroup;
 use mpc_core::{
     MpcState,
     protocols::rep3::{
@@ -125,7 +126,7 @@ impl<P: Pairing> CircomGroth16Prover<P> for Rep3Groth16Driver {
         scalars: &[Self::ArithmeticHalfShare],
     ) -> Self::PointHalfShare<C>
     where
-        C: CurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+        C: SwCurveGroup<ScalarField = <P as Pairing>::ScalarField>,
     {
         mpc_core::msm::msm_unchecked::<C>(points, scalars)
     }
