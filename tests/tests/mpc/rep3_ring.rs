@@ -49,7 +49,13 @@ mod ring_share {
     /// a ring element, truncating to `T`'s width like the former
     /// `cast_from_biguint` did.
     fn biguint_to_ring<T: IntRing2k>(b: &BigUint) -> T {
-        T::cast_from_uint(&U512::from_limbs_truncating(&b.to_u64_digits()))
+        T::cast_from_uint(&biguint_to_u512(b))
+    }
+
+    /// Converts a canonical `BigUint` (assumed to fit within 512 bits) into
+    /// the [`U512`] divisor type used by the ring division protocols.
+    fn biguint_to_u512(b: &BigUint) -> U512 {
+        U512::from_limbs_truncating(&b.to_u64_digits())
     }
 
     macro_rules! apply_to_all {
@@ -1804,7 +1810,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            let divisor = divisor.to_owned();
+            let divisor = biguint_to_u512(divisor);
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
@@ -1906,7 +1912,7 @@ mod ring_share {
         let (tx3, rx3) = mpsc::channel();
 
         for (net, tx, x) in izip!(nets, [tx1, tx2, tx3], x_shares.into_iter(),) {
-            let divisor = divisor.to_owned();
+            let divisor = biguint_to_u512(divisor);
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 

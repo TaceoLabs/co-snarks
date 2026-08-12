@@ -47,6 +47,8 @@ pub trait UintBackend:
     + std::ops::ShlAssign<usize>
     + std::ops::Shr<usize, Output = Self>
     + std::ops::ShrAssign<usize>
+    + std::ops::Div<Output = Self>
+    + std::ops::Rem<Output = Self>
     + ark_serialize::CanonicalSerialize
     + ark_serialize::CanonicalDeserialize
     + serde::Serialize
