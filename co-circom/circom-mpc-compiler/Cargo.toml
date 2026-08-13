@@ -31,6 +31,5 @@ circom-type_analysis = { version = "2.2.2", git = "https://github.com/TaceoLabs/
 
 [dev-dependencies]
 ark-bn254.workspace = true
-co-groth16 = { version = "0.10.0", path = "../co-groth16" }
-mpc-core = { version = "0.10.0", path = "../../mpc-core" }
 tracing.workspace = true
+

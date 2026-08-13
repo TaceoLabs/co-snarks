@@ -44,8 +44,6 @@ nom = { workspace = true }
 ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"] }
 
 [dev-dependencies]
-ark-bls12-381 = { workspace = true }
-ark-std = { workspace = true }
 bincode = { workspace = true }
 mpc-net = { version = "0.5.0", path = "../mpc-net", features = ["local"] }
 paste.workspace = true
@@ -54,3 +52,4 @@ criterion.workspace = true
 [[bench]]
 name = "local_mul_vec"
 harness = false
+
