@@ -1,7 +1,6 @@
 //! # CoNoir:
 
 use acir::native_types::{WitnessMap, WitnessStack};
-use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::pss_store::PssStore;
 use co_acvm::{PlainAcvmSolver, Rep3AcvmSolver, ShamirAcvmSolver, solver::Rep3CoSolver};
@@ -129,7 +128,7 @@ pub fn translate_witness<F: PrimeField, N: Network>(
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
 #[allow(clippy::complexity)]
-pub fn translate_proving_key<P: CurveGroup<BaseField: PrimeField>, N: Network>(
+pub fn translate_proving_key<P: HonkCurve<TranscriptFieldType>, N: Network>(
     proving_key: Rep3ProvingKey<P>,
     net: &N,
 ) -> Result<ShamirProvingKey<P>> {
@@ -338,7 +337,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Split a proving key into RPE3 shares
-pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
+pub fn split_proving_key_rep3<P: HonkCurve<TranscriptFieldType>>(
     proving_key: PlainProvingKey<P>,
 ) -> Result<[Rep3ProvingKey<P>; 3]> {
     let mut rng = rand::thread_rng();
@@ -365,7 +364,7 @@ pub fn split_proving_key_rep3<P: CurveGroup<BaseField: PrimeField>>(
 }
 
 /// Split a proving key into shamir shares
-pub fn split_proving_key_shamir<P: CurveGroup<BaseField: PrimeField>>(
+pub fn split_proving_key_shamir<P: HonkCurve<TranscriptFieldType>>(
     proving_key: PlainProvingKey<P>,
     degree: usize,
     num_parties: usize,

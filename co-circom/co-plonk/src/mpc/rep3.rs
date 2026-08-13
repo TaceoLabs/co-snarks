@@ -1,4 +1,5 @@
 use ark_ec::pairing::Pairing;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_poly::EvaluationDomain;
 use mpc_core::{
     MpcState,
@@ -13,7 +14,11 @@ use super::CircomPlonkProver;
 /// A Plonk driver for REP3 secret sharing
 pub struct Rep3PlonkDriver;
 
-impl<P: Pairing> CircomPlonkProver<P> for Rep3PlonkDriver {
+impl<P, C> CircomPlonkProver<P> for Rep3PlonkDriver
+where
+    P: Pairing<G1 = Projective<C>, G1Affine = Affine<C>>,
+    C: SWCurveConfig<ScalarField = P::ScalarField>,
+{
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShareG1 = Rep3PointShare<P::G1>;
     type PointShareG2 = Rep3PointShare<P::G2>;

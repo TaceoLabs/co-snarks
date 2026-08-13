@@ -1,7 +1,8 @@
 use std::any::Any;
 
 use crate::crs::ProverCrs;
-use crate::honk_proof::{HonkProofError, HonkProofResult};
+use crate::honk_curve::HonkCurve;
+use crate::honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{One, PrimeField, Zero};
 use eyre::Error;
@@ -24,18 +25,21 @@ impl Utils {
         let projective_elements: Vec<C> = elements.iter().map(|e| e.into_group()).collect();
         C::normalize_batch(&projective_elements)
     }
-    pub fn commit<P: CurveGroup>(
+    pub fn commit<P: HonkCurve<TranscriptFieldType>>(
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<P> {
         Self::msm::<P>(poly, crs.monomials.as_slice())
     }
 
-    pub fn msm<P: CurveGroup>(poly: &[P::ScalarField], crs: &[P::Affine]) -> HonkProofResult<P> {
+    pub fn msm<P: HonkCurve<TranscriptFieldType>>(
+        poly: &[P::ScalarField],
+        crs: &[P::Affine],
+    ) -> HonkProofResult<P> {
         if poly.len() > crs.len() {
             return Err(HonkProofError::CrsTooSmall);
         }
-        Ok(mpc_core::msm::msm_unchecked::<P>(crs, poly))
+        Ok(P::fast_msm(crs, poly))
     }
 
     pub fn get_msb32(inp: u32) -> u32 {

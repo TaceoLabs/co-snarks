@@ -3,6 +3,7 @@
 //! This module contains operations with point shares
 
 use ark_ec::CurveGroup;
+use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ff::{PrimeField, Zero};
 use itertools::{Itertools, izip};
 use mpc_net::Network;
@@ -196,10 +197,14 @@ pub fn open_point_and_field<C: CurveGroup, N: Network>(
 }
 
 /// Perform msm between `points` and `scalars`
-pub fn msm_public_points<C: CurveGroup>(
+pub fn msm_public_points<C, S>(
     points: &[C::Affine],
     scalars: &[FieldShare<C::ScalarField>],
-) -> PointShare<C> {
+) -> PointShare<C>
+where
+    C: CurveGroup<Config = S, Affine = Affine<S>>,
+    S: SWCurveConfig<ScalarField = C::ScalarField>,
+{
     tracing::trace!("> MSM public points for {} elements", points.len());
     debug_assert_eq!(points.len(), scalars.len());
     let (a_bigints, b_bigints) = scalars
@@ -208,11 +213,11 @@ pub fn msm_public_points<C: CurveGroup>(
         .map(|share| (share.a.into_bigint(), share.b.into_bigint()))
         .collect::<(Vec<_>, Vec<_>)>();
     let (res_a, res_b) = rayon::join(
-        || crate::msm::msm_bigint::<C>(points, &a_bigints),
-        || crate::msm::msm_bigint::<C>(points, &b_bigints),
+        || taceo_ark_algebra::msm::msm_bigint(points, &a_bigints),
+        || taceo_ark_algebra::msm::msm_bigint(points, &b_bigints),
     );
     tracing::trace!("< MSM public points for {} elements", points.len());
-    PointShare::new(res_a, res_b)
+    PointShare::new(C::from(res_a.into_affine()), C::from(res_b.into_affine()))
 }
 
 /// Checks whether the shared point is zero/infinity.

@@ -3,6 +3,7 @@ use std::{
     ops::{AddAssign, MulAssign, SubAssign},
 };
 
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_poly::domain::DomainCoeff;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
@@ -97,11 +98,11 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
 
     /// Perform msm between `points` and `scalars`
     fn msm_public_points_hs<C>(
-        points: &[C::Affine],
+        points: &[Affine<C>],
         scalars: &[Self::ArithmeticHalfShare],
-    ) -> Self::PointHalfShare<C>
+    ) -> Self::PointHalfShare<Projective<C>>
     where
-        C: CurveGroup<ScalarField = P::ScalarField>;
+        C: SWCurveConfig<ScalarField = P::ScalarField>;
 
     /// Multiplies a public point B to the shared point A in place: \[A\] *= B
     fn scalar_mul_public_point_hs<C>(

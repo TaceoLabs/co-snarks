@@ -1,10 +1,16 @@
-use ark_ec::{CurveGroup, short_weierstrass};
-use ark_ff::{BigInt, Field, One, PrimeField};
+use ark_ec::short_weierstrass::Affine;
+use ark_ec::{AffineRepr, CurveGroup, short_weierstrass};
+use ark_ff::{AdditiveGroup, BigInt, Field, One, PrimeField};
 use ark_grumpkin::GrumpkinConfig;
 use num_bigint::BigUint;
 use std::str::FromStr;
 
-// Des describes the PrimeField used for the Transcript
+// Des describes the PrimeField used for the Transcript.
+//
+// The optimized MSM and the affine-from-coordinates constructor only exist for short-Weierstrass
+// curves, and a generic [`CurveGroup`] cannot name its `SWCurveConfig`, so both live here as
+// per-curve methods: every implementation is a short-Weierstrass `Projective` and dispatches to
+// [`taceo_ark_algebra::msm`] and [`Affine::new`] with its concrete config.
 pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
     type CycleGroup: CurveGroup<BaseField = Self::ScalarField>;
 
@@ -13,8 +19,26 @@ pub trait HonkCurve<Des: PrimeField>: CurveGroup<BaseField: PrimeField> {
     const SUBGROUP_SIZE: usize;
     const LIBRA_UNIVARIATES_LENGTH: usize;
 
+    /// Builds a G1 point from its coordinates.
+    ///
+    /// Every caller parses the coordinates out of a proof or a verification key, so this stays
+    /// checked: rejecting off-curve and wrong-subgroup points here is load-bearing. Use
+    /// [`Affine::new_unchecked`] for coordinates that are already trusted.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the coordinates are not a point of the prime-order subgroup.
     fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine;
-    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField);
+
+    /// Computes an MSM with [`taceo_ark_algebra::msm::msm_unchecked`], chopping the slices to the
+    /// shorter of the two lengths.
+    fn fast_msm(bases: &[Self::Affine], scalars: &[Self::ScalarField]) -> Self;
+
+    /// The coordinates of a G1 point, `(0, 0)` for the point at infinity.
+    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
+        p.xy()
+            .unwrap_or((Self::BaseField::ZERO, Self::BaseField::ZERO))
+    }
 
     fn convert_scalarfield_into(src: &Self::ScalarField) -> Vec<Des>;
     fn convert_scalarfield_back(src: &[Des]) -> Self::ScalarField;
@@ -50,12 +74,12 @@ impl HonkCurve<ark_bn254::Fr> for ark_ec::short_weierstrass::Projective<ark_bn25
     const SUBGROUP_SIZE: usize = 256;
     const LIBRA_UNIVARIATES_LENGTH: usize = 9;
 
-    fn g1_affine_from_xy(x: ark_bn254::Fq, y: ark_bn254::Fq) -> ark_bn254::G1Affine {
-        ark_bn254::G1Affine::new(x, y)
+    fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine {
+        Affine::new(x, y)
     }
 
-    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
-        (p.x, p.y)
+    fn fast_msm(bases: &[Self::Affine], scalars: &[Self::ScalarField]) -> Self {
+        taceo_ark_algebra::msm::msm_unchecked(bases, scalars)
     }
 
     fn convert_scalarfield_into(src: &ark_bn254::Fr) -> Vec<ark_bn254::Fr> {
@@ -145,11 +169,11 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
     const LIBRA_UNIVARIATES_LENGTH: usize = 3;
 
     fn g1_affine_from_xy(x: Self::BaseField, y: Self::BaseField) -> Self::Affine {
-        ark_grumpkin::Affine::new(x, y)
+        Affine::new(x, y)
     }
 
-    fn g1_affine_to_xy(p: &Self::Affine) -> (Self::BaseField, Self::BaseField) {
-        (p.x, p.y)
+    fn fast_msm(bases: &[Self::Affine], scalars: &[Self::ScalarField]) -> Self {
+        taceo_ark_algebra::msm::msm_unchecked(bases, scalars)
     }
 
     fn convert_scalarfield_into(src: &Self::ScalarField) -> Vec<ark_bn254::Fr> {

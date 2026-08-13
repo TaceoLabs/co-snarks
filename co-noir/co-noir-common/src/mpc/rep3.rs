@@ -1,7 +1,7 @@
 use super::NoirUltraHonkProver;
 use crate::HonkCurve;
 use crate::honk_curve::NUM_LIMB_BITS;
-use ark_ec::CurveGroup;
+use crate::honk_proof::TranscriptFieldType;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
@@ -21,7 +21,7 @@ use std::any::TypeId;
 #[derive(Debug)]
 pub struct Rep3UltraHonkDriver;
 
-impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
+impl<P: HonkCurve<TranscriptFieldType>> NoirUltraHonkProver<P> for Rep3UltraHonkDriver {
     type ArithmeticShare = Rep3PrimeFieldShare<P::ScalarField>;
     type PointShare = Rep3PointShare<P>;
     type State = Rep3State;
@@ -256,7 +256,9 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for Rep3UltraH
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
-        pointshare::msm_public_points(points, scalars)
+        let (a, b): (Vec<_>, Vec<_>) = scalars.iter().map(|share| (share.a, share.b)).unzip();
+        let (res_a, res_b) = rayon::join(|| P::fast_msm(points, &a), || P::fast_msm(points, &b));
+        Rep3PointShare::new(res_a, res_b)
     }
 
     fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {

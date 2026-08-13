@@ -1,7 +1,10 @@
 use ark_ec::pairing::Pairing;
 use co_acvm::PlainAcvmSolver;
 use co_noir_common::{
-    crs::ProverCrs, honk_proof::HonkProofResult, keys::verification_key::VerifyingKey,
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+    keys::verification_key::VerifyingKey,
 };
 use std::sync::Arc;
 
@@ -18,7 +21,10 @@ pub trait VerifyingKeyTrait<P: Pairing> {
         Self: std::marker::Sized;
 }
 
-impl<P: Pairing> VerifyingKeyTrait<P> for VerifyingKey<P> {
+impl<P: Pairing> VerifyingKeyTrait<P> for VerifyingKey<P>
+where
+    P::G1: HonkCurve<TranscriptFieldType>,
+{
     fn create(
         circuit: UltraCircuitBuilder<P::G1>,
         prover_crs: Arc<ProverCrs<P::G1>>,

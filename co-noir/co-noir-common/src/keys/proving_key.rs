@@ -10,6 +10,7 @@ use crate::polynomials::entities::PrecomputedEntities;
 use crate::polynomials::entities::ProverWitnessEntities;
 use crate::polynomials::polynomial::Polynomial;
 use crate::utils::Utils;
+use crate::{HonkCurve, TranscriptFieldType};
 use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
 use eyre::Result;
@@ -120,7 +121,10 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
         &self,
         prover_crs: &ProverCrs<C>,
         verifier_crs: P::G2Affine,
-    ) -> Result<VerifyingKey<P>> {
+    ) -> Result<VerifyingKey<P>>
+    where
+        C: HonkCurve<TranscriptFieldType>,
+    {
         let mut commitments = PrecomputedEntities::default();
         for (des, src) in commitments
             .iter_mut()

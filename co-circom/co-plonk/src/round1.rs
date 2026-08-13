@@ -1,5 +1,6 @@
 use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use circom_types::plonk::Zkey;
 use co_circom_types::SharedWitness;
 use mpc_core::MpcState;
@@ -84,7 +85,11 @@ impl<P: Pairing, T: CircomPlonkProver<P>> Round1Challenges<P, T> {
     }
 }
 
-impl<P: Pairing> Round1Challenges<P, PlainPlonkDriver> {
+impl<P, C> Round1Challenges<P, PlainPlonkDriver>
+where
+    P: Pairing<G1 = Projective<C>, G1Affine = Affine<C>>,
+    C: SWCurveConfig<ScalarField = P::ScalarField>,
+{
     #[cfg(test)]
     pub(super) fn deterministic() -> Self {
         Self {

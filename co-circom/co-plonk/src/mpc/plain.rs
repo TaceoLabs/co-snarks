@@ -1,4 +1,5 @@
 use ark_ec::pairing::Pairing;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ff::Field;
 use ark_ff::UniformRand;
 use ark_poly::Polynomial;
@@ -14,7 +15,11 @@ use rand::thread_rng;
 /// A plain Plonk driver
 pub struct PlainPlonkDriver;
 
-impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
+impl<P, C> CircomPlonkProver<P> for PlainPlonkDriver
+where
+    P: Pairing<G1 = Projective<C>, G1Affine = Affine<C>>,
+    C: SWCurveConfig<ScalarField = P::ScalarField>,
+{
     type ArithmeticShare = P::ScalarField;
 
     type PointShareG1 = P::G1;
@@ -175,7 +180,7 @@ impl<P: Pairing> CircomPlonkProver<P> for PlainPlonkDriver {
         points: &[P::G1Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShareG1 {
-        mpc_core::msm::msm_unchecked::<P::G1>(points, scalars)
+        taceo_ark_algebra::msm::msm_unchecked(points, scalars)
     }
 
     fn evaluate_poly_public(

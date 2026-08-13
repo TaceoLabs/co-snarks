@@ -2,6 +2,7 @@
 
 #![warn(missing_docs)]
 use ark_ec::pairing::Pairing;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use circom_types::plonk::PlonkProof;
 use circom_types::plonk::Zkey;
 use circom_types::traits::CircomArkworksPairingBridge;
@@ -213,7 +214,11 @@ mod plonk_utils {
     }
 }
 
-impl<P: Pairing> Rep3CoPlonk<P> {
+impl<P, C> Rep3CoPlonk<P>
+where
+    P: Pairing<G1 = Projective<C>, G1Affine = Affine<C>>,
+    C: SWCurveConfig<ScalarField = P::ScalarField>,
+{
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
         nets: &[N; 8],
@@ -229,7 +234,11 @@ impl<P: Pairing> Rep3CoPlonk<P> {
     }
 }
 
-impl<P: Pairing> ShamirCoPlonk<P> {
+impl<P, C> ShamirCoPlonk<P>
+where
+    P: Pairing<G1 = Projective<C>, G1Affine = Affine<C>>,
+    C: SWCurveConfig<ScalarField = P::ScalarField>,
+{
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
         nets: &[N; 8],
@@ -251,9 +260,10 @@ impl<P: Pairing> ShamirCoPlonk<P> {
     }
 }
 
-impl<P: Pairing> Plonk<P>
+impl<P, C> Plonk<P>
 where
-    P: CircomArkworksPairingBridge,
+    P: Pairing<G1 = Projective<C>, G1Affine = Affine<C>> + CircomArkworksPairingBridge,
+    C: SWCurveConfig<ScalarField = P::ScalarField>,
 {
     /// *Locally* create a `Plonk` proof. This is just the [`CoPlonk`] prover
     /// initialized with the [`PlainPlonkDriver`].

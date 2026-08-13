@@ -7,9 +7,12 @@ pub(crate) mod types;
 pub(crate) mod ultra_prover;
 pub(crate) mod ultra_verifier;
 
-use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use co_noir_common::{crs::ProverCrs, honk_proof::HonkProofResult};
+use co_noir_common::{
+    crs::ProverCrs,
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofResult, TranscriptFieldType},
+};
 
 pub const NUM_ALPHAS: usize = decider::relations::NUM_SUBRELATIONS - 1;
 /// The log of the max circuit size assumed in order to achieve constant sized Honk proofs
@@ -38,14 +41,17 @@ impl Utils {
         co_noir_common::utils::Utils::batch_invert(coeffs);
     }
 
-    pub fn commit<P: CurveGroup>(
+    pub fn commit<P: HonkCurve<TranscriptFieldType>>(
         poly: &[P::ScalarField],
         crs: &ProverCrs<P>,
     ) -> HonkProofResult<P> {
         co_noir_common::utils::Utils::commit(poly, crs)
     }
 
-    pub fn msm<P: CurveGroup>(poly: &[P::ScalarField], crs: &[P::Affine]) -> HonkProofResult<P> {
+    pub fn msm<P: HonkCurve<TranscriptFieldType>>(
+        poly: &[P::ScalarField],
+        crs: &[P::Affine],
+    ) -> HonkProofResult<P> {
         co_noir_common::utils::Utils::msm::<P>(poly, crs)
     }
 }

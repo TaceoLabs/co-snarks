@@ -1,6 +1,6 @@
 use super::NoirUltraHonkProver;
 use crate::HonkCurve;
-use ark_ec::CurveGroup;
+use crate::honk_proof::TranscriptFieldType;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use itertools::izip;
@@ -18,7 +18,7 @@ use rayon::prelude::*;
 #[derive(Debug)]
 pub struct ShamirUltraHonkDriver;
 
-impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
+impl<P: HonkCurve<TranscriptFieldType>> NoirUltraHonkProver<P> for ShamirUltraHonkDriver {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShare = ShamirPointShare<P>;
     type State = ShamirState<P::ScalarField>;
@@ -251,7 +251,8 @@ impl<P: CurveGroup<BaseField: PrimeField>> NoirUltraHonkProver<P> for ShamirUltr
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
-        pointshare::msm_public_points(points, scalars)
+        let scalars = scalars.iter().map(|share| share.a).collect::<Vec<_>>();
+        ShamirPointShare::new(P::fast_msm(points, &scalars))
     }
 
     fn point_add(a: &Self::PointShare, b: &Self::PointShare) -> Self::PointShare {

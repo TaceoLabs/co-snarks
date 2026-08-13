@@ -104,7 +104,10 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         prover_crs: Arc<ProverCrs<C>>,
         verifier_crs: P::G2Affine,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKey<P>)> {
+    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKey<P>)>
+    where
+        C: HonkCurve<TranscriptFieldType>,
+    {
         let pk: PlainProvingKey<C> = create_prover_instance::<C>(&mut self, prover_crs, driver)?;
         let circuit_size = pk.circuit_size;
 
@@ -135,7 +138,10 @@ impl<C: CurveGroup> UltraCircuitBuilder<C> {
         mut self,
         crs: Arc<ProverCrs<C>>,
         driver: &mut PlainAcvmSolver<C::ScalarField>,
-    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKeyBarretenberg<C>)> {
+    ) -> HonkProofResult<(PlainProvingKey<C>, VerifyingKeyBarretenberg<C>)>
+    where
+        C: HonkCurve<TranscriptFieldType>,
+    {
         let pk: PlainProvingKey<C> = create_prover_instance::<C>(&mut self, crs, driver)?;
         let circuit_size = pk.circuit_size;
 

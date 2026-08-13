@@ -1,18 +1,19 @@
 use ark_ec::pairing::Pairing;
 use ark_ff::{FftField, Field, One};
-use ark_poly::{EvaluationDomain, GeneralEvaluationDomain};
 use ark_relations::utils::matrix::Matrix;
 use eyre::Result;
 use mpc_core::MpcState;
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
+use rayon::slice::ParallelSliceMut;
+use taceo_ark_algebra::fft::{Domain, bit_reverse};
 use taceo_groth16::ConstraintMatrices;
 use tracing::instrument;
 
 use crate::mpc::CircomGroth16Prover;
 
-use super::root_of_unity_for_groth16;
+use super::groth16_roots_of_unity;
 
 macro_rules! rayon_join {
     ($t1: expr, $t2: expr, $t3: expr) => {{
@@ -34,6 +35,30 @@ pub trait R1CSToQAP {
     ) -> Result<Vec<T::ArithmeticHalfShare>>;
 }
 
+/// The powers `[shift^0, shift^1, ..., shift^(size - 1)]`, permuted into bit-reversed order.
+///
+/// Both witness maps shift a polynomial onto a coset while its coefficients sit in bit-reversed
+/// order (the output order of [`Domain::ifft_in_to_out`]), so the table has to be permuted the
+/// same way. Building the table once and permuting it means the three coset shifts that follow
+/// read it sequentially instead of jumping around it.
+#[instrument(level = "debug", name = "bit reversed coset table", skip_all)]
+fn bit_reversed_coset_table<F: FftField>(shift: F, size: usize) -> Vec<F> {
+    let chunk_size = size.div_ceil(rayon::current_num_threads()).max(1);
+    let mut table = vec![F::one(); size];
+    table
+        .par_chunks_mut(chunk_size)
+        .enumerate()
+        .for_each(|(chunk_index, values)| {
+            let mut current = shift.pow([(chunk_index * chunk_size) as u64]);
+            for value in values.iter_mut() {
+                *value = current;
+                current *= shift;
+            }
+        });
+    bit_reverse(&mut table);
+    table
+}
+
 /// Implements the witness map used by snarkjs. The arkworks witness map calculates the
 /// coefficients of H through computing (AB-C)/Z in the evaluation domain and going back to the
 /// coefficients domain. snarkjs instead precomputes the Lagrange form of the powers of tau bases
@@ -41,6 +66,10 @@ pub trait R1CSToQAP {
 /// in that domain. This serves as HZ when computing the C proof element.
 ///
 /// Based on <https://github.com/arkworks-rs/circom-compat/>.
+///
+/// Each coset evaluation is an [`Domain::ifft_in_to_out`] followed by a
+/// [`Domain::fft_out_to_in`], so the bit-reversal permutations of the two halves cancel and the
+/// result is in the natural order that `h_query` expects.
 pub struct CircomReduction;
 
 impl R1CSToQAP for CircomReduction {
@@ -53,28 +82,22 @@ impl R1CSToQAP for CircomReduction {
     ) -> Result<Vec<T::ArithmeticHalfShare>> {
         let num_constraints = matrices.num_constraints;
         let num_inputs = matrices.num_instance_variables;
-        let mut domain =
-            GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
-                .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
-        let domain_size = domain.size();
+        let domain_size = (num_constraints + num_inputs).next_power_of_two();
         let power = domain_size.ilog2() as usize;
+        if power > P::ScalarField::TWO_ADICITY as usize {
+            eyre::bail!("Polynomial Degree too large");
+        }
+        // snarkjs uses its own root of unity for the domain, and the root of unity of the domain
+        // of twice the size as the coset shift.
+        let (group_gen, coset_shift) = groth16_roots_of_unity::<P::ScalarField>(power);
+        let domain = Domain::with_group_gen(domain_size, group_gen)
+            .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
         let id = state.id();
+
         let eval_constraint_span =
-            tracing::debug_span!("evaluate constraints + root of unity computation").entered();
-        let (roots_to_power_domain, a, b) = rayon_join!(
-            || {
-                let root_of_unity_span =
-                    tracing::debug_span!("root of unity computation").entered();
-                let root_of_unity = root_of_unity_for_groth16(power, &mut domain);
-                let mut roots = Vec::with_capacity(domain_size);
-                let mut c = P::ScalarField::one();
-                for _ in 0..domain_size {
-                    roots.push(c);
-                    c *= root_of_unity;
-                }
-                root_of_unity_span.exit();
-                roots
-            },
+            tracing::debug_span!("evaluate constraints + coset table computation").entered();
+        let (coset_table, a, b) = rayon_join!(
+            || bit_reversed_coset_table(coset_shift, domain_size),
             || {
                 let eval_constraint_span_a =
                     tracing::debug_span!("evaluate constraints - a").entered();
@@ -93,7 +116,7 @@ impl R1CSToQAP for CircomReduction {
             },
             || {
                 let eval_constraint_span_b =
-                    tracing::debug_span!("evaluate constraints - a").entered();
+                    tracing::debug_span!("evaluate constraints - b").entered();
                 let result = evaluate_constraint::<P, T>(
                     id,
                     domain_size,
@@ -115,24 +138,18 @@ impl R1CSToQAP for CircomReduction {
                     || {
                         let a_span =
                             tracing::debug_span!("a: distribute powers mul a (fft/ifft)").entered();
-                        domain.ifft_in_place(&mut a_result);
-                        T::distribute_powers_and_mul_by_const(
-                            &mut a_result,
-                            &roots_to_power_domain,
-                        );
-                        domain.fft_in_place(&mut a_result);
+                        domain.ifft_in_to_out(&mut a_result);
+                        T::distribute_powers_and_mul_by_const(&mut a_result, &coset_table);
+                        domain.fft_out_to_in(&mut a_result);
                         a_span.exit();
                         a_result
                     },
                     || {
                         let b_span =
                             tracing::debug_span!("b: distribute powers mul b (fft/ifft)").entered();
-                        domain.ifft_in_place(&mut b_result);
-                        T::distribute_powers_and_mul_by_const(
-                            &mut b_result,
-                            &roots_to_power_domain,
-                        );
-                        domain.fft_in_place(&mut b_result);
+                        domain.ifft_in_to_out(&mut b_result);
+                        T::distribute_powers_and_mul_by_const(&mut b_result, &coset_table);
+                        domain.fft_out_to_in(&mut b_result);
                         b_span.exit();
                         b_result
                     },
@@ -143,18 +160,18 @@ impl R1CSToQAP for CircomReduction {
                 let mut ab = T::local_mul_vec(a, b, state);
                 local_mul_vec_span.exit();
                 let ifft_span = tracing::debug_span!("c: ifft in dist pows").entered();
-                domain.ifft_in_place(&mut ab);
+                domain.ifft_in_to_out(&mut ab);
                 ifft_span.exit();
                 let dist_pows_span = tracing::debug_span!("c: dist pows").entered();
                 ab.par_iter_mut()
-                    .zip_eq(roots_to_power_domain.par_iter())
+                    .zip_eq(coset_table.par_iter())
                     .with_min_len(512)
                     .for_each(|(share, pow): (&mut T::ArithmeticHalfShare, _)| {
                         *share *= *pow;
                     });
                 dist_pows_span.exit();
                 let fft_span = tracing::debug_span!("c: fft in dist pows").entered();
-                domain.fft_in_place(&mut ab);
+                domain.fft_out_to_in(&mut ab);
                 fft_span.exit();
                 ab
             },
@@ -213,6 +230,10 @@ fn evaluate_constraint_half_share<P: Pairing, T: CircomGroth16Prover<P>>(
 /// coefficients domain.
 ///
 /// Based on <https://github.com/arkworks-rs/groth16/>.
+///
+/// The three coset evaluations pair an [`Domain::ifft_in_to_out`] with a
+/// [`Domain::fft_out_to_in`] and need no permutation. Only the final interpolation does, since
+/// `h_query` expects the coefficients of H in natural order.
 pub struct LibSnarkReduction;
 
 impl R1CSToQAP for LibSnarkReduction {
@@ -225,12 +246,12 @@ impl R1CSToQAP for LibSnarkReduction {
     ) -> Result<Vec<T::ArithmeticHalfShare>> {
         let num_constraints = matrices.num_constraints;
         let num_inputs = matrices.num_instance_variables;
-        let domain = GeneralEvaluationDomain::<P::ScalarField>::new(num_constraints + num_inputs)
+        let domain = Domain::<P::ScalarField>::new(num_constraints + num_inputs)
             .ok_or(eyre::eyre!("Polynomial Degree too large"))?;
         let domain_size = domain.size();
         let party_id = state.id();
 
-        let coset_domain = domain.get_coset(P::ScalarField::GENERATOR).unwrap();
+        let coset_table = bit_reversed_coset_table(P::ScalarField::GENERATOR, domain_size);
 
         let (mut ab, c) = rayon::join(
             || {
@@ -246,8 +267,9 @@ impl R1CSToQAP for LibSnarkReduction {
                         let promoted_public = T::promote_to_trivial_shares(party_id, public_inputs);
                         a[num_constraints..num_constraints + num_inputs]
                             .clone_from_slice(&promoted_public[..num_inputs]);
-                        domain.ifft_in_place(&mut a);
-                        coset_domain.fft_in_place(&mut a);
+                        domain.ifft_in_to_out(&mut a);
+                        T::distribute_powers_and_mul_by_const(&mut a, &coset_table);
+                        domain.fft_out_to_in(&mut a);
                         a
                     },
                     || {
@@ -258,8 +280,9 @@ impl R1CSToQAP for LibSnarkReduction {
                             public_inputs,
                             private_witness,
                         );
-                        domain.ifft_in_place(&mut b);
-                        coset_domain.fft_in_place(&mut b);
+                        domain.ifft_in_to_out(&mut b);
+                        T::distribute_powers_and_mul_by_const(&mut b, &coset_table);
+                        domain.fft_out_to_in(&mut b);
                         b
                     },
                 );
@@ -273,16 +296,22 @@ impl R1CSToQAP for LibSnarkReduction {
                     public_inputs,
                     private_witness,
                 );
-                domain.ifft_in_place(&mut c);
-                coset_domain.fft_in_place(&mut c);
+                domain.ifft_in_to_out(&mut c);
+                c.par_iter_mut()
+                    .zip_eq(coset_table.par_iter())
+                    .with_min_len(512)
+                    .for_each(|(share, pow): (&mut T::ArithmeticHalfShare, _)| {
+                        *share *= *pow;
+                    });
+                domain.fft_out_to_in(&mut c);
                 c
             },
         );
 
-        let vanishing_polynomial_over_coset = domain
-            .evaluate_vanishing_polynomial(P::ScalarField::GENERATOR)
-            .inverse()
-            .unwrap();
+        let vanishing_polynomial_over_coset = (P::ScalarField::GENERATOR.pow([domain_size as u64])
+            - P::ScalarField::one())
+        .inverse()
+        .unwrap();
 
         ab.par_iter_mut()
             .zip(c.par_iter())
@@ -292,7 +321,22 @@ impl R1CSToQAP for LibSnarkReduction {
                 *ab_i *= vanishing_polynomial_over_coset;
             });
 
-        coset_domain.ifft_in_place(&mut ab);
+        // Interpolate over the coset and undo the shift. `ifft_in_to_out` leaves the
+        // coefficients in bit-reversed order, so permute them back before applying the inverse
+        // shift, which then reads its table sequentially.
+        domain.ifft_in_to_out(&mut ab);
+        bit_reverse(&mut ab);
+        let shift_inv = P::ScalarField::GENERATOR.inverse().unwrap();
+        let chunk_size = domain_size.div_ceil(rayon::current_num_threads()).max(1);
+        ab.par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(chunk_index, values)| {
+                let mut current = shift_inv.pow([(chunk_index * chunk_size) as u64]);
+                for value in values.iter_mut() {
+                    *value *= current;
+                    current *= shift_inv;
+                }
+            });
 
         Ok(ab)
     }
