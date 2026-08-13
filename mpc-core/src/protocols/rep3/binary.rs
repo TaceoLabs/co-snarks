@@ -147,10 +147,24 @@ pub fn shift_l_public<F: FieldUint>(shared: &BinaryShare<F>, public: F) -> Binar
         .try_to_usize()
         .expect("shift is in usize range");
     assert!(
-        (shift as u32) < F::MODULUS_BIT_SIZE,
+        shift < F::MODULUS_BIT_SIZE as usize,
         "shifting by {shift} >= MODULUS_BIT_SIZE is not supported"
     );
     shared << shift
+}
+
+#[cfg(all(test, target_pointer_width = "64"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic(expected = "shifting by 4294967296 >= MODULUS_BIT_SIZE is not supported")]
+    fn shift_l_public_rejects_shift_that_wraps_u32() {
+        type F = ark_bn254::Fr;
+
+        let shared = Rep3UintShare::<F>::zero_share();
+        shift_l_public(&shared, F::from(1u64 << 32));
+    }
 }
 
 /// Shifts a public value `F` by a share to the left.

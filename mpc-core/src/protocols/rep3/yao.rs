@@ -212,8 +212,15 @@ impl GCUtils {
 
     /// Converts bits into a field element
     pub fn bits_to_field<F: FieldUint>(bits: &[bool]) -> eyre::Result<F> {
+        if bits
+            .get(F::Uint::BITS..)
+            .is_some_and(|excess| excess.contains(&true))
+        {
+            eyre::bail!("Invalid field element: bit string exceeds backend width");
+        }
+
         let mut res = F::Uint::zero();
-        for bit in bits.iter().rev() {
+        for bit in bits[..bits.len().min(F::Uint::BITS)].iter().rev() {
             res <<= 1;
             res = res.wrapping_add(&F::Uint::from(*bit));
         }
@@ -1704,4 +1711,29 @@ pub fn compute_wnaf_digits_and_compute_rows_many<F: FieldUint, N: Network>(
         GarbledCircuits::compute_wnaf_digits_many::<_, F>,
         (input_bitsize)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bits_to_field_rejects_set_bits_beyond_backend_width() {
+        type F = ark_bn254::Fr;
+
+        let mut bits = vec![false; <F as FieldUint>::Uint::BITS + 1];
+        bits[<F as FieldUint>::Uint::BITS] = true;
+
+        assert!(GCUtils::bits_to_field::<F>(&bits).is_err());
+    }
+
+    #[test]
+    fn bits_to_field_allows_zero_extension_beyond_backend_width() {
+        type F = ark_bn254::Fr;
+
+        let mut bits = vec![false; <F as FieldUint>::Uint::BITS + 1];
+        bits[0] = true;
+
+        assert_eq!(GCUtils::bits_to_field::<F>(&bits).unwrap(), F::from(1u64));
+    }
 }
