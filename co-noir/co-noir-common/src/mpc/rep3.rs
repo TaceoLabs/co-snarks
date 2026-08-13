@@ -1,10 +1,10 @@
 use super::NoirUltraHonkProver;
 use crate::HonkCurve;
 use crate::honk_curve::NUM_LIMB_BITS;
+use crate::honk_proof::TranscriptFieldType;
 use ark_ff::One;
 use ark_ff::PrimeField;
 use ark_ff::{Field, Zero};
-use crate::honk_proof::TranscriptFieldType;
 use itertools::izip;
 use mpc_core::protocols::rep3::Rep3BigUintShare;
 use mpc_core::protocols::rep3::conversion;

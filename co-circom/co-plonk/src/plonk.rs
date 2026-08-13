@@ -5,13 +5,13 @@
 //! see the [`Plonk::verify`] method.
 
 use crate::{Plonk, plonk_utils, types::Domains};
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{PrimeGroup, pairing::Pairing};
 use ark_ff::Field;
 use circom_types::{
     plonk::{PlonkProof, VerificationKey as JsonVerificationKey},
     traits::CircomArkworksPairingBridge,
 };
-use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use co_circom_types::VerificationError;
 use num_traits::One;
 use num_traits::Zero;

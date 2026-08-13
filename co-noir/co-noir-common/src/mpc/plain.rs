@@ -1,5 +1,6 @@
 use super::NoirUltraHonkProver;
 use crate::HonkCurve;
+use crate::honk_proof::TranscriptFieldType;
 use ark_ec::AffineRepr;
 use ark_ff::Field;
 use ark_ff::One;
@@ -9,7 +10,6 @@ use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
 use mpc_core::MpcState;
 use mpc_core::PlainState;
-use crate::honk_proof::TranscriptFieldType;
 use mpc_net::Network;
 use num_traits::Zero;
 use rand::thread_rng;

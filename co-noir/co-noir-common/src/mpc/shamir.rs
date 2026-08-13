@@ -1,9 +1,9 @@
 use super::NoirUltraHonkProver;
 use crate::HonkCurve;
+use crate::honk_proof::TranscriptFieldType;
 use ark_ff::Field;
 use ark_ff::PrimeField;
 use itertools::izip;
-use crate::honk_proof::TranscriptFieldType;
 use mpc_core::MpcState;
 use mpc_core::protocols::shamir::ShamirState;
 use mpc_core::protocols::shamir::network::ShamirNetworkExt;

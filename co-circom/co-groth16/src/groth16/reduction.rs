@@ -3,11 +3,11 @@ use ark_ff::{FftField, Field, One};
 use ark_relations::utils::matrix::Matrix;
 use eyre::Result;
 use mpc_core::MpcState;
-use taceo_ark_algebra::fft::{Domain, bit_reverse};
 use rayon::iter::{
     IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator,
 };
 use rayon::slice::ParallelSliceMut;
+use taceo_ark_algebra::fft::{Domain, bit_reverse};
 use taceo_groth16::ConstraintMatrices;
 use tracing::instrument;
 

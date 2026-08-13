@@ -1,3 +1,4 @@
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use circom_types::CheckElement;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use co_circom::{
@@ -8,7 +9,6 @@ use co_circom::{
     VMConfig, Witness,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
-use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use co_groth16::CircomReduction;
 use color_eyre::eyre::{self, Context, ContextCompat, eyre};
 use figment::{

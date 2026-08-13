@@ -1,7 +1,7 @@
 use ark_ec::pairing::Pairing;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_poly::EvaluationDomain;
 use ark_poly::Polynomial;
-use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_poly::univariate::DensePolynomial;
 
 use mpc_core::MpcState;

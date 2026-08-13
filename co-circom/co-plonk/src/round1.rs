@@ -1,8 +1,8 @@
 use ark_ec::CurveGroup;
 use ark_ec::pairing::Pairing;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use circom_types::plonk::Zkey;
 use co_circom_types::SharedWitness;
-use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use mpc_core::MpcState;
 use mpc_net::Network;
 use tracing::instrument;

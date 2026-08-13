@@ -1,9 +1,9 @@
 use ark_ec::pairing::Pairing;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ff::Field;
 use ark_ff::UniformRand;
 use ark_poly::Polynomial;
 use ark_poly::univariate::DensePolynomial;
-use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use itertools::izip;
 use mpc_core::MpcState;
 use mpc_net::Network;
