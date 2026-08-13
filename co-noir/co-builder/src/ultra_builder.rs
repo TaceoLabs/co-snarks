@@ -48,7 +48,7 @@ use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use co_noir_common::utils::Utils;
 use itertools::izip;
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, UintBackend, field_to_u256, u256_to_field};
 use std::collections::HashMap;
 use std::{array, collections::BTreeMap, sync::Arc};
 
@@ -592,20 +592,20 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.blocks
             .poseidon2_external
             .q_1()
-            .push(P::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][0],
+            .push(u256_to_field(&field_to_u256(
+                &POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][0],
             )));
         self.blocks
             .poseidon2_external
             .q_2()
-            .push(P::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][1],
+            .push(u256_to_field(&field_to_u256(
+                &POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][1],
             )));
         self.blocks
             .poseidon2_external
             .q_3()
-            .push(P::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][2],
+            .push(u256_to_field(&field_to_u256(
+                &POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][2],
             )));
         self.blocks
             .poseidon2_external
@@ -618,8 +618,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.blocks
             .poseidon2_external
             .q_4()
-            .push(P::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][3],
+            .push(u256_to_field(&field_to_u256(
+                &POSEIDON2_BN254_T4_PARAMS.round_constants_external[inp.round_idx][3],
             )));
         self.blocks
             .poseidon2_external
@@ -665,8 +665,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.blocks
             .poseidon2_internal
             .q_1()
-            .push(P::ScalarField::from(BigUint::from(
-                POSEIDON2_BN254_T4_PARAMS.round_constants_internal[inp.round_idx],
+            .push(u256_to_field(&field_to_u256(
+                &POSEIDON2_BN254_T4_PARAMS.round_constants_internal[inp.round_idx],
             )));
         self.blocks
             .poseidon2_internal
@@ -1391,10 +1391,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         if !T::is_shared(&val) {
             // Sanity check only doable in plain
-            let val: BigUint = T::get_public(&val)
-                .expect("Already checked it is public")
-                .into();
-            let index: usize = val.try_into().unwrap();
+            let index = field_to_u256(&T::get_public(&val).expect("Already checked it is public"))
+                .try_to_usize()
+                .unwrap();
             assert!(self.rom_arrays[rom_id].state.len() > index);
             assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
         }
@@ -1436,10 +1435,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         if !T::is_shared(&val) {
             // Sanity check only doable in plain
-            let val: BigUint = T::get_public(&val)
-                .expect("Already checked it is public")
-                .into();
-            let index: usize = val.try_into().unwrap();
+            let index = field_to_u256(&T::get_public(&val).expect("Already checked it is public"))
+                .try_to_usize()
+                .unwrap();
             assert!(self.rom_arrays[rom_id].state.len() > index);
             assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
             assert!(self.rom_arrays[rom_id].state[index][1] != Self::UNINITIALIZED_MEMORY_RECORD);
@@ -1491,10 +1489,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         if !T::is_shared(&index) && T::is_public_lut(&self.ram_arrays[ram_id].state) {
             // Sanity check only doable in plain
-            let val: BigUint = T::get_public(&index)
-                .expect("Already checked it is public")
-                .into();
-            let ind: usize = val.try_into().unwrap();
+            let ind = field_to_u256(&T::get_public(&index).expect("Already checked it is public"))
+                .try_to_usize()
+                .unwrap();
             let len = T::get_length_of_lut(&self.ram_arrays[ram_id].state);
             assert!(len > ind);
             assert!(
@@ -1564,10 +1561,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         if !T::is_shared(&index) && T::is_public_lut(&self.ram_arrays[ram_id].state) {
             // Sanity check only doable in plain
-            let val: BigUint = T::get_public(&index)
-                .expect("Already checked it is public")
-                .into();
-            let ind: usize = val.try_into().unwrap();
+            let ind = field_to_u256(&T::get_public(&index).expect("Already checked it is public"))
+                .try_to_usize()
+                .unwrap();
             let len = T::get_length_of_lut(&self.ram_arrays[ram_id].state);
             assert!(len > ind);
             assert!(
@@ -2559,12 +2555,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         // iterate over the cached items and create constraints
         for input in dedup.iter() {
-            let input_lo_0: BigUint = input.lo_0.into();
-            let input_lo_0: u32 = input_lo_0.try_into().expect("Invalid index");
-
             self.blocks
                 .nnf
-                .populate_wires(input.a[1], input.b[1], self.zero_idx, input_lo_0);
+                .populate_wires(input.a[1], input.b[1], self.zero_idx, input.lo_0);
             self.apply_nnf_selectors(NnfSelectors::NonNativeField1);
             self.num_gates += 1;
 
@@ -2574,21 +2567,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             self.apply_nnf_selectors(NnfSelectors::NonNativeField2);
             self.num_gates += 1;
 
-            let input_hi_0: BigUint = input.hi_0.into();
-            let input_hi_0: u32 = input_hi_0.try_into().expect("Invalid index");
-
             self.blocks
                 .nnf
-                .populate_wires(input.a[2], input.b[2], self.zero_idx, input_hi_0);
+                .populate_wires(input.a[2], input.b[2], self.zero_idx, input.hi_0);
             self.apply_nnf_selectors(NnfSelectors::NonNativeField3);
             self.num_gates += 1;
 
-            let input_hi_1: BigUint = input.hi_1.into();
-            let input_hi_1: u32 = input_hi_1.try_into().expect("Invalid index");
-
             self.blocks
                 .nnf
-                .populate_wires(input.a[1], input.b[1], self.zero_idx, input_hi_1);
+                .populate_wires(input.a[1], input.b[1], self.zero_idx, input.hi_1);
             self.apply_nnf_selectors(NnfSelectors::NnfNone);
             self.num_gates += 1;
         }
@@ -2778,14 +2765,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                     )?;
                     decomp.into_iter().map(T::AcvmType::from).collect()
                 } else {
-                    let mut accumulator: BigUint = T::get_public(&val)
-                        .expect("Already checked it is public")
-                        .into();
-                    let sublimb_mask: BigUint = sublimb_mask.into();
+                    let mut accumulator =
+                        field_to_u256(&T::get_public(&val).expect("Already checked it is public"));
+                    let sublimb_mask = U256::from(sublimb_mask);
                     (0..num_limbs)
                         .map(|_| {
-                            let sublimb_value = P::ScalarField::from(&accumulator & &sublimb_mask);
-                            accumulator >>= target_range_bitnum;
+                            let sublimb_value =
+                                u256_to_field::<P::ScalarField>(&(accumulator & sublimb_mask));
+                            accumulator >>= target_range_bitnum as usize;
                             T::AcvmType::from(sublimb_value)
                         })
                         .collect()
@@ -2861,10 +2848,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 target_range_bitnum * (3 * i + 1),
                 target_range_bitnum * (3 * i + 2),
             ];
-            let shiftmask = (BigUint::one() << 256) - BigUint::one(); // Simulate u256
-            let shift0 = P::ScalarField::from((BigUint::one() << shifts[0]) & &shiftmask);
-            let shift1 = P::ScalarField::from((BigUint::one() << shifts[1]) & &shiftmask);
-            let shift2 = P::ScalarField::from((BigUint::one() << shifts[2]) & shiftmask);
+            // Shifts on `U256` saturate to zero, matching the old explicit 2^256 mask.
+            let shift0 = u256_to_field::<P::ScalarField>(&(U256::one() << shifts[0] as usize));
+            let shift1 = u256_to_field::<P::ScalarField>(&(U256::one() << shifts[1] as usize));
+            let shift2 = u256_to_field::<P::ScalarField>(&(U256::one() << shifts[2] as usize));
 
             let mut subtrahend = T::mul_with_public(driver, shift0, round_sublimbs[0].clone());
             let term0 = T::mul_with_public(driver, shift1, round_sublimbs[1].clone());
@@ -2907,8 +2894,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         // we skip this assert
         // ASSERT(uint256_t(this->get_variable_reference(limb_idx)) < (uint256_t(1) << num_limb_bits));
 
-        let limb_mask =
-            (BigUint::one() << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) - BigUint::one();
+        let limb_mask = U256::mask(Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS);
         let value = self.get_variable(limb_idx as usize);
         let (low, hi) = if T::is_shared(&value) {
             let value = T::get_shared(&value).expect("Already checked it is shared");
@@ -2920,17 +2906,16 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             )?;
             (low.into(), hi.into())
         } else {
-            let value: BigUint = T::get_public(&value)
-                .expect("Already checked it is public")
-                .into();
-            let low = &value & &limb_mask;
-            let hi = &value >> Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
+            let value =
+                field_to_u256(&T::get_public(&value).expect("Already checked it is public"));
+            let low = value & limb_mask;
+            let hi = value >> Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS;
 
-            assert!(&low + (&hi << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) == value);
+            assert!(low + (hi << Self::DEFAULT_NON_NATIVE_FIELD_LIMB_BITS) == value);
 
             (
-                P::ScalarField::from(low).into(),
-                P::ScalarField::from(hi).into(),
+                u256_to_field::<P::ScalarField>(&low).into(),
+                u256_to_field::<P::ScalarField>(&hi).into(),
             )
         };
 
@@ -2985,45 +2970,41 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 // we can use constant 2^14 - 1 mask here. If the sublimb value exceeds the expected value then witness will
                 // fail the range check below
                 // We also use zero_idx to substitute variables that should be zero
-                let limb: BigUint = T::get_public(&limb)
-                    .expect("Already checked it is public")
-                    .into();
-                const MAX_SUBLIMB_MASK: u64 = (1u64 << 14) - 1;
+                let limb =
+                    field_to_u256(&T::get_public(&limb).expect("Already checked it is public"));
+                let sublimb_mask = U256::mask(14);
                 let mut sublimb_indices = [self.zero_idx; 5];
                 sublimb_indices[0] = if sublimb_masks[0] != 0 {
                     self.add_variable(
-                        P::ScalarField::from(limb.clone() & &MAX_SUBLIMB_MASK.into()).into(),
+                        u256_to_field::<P::ScalarField>(&(limb & sublimb_mask)).into(),
                     )
                 } else {
                     self.zero_idx
                 };
                 sublimb_indices[1] = if sublimb_masks[1] != 0 {
                     self.add_variable(
-                        P::ScalarField::from((limb.clone() >> 14) & &MAX_SUBLIMB_MASK.into())
-                            .into(),
+                        u256_to_field::<P::ScalarField>(&((limb >> 14) & sublimb_mask)).into(),
                     )
                 } else {
                     self.zero_idx
                 };
                 sublimb_indices[2] = if sublimb_masks[2] != 0 {
                     self.add_variable(
-                        P::ScalarField::from((limb.clone() >> 28) & &MAX_SUBLIMB_MASK.into())
-                            .into(),
+                        u256_to_field::<P::ScalarField>(&((limb >> 28) & sublimb_mask)).into(),
                     )
                 } else {
                     self.zero_idx
                 };
                 sublimb_indices[3] = if sublimb_masks[3] != 0 {
                     self.add_variable(
-                        P::ScalarField::from((limb.clone() >> 42) & &MAX_SUBLIMB_MASK.into())
-                            .into(),
+                        u256_to_field::<P::ScalarField>(&((limb >> 42) & sublimb_mask)).into(),
                     )
                 } else {
                     self.zero_idx
                 };
                 sublimb_indices[4] = if sublimb_masks[4] != 0 {
                     self.add_variable(
-                        P::ScalarField::from((limb >> 56) & &MAX_SUBLIMB_MASK.into()).into(),
+                        u256_to_field::<P::ScalarField>(&((limb >> 56) & sublimb_mask)).into(),
                     )
                 } else {
                     self.zero_idx
@@ -4519,8 +4500,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let input_result_y = FieldCT::from_witness_index(input.out_point_y);
         // If no valid witness assignments, set result to generator point to avoid errors during circuit construction.
         if self.is_write_vk_mode {
-            let g1_y = P::ScalarField::from(BigUint::new(vec![
-                2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
+            let g1_y = u256_to_field::<P::ScalarField>(&U256::from_limbs_truncating(&[
+                9457493854555940652,
+                3253583849847263892,
+                14921373847124204899,
+                2,
             ]));
             self.set_variable(input.out_point_x, P::ScalarField::one().into());
             self.set_variable(input.out_point_y, g1_y.into());
@@ -4603,8 +4587,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let input_result_x = FieldCT::from_witness_index(constraint.result_x);
         let input_result_y = FieldCT::from_witness_index(constraint.result_y);
 
-        let g1_y = P::ScalarField::from(BigUint::new(vec![
-            2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
+        let g1_y = u256_to_field::<P::ScalarField>(&U256::from_limbs_truncating(&[
+            9457493854555940652,
+            3253583849847263892,
+            14921373847124204899,
+            2,
         ]));
         if self.is_write_vk_mode {
             let index_x = input_result_x.get_witness_index(self, driver);
@@ -4784,26 +4771,28 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         assert!(num_bits > 0);
 
         if a.is_constant() && b.is_constant() {
-            let a_native: BigUint = T::get_public(&a.get_value(self, driver))
-                .expect("Constant should be public")
-                .into();
-            let b_native: BigUint = T::get_public(&b.get_value(self, driver))
-                .expect("Constant should be public")
-                .into();
+            let a_native = field_to_u256(
+                &T::get_public(&a.get_value(self, driver)).expect("Constant should be public"),
+            );
+            let b_native = field_to_u256(
+                &T::get_public(&b.get_value(self, driver)).expect("Constant should be public"),
+            );
             assert!(
-                a_native.bits() <= num_bits as u64,
+                a_native.bit_len() <= num_bits,
                 "field_t: Left operand in logic gate exceeds specified bit length"
             );
             assert!(
-                b_native.bits() <= num_bits as u64,
+                b_native.bit_len() <= num_bits,
                 "field_t: Right operand in logic gate exceeds specified bit length"
             );
-            let result_native: BigUint = if is_xor_gate {
+            let result_native = if is_xor_gate {
                 a_native ^ b_native
             } else {
                 a_native & b_native
             };
-            return Ok(FieldCT::from(P::ScalarField::from(result_native)));
+            return Ok(FieldCT::from(u256_to_field::<P::ScalarField>(
+                &result_native,
+            )));
         }
 
         if a.is_constant() && !b.is_constant() {
@@ -4837,14 +4826,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let mut to_mpc_decompose = Vec::new();
 
         if !T::is_shared(&left) {
-            let sublimb_mask = (BigUint::one() << 32) - BigUint::one();
-            let mut left_: BigUint = T::get_public(&left)
-                .expect("Already checked it is public")
-                .into();
+            let sublimb_mask = U256::mask(32);
+            let mut left_ =
+                field_to_u256(&T::get_public(&left).expect("Already checked it is public"));
 
             decomp_left = (0..num_chunks)
                 .map(|_| {
-                    let sublimb_value = P::ScalarField::from(&left_ & &sublimb_mask);
+                    let sublimb_value = u256_to_field::<P::ScalarField>(&(left_ & sublimb_mask));
                     left_ >>= 32;
                     T::AcvmType::from(sublimb_value)
                 })
@@ -4854,14 +4842,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         }
 
         if !T::is_shared(&right) {
-            let sublimb_mask = (BigUint::one() << 32) - BigUint::one();
-            let mut right_: BigUint = T::get_public(&right)
-                .expect("Already checked it is public")
-                .into();
+            let sublimb_mask = U256::mask(32);
+            let mut right_ =
+                field_to_u256(&T::get_public(&right).expect("Already checked it is public"));
 
             decomp_right = (0..num_chunks)
                 .map(|_| {
-                    let sublimb_value = P::ScalarField::from(&right_ & &sublimb_mask);
+                    let sublimb_value = u256_to_field::<P::ScalarField>(&(right_ & sublimb_mask));
                     right_ >>= 32;
                     T::AcvmType::from(sublimb_value)
                 })
@@ -4922,7 +4909,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 )?
             };
 
-            let scaling_factor = FieldCT::from(P::ScalarField::from(BigUint::one() << (32 * i)));
+            let scaling_factor =
+                FieldCT::from(u256_to_field::<P::ScalarField>(&(U256::one() << (32 * i))));
             a_accumulator.add_assign(
                 &a_chunk.multiply(&scaling_factor, self, driver)?,
                 self,

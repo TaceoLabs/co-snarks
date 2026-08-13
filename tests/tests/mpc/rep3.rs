@@ -28,11 +28,10 @@ mod field_share {
     use mpc_core::protocols::rep3::Rep3State;
     use mpc_core::protocols::rep3::{self, arithmetic};
     use mpc_core::protocols::rep3_ring;
-    use mpc_core::uint::{FieldUint, UintBackend, U256};
+    use mpc_core::uint::{u256_to_field, FieldUint, UintBackend, U256};
     use mpc_core::MpcState as _;
     use mpc_net::local::LocalNetwork;
     use mpc_net::Network;
-    use num_bigint::BigUint;
     use rand::thread_rng;
     use rand::Rng;
     use std::array;
@@ -2205,11 +2204,11 @@ mod field_share {
                 y /= U256::from(*slice);
                 let res = res1.to_u64_truncating();
                 let mapped_into = Utils::map_into_sparse_form::<BASE>(res);
-                rs0.push(ark_bn254::Fr::from(mapped_into));
+                rs0.push(u256_to_field::<ark_bn254::Fr>(&mapped_into));
                 let rotated: u32 = u32::try_from(res).unwrap();
                 let rotated = rotated.rotate_right(*rot);
                 let mapped_into = Utils::map_into_sparse_form::<BASE>(rotated as u64);
-                rs1.push(ark_bn254::Fr::from(mapped_into));
+                rs1.push(u256_to_field::<ark_bn254::Fr>(&mapped_into));
             }
             should_result.extend(xs);
             should_result.extend(ys);
@@ -2248,7 +2247,7 @@ mod field_share {
         let base_powers = Utils::get_base_powers::<BASE, 32>();
         let base_powers = base_powers
             .iter()
-            .map(|x| ark_bn254::Fr::from(x.clone()))
+            .map(u256_to_field::<ark_bn254::Fr>)
             .collect_vec();
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -2469,9 +2468,9 @@ mod field_share {
             for slice in slice_sizes.iter() {
                 let res1 = x % U256::from(*slice);
                 xs.push(ark_bn254::Fr::from_uint_unchecked(&res1));
-                rs0.push(ark_bn254::Fr::from(
-                    Utils::map_into_sparse_form::<{ BASE }>(
-                        Utils::map_from_sparse_form::<{ BASE }>(num_bigint::BigUint::from(res1)),
+                rs0.push(u256_to_field::<ark_bn254::Fr>(
+                    &Utils::map_into_sparse_form::<{ BASE }>(
+                        Utils::map_from_sparse_form::<{ BASE }>(res1),
                     ),
                 ));
                 x /= U256::from(*slice);
@@ -2514,7 +2513,7 @@ mod field_share {
         let base_powers = Utils::get_base_powers::<BASE, 32>();
         let base_powers = base_powers
             .iter()
-            .map(|x| ark_bn254::Fr::from(x.clone()))
+            .map(u256_to_field::<ark_bn254::Fr>)
             .collect_vec();
         let result1 = rx1.recv().unwrap();
         let result2 = rx2.recv().unwrap();
@@ -2584,14 +2583,14 @@ mod field_share {
             for slice in slice_sizes.iter() {
                 let res1 = x % U256::from(*slice);
                 xs.push(ark_bn254::Fr::from_uint_unchecked(&res1));
-                let byte = Utils::map_from_sparse_form::<{ BASE }>(num_bigint::BigUint::from(res1));
+                let byte = Utils::map_from_sparse_form::<{ BASE }>(res1);
                 let sbox_value = AES128_SBOX[byte as usize];
                 let swizzled = (sbox_value << 1u8) ^ (((sbox_value >> 7u8) & 1u8) * 0x1b);
-                rs0.push(ark_bn254::Fr::from(
-                    Utils::map_into_sparse_form::<{ BASE }>(sbox_value as u64),
+                rs0.push(u256_to_field::<ark_bn254::Fr>(
+                    &Utils::map_into_sparse_form::<{ BASE }>(sbox_value as u64),
                 ));
-                rs1.push(ark_bn254::Fr::from(
-                    Utils::map_into_sparse_form::<{ BASE }>((sbox_value ^ swizzled) as u64),
+                rs1.push(u256_to_field::<ark_bn254::Fr>(
+                    &Utils::map_into_sparse_form::<{ BASE }>((sbox_value ^ swizzled) as u64),
                 ));
                 x /= U256::from(*slice);
                 let res2 = y % U256::from(*slice);
@@ -2650,7 +2649,7 @@ mod field_share {
                 );
                 let base_powers = Utils::get_base_powers::<BASE, 32>();
                 let base_powers: [ark_bn254::Fr; 32] =
-                    array::from_fn(|i| ark_bn254::Fr::from(base_powers[i].clone()));
+                    array::from_fn(|i| u256_to_field(&base_powers[i]));
 
                 let rs = conversion::a2b_many(&rs, &net0, &mut state0).unwrap();
                 for key in rs {
@@ -2754,17 +2753,15 @@ mod field_share {
 
         let x_shares = rep3::share_field_elements(&input, &mut rng);
 
-        // `Utils::map_from_sparse_form` is a BigUint API (co-noir-common), so this
-        // oracle stays on BigUint at that boundary.
-        let mut accumulator = BigUint::zero();
-        let byte_mask = (BigUint::one() << output_bitsize) - BigUint::one();
+        let mut accumulator = U256::zero();
+        let byte_mask = U256::mask(output_bitsize);
         for byte in input.iter() {
-            let sparse_byte = BigUint::from(byte.to_uint().to_u64_truncating());
+            let sparse_byte = U256::from(byte.to_uint().to_u64_truncating());
             let byte = Utils::map_from_sparse_form::<BASE>(sparse_byte);
             accumulator <<= 8;
-            accumulator += BigUint::from(byte) & byte_mask.clone();
+            accumulator += U256::from(byte) & byte_mask;
         }
-        let should_result = ark_bn254::Fr::from(accumulator);
+        let should_result = u256_to_field::<ark_bn254::Fr>(&accumulator);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();

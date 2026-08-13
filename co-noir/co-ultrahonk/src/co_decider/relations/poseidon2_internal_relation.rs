@@ -9,9 +9,9 @@ use co_noir_common::{
     mpc::NoirUltraHonkProver,
 };
 use itertools::Itertools as _;
+use mpc_core::uint::{field_to_u256, u256_to_field};
 use mpc_core::{MpcState as _, gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS};
 use mpc_net::Network;
-use num_bigint::BigUint;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
@@ -176,17 +176,17 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
             .collect_vec();
 
         // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
-        let internal_matrix_diag_0 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
+        let internal_matrix_diag_0 = u256_to_field::<P::ScalarField>(&field_to_u256(
+            &POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
         ));
-        let internal_matrix_diag_1 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
+        let internal_matrix_diag_1 = u256_to_field::<P::ScalarField>(&field_to_u256(
+            &POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
         ));
-        let internal_matrix_diag_2 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
+        let internal_matrix_diag_2 = u256_to_field::<P::ScalarField>(&field_to_u256(
+            &POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
         ));
-        let internal_matrix_diag_3 = P::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
+        let internal_matrix_diag_3 = u256_to_field::<P::ScalarField>(&field_to_u256(
+            &POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
         ));
 
         T::scale_many_in_place(&mut u1, internal_matrix_diag_0);

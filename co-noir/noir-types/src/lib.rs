@@ -11,7 +11,6 @@ use noirc_abi::input_parser::{Format, InputValue};
 pub use noirc_abi::Abi;
 use noirc_abi::MAIN_RETURN_NAME;
 pub use noirc_artifacts::program::ProgramArtifact;
-use num_bigint::BigUint;
 use ruint::Uint;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -275,16 +274,6 @@ impl<F: Field> SerializeF<F> {
         res
     }
 
-    pub fn read_biguint(buf: &[u8], num_64_limbs: usize, offset: &mut usize) -> BigUint {
-        let mut bigint = BigUint::default();
-        for _ in 0..num_64_limbs {
-            let data = Self::read_u64(buf, offset);
-            bigint <<= 64;
-            bigint += data;
-        }
-        bigint
-    }
-
     pub fn write_u32(buf: &mut Vec<u8>, val: u32) {
         buf.extend(val.to_be_bytes());
     }
@@ -311,15 +300,14 @@ impl<F: Field> SerializeF<F> {
 
     pub fn read_field_element(buf: &[u8], offset: &mut usize) -> F {
         let mut fields = Vec::with_capacity(F::extension_degree() as usize);
+        let num_bytes = Self::FIELDSIZE_BYTES as usize;
 
         for _ in 0..F::extension_degree() {
-            let mut bigint: BigUint = Default::default();
-            for _ in 0..Self::NUM_64_LIMBS {
-                let data = Self::read_u64(buf, offset);
-                bigint <<= 64;
-                bigint += data;
-            }
-            fields.push(F::BasePrimeField::from(bigint));
+            // The limbs are stored most-significant first, i.e. the element is
+            // just a big-endian integer of `FIELDSIZE_BYTES` bytes.
+            let bytes = &buf[*offset..*offset + num_bytes];
+            *offset += num_bytes;
+            fields.push(F::BasePrimeField::from_be_bytes_mod_order(bytes));
         }
 
         F::from_base_prime_field_elems(fields).expect("Should work")

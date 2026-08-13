@@ -6,8 +6,8 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{One, PrimeField, Zero};
 use eyre::Error;
 use mpc_core::gadgets;
+use mpc_core::uint::{U256, UintBackend};
 use num_bigint::BigUint;
-use std::array;
 
 pub struct Utils {}
 
@@ -55,27 +55,27 @@ impl Utils {
         inp.ilog2()
     }
 
-    pub fn get_base_powers<const BASE: u64, const NUM_SLICES: usize>() -> [BigUint; NUM_SLICES] {
-        let mut output: [BigUint; NUM_SLICES] = array::from_fn(|_| BigUint::one());
-        let base = BigUint::from(BASE);
-        let mask = (BigUint::from(1u64) << 256) - BigUint::one();
+    pub fn get_base_powers<const BASE: u64, const NUM_SLICES: usize>() -> [U256; NUM_SLICES] {
+        let mut output = [U256::one(); NUM_SLICES];
+        let base = U256::from(BASE);
 
+        // `*` on `U256` wraps mod 2^256, which is what the explicit 256-bit
+        // mask used to do.
         for i in 1..NUM_SLICES {
-            let tmp = &output[i - 1] * &base;
-            output[i] = tmp & &mask;
+            output[i] = output[i - 1] * base;
         }
 
         output
     }
 
-    pub fn map_into_sparse_form<const BASE: u64>(input: u64) -> BigUint {
-        let mut out: BigUint = BigUint::zero();
+    pub fn map_into_sparse_form<const BASE: u64>(input: u64) -> U256 {
+        let mut out = U256::zero();
         let base_powers = Self::get_base_powers::<BASE, 32>();
 
         for (i, base_power) in base_powers.iter().enumerate() {
             let sparse_bit = (input >> i) & 1;
             if sparse_bit != 0 {
-                out += base_power;
+                out += *base_power;
             }
         }
         out
@@ -105,20 +105,21 @@ impl Utils {
      * @returns the u256 equal to the substring of bits from (and including) the `start`-th bit, to (but excluding) the
      * `end`-th bit of `this`.
      */
-    pub fn slice_u256(value: &BigUint, start: u64, end: u64) -> BigUint {
+    pub fn slice_u256(value: &U256, start: u64, end: u64) -> U256 {
         if end <= start {
-            return BigUint::zero();
+            return U256::zero();
         }
-        let range = end - start;
-        let mask = if range == 256 {
-            (BigUint::from(1u64) << 256) - BigUint::one()
+        let range = (end - start) as usize;
+        // Shifts on `U256` saturate to zero, matching `BigUint >> start`.
+        let sliced = *value >> start as usize;
+        if range >= U256::BITS {
+            sliced
         } else {
-            (BigUint::one() << range) - BigUint::one()
-        };
-        (value >> start) & mask
+            sliced & U256::mask(range)
+        }
     }
 
-    pub fn map_from_sparse_form<const BASE: u64>(input: BigUint) -> u64 {
+    pub fn map_from_sparse_form<const BASE: u64>(input: U256) -> u64 {
         let mut target = input;
         let mut output = 0u64;
 
@@ -126,9 +127,9 @@ impl Utils {
 
         for i in (0..32).rev() {
             let base_power = &bases[i];
-            let mut prev_threshold = BigUint::zero();
+            let mut prev_threshold = U256::zero();
             for j in 1..BASE + 1 {
-                let threshold = &prev_threshold + base_power;
+                let threshold = prev_threshold + *base_power;
                 if target < threshold {
                     let bit = ((j - 1) & 1) != 0;
                     if bit {
@@ -145,6 +146,10 @@ impl Utils {
 
         output
     }
+
+    // The two helpers below bridge the bigfield/biggroup emulation, whose
+    // `NUM_LIMBS * LIMB_SIZE` product exceeds 256 bits (4 x 68 = 272), so they
+    // stay on `BigUint` until that gadget gets a wider fixed-width backend.
 
     pub fn field_limbs_to_biguint<F: PrimeField, const NUM_LIMBS: usize, const LIMB_SIZE: usize>(
         limbs: &[F; NUM_LIMBS],

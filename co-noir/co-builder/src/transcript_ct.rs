@@ -21,7 +21,8 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::honk_proof::HonkProofError;
 use co_noir_common::honk_proof::HonkProofResult;
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, u256_to_field};
+use num_traits::One as _;
 use std::{collections::BTreeMap, ops::Index};
 
 pub type Bn254G1 = <Bn254 as Pairing>::G1;
@@ -146,8 +147,8 @@ where
         builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()> {
-        let shift: BigUint = BigUint::from(1u64) << NUM_LIMB_BITS;
-        let shift = FieldCT::from(C::ScalarField::from(shift));
+        let shift = U256::one() << NUM_LIMB_BITS;
+        let shift = FieldCT::from(u256_to_field::<C::ScalarField>(&shift));
         let mut elements = Self::convert_grumpkin_fr_to_bn254_frs(&point.x, builder, driver)?;
         elements.extend(Self::convert_grumpkin_fr_to_bn254_frs(
             &point.y, builder, driver,
@@ -208,8 +209,8 @@ where
         builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> eyre::Result<()> {
-        let shift: BigUint = BigUint::from(1u64) << NUM_LIMB_BITS;
-        let shift = FieldCT::from(C::ScalarField::from(shift));
+        let shift = U256::one() << NUM_LIMB_BITS;
+        let shift = FieldCT::from(u256_to_field::<C::ScalarField>(&shift));
         let mut elements = Self::convert_grumpkin_fr_to_bn254_frs(&point.x, builder, driver)?;
         elements.extend(Self::convert_grumpkin_fr_to_bn254_frs(
             &point.y, builder, driver,
@@ -352,8 +353,8 @@ where
         builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> eyre::Result<Vec<FieldCT<C::ScalarField>>> {
-        let shift: BigUint = BigUint::from(1u64) << NUM_LIMB_BITS;
-        let shift = FieldCT::from(C::ScalarField::from(shift));
+        let shift = U256::one() << NUM_LIMB_BITS;
+        let shift = FieldCT::from(u256_to_field::<C::ScalarField>(&shift));
         let mut elements = Vec::with_capacity(C::NUM_BASEFIELD_ELEMENTS);
         elements.push(
             element.binary_basis_limbs[0].element.add(

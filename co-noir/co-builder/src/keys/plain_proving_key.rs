@@ -15,7 +15,7 @@ use co_noir_common::{
         polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial, Polynomials},
     },
 };
-use num_bigint::BigUint;
+use mpc_core::uint::{UintBackend, field_to_u256};
 use std::sync::Arc;
 
 pub fn create_prover_instance<P: CurveGroup>(
@@ -449,13 +449,14 @@ pub fn construct_lookup_read_counts<
                 }
             } else {
                 // Index is public
-                let index_in_table: BigUint = T::get_public(&index_in_table)
-                    .expect("Already checked it is public")
-                    .into();
+                let index_in_table =
+                    T::get_public(&index_in_table).expect("Already checked it is public");
                 let index_in_table = if table.requires_index_map() {
-                    table.index_map[index_in_table.into()]
+                    table.index_map[index_in_table]
                 } else {
-                    usize::try_from(index_in_table).expect("index is too large for usize?")
+                    field_to_u256(&index_in_table)
+                        .try_to_usize()
+                        .expect("index is too large for usize?")
                 };
 
                 let index_in_poly = table_offset + index_in_table;

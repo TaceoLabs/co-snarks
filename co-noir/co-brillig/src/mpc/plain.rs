@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use acvm::brillig_vm::MEMORY_ADDRESSING_BIT_SIZE;
 use ark_ff::{One as _, PrimeField};
 use brillig::{BitSize, IntegerBitSize};
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, UintBackend, field_to_u256, u256_to_field};
 use num_traits::Zero;
 use rand::Rng;
 
@@ -320,9 +320,9 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         rhs: Self::BrilligType,
     ) -> eyre::Result<Self::BrilligType> {
         if let (PlainBrilligType::Field(lhs), PlainBrilligType::Field(rhs)) = (lhs, rhs) {
-            let lhs: BigUint = lhs.into();
-            let rhs: BigUint = rhs.into();
-            Ok(PlainBrilligType::Field(F::from(lhs / rhs)))
+            let lhs = field_to_u256(&lhs);
+            let rhs = field_to_u256(&rhs);
+            Ok(PlainBrilligType::Field(u256_to_field(&(lhs / rhs))))
         } else {
             eyre::bail!("IntDiv only supported on fields")
         }
@@ -403,23 +403,22 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
             // https://github.com/noir-lang/noir/blob/7216f0829dcece948d3243471e6d57380522e997/acvm-repo/brillig_vm/src/black_box.rs#L323
             // and modified for our implementation
 
-            let mut input: BigUint = val.into();
-            let radix = BigUint::from(radix);
+            let mut input = field_to_u256(&val);
+            let radix = U256::from(radix as u64);
 
             let mut limbs = vec![PlainBrilligType::default(); output_size];
 
             for i in (0..output_size).rev() {
-                let limb = &input % &radix;
+                let limb = input % radix;
                 if bits {
                     let limb = if limb.is_zero() { 0 } else { 1 };
                     limbs[i] = PlainBrilligType::Int(limb, IntegerBitSize::U1);
                 } else {
-                    let limb: u128 = limb
-                        .try_into()
-                        .expect("fits into u128 since radix is at most 256");
+                    // radix is at most 256, so the remainder fits into a u128
+                    let limb = limb.to_u64_truncating() as u128;
                     limbs[i] = PlainBrilligType::Int(limb, IntegerBitSize::U8);
                 };
-                input /= &radix;
+                input /= radix;
             }
             for limb in limbs.iter() {
                 tracing::debug!("{limb:?}");

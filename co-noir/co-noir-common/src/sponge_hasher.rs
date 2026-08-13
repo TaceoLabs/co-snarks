@@ -1,6 +1,6 @@
 use ark_ff::{One, PrimeField};
 use mpc_core::gadgets::poseidon2::Poseidon2;
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, u256_to_field};
 
 pub trait FieldHash<F: PrimeField, const T: usize> {
     fn permutation(&self, input: &[F; T]) -> [F; T] {
@@ -122,9 +122,9 @@ where
         input: &[F],
     ) -> [F; OUT_LEN] {
         let in_len = input.len();
-        let iv = (BigUint::from(in_len) << 64) + OUT_LEN - BigUint::one();
+        let iv = (U256::from(in_len as u64) << 64) + U256::from(OUT_LEN as u64) - U256::one();
 
-        let mut sponge = Self::new(F::from(iv));
+        let mut sponge = Self::new(u256_to_field(&iv));
         for input in input.iter() {
             sponge.absorb(input);
         }

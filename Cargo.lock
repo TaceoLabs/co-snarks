@@ -3081,7 +3081,6 @@ dependencies = [
  "eyre",
  "noirc_abi",
  "noirc_artifacts",
- "num-bigint 0.4.6",
  "ruint",
  "serde_json",
  "toml",

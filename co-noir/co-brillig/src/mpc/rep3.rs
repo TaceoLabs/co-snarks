@@ -9,14 +9,18 @@ use mpc_core::protocols::rep3_ring::ring::bit::Bit;
 use mpc_core::protocols::rep3_ring::ring::int_ring::IntRing2k;
 use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
 use mpc_core::protocols::rep3_ring::{self, Rep3BitShare, Rep3RingShare};
-use mpc_core::uint::FieldUint;
+use mpc_core::uint::{FieldUint, UintBackend};
 use mpc_net::Network;
-use num_bigint::BigUint;
 use num_traits::AsPrimitive;
 use rand::distributions::{Distribution, Standard};
 use std::marker::PhantomData;
 
 use super::PlainBrilligType as Public;
+
+/// Whether the (non-zero) value is a power of two, i.e. has exactly one set bit.
+fn is_power_of_two<U: UintBackend>(v: &U) -> bool {
+    !v.is_zero() && (*v & v.wrapping_sub(&U::from(1u64))).is_zero()
+}
 
 /// A driver for the coBrillig-VM that uses replicated secret sharing.
 pub struct Rep3BrilligDriver<'a, F: FieldUint, N: Network> {
@@ -979,10 +983,9 @@ impl<F: FieldUint, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> 
             }
             (Rep3BrilligType::Shared(shared), Rep3BrilligType::Public(public)) => {
                 if let (Public::Field(public), Shared::Field(shared)) = (public, shared) {
-                    let divisor: BigUint = public.into();
-                    if divisor.count_ones() == 1 {
-                        // is power-of-2
-                        let divisor_bit = divisor.bits() as usize - 1;
+                    let divisor = public.to_uint();
+                    if is_power_of_two(&divisor) {
+                        let divisor_bit = divisor.bit_len() - 1;
                         let divided = rep3::yao::field_int_div_power_2(
                             shared,
                             self.net,

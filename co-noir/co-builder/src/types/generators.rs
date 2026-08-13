@@ -2,7 +2,7 @@ use crate::types::plookup::FixedBaseParams;
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{BigInteger, Field, One, PrimeField};
 use co_noir_common::{serialize::SerializeC, utils::Utils};
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, u256_to_field};
 use std::{any::TypeId, sync::OnceLock};
 
 pub(crate) const DEFAULT_DOMAIN_SEPARATOR: &[u8] = "DEFAULT_DOMAIN_SEPARATOR".as_bytes();
@@ -203,8 +203,9 @@ pub(crate) fn generate_fixed_base_tables<C: CurveGroup>()
 
         let res = INSTANCE.get_or_init(|| {
             let gens = default_generators::<ark_grumpkin::Projective>();
-            let scale =
-                ark_grumpkin::Fr::from(BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR);
+            let scale = u256_to_field::<ark_grumpkin::Fr>(
+                &(U256::one() << FixedBaseParams::BITS_PER_LO_SCALAR),
+            );
             let lhs_base_point_lo = &gens[0];
             let lhs_base_point_hi = *lhs_base_point_lo * scale;
             let rhs_base_point_lo = &gens[1];
@@ -292,8 +293,9 @@ pub(crate) fn fixed_base_table_offset_generators<C: CurveGroup>()
         > = OnceLock::new();
         let res = INSTANCE.get_or_init(|| {
             let gens = default_generators::<ark_grumpkin::Projective>();
-            let scale =
-                ark_grumpkin::Fr::from(BigUint::one() << FixedBaseParams::BITS_PER_LO_SCALAR);
+            let scale = u256_to_field::<ark_grumpkin::Fr>(
+                &(U256::one() << FixedBaseParams::BITS_PER_LO_SCALAR),
+            );
             let lhs_base_point_lo = &gens[0];
             let lhs_base_point_hi = *lhs_base_point_lo * scale;
             let rhs_base_point_lo = &gens[1];
@@ -353,7 +355,7 @@ pub fn offset_generator_scaled<C: CurveGroup>() -> C::Affine {
         domain_bytes.push(i as u8);
     }
     let offset_generator = derive_generators::<C>(&domain_bytes, 1, 0)[0];
-    (offset_generator * C::ScalarField::from(BigUint::one() << 124)).into()
+    (offset_generator * u256_to_field::<C::ScalarField>(&(U256::one() << 124))).into()
 }
 pub fn offset_generator<C: CurveGroup>(domain_separator: &str) -> C::Affine {
     let mut domain_bytes = Vec::with_capacity(domain_separator.len());

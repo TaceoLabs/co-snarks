@@ -36,6 +36,38 @@ pub trait FieldUint: PrimeField {
     fn modulus_uint() -> Self::Uint;
 }
 
+/// Converts a field element to a [`U256`].
+///
+/// Unlike [`FieldUint::to_uint`] this pins the width instead of deriving it
+/// from the field, for callers whose values are 256-bit quantities by
+/// construction and that are generic over `F: PrimeField` only. The field must
+/// be at most 256 bits wide; wider ones would be truncated.
+pub fn field_to_u256<F: PrimeField>(value: &F) -> U256 {
+    debug_assert!(
+        F::MODULUS_BIT_SIZE as usize <= <U256 as UintBackend>::BITS,
+        "field is wider than 256 bits"
+    );
+    U256::from_limbs_truncating(value.into_bigint().as_ref())
+}
+
+/// Converts a [`U256`] to a field element, reducing modulo `p`
+/// (the `F::from(BigUint)` replacement). See [`field_to_u256`].
+pub fn u256_to_field<F: PrimeField>(value: &U256) -> F {
+    let mut bytes = [0u8; <U256 as UintBackend>::BYTES];
+    value.to_le_bytes_into(&mut bytes);
+    F::from_le_bytes_mod_order(&bytes)
+}
+
+/// The field modulus `p` as a [`U256`] (the `F::MODULUS.into()` replacement).
+/// See [`field_to_u256`].
+pub fn modulus_u256<F: PrimeField>() -> U256 {
+    debug_assert!(
+        F::MODULUS_BIT_SIZE as usize <= <U256 as UintBackend>::BITS,
+        "field is wider than 256 bits"
+    );
+    U256::from_limbs_truncating(F::MODULUS.as_ref())
+}
+
 /// Reduces an integer of arbitrary width modulo `p` via Horner evaluation
 /// over its 64-bit limbs. The ruint ark-ff bridge only converts values `< p`,
 /// so full reduction (the `F::from(BigUint)` replacement) stays hand-rolled.

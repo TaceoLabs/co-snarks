@@ -1,7 +1,7 @@
 use super::plain::PlainAcvmSolver;
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, Field, MontConfig, One, PrimeField, Zero};
+use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{Rep3BrilligDriver, Rep3BrilligType};
 use co_noir_common::utils::Utils;
@@ -19,13 +19,12 @@ use mpc_core::protocols::rep3::{
     network::Rep3NetworkExt, pointshare, yao,
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
-use mpc_core::uint::{FieldUint, UintBackend};
+use mpc_core::uint::{FieldUint, U256, UintBackend, modulus_u256, u256_to_field};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
 };
 use mpc_net::Network;
-use num_bigint::BigUint;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::any::TypeId;
@@ -69,21 +68,18 @@ impl<'a, F: PrimeField + FieldUint, N: Network> Rep3AcvmSolver<'a, F, N> {
         state: &mut Rep3State,
         pedantic_solving: bool,
     ) -> eyre::Result<Rep3AcvmType<ark_grumpkin::Fr>> {
-        let scale = ark_grumpkin::Fr::from(BigUint::one() << 128);
+        let scale: ark_grumpkin::Fr = u256_to_field(&(U256::one() << 128));
         let res = match (low, high) {
             (Rep3AcvmType::Public(low), Rep3AcvmType::Public(high)) => {
                 let scalar_low = PlainAcvmSolver::<F>::bn254_fr_to_u128(*low)?;
                 let scalar_high = PlainAcvmSolver::<F>::bn254_fr_to_u128(*high)?;
-                let grumpkin_integer: BigUint = (BigUint::from(scalar_high) << 128) + scalar_low;
+                let grumpkin_integer = (U256::from(scalar_high) << 128) + U256::from(scalar_low);
 
                 // Check if this is smaller than the grumpkin modulus
-                if pedantic_solving && grumpkin_integer >= ark_grumpkin::FrConfig::MODULUS.into() {
-                    eyre::bail!(
-                        "{} is not a valid grumpkin scalar",
-                        grumpkin_integer.to_str_radix(16)
-                    );
+                if pedantic_solving && grumpkin_integer >= modulus_u256::<ark_grumpkin::Fr>() {
+                    eyre::bail!("{grumpkin_integer} is not a valid grumpkin scalar");
                 }
-                Rep3AcvmType::Public(ark_grumpkin::Fr::from(grumpkin_integer))
+                Rep3AcvmType::Public(u256_to_field::<ark_grumpkin::Fr>(&grumpkin_integer))
             }
             (Rep3AcvmType::Public(low), Rep3AcvmType::Shared(high)) => {
                 let scalar_low = PlainAcvmSolver::<F>::bn254_fr_to_u128(*low)?;
@@ -344,12 +340,12 @@ impl<F: PrimeField + FieldUint> Rep3AcvmType<F> {
     }
 }
 
-fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] {
-    let mut output: [BigUint; NUM_SLICES] = array::from_fn(|_| BigUint::one());
-    let mask: BigUint = (BigUint::from(1u64) << 256) - BigUint::one();
+fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [U256; NUM_SLICES] {
+    let mut output = [U256::one(); NUM_SLICES];
+    let base = U256::from(base);
+    // `*` on `U256` wraps mod 2^256, which is what the explicit mask used to do.
     for i in 1..NUM_SLICES {
-        let tmp = &output[i - 1] * base;
-        output[i] = tmp & &mask;
+        output[i] = output[i - 1] * base;
     }
     output
 }
@@ -683,9 +679,10 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     ) -> eyre::Result<Self::AcvmType> {
         let result = match index {
             Rep3AcvmType::Public(public) => {
-                let index: BigUint = public.into();
-                let index = usize::try_from(index)
-                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+                let index = public
+                    .to_uint()
+                    .try_to_usize()
+                    .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
                     mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
@@ -716,9 +713,10 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let mut result = Vec::with_capacity(luts.len());
         match index {
             Rep3AcvmType::Public(index) => {
-                let index: BigUint = index.into();
-                let index = usize::try_from(index)
-                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+                let index = index
+                    .to_uint()
+                    .try_to_usize()
+                    .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
                 for lut in luts {
                     result.push(Rep3AcvmType::Public(lut[index].to_owned()));
                 }
@@ -748,9 +746,10 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     ) -> eyre::Result<()> {
         match (index, value) {
             (Rep3AcvmType::Public(index), Rep3AcvmType::Public(value)) => {
-                let index: BigUint = (index).into();
-                let index = usize::try_from(index)
-                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+                let index = index
+                    .to_uint()
+                    .try_to_usize()
+                    .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
                     mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
@@ -762,9 +761,10 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 }
             }
             (Rep3AcvmType::Public(index), Rep3AcvmType::Shared(value)) => {
-                let index: BigUint = (index).into();
-                let index = usize::try_from(index)
-                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+                let index = index
+                    .to_uint()
+                    .try_to_usize()
+                    .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
 
                 match lut {
                     mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
@@ -1610,8 +1610,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     fn right_shift(&mut self, input: Self::AcvmType, shift: usize) -> eyre::Result<Self::AcvmType> {
         match input {
             Rep3AcvmType::Public(a) => {
-                let x: BigUint = a.into();
-                Ok(Rep3AcvmType::Public(F::from(x >> shift)))
+                let x = a.to_uint();
+                Ok(Rep3AcvmType::Public(F::from_uint_unchecked(&(x >> shift))))
             }
             Rep3AcvmType::Shared(shared) => Ok(Rep3AcvmType::Shared(yao::field_int_div_power_2(
                 shared,
@@ -1684,14 +1684,12 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             let mut state_as_u32 = [0u32; 8];
             for (i, input) in state.iter().enumerate() {
                 let input = Self::get_public(input).expect("Already checked it is public");
-                let x: BigUint = (input.into_bigint()).into();
-                state_as_u32[i] = x.iter_u32_digits().next().unwrap_or_default();
+                state_as_u32[i] = input.to_uint().to_u64_truncating() as u32;
             }
             let mut blocks = [0_u8; 64];
             for (i, input) in message.iter().enumerate() {
                 let input = Self::get_public(input).expect("Already checked it is public");
-                let x: BigUint = (input.into_bigint()).into();
-                let message_as_u32 = x.iter_u32_digits().next().unwrap_or_default();
+                let message_as_u32 = input.to_uint().to_u64_truncating() as u32;
                 let bytes = message_as_u32.to_be_bytes();
                 blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
             }
@@ -1763,7 +1761,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             .map(|a| Rep3AcvmType::Shared(a))
             .collect();
         let base_powers = get_base_powers::<32>(base);
-        let base_powers: [F; 32] = array::from_fn(|i| F::from(base_powers[i].clone()));
+        let base_powers: [F; 32] = array::from_fn(|i| u256_to_field(&base_powers[i]));
 
         let mut res0 = Vec::with_capacity(rotation_values.len() / 64);
         let mut res1 = Vec::with_capacity(rotation_values.len() / 64);
@@ -2112,7 +2110,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             .map(|a| Rep3AcvmType::Shared(a))
             .collect();
         let base_powers = get_base_powers::<32>(base);
-        let base_powers: [F; 32] = array::from_fn(|i| F::from(base_powers[i].clone()));
+        let base_powers: [F; 32] = array::from_fn(|i| u256_to_field(&base_powers[i]));
         let mut res0 = Vec::with_capacity(sliced_bits.len() / 8);
         for chunk in sliced_bits.chunks_exact(8) {
             let vec_t0 = chunk.to_vec();
@@ -2171,7 +2169,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             sbox.iter().map(|&value| F::from(value)).collect::<Vec<_>>(),
         );
         let base_powers = get_base_powers::<32>(base);
-        let base_powers: [F; 32] = array::from_fn(|i| F::from(base_powers[i].clone()));
+        let base_powers: [F; 32] = array::from_fn(|i| u256_to_field(&base_powers[i]));
         let mut res1 = Vec::with_capacity(res0.len());
         let mut res2 = Vec::with_capacity(res0.len());
         for index_bits in res0 {

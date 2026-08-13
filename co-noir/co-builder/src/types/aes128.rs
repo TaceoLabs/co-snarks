@@ -4,9 +4,8 @@ use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, uti
 
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use ark_ff::Zero;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, UintBackend, field_to_u256, u256_to_field};
 use std::{array, marker::PhantomData}; // Import FieldCT from the correct module
 
 pub(crate) const AES128_BASE: u32 = 9;
@@ -97,17 +96,17 @@ impl<F: PrimeField> AES128<F> {
             .collect();
         let all_public = !sparse_slice.iter().any(|v| T::is_shared(v));
         let accumulator = if all_public {
-            let mut accumulator = BigUint::zero();
+            let mut accumulator = U256::zero();
             for byte in sparse_bytes[..16].iter() {
-                let mut sparse_byte: BigUint = T::get_public(&byte.get_value(builder, driver))
-                    .expect("Already checked it is public")
-                    .into();
-                sparse_byte &= BigUint::from(u64::MAX);
+                let sparse_byte = field_to_u256(
+                    &T::get_public(&byte.get_value(builder, driver))
+                        .expect("Already checked it is public"),
+                ) & U256::mask(64);
                 let byte = Utils::map_from_sparse_form::<{ AES128_BASE as u64 }>(sparse_byte);
                 accumulator <<= 8;
-                accumulator += byte as u128;
+                accumulator += U256::from(byte);
             }
-            F::from(accumulator).into()
+            u256_to_field::<F>(&accumulator).into()
         } else {
             T::accumulate_from_sparse_bytes(driver, &sparse_slice, AES128_BASE as u64, 64, 8)?
         };
@@ -142,9 +141,9 @@ impl<F: PrimeField> AES128<F> {
         let sparse_round_constants: [FieldCT<F>; 11] = ROUND_CONSTANTS
             .iter()
             .map(|&x| {
-                FieldCT::<F>::from(F::from(
-                    Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(x as u64),
-                ))
+                FieldCT::<F>::from(u256_to_field::<F>(&Utils::map_into_sparse_form::<
+                    { AES128_BASE as u64 },
+                >(x as u64)))
             })
             .collect::<Vec<_>>()
             .try_into()

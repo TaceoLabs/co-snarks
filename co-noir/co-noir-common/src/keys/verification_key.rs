@@ -3,8 +3,8 @@ use ark_ec::AffineRepr;
 use ark_ec::{CurveGroup, pairing::Pairing};
 use ark_ff::PrimeField;
 use ark_ff::Zero;
+use mpc_core::uint::{UintBackend, field_to_u256};
 use noir_types::{SerializeF, U256};
-use num_bigint::BigUint;
 
 use crate::{
     honk_curve::HonkCurve,
@@ -184,21 +184,13 @@ impl<C: HonkCurve<TranscriptFieldType>> VerifyingKeyBarretenberg<C> {
         }
 
         // Read data
-        let log_circuit_size: BigUint = {
-            let fe = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
-            fe.into()
+        let read_u64 = |offset: &mut usize| -> u64 {
+            let fe = SerializeF::<TranscriptFieldType>::read_field_element(buf, offset);
+            field_to_u256(&fe).to_u64_truncating()
         };
-        let log_circuit_size: u64 = log_circuit_size.to_u64_digits()[0];
-        let num_public_inputs: BigUint = {
-            let fe = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
-            fe.into()
-        };
-        let num_public_inputs: u64 = num_public_inputs.to_u64_digits()[0];
-        let pub_inputs_offset: BigUint = {
-            let fe = SerializeF::<TranscriptFieldType>::read_field_element(buf, &mut offset);
-            fe.into()
-        };
-        let pub_inputs_offset: u64 = pub_inputs_offset.to_u64_digits()[0];
+        let log_circuit_size = read_u64(&mut offset);
+        let num_public_inputs = read_u64(&mut offset);
+        let pub_inputs_offset = read_u64(&mut offset);
 
         let mut commitments = PrecomputedEntities::default();
 

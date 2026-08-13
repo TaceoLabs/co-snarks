@@ -4,7 +4,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::lut::LookupTableProvider;
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, UintBackend, field_to_u256};
 use std::cmp::Ordering;
 use std::ops::Index;
 
@@ -47,8 +47,7 @@ impl<F: PrimeField> RomTable<F> {
         if index.is_constant() {
             let value = T::get_public(&index.get_value(builder, driver))
                 .expect("Constant should be public");
-            let val: BigUint = value.into();
-            let val: usize = val.try_into().expect("Invalid index");
+            let val = field_to_u256(&value).try_to_usize().expect("Invalid index");
             return self[val].to_owned();
         }
         self.initialize_table(builder, driver);
@@ -57,8 +56,8 @@ impl<F: PrimeField> RomTable<F> {
             // Sanity check, only doable in plain
             let value = T::get_public(&index.get_value(builder, driver))
                 .expect("Already checked it is public");
-            let val: BigUint = value.into();
-            assert!(val < BigUint::from(self.length));
+            let val = field_to_u256(&value);
+            assert!(val < U256::from(self.length as u64));
         }
 
         let witness_index = index.get_witness_index(builder, driver);
@@ -205,10 +204,10 @@ impl<F: PrimeField> RamTable<F> {
         };
 
         if index.is_constant() {
-            let cast_index: BigUint = T::get_public(&index_value)
-                .expect("Constant should be public")
-                .into();
-            let cast_index = usize::try_from(cast_index).expect("Invalid index");
+            let cast_index =
+                field_to_u256(&T::get_public(&index_value).expect("Constant should be public"))
+                    .try_to_usize()
+                    .expect("Invalid index");
             if !self.index_initialized[cast_index] {
                 // if index constant && not initialized
                 let index = value_wire.get_witness_index(builder, driver);
@@ -539,8 +538,7 @@ impl<F: PrimeField> TwinRomTable<F> {
         if index.is_constant() {
             let value = T::get_public(&index.get_value(builder, driver))
                 .expect("Constant should be public");
-            let val: BigUint = value.into();
-            let val: usize = val.try_into().expect("Invalid index");
+            let val = field_to_u256(&value).try_to_usize().expect("Invalid index");
             return Ok(self.entries[val].to_owned());
         }
         self.initialize_table(builder, driver);
@@ -549,8 +547,8 @@ impl<F: PrimeField> TwinRomTable<F> {
             // Sanity check, only doable in plain
             let value = T::get_public(&index.get_value(builder, driver))
                 .expect("Already checked it is public");
-            let val: BigUint = value.into();
-            assert!(val < BigUint::from(self.length));
+            let val = field_to_u256(&value);
+            assert!(val < U256::from(self.length as u64));
         }
 
         let normalized_witness_index = index.get_witness_index(builder, driver);

@@ -15,6 +15,7 @@ use ark_ff::Zero;
 use ark_ff::{One, PrimeField};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::gadgets::field_from_hex_string;
+use mpc_core::uint::{U256, u256_to_field};
 use num_bigint::BigUint;
 
 pub struct BigGroup<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> {
@@ -735,7 +736,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             eyre::bail!("Precomputed offset generators not available for this curve");
         };
 
-        let offset_multiplier = F::from(BigUint::one() << (num_rounds - 1));
+        let offset_multiplier = u256_to_field::<F>(&(U256::one() << (num_rounds - 1)));
         let offset_generator_end = offset_generator * offset_multiplier;
         Ok((offset_generator, offset_generator_end.into_affine()))
     }
@@ -809,7 +810,7 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
         let one = FieldCT::from(F::one());
         for i in 0..num_rounds {
             // bit = 1 - 2 * naf
-            let shift = FieldCT::from(F::from(BigUint::one() << i));
+            let shift = FieldCT::from(u256_to_field::<F>(&(U256::one() << i)));
 
             let entry = naf_entries[num_rounds - 1 - i]
                 .to_field_ct(driver)
@@ -1525,6 +1526,7 @@ mod tests {
     use ark_ff::UniformRand;
     use ark_ff::Zero;
     use co_acvm::PlainAcvmSolver;
+    use mpc_core::uint::{U256, u256_to_field};
     use num_bigint::BigUint;
 
     use crate::{
@@ -1630,7 +1632,7 @@ mod tests {
             let mut reconstructed_scalar = Fr::zero();
             for (i, item) in naf.iter().enumerate().take(length) {
                 reconstructed_scalar += (Fr::one() - Fr::from(2u64) * item.get_value(driver))
-                    * Fr::from(BigUint::one() << (length - 1 - i) as u32);
+                    * u256_to_field::<Fr>(&(U256::one() << (length - 1 - i)));
             }
 
             reconstructed_scalar -= Fr::from(naf[length].get_value(driver));

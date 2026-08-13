@@ -4,7 +4,7 @@
 mod field_uint;
 mod ruint_wrapper;
 
-pub use field_uint::FieldUint;
+pub use field_uint::{FieldUint, field_to_u256, modulus_u256, u256_to_field};
 pub use ruint_wrapper::RUint;
 
 /// A common interface for stack-allocated, fixed-width unsigned integer

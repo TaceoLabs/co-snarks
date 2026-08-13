@@ -9,6 +9,7 @@ use co_noir_common::utils::Utils;
 use core::panic;
 use eyre::Ok;
 use itertools::repeat_n;
+use mpc_core::uint::{U256, u256_to_field};
 use num_bigint::BigUint;
 use std::array;
 use std::cmp::max;
@@ -705,6 +706,9 @@ impl<F: PrimeField> BigField<F> {
         assert!(!upper_limit.is_zero(), "upper_limit must be non-zero");
 
         let strict_upper_limit = upper_limit - BigUint::one();
+        // `upper_limit` is a target-field modulus, so it fits into 256 bits.
+        let strict_upper_limit =
+            U256::try_from(&strict_upper_limit).expect("upper limit does not fit into 256 bits");
         let upper_limit_value_0 = Utils::slice_u256(&strict_upper_limit, 0, NUM_LIMB_BITS as u64);
         let upper_limit_value_1 = Utils::slice_u256(
             &strict_upper_limit,
@@ -728,7 +732,7 @@ impl<F: PrimeField> BigField<F> {
 
         let borrow_0_val = driver.gt(
             limb_0_value,
-            T::AcvmType::from(F::from(upper_limit_value_0.clone())),
+            T::AcvmType::from(u256_to_field::<F>(&upper_limit_value_0)),
         )?;
         let borrow_0 = BoolCT::from_witness_ct(
             WitnessCT::from_acvm_type(borrow_0_val, builder),
@@ -740,7 +744,7 @@ impl<F: PrimeField> BigField<F> {
         let limb_1_plus_borrow_0 = driver.add(limb_1_value, borrow_0_value);
         let borrow_1_val = driver.gt(
             limb_1_plus_borrow_0,
-            T::AcvmType::from(F::from(upper_limit_value_1.clone())),
+            T::AcvmType::from(u256_to_field::<F>(&upper_limit_value_1)),
         )?;
         let borrow_1 = BoolCT::from_witness_ct(
             WitnessCT::from_acvm_type(borrow_1_val, builder),
@@ -752,7 +756,7 @@ impl<F: PrimeField> BigField<F> {
         let limb_2_plus_borrow_1 = driver.add(limb_2_value, borrow_1_value);
         let borrow_2_val = driver.gt(
             limb_2_plus_borrow_1,
-            T::AcvmType::from(F::from(upper_limit_value_2.clone())),
+            T::AcvmType::from(u256_to_field::<F>(&upper_limit_value_2)),
         )?;
         let borrow_2 = BoolCT::from_witness_ct(
             WitnessCT::from_acvm_type(borrow_2_val, builder),
@@ -760,10 +764,10 @@ impl<F: PrimeField> BigField<F> {
             false,
         );
 
-        let upper_0 = FieldCT::from(F::from(upper_limit_value_0));
-        let upper_1 = FieldCT::from(F::from(upper_limit_value_1));
-        let upper_2 = FieldCT::from(F::from(upper_limit_value_2));
-        let upper_3 = FieldCT::from(F::from(upper_limit_value_3));
+        let upper_0 = FieldCT::from(u256_to_field::<F>(&upper_limit_value_0));
+        let upper_1 = FieldCT::from(u256_to_field::<F>(&upper_limit_value_1));
+        let upper_2 = FieldCT::from(u256_to_field::<F>(&upper_limit_value_2));
+        let upper_3 = FieldCT::from(u256_to_field::<F>(&upper_limit_value_3));
         let shift_1 = FieldCT::from(F::from(BigUint::one() << NUM_LIMB_BITS));
 
         let r0 = upper_0

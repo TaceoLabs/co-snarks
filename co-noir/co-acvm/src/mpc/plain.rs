@@ -1,6 +1,6 @@
 use super::{NoirWitnessExtensionProtocol, downcast};
 use ark_ec::{AffineRepr, CurveGroup};
-use ark_ff::{BigInteger, Field, MontConfig, One, PrimeField, Zero};
+use ark_ff::{BigInteger, Field, One, PrimeField, Zero};
 use blake2::{Blake2s256, Digest};
 use co_brillig::mpc::{PlainBrilligDriver, PlainBrilligType};
 use co_noir_common::utils::Utils;
@@ -11,6 +11,7 @@ use mpc_core::{
     gadgets::poseidon2::{Poseidon2, Poseidon2Precomputations},
     lut::{LookupTableProvider, PlainLookupTableProvider},
     protocols::rep3::yao::circuits::SHA256Table,
+    uint::{U256, UintBackend, field_to_u256, modulus_u256, u256_to_field},
 };
 use num_bigint::BigUint;
 use rand::thread_rng;
@@ -256,8 +257,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let len_ = len.next_power_of_two();
         let mut result = vec![F::zero(); len_];
-        let index: BigUint = index.into();
-        let index = usize::try_from(index).expect("Index to large for usize");
+        let index = field_to_u256(&index)
+            .try_to_usize()
+            .expect("Index to large for usize");
         result[index] = F::one();
         Ok(result)
     }
@@ -335,14 +337,12 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         decompose_bit_size: usize,
     ) -> eyre::Result<std::vec::Vec<F>> {
         let mut result = Vec::with_capacity(total_bit_size_per_field.div_ceil(decompose_bit_size));
-        let big_mask = (BigUint::from(1u64) << total_bit_size_per_field) - BigUint::one();
-        let small_mask = (BigUint::from(1u64) << decompose_bit_size) - BigUint::one();
-        let mut x: BigUint = input.into();
-        x &= &big_mask;
+        let small_mask = U256::mask(decompose_bit_size);
+        let mut x = field_to_u256(&input) & U256::mask(total_bit_size_per_field);
         for _ in 0..total_bit_size_per_field.div_ceil(decompose_bit_size) {
-            let chunk = &x & &small_mask;
+            let chunk = x & small_mask;
             x >>= decompose_bit_size;
-            result.push(F::from(chunk));
+            result.push(u256_to_field(&chunk));
         }
         Ok(result)
     }
@@ -367,11 +367,10 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         bitsize: usize,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         let mut result = Vec::with_capacity(inputs.len());
-        let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+        let mask = U256::mask(bitsize);
         for x in inputs.iter() {
-            let mut x: BigUint = (*x).into();
-            x &= &mask;
-            result.push(F::from(x));
+            let x = field_to_u256(x) & mask;
+            result.push(u256_to_field(&x));
         }
         result.sort();
         Ok(result)
@@ -384,9 +383,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         lsb: u8,
         bitsize: usize,
     ) -> eyre::Result<[Self::ArithmeticShare; 2]> {
-        let x: BigUint = input.into();
-        let hi = F::from(Utils::slice_u256(&x, lsb as u64, msb as u64));
-        let lo = F::from(Utils::slice_u256(&x, msb as u64, bitsize as u64));
+        let x = field_to_u256(&input);
+        let hi = u256_to_field(&Utils::slice_u256(&x, lsb as u64, msb as u64));
+        let lo = u256_to_field(&Utils::slice_u256(&x, msb as u64, bitsize as u64));
 
         Ok([lo, hi])
     }
@@ -400,9 +399,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> eyre::Result<Vec<[Self::ArithmeticShare; 2]>> {
         let mut result = Vec::with_capacity(input.len());
         for x in input.iter() {
-            let x: BigUint = (*x).into();
-            let hi = F::from(Utils::slice_u256(&x, lsb as u64, msb as u64));
-            let lo = F::from(Utils::slice_u256(&x, msb as u64, bitsize as u64));
+            let x = field_to_u256(x);
+            let hi = u256_to_field(&Utils::slice_u256(&x, lsb as u64, msb as u64));
+            let lo = u256_to_field(&Utils::slice_u256(&x, msb as u64, bitsize as u64));
             result.push([lo, hi]);
         }
         Ok(result)
@@ -415,11 +414,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         num_bits: u32,
     ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
-        let mask = (BigUint::one() << num_bits) - BigUint::one();
-        let lhs: BigUint = lhs.into();
-        let rhs: BigUint = rhs.into();
+        let mask = U256::mask(num_bits as usize);
+        let lhs = field_to_u256(&lhs);
+        let rhs = field_to_u256(&rhs);
         let res = (lhs & rhs) & mask;
-        Ok(Self::AcvmType::from(res))
+        Ok(u256_to_field(&res))
     }
 
     fn integer_bitwise_xor(
@@ -429,11 +428,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         num_bits: u32,
     ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
-        let mask = (BigUint::one() << num_bits) - BigUint::one();
-        let lhs: BigUint = lhs.into();
-        let rhs: BigUint = rhs.into();
+        let mask = U256::mask(num_bits as usize);
+        let lhs = field_to_u256(&lhs);
+        let rhs = field_to_u256(&rhs);
         let res = (lhs ^ rhs) & mask;
-        Ok(Self::AcvmType::from(res))
+        Ok(u256_to_field(&res))
     }
 
     fn slice_and_get_and_rotate_values(
@@ -493,15 +492,14 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         inputs: Vec<&[Self::ArithmeticShare]>,
         bitsize: usize,
     ) -> eyre::Result<Vec<Vec<Self::ArithmeticShare>>> {
-        let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+        let mask = U256::mask(bitsize);
 
         let mut indexed_values: Vec<(F, usize)> = key
             .iter()
             .enumerate()
             .map(|(i, x)| {
-                let mut x: BigUint = (*x).into();
-                x &= &mask;
-                (F::from(x), i)
+                let x = field_to_u256(x) & mask;
+                (u256_to_field(&x), i)
             })
             .collect();
 
@@ -647,18 +645,15 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
 
             let scalar_low = Self::bn254_fr_to_u128(scalars_lo[i / 3])?;
             let scalar_high = Self::bn254_fr_to_u128(scalars_hi[i / 3])?;
-            let grumpkin_integer: BigUint = (BigUint::from(scalar_high) << 128) + scalar_low;
+            let grumpkin_integer = (U256::from(scalar_high) << 128) + U256::from(scalar_low);
 
             // Check if this is smaller than the grumpkin modulus
-            if pedantic_solving && grumpkin_integer >= ark_grumpkin::FrConfig::MODULUS.into() {
-                eyre::bail!(
-                    "{} is not a valid grumpkin scalar",
-                    grumpkin_integer.to_str_radix(16)
-                );
+            if pedantic_solving && grumpkin_integer >= modulus_u256::<ark_grumpkin::Fr>() {
+                eyre::bail!("{grumpkin_integer} is not a valid grumpkin scalar");
             }
 
             let iteration_output_point =
-                ark_grumpkin::Affine::from(point.mul_bigint(grumpkin_integer.to_u64_digits()));
+                ark_grumpkin::Affine::from(point.mul_bigint(grumpkin_integer.as_limbs()));
 
             output_point = ark_grumpkin::Affine::from(output_point + iteration_output_point);
         }
@@ -714,8 +709,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     }
 
     fn right_shift(&mut self, input: Self::AcvmType, shift: usize) -> eyre::Result<Self::AcvmType> {
-        let x: BigUint = input.into();
-        Ok((x >> shift).into())
+        let x = field_to_u256(&input);
+        Ok(u256_to_field(&(x >> shift)))
     }
 
     fn set_point_to_value_if_zero<C: CurveGroup<BaseField = F>>(
@@ -736,13 +731,11 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut state_as_u32 = [0u32; 8];
         for (i, input) in state.iter().enumerate() {
-            let x: BigUint = (*input).into();
-            state_as_u32[i] = x.iter_u32_digits().next().unwrap_or_default();
+            state_as_u32[i] = field_to_u256(input).to_u64_truncating() as u32;
         }
         let mut blocks = [0_u8; 64];
         for (i, input) in message.iter().enumerate() {
-            let x: BigUint = (*input).into();
-            let message_as_u32 = x.iter_u32_digits().next().unwrap_or_default();
+            let message_as_u32 = field_to_u256(input).to_u64_truncating() as u32;
             let bytes = message_as_u32.to_be_bytes();
             blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
         }
@@ -756,11 +749,9 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         &mut self,
         input: Self::ArithmeticShare,
     ) -> eyre::Result<Self::ArithmeticShare> {
-        let mut sum: BigUint = input.into();
-        let mask = BigUint::from(u64::MAX);
-        sum &= mask;
-        let normalized_sum = sum.iter_u32_digits().next().unwrap_or_default();
-        Ok(Self::ArithmeticShare::from((sum - normalized_sum) >> 32))
+        let sum = field_to_u256(&input) & U256::mask(64);
+        // Dropping the low 32 bits is what subtracting them off and shifting did.
+        Ok(u256_to_field(&(sum >> 32)))
     }
 
     fn slice_and_get_sparse_table_with_rotation_values(
@@ -971,8 +962,8 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         scalar: &Self::AcvmType,
         max_num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        let modulus: BigUint = F::MODULUS.into();
-        let mut scalar_multiplier = scalar.into_bigint().into();
+        let modulus = modulus_u256::<F>();
+        let mut scalar_multiplier = field_to_u256(scalar);
 
         let num_rounds = if max_num_bits == 0 || scalar_multiplier.is_zero() {
             F::MODULUS_BIT_SIZE as usize
@@ -985,16 +976,16 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             scalar_multiplier = modulus;
         }
 
-        let skew = (&scalar_multiplier & BigUint::one()).is_zero();
+        let skew = !scalar_multiplier.bit(0);
         if skew {
-            scalar_multiplier += BigUint::one();
+            scalar_multiplier += U256::one();
         }
 
         let mut entries = Vec::with_capacity(num_rounds);
         entries.push(F::from(skew as u64));
 
         for i in 0..num_rounds - 1 {
-            let next_bit_is_set = ((&scalar_multiplier >> (i + 1)) & BigUint::one()).is_one();
+            let next_bit_is_set = scalar_multiplier.bit(i + 1);
             entries.push(F::from((!next_bit_is_set) as u64));
         }
 

@@ -15,7 +15,7 @@ use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
-use num_bigint::BigUint;
+use mpc_core::uint::{UintBackend, field_to_u256};
 
 pub(crate) struct OinkRecursiveVerifier;
 
@@ -50,14 +50,13 @@ impl OinkRecursiveVerifier {
             .num_public_inputs
             .get_value(builder, driver);
 
-        let num_public_inputs: BigUint = T::get_public(&num_public_inputs).expect(
+        let num_public_inputs = field_to_u256(&T::get_public(&num_public_inputs).expect(
             "Failed to get the number of public inputs as a public value during recursive verification key verification",
-        ).into();
+        ));
 
-        let num_public_inputs_usize = *num_public_inputs
-            .to_u64_digits()
-            .first()
-            .expect("Should fit into 64 bits") as usize;
+        let num_public_inputs_usize = num_public_inputs
+            .try_to_usize()
+            .expect("Should fit into a usize");
         let mut public_inputs = Vec::with_capacity(num_public_inputs_usize);
 
         for i in 0..num_public_inputs_usize {

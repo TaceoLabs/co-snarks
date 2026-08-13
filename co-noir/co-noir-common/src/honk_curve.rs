@@ -1,7 +1,7 @@
 use ark_ec::{CurveGroup, short_weierstrass};
 use ark_ff::{BigInt, Field, One, PrimeField};
 use ark_grumpkin::GrumpkinConfig;
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, UintBackend, field_to_u256, u256_to_field};
 use std::str::FromStr;
 
 // Des describes the PrimeField used for the Transcript
@@ -130,9 +130,10 @@ impl HonkCurve<ark_bn254::Fr> for ark_ec::short_weierstrass::Projective<ark_bn25
     }
 
     fn get_bb_infinity_default() -> Self::BaseField {
-        let set_bit = BigUint::one() << (ark_bn254::Fq::MODULUS_BIT_SIZE.next_power_of_two() - 1);
+        let set_bit =
+            U256::one() << (ark_bn254::Fq::MODULUS_BIT_SIZE.next_power_of_two() - 1) as usize;
         let mont_r = ark_bn254::Fq::from(ark_bn254::Fq::MODULUS.montgomery_r());
-        ark_bn254::Fq::from(set_bit) / mont_r
+        u256_to_field::<ark_bn254::Fq>(&set_bit) / mont_r
     }
 }
 
@@ -212,9 +213,9 @@ impl HonkCurve<ark_bn254::Fr> for short_weierstrass::Projective<GrumpkinConfig> 
 
     fn get_bb_infinity_default() -> Self::BaseField {
         let set_bit =
-            BigUint::one() << (ark_grumpkin::Fq::MODULUS_BIT_SIZE.next_power_of_two() - 1);
+            U256::one() << (ark_grumpkin::Fq::MODULUS_BIT_SIZE.next_power_of_two() - 1) as usize;
         let mont_r = ark_grumpkin::Fq::from(ark_grumpkin::Fq::MODULUS.montgomery_r());
-        ark_grumpkin::Fq::from(set_bit) / mont_r
+        u256_to_field::<ark_grumpkin::Fq>(&set_bit) / mont_r
     }
 
     fn convert_basefield_to_scalarfield(_src: &Self::BaseField) -> Vec<Self::ScalarField> {
@@ -241,19 +242,18 @@ const TOTAL_BITS: u32 = 254;
 pub fn bn254_fq_to_fr(fq: &ark_bn254::Fq) -> (ark_bn254::Fr, ark_bn254::Fr) {
     // Goal is to slice up the 64 bit limbs of grumpkin::fr/uint256_t to mirror the 68 bit limbs of bigfield
     // We accomplish this by dividing the grumpkin::fr's value into two 68*2=136 bit pieces.
-    const LOWER_BITS: u32 = 2 * NUM_LIMB_BITS;
-    let lower_mask = (BigUint::one() << LOWER_BITS) - BigUint::one();
-    let value = BigUint::from(*fq);
+    const LOWER_BITS: usize = 2 * NUM_LIMB_BITS as usize;
+    let value = field_to_u256(fq);
 
-    debug_assert!(value < (BigUint::one() << TOTAL_BITS));
+    debug_assert!(value.bit_len() <= TOTAL_BITS as usize);
 
-    let res0 = &value & lower_mask;
+    let res0 = value & U256::mask(LOWER_BITS);
     let res1 = value >> LOWER_BITS;
 
-    debug_assert!(res1 < (BigUint::one() << (TOTAL_BITS - LOWER_BITS)));
+    debug_assert!(res1.bit_len() <= TOTAL_BITS as usize - LOWER_BITS);
 
-    let res0 = ark_bn254::Fr::from(res0);
-    let res1 = ark_bn254::Fr::from(res1);
+    let res0 = u256_to_field(&res0);
+    let res1 = u256_to_field(&res1);
 
     (res0, res1)
 }
@@ -261,14 +261,14 @@ pub fn bn254_fq_to_fr(fq: &ark_bn254::Fq) -> (ark_bn254::Fr, ark_bn254::Fr) {
 fn bn254_fq_to_fr_rev(res0: &ark_bn254::Fr, res1: &ark_bn254::Fr) -> ark_bn254::Fq {
     // Combines the two elements into one uint256_t, and then convert that to a grumpkin::fr
 
-    let res0 = BigUint::from(*res0);
-    let res1 = BigUint::from(*res1);
+    let res0 = field_to_u256(res0);
+    let res1 = field_to_u256(res1);
 
-    debug_assert!(res0 < (BigUint::one() << (NUM_LIMB_BITS * 2))); // lower 136 bits
-    debug_assert!(res1 < (BigUint::one() << (TOTAL_BITS - NUM_LIMB_BITS * 2))); // upper 254-136=118 bits
+    debug_assert!(res0.bit_len() <= (NUM_LIMB_BITS * 2) as usize); // lower 136 bits
+    debug_assert!(res1.bit_len() <= (TOTAL_BITS - NUM_LIMB_BITS * 2) as usize); // upper 254-136=118 bits
 
-    let value = res0 + (res1 << (NUM_LIMB_BITS * 2));
-    ark_bn254::Fq::from(value)
+    let value = res0 + (res1 << (NUM_LIMB_BITS * 2) as usize);
+    u256_to_field(&value)
 }
 
 fn convert_grumpkin_fr_to_bn254_frs(val: &ark_grumpkin::Fr) -> (ark_bn254::Fr, ark_bn254::Fr) {
@@ -277,27 +277,28 @@ fn convert_grumpkin_fr_to_bn254_frs(val: &ark_grumpkin::Fr) -> (ark_bn254::Fr, a
 }
 
 fn convert_to_grumpkin_fr(f: &ark_bn254::Fr) -> ark_grumpkin::Fr {
-    const NUM_BITS_IN_TWO_LIMBS: u32 = 2 * NUM_LIMB_BITS; // the number of bits in 2 bigfield limbs which is 136
+    const NUM_BITS_IN_TWO_LIMBS: usize = 2 * NUM_LIMB_BITS as usize; // the number of bits in 2 bigfield limbs which is 136
 
-    let limb_mask = (BigUint::one() << NUM_BITS_IN_TWO_LIMBS) - BigUint::one(); // split bn254_fr into two 136 bit pieces
-    let value = BigUint::from(*f);
-    let low = &value & &limb_mask;
-    let hi = &value >> NUM_BITS_IN_TWO_LIMBS;
+    // split bn254_fr into two 136 bit pieces
+    let value = field_to_u256(f);
+    let low = value & U256::mask(NUM_BITS_IN_TWO_LIMBS);
+    let hi = value >> NUM_BITS_IN_TWO_LIMBS;
 
-    debug_assert_eq!(&low + (&hi << NUM_BITS_IN_TWO_LIMBS), value);
+    debug_assert_eq!(low + (hi << NUM_BITS_IN_TWO_LIMBS), value);
 
-    let fr_vec = [ark_grumpkin::Fr::from(low), ark_grumpkin::Fr::from(hi)];
+    let fr_vec: [ark_grumpkin::Fr; 2] = [u256_to_field(&low), u256_to_field(&hi)];
 
     // Combines the two elements into one uint256_t, and then convert that to a grumpkin::fr
     debug_assert!(
-        BigUint::from(fr_vec[0]) < (BigUint::one() << (NUM_LIMB_BITS * 2)),
+        field_to_u256(&fr_vec[0]).bit_len() <= (NUM_LIMB_BITS * 2) as usize,
         "Conversion error here usually implies some bad proof serde or parsing"
     );
     debug_assert!(
-        BigUint::from(fr_vec[1]) < (BigUint::one() << (TOTAL_BITS - NUM_LIMB_BITS * 2)),
+        field_to_u256(&fr_vec[1]).bit_len() <= (TOTAL_BITS - NUM_LIMB_BITS * 2) as usize,
         "Conversion error here usually implies some bad proof serde or parsing"
     );
 
-    let value = BigUint::from(fr_vec[0]) + (BigUint::from(fr_vec[1]) << (NUM_LIMB_BITS * 2));
-    ark_grumpkin::Fr::from(value)
+    let value =
+        field_to_u256(&fr_vec[0]) + (field_to_u256(&fr_vec[1]) << (NUM_LIMB_BITS * 2) as usize);
+    u256_to_field(&value)
 }

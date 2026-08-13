@@ -4,10 +4,10 @@ use crate::{
     sponge_hasher::{FieldHash, FieldSponge},
 };
 use ark_ec::AffineRepr;
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{PrimeField, Zero};
 use mpc_core::gadgets::poseidon2::Poseidon2;
+use mpc_core::uint::{U256, UintBackend, field_to_u256, u256_to_field};
 use noir_types::{HonkProof, SerializeF};
-use num_bigint::BigUint;
 use std::{collections::BTreeMap, ops::Index};
 
 pub type Poseidon2Sponge =
@@ -82,15 +82,13 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T> + Default
         let total_bits = F::MODULUS_BIT_SIZE as usize;
         let lo_bits = total_bits / 2;
         let hi_bits = total_bits - lo_bits;
-        let biguint: BigUint = challenge.into();
+        let value = field_to_u256(&challenge);
 
-        let lower_mask = (BigUint::one() << lo_bits) - BigUint::one();
-        let lo = &biguint & lower_mask;
-        let upper_mask = (BigUint::one() << hi_bits) - BigUint::one();
-        let hi = (biguint >> lo_bits) & upper_mask;
+        let lo = value & U256::mask(lo_bits);
+        let hi = (value >> lo_bits) & U256::mask(hi_bits);
 
-        let lo = F::from(lo);
-        let hi = F::from(hi);
+        let lo = u256_to_field(&lo);
+        let hi = u256_to_field(&hi);
 
         [lo, hi]
     }

@@ -3,7 +3,7 @@ use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder}
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField, UniformRand};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, u256_to_field};
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 /**
@@ -62,7 +62,7 @@ pub(crate) fn mask_points<
 
     // Add a scalar -(<(1,2,4,...,2ⁿ⁻¹ ),(scalar₀,...,scalarₙ₋₁)> / 2ⁿ)
     let n = points.len();
-    let two_power_n = F::from(BigUint::one() << n);
+    let two_power_n = u256_to_field::<F>(&(U256::one() << n));
     let two_power_n_inv = two_power_n.inverse().expect("Scalar inversion failed");
     last_scalar = last_scalar.multiply(&FieldCT::from(two_power_n_inv), builder, driver)?;
     masked_scalars.push(last_scalar.neg());

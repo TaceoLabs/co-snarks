@@ -1,6 +1,6 @@
 use super::{NoirWitnessExtensionProtocol, plain::PlainAcvmSolver};
 use ark_ec::CurveGroup;
-use ark_ff::{One, PrimeField};
+use ark_ff::PrimeField;
 use co_brillig::mpc::{ShamirBrilligDriver, ShamirBrilligType};
 use co_noir_types::ShamirType;
 use core::panic;
@@ -16,10 +16,10 @@ use mpc_core::{
             network::ShamirNetworkExt, pointshare,
         },
     },
-    uint::FieldUint,
+    uint::{FieldUint, UintBackend},
 };
 use mpc_net::Network;
-use num_bigint::BigUint;
+
 use serde::{Deserialize, Serialize};
 use std::{array, marker::PhantomData};
 
@@ -580,11 +580,10 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 .map(|input| Self::get_public(input).unwrap())
                 .collect();
             let mut result: Vec<_> = Vec::with_capacity(inputs.len());
-            let mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
+            let mask = <F as FieldUint>::Uint::mask(bitsize);
             for x in public.iter() {
-                let mut x: BigUint = (*x).into();
-                x &= &mask;
-                result.push(F::from(x));
+                let x = x.to_uint() & mask;
+                result.push(F::from_uint_unchecked(&x));
             }
             result.sort();
 
@@ -630,13 +629,11 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         num_bits: u32,
     ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
-        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        let mask = <F as FieldUint>::Uint::mask(num_bits as usize);
         match (lhs, rhs) {
             (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
-                let lhs: BigUint = lhs.into();
-                let rhs: BigUint = rhs.into();
-                let res = (lhs & rhs) & mask;
-                let res = F::from(res);
+                let res = (lhs.to_uint() & rhs.to_uint()) & mask;
+                let res = F::from_uint_unchecked(&res);
                 Ok(ShamirAcvmType::Public(res))
             }
             _ => panic!("functionality bitwise_and not feasible for Shamir"),
@@ -650,13 +647,11 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         num_bits: u32,
     ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
-        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        let mask = <F as FieldUint>::Uint::mask(num_bits as usize);
         match (lhs, rhs) {
             (ShamirAcvmType::Public(lhs), ShamirAcvmType::Public(rhs)) => {
-                let lhs: BigUint = lhs.into();
-                let rhs: BigUint = rhs.into();
-                let res = (lhs ^ rhs) & mask;
-                let res = F::from(res);
+                let res = (lhs.to_uint() ^ rhs.to_uint()) & mask;
+                let res = F::from_uint_unchecked(&res);
                 Ok(ShamirAcvmType::Public(res))
             }
             _ => panic!("functionality bitwise_xor not feasible for Shamir"),

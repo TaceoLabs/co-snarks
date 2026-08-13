@@ -296,7 +296,7 @@ swap is confined to rep3 impl bodies. Sites:
 - **tests/**: `share_biguint` / `combine_binary_element(s)` callers,
   plus direct `.a &= BigUint::one()` mutations.
 
-### 4.4 Explicitly out of scope (keep `num-bigint` there for now)
+### 4.4 Deferred out of Plan C (public-value math)
 
 Public-value arbitrary-precision math that never lives inside a share:
 
@@ -311,6 +311,8 @@ Public-value arbitrary-precision math that never lives inside a share:
   `ruint::U256`, but orthogonal.
 - `to_radix` div/mod in co-brillig plain, co-circom-types input parsing
   (`% modulus`), test-only `BigUint` division in `yao/circuits.rs:4540`.
+
+The second and third bullets landed as Plan D (§8); the first is what remains.
 
 ## 5. Expected wins
 
@@ -392,3 +394,75 @@ Landed on `dk/uint_backend` commits `893a16e2..2d3fbf1f`: Phase 3 completed rep3
 - Keep the deprecated `Rep3BigUintShare` alias for one release, or rename hard?
 - Do we want `FieldUint` as a supertrait bound everywhere, or a blanket-ish
   sealed helper trait to reduce bound noise in downstream signatures?
+
+## 8. Plan D — public-value math (2026-08-13)
+
+Ports the §4.4 sites whose width is statically known onto `U256`, taking the
+workspace from 446 `BigUint` mentions to 207. Everything ported was
+public-value math on values that are 256-bit quantities by construction.
+
+### 8.1 New surface: `mpc_core::uint`
+
+```rust
+pub fn field_to_u256<F: PrimeField>(value: &F) -> U256;
+pub fn u256_to_field<F: PrimeField>(value: &U256) -> F;   // reduces mod p
+pub fn modulus_u256<F: PrimeField>() -> U256;
+```
+
+These pin the width instead of deriving it from the field, for code that is
+generic over `F: PrimeField` only. `FieldUint` would be the exact choice, but
+co-builder alone has 196 `PrimeField` bounds and propagating `FieldUint`
+through them is out of proportion to the win — and co-noir only ever
+instantiates bn254/grumpkin `Fr`/`Fq` (254 bits). A `debug_assert` on
+`MODULUS_BIT_SIZE <= 256` makes the assumption observable. Where a
+`FieldUint` bound already existed (co-acvm rep3/shamir, co-brillig rep3) the
+port uses `F::Uint` + `to_uint()`/`from_uint_*()` instead.
+
+### 8.2 Ported
+
+| Crate | Sites |
+|---|---|
+| co-noir-common | `Utils::{get_base_powers, map_into_sparse_form, map_from_sparse_form, slice_u256}` now `U256`; `honk_curve` fq↔2×fr limb split; `transcript::split_challenge`; `sponge_hasher` IV; `verification_key::from_buffer` |
+| noir-types | `read_field_element` reads big-endian bytes directly; dead `read_biguint` deleted; **`num-bigint` dependency dropped** |
+| co-acvm | plain: decompose/sort/slice/bitwise masks, grumpkin scalar recombination, sha256, NAF. rep3: base powers, LUT indices, `right_shift`, sha256. shamir: sort + bitwise masks |
+| co-brillig | plain `int_div`/`to_radix`; rep3 power-of-two divisor test |
+| co-builder | `field_ct` (pow, range checks, `split_unique`, `validate_split_in_field`, `CycleScalarCT`, byte arrays), `ultra_builder` (poseidon2 constants, range-constraint sublimbs, logic gates, nnf limbs), `rom_ram`, `plookup`, `aes128`, `sha_compression`, `poseidon2`, `generators`, `types`, `transcript_ct`, `plain_proving_key`, `oink_recursive_verifier`, biggroup powers of two |
+| ultrahonk / co-ultrahonk / co-builder | `poseidon2_internal` + `non_native_field` relation constants |
+
+Wrap-around safety: `map_into_sparse_form`'s accumulation and
+`map_from_sparse_form`'s thresholds top out at 154 bits for the `BASE` values
+in use (9, 16, 28), so replacing `BigUint`'s growth with `U256`'s mod-2^256
+wrapping is not observable. The explicit `& ((1 << 256) - 1)` masks in
+`get_base_powers` and the ultra_builder shifts are now implicit in `U256`.
+
+### 8.3 Behaviour changes (all fix latent panics/bugs)
+
+1. **`field_ct.rs` `byte_array` public decomposition**: was
+   `value.to_bytes_be()` + `resize(num_bytes, 0)`. `to_bytes_be()` drops
+   leading zeros, and `resize` pads at the *end*, i.e. the least-significant
+   position of a big-endian buffer — so any value with fewer than `num_bytes`
+   significant bytes was decomposed as `value << 8k` and failed the
+   `assert_equal(&reconstructed)` that follows (~1/256 of random 32-byte
+   inputs). Now a shift/mask over the `num_bytes` window, matching the shared
+   branch's `decompose_arithmetic(..).rev()` ordering.
+2. **`verification_key::from_buffer`**: `to_u64_digits()[0]` panics on zero
+   (num-bigint stores no limbs for zero), so a VK with `num_public_inputs == 0`
+   or `pub_inputs_offset == 0` could not be deserialized. Now
+   `to_u64_truncating()`, which yields 0.
+3. **`oink_recursive_verifier`**: same `to_u64_digits().first()` pattern,
+   replaced with `try_to_usize()`.
+
+### 8.4 Still on `BigUint` (207 mentions), and why
+
+- **bigfield/biggroup emulation** — `big_field.rs` (151), `big_group*.rs` (18),
+  co-acvm plain's bigfield block (12), `Utils::{field_limbs_to_biguint,
+  biguint_to_field_limbs}` (8). `NUM_LIMBS * LIMB_SIZE` is 4×68 = 272 bits and
+  `madd_div_mod` products reach ~544, so this needs `U512`/`U1024` and a
+  per-expression bound analysis (ruint's `+`/`-`/`*` wrap silently). The
+  `slice_u256` boundary into `big_field.rs` converts explicitly.
+- **arbitrary-length hex parsing** — `gadgets::field_from_hex_string`,
+  co-circom-types and tests' `parse_field`. These accept user input of
+  unbounded length and deliberately reduce over-modulus values, so the width is
+  genuinely not known.
+- **the `uint` module's own bridges** — `RUint`'s `From`/`TryFrom<BigUint>`
+  impls and their tests.

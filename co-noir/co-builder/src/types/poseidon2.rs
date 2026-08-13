@@ -9,7 +9,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::gadgets::poseidon2::{Poseidon2, Poseidon2Params};
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, u256_to_field};
 use std::{any::TypeId, array};
 
 // This workaround is required due to mutability issues
@@ -366,8 +366,8 @@ where
         in_len: usize,
     ) -> Self {
         // Add the domain separation to the initial state.
-        let iv = BigUint::from(in_len) << 64;
-        let mut iv = FieldCT::from(C::ScalarField::from(iv));
+        let iv = U256::from(in_len as u64) << 64;
+        let mut iv = FieldCT::from(u256_to_field::<C::ScalarField>(&iv));
         iv.convert_constant_to_fixed_witness(builder, driver);
         let mut state: [FieldCT<C::ScalarField>; T] = array::from_fn(|_| FieldCT::default());
         let cache: [FieldCT<C::ScalarField>; R] = array::from_fn(|_| FieldCT::default());

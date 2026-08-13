@@ -12,7 +12,7 @@ use co_noir_common::{
     honk_curve::HonkCurve,
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, u256_to_field};
 
 #[derive(Clone, Debug)]
 pub(crate) struct NonNativeFieldRelationEvals<F: PrimeField> {
@@ -52,7 +52,7 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for NonNativeFieldRelation {
         let q_m = input.precomputed.q_m();
         let q_nnf = input.precomputed.q_nnf();
 
-        let limb_size = FieldCT::from(C::ScalarField::from(BigUint::one() << 68));
+        let limb_size = FieldCT::from(u256_to_field::<C::ScalarField>(&(U256::one() << 68)));
         let sublimb_shift = FieldCT::from(C::ScalarField::from(1u64 << 14));
 
         /*

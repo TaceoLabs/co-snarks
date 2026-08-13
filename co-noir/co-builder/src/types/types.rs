@@ -9,7 +9,7 @@ use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE};
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, UintBackend, u256_to_field};
 use std::array;
 use std::cmp::Ordering;
 use std::collections::HashSet;
@@ -832,8 +832,14 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         // non-constant since otherwise no variable indices exist. Note that there is no need to assign the infinite flag
         // because native on-curve checks will always pass as long x and y coordinates correspond to a valid point on
         // Grumpkin.
-        let g1_y = F::from(BigUint::new(vec![
-            2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2,
+        // Grumpkin G1 y-coordinate; the little-endian 32-bit digits
+        // [2185176876, 2201994381, 4044886676, 757534021, 111435107, 3474153077, 2]
+        // packed into 64-bit limbs.
+        let g1_y = u256_to_field::<F>(&U256::from_limbs_truncating(&[
+            9457493854555940652,
+            3253583849847263892,
+            14921373847124204899,
+            2,
         ]));
         if builder.is_write_vk_mode && !constant_coordinates {
             builder.set_variable(input_x.index, F::one().into());

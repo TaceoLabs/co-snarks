@@ -8,7 +8,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{PrimeField, Zero};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, UintBackend, field_to_u256, u256_to_field};
 use std::array::from_fn;
 use std::collections::HashMap;
 use std::ops::{Index, IndexMut};
@@ -279,9 +279,9 @@ impl BasicTableId {
                 (key[0] as u32).rotate_right(NUM_ROTATED_BITS as u32) as u64,
             )
         } else {
-            t0.clone()
+            t0
         };
-        [F::from(t0), F::from(t1)]
+        [u256_to_field(&t0), u256_to_field(&t1)]
     }
 
     pub(crate) fn get_sparse_normalization_values<F: PrimeField, const BASE: u64>(
@@ -344,22 +344,22 @@ impl BasicTableId {
     pub(crate) fn get_aes_sparse_normalization_values_from_key<F: PrimeField>(
         key: [u64; 2],
     ) -> [F; 2] {
-        let byte = Utils::map_from_sparse_form::<{ AES128_BASE as u64 }>(key[0].into());
+        let byte = Utils::map_from_sparse_form::<{ AES128_BASE as u64 }>(U256::from(key[0]));
         [
-            F::from(Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(byte)),
+            u256_to_field(&Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(byte)),
             F::zero(),
         ]
     }
 
     pub(crate) fn get_aes_sbox_values_from_key<F: PrimeField>(key: [u64; 2]) -> [F; 2] {
-        let byte = Utils::map_from_sparse_form::<{ AES128_BASE as u64 }>(key[0].into());
+        let byte = Utils::map_from_sparse_form::<{ AES128_BASE as u64 }>(U256::from(key[0]));
         let sbox_value = AES128_SBOX[byte as usize];
         let swizzled = (sbox_value << 1u8) ^ (((sbox_value >> 7u8) & 1u8) * 0x1b);
         [
-            F::from(Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(
+            u256_to_field(&Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(
                 sbox_value as u64,
             )),
-            F::from(Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(
+            u256_to_field(&Utils::map_into_sparse_form::<{ AES128_BASE as u64 }>(
                 (sbox_value ^ swizzled) as u64,
             )),
         ]
@@ -1274,15 +1274,17 @@ impl<F: PrimeField> Plookup<F> {
         &self.multi_tables[usize::from(id)]
     }
 
-    fn slice_input_using_variable_bases(input: BigUint, bases: &[u64]) -> Vec<u64> {
+    fn slice_input_using_variable_bases(input: U256, bases: &[u64]) -> Vec<u64> {
         let mut target = input;
         let mut slices = Vec::with_capacity(bases.len());
         for i in 0..bases.len() {
-            if target >= bases[i].into() && i == bases.len() - 1 {
+            let base = U256::from(bases[i]);
+            if target >= base && i == bases.len() - 1 {
                 panic!("Last key slice greater than {}", bases[i]);
             }
-            slices.push((&target % bases[i]).try_into().unwrap());
-            target /= bases[i];
+            // The remainder is smaller than `base`, so it fits into a u64.
+            slices.push((target % base).to_u64_truncating());
+            target /= base;
         }
         slices
     }
@@ -1353,15 +1355,11 @@ impl<F: PrimeField> Plookup<F> {
         let mut key_b_slices = Vec::with_capacity(bases.len());
         if !T::is_shared(&key_a) && !T::is_shared(&key_b) {
             let key_a_slice = Self::slice_input_using_variable_bases(
-                T::get_public(&key_a)
-                    .expect("Already checked it is public")
-                    .into(),
+                field_to_u256(&T::get_public(&key_a).expect("Already checked it is public")),
                 &multi_table.slice_sizes,
             );
             let key_b_slice = Self::slice_input_using_variable_bases(
-                T::get_public(&key_b)
-                    .expect("Already checked it is public")
-                    .into(),
+                field_to_u256(&T::get_public(&key_b).expect("Already checked it is public")),
                 &multi_table.slice_sizes,
             );
 
@@ -2219,15 +2217,15 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasi
             let source = i as u64;
             let target = Utils::map_into_sparse_form::<BASE>(source);
             table.column_1.push(P::ScalarField::from(source));
-            table.column_2.push(P::ScalarField::from(target.clone()));
+            table.column_2.push(u256_to_field(&target));
 
             if NUM_ROTATED_BITS > 0 {
                 let rotated = Utils::map_into_sparse_form::<BASE>(
                     (source as u32).rotate_right(NUM_ROTATED_BITS as u32) as u64,
                 );
-                table.column_3.push(P::ScalarField::from(rotated));
+                table.column_3.push(u256_to_field(&rotated));
             } else {
-                table.column_3.push(P::ScalarField::from(target));
+                table.column_3.push(u256_to_field(&target));
             }
         }
 
@@ -2351,9 +2349,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>> PlookupBasi
                 sbox_value as u64 ^ swizzled as u64,
             );
 
-            table.column_1.push(P::ScalarField::from(first));
-            table.column_2.push(P::ScalarField::from(second));
-            table.column_3.push(P::ScalarField::from(third));
+            table.column_1.push(u256_to_field(&first));
+            table.column_2.push(u256_to_field(&second));
+            table.column_3.push(u256_to_field(&third));
         }
 
         table.get_values_from_key = BasicTableId::get_aes_sbox_values_from_key;

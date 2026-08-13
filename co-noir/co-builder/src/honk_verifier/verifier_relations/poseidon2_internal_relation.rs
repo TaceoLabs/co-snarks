@@ -13,7 +13,7 @@ use co_noir_common::{
     honk_proof::{HonkProofResult, TranscriptFieldType},
 };
 use mpc_core::gadgets::poseidon2::POSEIDON2_BN254_T4_PARAMS;
-use num_bigint::BigUint;
+use mpc_core::uint::{field_to_u256, u256_to_field};
 
 #[derive(Clone, Debug)]
 pub(crate) struct Poseidon2InternalRelationEvals<F: PrimeField> {
@@ -67,18 +67,18 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for Poseidon2InternalRelatio
         let scaled_u1 = u1.multiply(&q_pos_by_scaling, builder, driver)?;
 
         // TACEO TODO this poseidon instance is very hardcoded to the bn254 curve
-        let internal_matrix_diag_0 = FieldCT::from(C::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0],
-        )));
-        let internal_matrix_diag_1 = FieldCT::from(C::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1],
-        )));
-        let internal_matrix_diag_2 = FieldCT::from(C::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2],
-        )));
-        let internal_matrix_diag_3 = FieldCT::from(C::ScalarField::from(BigUint::from(
-            POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3],
-        )));
+        let internal_matrix_diag_0 = FieldCT::from(u256_to_field::<C::ScalarField>(
+            &field_to_u256(&POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[0]),
+        ));
+        let internal_matrix_diag_1 = FieldCT::from(u256_to_field::<C::ScalarField>(
+            &field_to_u256(&POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[1]),
+        ));
+        let internal_matrix_diag_2 = FieldCT::from(u256_to_field::<C::ScalarField>(
+            &field_to_u256(&POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[2]),
+        ));
+        let internal_matrix_diag_3 = FieldCT::from(u256_to_field::<C::ScalarField>(
+            &field_to_u256(&POSEIDON2_BN254_T4_PARAMS.mat_internal_diag_m_1[3]),
+        ));
         let d1_plus_1 =
             FieldCT::from(C::ScalarField::one()).add(&internal_matrix_diag_0, builder, driver);
 

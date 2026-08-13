@@ -4,7 +4,7 @@ use crate::decider::{
     univariate::Univariate,
 };
 use ark_ff::{One, PrimeField, Zero};
-use num_bigint::BigUint;
+use mpc_core::uint::{U256, u256_to_field};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct NonNativeFieldRelationAcc<F: PrimeField> {
@@ -105,7 +105,7 @@ impl<F: PrimeField> Relation<F> for NonNativeFieldRelation {
         let q_m = input.precomputed.q_m();
         let q_nnf = input.precomputed.q_nnf();
 
-        let limb_size = F::from(BigUint::one() << 68);
+        let limb_size = u256_to_field::<F>(&(U256::one() << 68));
         let sublimb_shift = F::from(1u64 << 14);
 
         /*
@@ -199,7 +199,7 @@ impl<F: PrimeField> Relation<F> for NonNativeFieldRelation {
         let q_m = input.precomputed.q_m();
         let q_nnf = input.precomputed.q_nnf();
 
-        let limb_size = F::from(BigUint::one() << 68);
+        let limb_size = u256_to_field::<F>(&(U256::one() << 68));
         let sublimb_shift = F::from(1u64 << 14);
 
         // Non native field arithmetic gate 2

@@ -3,7 +3,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
 use co_noir_common::{honk_curve::HonkCurve, honk_proof::TranscriptFieldType, utils::Utils};
-use num_bigint::BigUint;
+use mpc_core::uint::{UintBackend, field_to_u256, u256_to_field};
 use std::{array, marker::PhantomData};
 
 use super::{
@@ -27,13 +27,12 @@ impl<F: PrimeField> SparseValue<F> {
         driver: &mut T,
     ) -> Self {
         let sparse = if input.is_constant() {
-            let value: BigUint = T::get_public(&input.get_value(builder, driver))
-                .expect("Constants should be public")
-                .into();
-            let sparse_value = Utils::map_into_sparse_form::<16>(
-                value.iter_u64_digits().next().unwrap_or_default(),
+            let value = field_to_u256(
+                &T::get_public(&input.get_value(builder, driver))
+                    .expect("Constants should be public"),
             );
-            FieldCT::from(F::from(sparse_value))
+            let sparse_value = Utils::map_into_sparse_form::<16>(value.to_u64_truncating());
+            FieldCT::from(u256_to_field::<F>(&sparse_value))
         } else {
             FieldCT::default()
         };

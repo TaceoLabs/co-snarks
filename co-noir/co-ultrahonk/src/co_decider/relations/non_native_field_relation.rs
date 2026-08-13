@@ -10,8 +10,8 @@ use co_noir_common::{
     mpc::NoirUltraHonkProver,
 };
 use itertools::Itertools as _;
+use mpc_core::uint::{U256, u256_to_field};
 use mpc_net::Network;
-use num_bigint::BigUint;
 use ultrahonk::prelude::Univariate;
 
 #[derive(Clone, Debug)]
@@ -129,7 +129,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let q_m = input.precomputed.q_m();
         let q_nnf = input.precomputed.q_nnf();
 
-        let limb_size = P::ScalarField::from(BigUint::one() << 68);
+        let limb_size = u256_to_field::<P::ScalarField>(&(U256::one() << 68));
         let sublimb_shift = P::ScalarField::from(1u64 << 14);
 
         let capacity = w_1.len() + w_2.len() + w_3.len() + w_4.len() + w_1_shift.len();
