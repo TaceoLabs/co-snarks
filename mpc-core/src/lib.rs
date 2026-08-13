@@ -4,10 +4,8 @@
 
 #![warn(missing_docs)]
 
-pub mod fft;
 pub mod gadgets;
 pub mod lut;
-pub mod msm;
 pub mod protocols;
 pub mod serde_compat;
 

@@ -1,6 +1,6 @@
 use super::CircomGroth16Prover;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{CurveGroup, pairing::Pairing};
-use mpc_core::msm::SwCurveGroup;
 use mpc_core::{
     MpcState,
     protocols::shamir::{
@@ -109,13 +109,13 @@ impl<P: Pairing> CircomGroth16Prover<P> for ShamirGroth16Driver {
     }
 
     fn msm_public_points_hs<C>(
-        points: &[C::Affine],
+        points: &[Affine<C>],
         scalars: &[Self::ArithmeticHalfShare],
-    ) -> Self::PointHalfShare<C>
+    ) -> Self::PointHalfShare<Projective<C>>
     where
-        C: SwCurveGroup<ScalarField = <P as Pairing>::ScalarField>,
+        C: SWCurveConfig<ScalarField = <P as Pairing>::ScalarField>,
     {
-        mpc_core::msm::msm_unchecked::<C>(points, scalars)
+        taceo_ark_algebra::msm::msm_unchecked(points, scalars)
     }
 
     fn scalar_mul_public_point_hs<C>(a: &C, b: Self::ArithmeticHalfShare) -> Self::PointHalfShare<C>

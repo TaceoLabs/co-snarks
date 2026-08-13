@@ -1325,6 +1325,7 @@ dependencies = [
  "rand 0.8.6",
  "rayon",
  "serde_json",
+ "taceo-ark-algebra",
  "taceo-circom-types",
  "taceo-groth16",
  "tracing",
@@ -1385,6 +1386,7 @@ dependencies = [
  "ruint",
  "serde",
  "sha3",
+ "taceo-ark-algebra",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -1420,6 +1422,7 @@ dependencies = [
  "rayon",
  "serde_json",
  "sha3",
+ "taceo-ark-algebra",
  "taceo-circom-types",
  "thiserror 2.0.18",
  "tracing",
@@ -2998,7 +3001,6 @@ dependencies = [
  "ark-ec",
  "ark-ff 0.6.0",
  "ark-grumpkin",
- "ark-poly",
  "ark-serialize 0.6.0",
  "ark-std 0.6.0",
  "bytes",
@@ -3020,6 +3022,7 @@ dependencies = [
  "serde",
  "sha3",
  "subtle",
+ "taceo-ark-algebra",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -4762,6 +4765,19 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "taceo-ark-algebra"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba6414282303de2123e0bcd5840444d7eb5cf4df40b41a33799a967a5d91584b"
+dependencies = [
+ "ark-ec",
+ "ark-ff 0.6.0",
+ "ark-poly",
+ "ark-std 0.6.0",
+ "rayon",
 ]
 
 [[package]]

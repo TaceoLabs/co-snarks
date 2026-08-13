@@ -8,7 +8,8 @@ use co_circom::{
     VMConfig, Witness,
 };
 use co_circom_types::{CompressedRep3SharedWitness, VerificationError};
-use co_groth16::{CircomReduction, SwCurveGroup};
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
+use co_groth16::CircomReduction;
 use color_eyre::eyre::{self, Context, ContextCompat, eyre};
 use figment::{
     Figment,
@@ -642,15 +643,15 @@ fn main() -> color_eyre::Result<ExitCode> {
         Commands::GenerateProof(cli) => {
             let config = GenerateProofConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                Curve::BN254 => run_generate_proof::<Bn254>(config),
-                Curve::BLS12_381 => run_generate_proof::<Bls12_381>(config),
+                Curve::BN254 => run_generate_proof::<Bn254, _, _>(config),
+                Curve::BLS12_381 => run_generate_proof::<Bls12_381, _, _>(config),
             }
         }
         Commands::Verify(cli) => {
             let config = VerifyConfig::parse(cli).context("while parsing config")?;
             match config.curve {
-                Curve::BN254 => run_verify::<Bn254>(config),
-                Curve::BLS12_381 => run_verify::<Bls12_381>(config),
+                Curve::BN254 => run_verify::<Bn254, _, _>(config),
+                Curve::BLS12_381 => run_verify::<Bls12_381, _, _>(config),
             }
         }
     }
@@ -958,12 +959,16 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
 }
 
 #[instrument(level = "debug", skip(config))]
-fn run_generate_proof<P: Pairing + CircomArkworksPairingBridge>(
-    config: GenerateProofConfig,
-) -> color_eyre::Result<ExitCode>
+fn run_generate_proof<P, C1, C2>(config: GenerateProofConfig) -> color_eyre::Result<ExitCode>
 where
-    P::G1: SwCurveGroup,
-    P::G2: SwCurveGroup,
+    P: Pairing<
+            G1 = Projective<C1>,
+            G1Affine = Affine<C1>,
+            G2 = Projective<C2>,
+            G2Affine = Affine<C2>,
+        > + CircomArkworksPairingBridge,
+    C1: SWCurveConfig<ScalarField = P::ScalarField>,
+    C2: SWCurveConfig<ScalarField = P::ScalarField>,
 {
     let proof_system = config.proof_system;
     let witness = config.witness;
@@ -1138,11 +1143,16 @@ where
 }
 
 #[instrument(level = "debug", skip(config))]
-fn run_verify<P: Pairing + CircomArkworksPairingBridge>(
-    config: VerifyConfig,
-) -> color_eyre::Result<ExitCode>
+fn run_verify<P, C1, C2>(config: VerifyConfig) -> color_eyre::Result<ExitCode>
 where
-    P::G1: SwCurveGroup,
+    P: Pairing<
+            G1 = Projective<C1>,
+            G1Affine = Affine<C1>,
+            G2 = Projective<C2>,
+            G2Affine = Affine<C2>,
+        > + CircomArkworksPairingBridge,
+    C1: SWCurveConfig<ScalarField = P::ScalarField>,
+    C2: SWCurveConfig<ScalarField = P::ScalarField>,
 {
     let proofsystem = config.proof_system;
     let proof = config.proof;

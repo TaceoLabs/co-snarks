@@ -2,8 +2,8 @@
 //!
 //! This module contains operations with point shares
 
-use crate::msm::SwCurveGroup;
 use ark_ec::CurveGroup;
+use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ff::Zero;
 use mpc_net::Network;
 
@@ -204,14 +204,22 @@ pub fn open_point_and_field_many<C: CurveGroup, N: Network>(
 }
 
 /// Performs MSM between curve points and field shares.
-pub fn msm_public_points<C: SwCurveGroup>(
+pub fn msm_public_points<C, S>(
     points: &[C::Affine],
     scalars: &[FieldShare<C::ScalarField>],
-) -> PointShare<C> {
+) -> PointShare<C>
+where
+    C: CurveGroup<Config = S, Affine = Affine<S>>,
+    S: SWCurveConfig<ScalarField = C::ScalarField>,
+{
     tracing::trace!("> MSM public points for {} elements", points.len());
     debug_assert_eq!(points.len(), scalars.len());
-    let res =
-        crate::msm::msm_unchecked::<C>(points, &scalars.iter().map(|s| s.a).collect::<Vec<_>>());
+    let res = taceo_ark_algebra::msm::msm_unchecked(
+        points,
+        &scalars.iter().map(|s| s.a).collect::<Vec<_>>(),
+    );
     tracing::trace!("< MSM public points for {} elements", points.len());
-    PointShare::<C> { a: res }
+    PointShare::<C> {
+        a: C::from(res.into_affine()),
+    }
 }

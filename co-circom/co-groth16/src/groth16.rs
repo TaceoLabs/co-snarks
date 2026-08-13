@@ -1,12 +1,12 @@
 //! A Groth16 proof protocol that uses a collaborative MPC protocol to generate the proof.
 use ark_ec::pairing::Pairing;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_groth16::{Proof, ProvingKey};
 use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
 use eyre::Result;
 use mpc_core::MpcState;
-use mpc_core::msm::SwCurveGroup;
 use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::shamir::{ShamirPreprocessing, ShamirState};
@@ -104,10 +104,20 @@ pub struct CoGroth16<P: Pairing, T: CircomGroth16Prover<P>> {
     phantom_data: PhantomData<(P, T)>,
 }
 
-impl<P: Pairing, T: CircomGroth16Prover<P>> CoGroth16<P, T>
+// The MSM only exists for short-Weierstrass curves, and generic pairing groups offer no way to
+// construct affine points from raw coordinates, so the prover names the curve configs behind
+// `P::G1`/`P::G2` explicitly. `C1` and `C2` are inferred at every concrete call site.
+impl<P, T, C1, C2> CoGroth16<P, T>
 where
-    P::G1: SwCurveGroup,
-    P::G2: SwCurveGroup,
+    P: Pairing<
+            G1 = Projective<C1>,
+            G1Affine = Affine<C1>,
+            G2 = Projective<C2>,
+            G2Affine = Affine<C2>,
+        >,
+    T: CircomGroth16Prover<P>,
+    C1: SWCurveConfig<ScalarField = P::ScalarField>,
+    C2: SWCurveConfig<ScalarField = P::ScalarField>,
 {
     /// Execute the Groth16 prover using the internal MPC driver.
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
@@ -168,20 +178,20 @@ where
 
     fn calculate_coeff<C>(
         id: <T::State as MpcState>::PartyID,
-        initial: T::PointHalfShare<C>,
-        query: &[C::Affine],
-        vk_param: C::Affine,
+        initial: T::PointHalfShare<Projective<C>>,
+        query: &[Affine<C>],
+        vk_param: Affine<C>,
         input_assignment: &[P::ScalarField],
         aux_assignment: &[T::ArithmeticHalfShare],
-    ) -> T::PointHalfShare<C>
+    ) -> T::PointHalfShare<Projective<C>>
     where
-        C: SwCurveGroup<ScalarField = P::ScalarField>,
+        C: SWCurveConfig<ScalarField = P::ScalarField>,
     {
         let pub_len = input_assignment.len();
 
         let (priv_acc, pub_acc) = rayon::join(
             || T::msm_public_points_hs(&query[1 + pub_len..], aux_assignment),
-            || mpc_core::msm::msm_unchecked::<C>(&query[1..=pub_len], input_assignment),
+            || taceo_ark_algebra::msm::msm_unchecked(&query[1..=pub_len], input_assignment),
         );
 
         let mut res = initial;
@@ -328,10 +338,16 @@ where
     }
 }
 
-impl<P: Pairing> Rep3CoGroth16<P>
+impl<P, C1, C2> Rep3CoGroth16<P>
 where
-    P::G1: SwCurveGroup,
-    P::G2: SwCurveGroup,
+    P: Pairing<
+            G1 = Projective<C1>,
+            G1Affine = Affine<C1>,
+            G2 = Projective<C2>,
+            G2Affine = Affine<C2>,
+        >,
+    C1: SWCurveConfig<ScalarField = P::ScalarField>,
+    C2: SWCurveConfig<ScalarField = P::ScalarField>,
 {
     /// Create a [`Proof`].
     pub fn prove<N: Network, R: R1CSToQAP>(
@@ -356,10 +372,16 @@ where
     }
 }
 
-impl<P: Pairing> ShamirCoGroth16<P>
+impl<P, C1, C2> ShamirCoGroth16<P>
 where
-    P::G1: SwCurveGroup,
-    P::G2: SwCurveGroup,
+    P: Pairing<
+            G1 = Projective<C1>,
+            G1Affine = Affine<C1>,
+            G2 = Projective<C2>,
+            G2Affine = Affine<C2>,
+        >,
+    C1: SWCurveConfig<ScalarField = P::ScalarField>,
+    C2: SWCurveConfig<ScalarField = P::ScalarField>,
 {
     /// Create a [`Proof`].
     pub fn prove<N: Network, R: R1CSToQAP>(
@@ -389,10 +411,16 @@ where
     }
 }
 
-impl<P: Pairing> Groth16<P>
+impl<P, C1, C2> Groth16<P>
 where
-    P::G1: SwCurveGroup,
-    P::G2: SwCurveGroup,
+    P: Pairing<
+            G1 = Projective<C1>,
+            G1Affine = Affine<C1>,
+            G2 = Projective<C2>,
+            G2Affine = Affine<C2>,
+        >,
+    C1: SWCurveConfig<ScalarField = P::ScalarField>,
+    C2: SWCurveConfig<ScalarField = P::ScalarField>,
 {
     /// *Locally* create a `Groth16` proof. This is just the [`CoGroth16`] prover
     /// initialized with the [`PlainGroth16Driver`].

@@ -13,7 +13,8 @@ use co_noir_common::keys::verification_key::VerifyingKeyBarretenberg;
 use co_noir_common::polynomials::entities::PrecomputedEntities;
 use co_noir_common::utils::Utils;
 use co_noir_common::{
-    honk_proof::{HonkProofError, HonkProofResult},
+    honk_curve::HonkCurve,
+    honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     keys::proving_key::ProvingKey,
     keys::types::ActiveRegionData,
     mpc::NoirUltraHonkProver,
@@ -22,7 +23,6 @@ use co_noir_common::{
     polynomials::entities::Polynomials,
 };
 use mpc_core::MpcState;
-use mpc_core::msm::SwCurveGroup;
 
 pub type Rep3ProvingKey<P> = ProvingKey<Rep3UltraHonkDriver, P>;
 pub type ShamirProvingKey<P> = ProvingKey<ShamirUltraHonkDriver, P>;
@@ -236,7 +236,7 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<
 }
 
 pub fn create_keys_barretenberg<
-    C: SwCurveGroup,
+    C: HonkCurve<TranscriptFieldType>,
     T: NoirUltraHonkProver<C>,
     U: NoirWitnessExtensionProtocol<C::ScalarField, ArithmeticShare = T::ArithmeticShare>,
 >(

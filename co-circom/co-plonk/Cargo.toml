@@ -26,6 +26,7 @@ num-traits = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
 sha3 = { workspace = true }
+taceo-ark-algebra = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 serde_json = { workspace = true }

@@ -1,8 +1,8 @@
 use ark_ec::pairing::Pairing;
 use ark_poly::EvaluationDomain;
 use ark_poly::Polynomial;
+use ark_ec::short_weierstrass::{Affine, Projective, SWCurveConfig};
 use ark_poly::univariate::DensePolynomial;
-use mpc_core::msm::SwCurveGroup;
 
 use mpc_core::MpcState;
 use mpc_core::protocols::shamir::network::ShamirNetworkExt;
@@ -16,9 +16,10 @@ use super::CircomPlonkProver;
 /// A Plonk driver using shamir secret sharing
 pub struct ShamirPlonkDriver;
 
-impl<P: Pairing> CircomPlonkProver<P> for ShamirPlonkDriver
+impl<P, C> CircomPlonkProver<P> for ShamirPlonkDriver
 where
-    P::G1: SwCurveGroup,
+    P: Pairing<G1 = Projective<C>, G1Affine = Affine<C>>,
+    C: SWCurveConfig<ScalarField = P::ScalarField>,
 {
     type ArithmeticShare = ShamirPrimeFieldShare<P::ScalarField>;
     type PointShareG1 = ShamirPointShare<P::G1>;

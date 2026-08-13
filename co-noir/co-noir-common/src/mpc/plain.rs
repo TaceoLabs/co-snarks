@@ -1,7 +1,6 @@
 use super::NoirUltraHonkProver;
 use crate::HonkCurve;
 use ark_ec::AffineRepr;
-use ark_ec::CurveGroup;
 use ark_ff::Field;
 use ark_ff::One;
 use ark_ff::PrimeField;
@@ -10,7 +9,7 @@ use ark_poly::DenseUVPolynomial;
 use ark_poly::{Polynomial, univariate::DensePolynomial};
 use mpc_core::MpcState;
 use mpc_core::PlainState;
-use mpc_core::msm::SwCurveGroup;
+use crate::honk_proof::TranscriptFieldType;
 use mpc_net::Network;
 use num_traits::Zero;
 use rand::thread_rng;
@@ -25,7 +24,7 @@ fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
 #[derive(Clone, Debug)]
 pub struct PlainUltraHonkDriver;
 
-impl<P: CurveGroup + SwCurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
+impl<P: HonkCurve<TranscriptFieldType>> NoirUltraHonkProver<P> for PlainUltraHonkDriver {
     type ArithmeticShare = P::ScalarField;
     type PointShare = P;
     type State = PlainState;
@@ -269,7 +268,7 @@ impl<P: CurveGroup + SwCurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriv
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],
     ) -> Self::PointShare {
-        mpc_core::msm::msm_unchecked::<P>(points, scalars)
+        P::fast_msm(points, scalars)
     }
 
     fn eval_poly(coeffs: &[Self::ArithmeticShare], point: P::ScalarField) -> Self::ArithmeticShare {
@@ -359,8 +358,8 @@ impl<P: CurveGroup + SwCurveGroup> NoirUltraHonkProver<P> for PlainUltraHonkDriv
                 } else {
                     (P::BaseField::zero(), P::BaseField::zero())
                 };
-                let res0 = P::convert_basefield_into(&x);
-                let res1 = P::convert_basefield_into(&y);
+                let res0 = <P as HonkCurve<F>>::convert_basefield_into(&x);
+                let res1 = <P as HonkCurve<F>>::convert_basefield_into(&y);
                 let res0_0: P::ScalarField = *downcast(&res0[0]).expect("We checked types");
                 let res0_1: P::ScalarField = *downcast(&res0[1]).expect("We checked types");
                 let res1_0: P::ScalarField = *downcast(&res1[0]).expect("We checked types");

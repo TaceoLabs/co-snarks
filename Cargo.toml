@@ -1,23 +1,23 @@
 [workspace]
 members = [
-    "co-circom/circom-mpc-compiler",
-    "co-circom/circom-mpc-vm",
-    "co-circom/co-circom-types",
-    "co-circom/co-circom",
-    "co-circom/co-groth16",
-    "co-circom/co-plonk",
-    "co-noir/co-acvm",
-    "co-noir/co-brillig",
-    "co-noir/co-builder",
-    "co-noir/ultrahonk",
-    "co-noir/co-ultrahonk",
-    "co-noir/co-noir",
-    "co-noir/co-noir-types",
-    "co-noir/noir-types",
-    "co-noir/co-noir-common",
-    "mpc-core",
-    "mpc-net",
-    "tests",
+ "co-circom/circom-mpc-compiler",
+ "co-circom/circom-mpc-vm",
+ "co-circom/co-circom-types",
+ "co-circom/co-circom",
+ "co-circom/co-groth16",
+ "co-circom/co-plonk",
+ "co-noir/co-acvm",
+ "co-noir/co-brillig",
+ "co-noir/co-builder",
+ "co-noir/ultrahonk",
+ "co-noir/co-ultrahonk",
+ "co-noir/co-noir",
+ "co-noir/co-noir-types",
+ "co-noir/noir-types",
+ "co-noir/co-noir-common",
+ "mpc-core",
+ "mpc-net",
+ "tests",
 ]
 resolver = "2"
 
@@ -81,6 +81,7 @@ sha3 = "0.10"
 nom = "7"
 ruint = "1.20"
 subtle = "2.6"
+taceo-ark-algebra = "0.1.0"
 thiserror = "2"
 toml = "0.8"
 tracing = { version = "0.1" }
