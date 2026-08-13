@@ -146,12 +146,12 @@ fn low_depth_sub_p_cmux_many<F: FieldUint, N: Network>(
     // Spread the ov share to the whole uint
     let mut ov = Vec::with_capacity(y_msb.len());
     for y_msb in y_msb {
-        let ov_a = if y_msb.a.to_u64_truncating() & 1 == 1 {
+        let ov_a = if y_msb.a.bit(0) {
             mask
         } else {
             F::Uint::zero()
         };
-        let ov_b = if y_msb.b.to_u64_truncating() & 1 == 1 {
+        let ov_b = if y_msb.b.bit(0) {
             mask
         } else {
             F::Uint::zero()
@@ -177,11 +177,16 @@ fn low_depth_sub_p_cmux<F: FieldUint, N: Network>(
     y.and_mask_assign(&mask);
 
     // Spread the ov share to the whole uint
-    let ov_a = y_msb.a.to_u64_truncating() & 1;
-    let ov_b = y_msb.b.to_u64_truncating() & 1;
-
-    let ov_a = if ov_a == 1 { mask } else { F::Uint::zero() };
-    let ov_b = if ov_b == 1 { mask } else { F::Uint::zero() };
+    let ov_a = if y_msb.a.bit(0) {
+        mask
+    } else {
+        F::Uint::zero()
+    };
+    let ov_b = if y_msb.b.bit(0) {
+        mask
+    } else {
+        F::Uint::zero()
+    };
     let ov = Rep3UintShare::<F>::new(ov_a, ov_b);
 
     // one big multiplexer
