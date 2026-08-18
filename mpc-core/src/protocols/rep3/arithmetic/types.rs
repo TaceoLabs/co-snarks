@@ -68,10 +68,16 @@ impl<F: PrimeField> Rep3PrimeFieldShare<F> {
 
     /// Promotes a public field element to a replicated share by setting the additive share of the party with id=0 and leaving all other shares to be 0. Thus, the replicated shares of party 0 and party 1 are set.
     pub fn promote_from_trivial(val: &F, id: PartyID) -> Self {
+        Self::promote_from_trivial_with_scalar(val, &F::zero(), id)
+    }
+
+    /// Promotes a public field element to a replicated share with additive shares `val` for party 0, `scalar` for party 1, and `-scalar` for party 2, which sum to `val`.
+    pub fn promote_from_trivial_with_scalar(val: &F, scalar: &F, id: PartyID) -> Self {
+        let neg_scalar = -*scalar;
         match id {
-            PartyID::ID0 => Self::new(*val, F::zero()),
-            PartyID::ID1 => Self::new(F::zero(), *val),
-            PartyID::ID2 => Self::zero_share(),
+            PartyID::ID0 => Self::new(*val, neg_scalar),
+            PartyID::ID1 => Self::new(*scalar, *val),
+            PartyID::ID2 => Self::new(neg_scalar, *scalar),
         }
     }
 }
