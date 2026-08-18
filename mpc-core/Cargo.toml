@@ -1,19 +1,23 @@
 [package]
 name = "mpc-core"
 version = "0.10.0"
-publish.workspace = true
 authors.workspace = true
 edition.workspace = true
-repository.workspace = true
-homepage.workspace = true
-license.workspace = true
 rust-version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+license.workspace = true
+publish.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-default = []
-dangerous = []
+[[bench]]
+harness = false
+name = "local_mul_vec"
+
+[[bench]]
+harness = false
+name = "rep3_to_shamir"
 
 [dependencies]
 ark-bls12-377 = { workspace = true }
@@ -27,29 +31,28 @@ bytes = { workspace = true }
 eyre = { workspace = true }
 fancy-garbling = { git = "https://github.com/GaloisInc/swanky", rev = "5ff648457218b74da9d8323b7ca47166ff5be4b3" }
 itertools = { workspace = true }
-mpc-net = { version = "0.5.0", path = "../mpc-net", default-features = false }
+mpc-net = { path = "../mpc-net", version = "0.5.0", default-features = false }
+nom = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 rand = { workspace = true }
 rand_chacha = { workspace = true }
 rayon = { workspace = true }
-scuttlebutt = { git = "https://github.com/GaloisInc/swanky", rev = "5ff648457218b74da9d8323b7ca47166ff5be4b3" }
-subtle = { workspace = true }
-serde = { workspace = true }
-taceo-ark-algebra = { workspace = true }
-sha3 = { workspace = true }
-tracing.workspace = true
-thiserror = { workspace = true }
-nom = { workspace = true }
 ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"] }
+scuttlebutt = { git = "https://github.com/GaloisInc/swanky", rev = "5ff648457218b74da9d8323b7ca47166ff5be4b3" }
+serde = { workspace = true }
+sha3 = { workspace = true }
+subtle = { workspace = true }
+taceo-ark-algebra = { workspace = true }
+thiserror = { workspace = true }
+tracing.workspace = true
 
 [dev-dependencies]
 bincode = { workspace = true }
-mpc-net = { version = "0.5.0", path = "../mpc-net", features = ["local"] }
-paste.workspace = true
 criterion.workspace = true
+mpc-net = { path = "../mpc-net", version = "0.5.0", features = ["local"] }
+paste.workspace = true
 
-[[bench]]
-name = "local_mul_vec"
-harness = false
-
+[features]
+default = []
+dangerous = []

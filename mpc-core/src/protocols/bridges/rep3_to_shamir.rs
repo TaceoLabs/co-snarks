@@ -5,6 +5,10 @@ use crate::protocols::{
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use mpc_net::Network;
+use rayon::prelude::*;
+
+const PARALLEL_TRANSLATION_THRESHOLD: usize = 4096;
+const PARALLEL_TRANSLATION_MIN_LEN: usize = 1024;
 
 impl<F: PrimeField> ShamirState<F> {
     fn get_translation_points(id: PartyID) -> (F, F) {
@@ -42,12 +46,19 @@ impl<F: PrimeField> ShamirState<F> {
     ) -> Vec<ShamirPrimeFieldShare<F>> {
         let (x, y) = Self::get_translation_points(id);
 
-        input
-            .into_iter()
-            .map(|rep_share| ShamirPrimeFieldShare {
-                a: rep_share.a * x + rep_share.b * y,
-            })
-            .collect::<Vec<_>>()
+        let translate = |rep_share: Rep3PrimeFieldShare<F>| ShamirPrimeFieldShare {
+            a: rep_share.a * x + rep_share.b * y,
+        };
+
+        if input.len() < PARALLEL_TRANSLATION_THRESHOLD {
+            input.into_iter().map(translate).collect()
+        } else {
+            input
+                .into_par_iter()
+                .with_min_len(PARALLEL_TRANSLATION_MIN_LEN)
+                .map(translate)
+                .collect()
+        }
     }
 
     /// Translate a 3-party additive prime field share into a 3-party Shamir prime field share, where the underlying sharing polynomial is of degree 1 (i.e., the threshold t = 1).
