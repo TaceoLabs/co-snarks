@@ -120,7 +120,6 @@ pub fn translate_witness<F: PrimeField>(
 }
 
 /// Translate a REP3 shared proving key to a shamir shared proving key
-#[allow(clippy::complexity)]
 pub fn translate_proving_key<P: HonkCurve<TranscriptFieldType>>(
     proving_key: Rep3ProvingKey<P>,
     id: PartyID,
