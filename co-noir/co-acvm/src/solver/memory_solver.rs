@@ -33,9 +33,9 @@ where
             .iter()
             .map(|witness| witness_map.get(witness).cloned())
             .collect::<Option<Vec<_>>>()
-            .ok_or(eyre::eyre!(
-                "tried to write not initialized witness to memory - this is a  bug"
-            ))?;
+            .ok_or_else(|| {
+                eyre::eyre!("tried to write not initialized witness to memory - this is a  bug")
+            })?;
         let lut = self.driver.init_lut_by_acvm_type(init);
         self.memory_access.insert(block_id.0.into(), lut);
         Ok(())
@@ -53,13 +53,9 @@ where
             MemOpKind::Read => {
                 // read the value from the LUT
                 tracing::trace!("reading value from LUT");
-                let lut = self
-                    .memory_access
-                    .get(block_id.0.into())
-                    .ok_or(eyre::eyre!(
-                        "tried to access block {} but not present",
-                        block_id.0
-                    ))?;
+                let lut = self.memory_access.get(block_id.0.into()).ok_or_else(|| {
+                    eyre::eyre!("tried to access block {} but not present", block_id.0)
+                })?;
                 let value = self.driver.read_lut_by_acvm_type(index, lut)?;
 
                 self.witness().insert(op.value, value);
@@ -71,10 +67,9 @@ where
                 let lut = self
                     .memory_access
                     .get_mut(block_id.0.into())
-                    .ok_or(eyre::eyre!(
-                        "tried to access block {} but not present",
-                        block_id.0
-                    ))?;
+                    .ok_or_else(|| {
+                        eyre::eyre!("tried to access block {} but not present", block_id.0)
+                    })?;
 
                 self.driver.write_lut_by_acvm_type(index, value, lut)?;
             }

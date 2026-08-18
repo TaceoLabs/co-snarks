@@ -16,7 +16,6 @@ default = []
 verifier = []
 
 [dependencies]
-ark-bn254 = { workspace = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
 ark-groth16 = { workspace = true }
@@ -33,12 +32,10 @@ rand = { workspace = true }
 rayon = { workspace = true }
 taceo-ark-algebra = { workspace = true }
 tracing = { workspace = true }
-serde_json = { workspace = true }
 
 [dev-dependencies]
+ark-bn254 = { workspace = true }
 serde_json = { workspace = true }
 ark-bls12-377 = { workspace = true }
 ark-bls12-381 = { workspace = true }
 circom-types = { workspace = true, features = ["bls12-381"] }
-itertools = { workspace = true }
-mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }

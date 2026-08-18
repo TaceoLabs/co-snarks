@@ -28,6 +28,7 @@ mod field_share {
     use mpc_core::protocols::rep3::Rep3State;
     use mpc_core::protocols::rep3::{self, arithmetic};
     use mpc_core::protocols::rep3_ring;
+    use mpc_core::uint::{FieldUint, UintBackend, U256};
     use mpc_core::MpcState as _;
     use mpc_net::local::LocalNetwork;
     use mpc_net::Network;
@@ -479,11 +480,11 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
-        let mut x_shares = rep3::share_biguint(x, &mut rng);
+        let mut x_shares = rep3::share_binary(x, &mut rng);
         // Simulate sharing of just one bit
         for x in x_shares.iter_mut() {
-            x.a &= BigUint::one();
-            x.b &= BigUint::one();
+            x.a &= <ark_bn254::Fr as FieldUint>::Uint::one();
+            x.b &= <ark_bn254::Fr as FieldUint>::Uint::one();
         }
 
         let (tx1, rx1) = mpsc::channel();
@@ -515,11 +516,11 @@ mod field_share {
         for _ in 0..VEC_SIZE {
             let x = ark_bn254::Fr::from(rng.gen::<bool>() as u64);
             should_result.push(x);
-            let mut x_shares = rep3::share_biguint(x, &mut rng);
+            let mut x_shares = rep3::share_binary(x, &mut rng);
             // Simulate sharing of just one bit
             for x in x_shares.iter_mut() {
-                x.a &= BigUint::one();
-                x.b &= BigUint::one();
+                x.a &= <ark_bn254::Fr as FieldUint>::Uint::one();
+                x.b &= <ark_bn254::Fr as FieldUint>::Uint::one();
             }
             x0_shares.push(x_shares[0].to_owned());
             x1_shares.push(x_shares[1].to_owned());
@@ -653,9 +654,9 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -679,9 +680,9 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -705,9 +706,9 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -747,7 +748,10 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_elements(&result1, &result2, &result3);
-        let is_result_f: Vec<ark_bn254::Fr> = is_result.into_iter().map(|e| e.into()).collect();
+        let is_result_f: Vec<ark_bn254::Fr> = is_result
+            .into_iter()
+            .map(|e| ark_bn254::Fr::from_uint_unchecked(&e))
+            .collect();
         assert_eq!(is_result_f, should_result);
     }
 
@@ -772,9 +776,9 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -799,9 +803,9 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -826,9 +830,9 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -868,7 +872,10 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_elements(&result1, &result2, &result3);
-        let is_result_f: Vec<ark_bn254::Fr> = is_result.into_iter().map(|e| e.into()).collect();
+        let is_result_f: Vec<ark_bn254::Fr> = is_result
+            .into_iter()
+            .map(|e| ark_bn254::Fr::from_uint_unchecked(&e))
+            .collect();
         assert_eq!(is_result_f, should_result);
     }
 
@@ -877,7 +884,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -900,7 +907,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -923,7 +930,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1300,7 +1307,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1343,7 +1350,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
-        let x_shares = rep3::share_biguint(x, &mut rng);
+        let x_shares = rep3::share_binary(x, &mut rng);
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -1410,9 +1417,9 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
 
-        let should_result = x.into();
+        let should_result = x.to_uint();
         assert_eq!(is_result, should_result);
-        let is_result_f: ark_bn254::Fr = is_result.into();
+        let is_result_f = ark_bn254::Fr::from_uint_unchecked(&is_result);
         assert_eq!(is_result_f, x);
     }
 
@@ -1457,7 +1464,10 @@ mod field_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let result = rep3::combine_binary_elements(&result1, &result2, &result3);
-        let result_f: Vec<ark_bn254::Fr> = result.into_iter().map(|b| b.into()).collect();
+        let result_f: Vec<ark_bn254::Fr> = result
+            .into_iter()
+            .map(|b| ark_bn254::Fr::from_uint_unchecked(&b))
+            .collect();
         assert_eq!(result_f, should_result);
     }
 
@@ -1476,15 +1486,15 @@ mod field_share {
 
         let mut should_result =
             Vec::with_capacity(VEC_SIZE * (TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE)));
-        let big_mask = (BigUint::from(1u64) << TOTAL_BIT_SIZE) - BigUint::one();
-        let small_mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        let big_mask = U256::mask(TOTAL_BIT_SIZE);
+        let small_mask = U256::mask(CHUNK_SIZE);
         for x in x.into_iter() {
-            let mut x: BigUint = x.into();
-            x &= &big_mask;
+            let mut x = x.to_uint();
+            x &= big_mask;
             for _ in 0..TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE) {
-                let chunk = &x & &small_mask;
+                let chunk = x & small_mask;
                 x >>= CHUNK_SIZE;
-                should_result.push(ark_bn254::Fr::from(chunk));
+                should_result.push(ark_bn254::Fr::from_uint_unchecked(&chunk));
             }
         }
 
@@ -1530,15 +1540,15 @@ mod field_share {
 
         let mut should_result =
             Vec::with_capacity(VEC_SIZE * (TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE)));
-        let big_mask = (BigUint::from(1u64) << TOTAL_BIT_SIZE) - BigUint::one();
-        let small_mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        let big_mask = U256::mask(TOTAL_BIT_SIZE);
+        let small_mask = U256::mask(CHUNK_SIZE);
         for x in x.into_iter() {
-            let mut x: BigUint = x.into();
-            x &= &big_mask;
+            let mut x = x.to_uint();
+            x &= big_mask;
             for _ in 0..TOTAL_BIT_SIZE.div_ceil(CHUNK_SIZE) {
-                let chunk = &x & &small_mask;
+                let chunk = x & small_mask;
                 x >>= CHUNK_SIZE;
-                should_result.push(ark_bn254::Fq::from(chunk));
+                should_result.push(ark_bn254::Fq::from_uint_unchecked(&chunk));
             }
         }
 
@@ -1578,17 +1588,17 @@ mod field_share {
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
         let mut should_result = Vec::with_capacity(VEC_SIZE * 3);
-        let big_mask = (BigUint::from(1u64) << bitsize) - BigUint::one();
-        let lo_mask = (BigUint::one() << (msb - lsb)) - BigUint::one();
-        let hi_mask = (BigUint::one() << (bitsize - msb)) - BigUint::one();
+        let big_mask = U256::mask(bitsize);
+        let lo_mask = U256::mask(msb - lsb);
+        let hi_mask = U256::mask(bitsize - msb);
 
         for x in x.into_iter() {
-            let mut x: BigUint = x.into();
-            x &= &big_mask;
-            let lo = (&x >> lsb) & &lo_mask;
-            let hi = (&x >> msb) & &hi_mask;
-            should_result.push(ark_bn254::Fr::from(lo));
-            should_result.push(ark_bn254::Fr::from(hi));
+            let mut x = x.to_uint();
+            x &= big_mask;
+            let lo = (x >> lsb) & lo_mask;
+            let hi = (x >> msb) & hi_mask;
+            should_result.push(ark_bn254::Fr::from_uint_unchecked(&lo));
+            should_result.push(ark_bn254::Fr::from_uint_unchecked(&hi));
         }
 
         let (tx1, rx1) = mpsc::channel();
@@ -1632,39 +1642,39 @@ mod field_share {
 
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
-        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let mask = U256::mask(TOTAL_BIT_SIZE);
         let x = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
         let y = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let y_shares = rep3::share_field_elements(&y, &mut rng);
 
         let mut should_result = Vec::new();
         for (x, y) in x.into_iter().zip(y) {
-            let mut x: BigUint = x.into();
-            let mut y: BigUint = y.into();
+            let mut x = x.to_uint();
+            let mut y = y.to_uint();
             let mut xs = Vec::with_capacity(NUM_DECOMPS);
             let mut ys = Vec::with_capacity(NUM_DECOMPS);
             let mut rs = Vec::with_capacity(NUM_DECOMPS);
 
             for _ in 0..NUM_DECOMPS {
-                let res1 = &x % BASE;
-                xs.push(ark_bn254::Fr::from(res1.clone()));
-                x /= BASE;
-                let res2 = &y % BASE;
-                ys.push(ark_bn254::Fr::from(res2.clone()));
-                y /= BASE;
-                let res = u64::try_from(res1 & res2).unwrap();
+                let res1 = x % U256::from(BASE as u64);
+                xs.push(ark_bn254::Fr::from_uint_unchecked(&res1));
+                x /= U256::from(BASE as u64);
+                let res2 = y % U256::from(BASE as u64);
+                ys.push(ark_bn254::Fr::from_uint_unchecked(&res2));
+                y /= U256::from(BASE as u64);
+                let res = (res1 & res2).to_u64_truncating();
                 let rotated = res.rotate_right(ROTATION as u32);
                 rs.push(ark_bn254::Fr::from(rotated));
             }
@@ -1719,11 +1729,11 @@ mod field_share {
 
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
-        let mask: BigUint = (BigUint::one() << NUM_SCALAR_BITS) - BigUint::one();
+        let mask = U256::mask(NUM_SCALAR_BITS);
         let x = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let x_shares = rep3::share_field_elements(&x, &mut rng);
@@ -1742,7 +1752,7 @@ mod field_share {
             Vec::with_capacity(VEC_SIZE * NUM_WNAF_DIGITS_PER_SCALAR);
         let mut should_result_row_s = Vec::with_capacity(VEC_SIZE * NUM_WNAF_DIGITS_PER_SCALAR);
 
-        let compute_wnaf_digits = |mut scalar: BigUint| -> (
+        let compute_wnaf_digits = |mut scalar: U256| -> (
             [i32; NUM_WNAF_DIGITS_PER_SCALAR],
             [bool; NUM_WNAF_DIGITS_PER_SCALAR],
             [i32; NUM_WNAF_DIGITS_PER_SCALAR],
@@ -1754,13 +1764,9 @@ mod field_share {
             const BORROW_CONSTANT: i32 = 1 << NUM_WNAF_DIGIT_BITS;
 
             for i in 0..NUM_WNAF_DIGITS_PER_SCALAR {
-                let raw_slice = &scalar & BigUint::from(WNAF_MASK);
-                let is_even = (&raw_slice & BigUint::one()) == BigUint::zero();
-                let mut wnaf_slice = raw_slice
-                    .to_u32_digits()
-                    .first()
-                    .cloned()
-                    .unwrap_or_default() as i32;
+                let raw_slice = scalar & U256::from(WNAF_MASK);
+                let is_even = !raw_slice.bit(0);
+                let mut wnaf_slice = raw_slice.to_u64_truncating() as i32;
 
                 if i == 0 && is_even {
                     wnaf_slice += 1;
@@ -1790,9 +1796,9 @@ mod field_share {
             (output, pos_output, neg_output)
         };
         for x in x.into_iter() {
-            let x: BigUint = x.into();
-            let (wnaf_digits, neg_output, outputs_unchanged) = compute_wnaf_digits(x.clone());
-            let is_even = (x & BigUint::one()) == BigUint::zero();
+            let x = x.to_uint();
+            let (wnaf_digits, neg_output, outputs_unchanged) = compute_wnaf_digits(x);
+            let is_even = !x.bit(0);
             should_result_even.push(ark_bn254::Fr::from(is_even as u64));
             should_result.extend(wnaf_digits.iter().map(|&d| ark_bn254::Fr::from(d as u64)));
             should_result_pos.extend(neg_output);
@@ -1914,39 +1920,39 @@ mod field_share {
 
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
-        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let mask = U256::mask(TOTAL_BIT_SIZE);
         let x = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
         let y = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let y_shares = rep3::share_field_elements(&y, &mut rng);
 
         let mut should_result = Vec::new();
         for (x, y) in x.into_iter().zip(y) {
-            let mut x: BigUint = x.into();
-            let mut y: BigUint = y.into();
+            let mut x = x.to_uint();
+            let mut y = y.to_uint();
             let mut xs = Vec::with_capacity(NUM_DECOMPS);
             let mut ys = Vec::with_capacity(NUM_DECOMPS);
             let mut rs = Vec::with_capacity(NUM_DECOMPS);
 
             for _ in 0..NUM_DECOMPS {
-                let res1 = &x % BASE;
-                xs.push(ark_bn254::Fr::from(res1.clone()));
-                x /= BASE;
-                let res2 = &y % BASE;
-                ys.push(ark_bn254::Fr::from(res2.clone()));
-                y /= BASE;
-                let res = u64::try_from(res1 ^ res2).unwrap();
+                let res1 = x % U256::from(BASE as u64);
+                xs.push(ark_bn254::Fr::from_uint_unchecked(&res1));
+                x /= U256::from(BASE as u64);
+                let res2 = y % U256::from(BASE as u64);
+                ys.push(ark_bn254::Fr::from_uint_unchecked(&res2));
+                y /= U256::from(BASE as u64);
+                let res = (res1 ^ res2).to_u64_truncating();
                 let rotated = res.rotate_right(ROTATION as u32);
                 rs.push(ark_bn254::Fr::from(rotated));
             }
@@ -2001,11 +2007,11 @@ mod field_share {
         let x_shares = rep3::share_field_elements(&x, &mut rng);
 
         let mut should_result = Vec::with_capacity(VEC_SIZE);
-        let mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        let mask = U256::mask(CHUNK_SIZE);
         for x in x.into_iter() {
-            let mut x: BigUint = x.into();
-            x &= &mask;
-            should_result.push(ark_bn254::Fr::from(x));
+            let mut x = x.to_uint();
+            x &= mask;
+            should_result.push(ark_bn254::Fr::from_uint_unchecked(&x));
         }
         should_result.sort();
 
@@ -2047,11 +2053,11 @@ mod field_share {
 
         // Only sort by the first CHUNK_SIZE bits
         let mut shortened = Vec::with_capacity(VEC_SIZE);
-        let mask = (BigUint::from(1u64) << CHUNK_SIZE) - BigUint::one();
+        let mask = U256::mask(CHUNK_SIZE);
         for (i, x) in x.iter().cloned().enumerate() {
-            let mut x: BigUint = x.into();
-            x &= &mask;
-            shortened.push((i, ark_bn254::Fr::from(x)));
+            let mut x = x.to_uint();
+            x &= mask;
+            shortened.push((i, ark_bn254::Fr::from_uint_unchecked(&x)));
         }
         shortened.sort_by_key(|a| a.1);
         let mut should_result = Vec::with_capacity(VEC_SIZE);
@@ -2165,17 +2171,17 @@ mod field_share {
 
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
-        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let mask = U256::mask(TOTAL_BIT_SIZE);
         let keys_a = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let keys_b = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let x_shares = rep3::share_field_elements(&keys_a, &mut rng);
@@ -2183,21 +2189,21 @@ mod field_share {
 
         let mut should_result = Vec::new();
         for (x, y) in keys_a.into_iter().zip(keys_b) {
-            let mut x: BigUint = x.into();
-            let mut y: BigUint = y.into();
+            let mut x = x.to_uint();
+            let mut y = y.to_uint();
             let mut xs = Vec::with_capacity(slice_sizes.len());
             let mut ys = Vec::with_capacity(slice_sizes.len());
             let mut rs0 = Vec::with_capacity(slice_sizes.len());
             let mut rs1 = Vec::with_capacity(slice_sizes.len());
 
             for (rot, slice) in rotation_values.iter().zip(slice_sizes.iter()) {
-                let res1 = &x % slice;
-                xs.push(ark_bn254::Fr::from(res1.clone()));
-                x /= *slice;
-                let res2 = &y % slice;
-                ys.push(ark_bn254::Fr::from(res2.clone()));
-                y /= *slice;
-                let res = u64::try_from(res1).unwrap();
+                let res1 = x % U256::from(*slice);
+                xs.push(ark_bn254::Fr::from_uint_unchecked(&res1));
+                x /= U256::from(*slice);
+                let res2 = y % U256::from(*slice);
+                ys.push(ark_bn254::Fr::from_uint_unchecked(&res2));
+                y /= U256::from(*slice);
+                let res = res1.to_u64_truncating();
                 let mapped_into = Utils::map_into_sparse_form::<BASE>(res);
                 rs0.push(ark_bn254::Fr::from(mapped_into));
                 let rotated: u32 = u32::try_from(res).unwrap();
@@ -2303,17 +2309,17 @@ mod field_share {
 
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
-        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let mask = U256::mask(TOTAL_BIT_SIZE);
         let keys_a = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let keys_b = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let x_shares = rep3::share_field_elements(&keys_a, &mut rng);
@@ -2321,21 +2327,21 @@ mod field_share {
 
         let mut should_result = Vec::new();
         for (x, y) in keys_a.into_iter().zip(keys_b) {
-            let mut x: BigUint = x.into();
-            let mut y: BigUint = y.into();
+            let mut x = x.to_uint();
+            let mut y = y.to_uint();
             let mut xs = Vec::with_capacity(slice_sizes.len());
             let mut ys = Vec::with_capacity(slice_sizes.len());
             let mut rs0 = Vec::with_capacity(slice_sizes.len());
 
             for slice in slice_sizes.iter() {
-                let res1 = &x % slice;
-                xs.push(ark_bn254::Fr::from(res1.clone()));
-                x /= *slice;
-                let res2 = &y % slice;
-                ys.push(ark_bn254::Fr::from(res2.clone()));
-                y /= *slice;
+                let res1 = x % U256::from(*slice);
+                xs.push(ark_bn254::Fr::from_uint_unchecked(&res1));
+                x /= U256::from(*slice);
+                let res2 = y % U256::from(*slice);
+                ys.push(ark_bn254::Fr::from_uint_unchecked(&res2));
+                y /= U256::from(*slice);
 
-                let res = u64::try_from(res1).unwrap();
+                let res = res1.to_u64_truncating();
                 let mut accumulator = 0u64;
                 let mut input = res;
                 let mut count = 0u64;
@@ -2436,17 +2442,17 @@ mod field_share {
 
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
-        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let mask = U256::mask(TOTAL_BIT_SIZE);
         let keys_a = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let keys_b = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let x_shares = rep3::share_field_elements(&keys_a, &mut rng);
@@ -2454,24 +2460,24 @@ mod field_share {
 
         let mut should_result = Vec::new();
         for (x, y) in keys_a.into_iter().zip(keys_b) {
-            let mut x: BigUint = x.into();
-            let mut y: BigUint = y.into();
+            let mut x = x.to_uint();
+            let mut y = y.to_uint();
             let mut xs = Vec::with_capacity(slice_sizes.len());
             let mut ys = Vec::with_capacity(slice_sizes.len());
             let mut rs0 = Vec::with_capacity(slice_sizes.len());
 
             for slice in slice_sizes.iter() {
-                let res1 = &x % slice;
-                xs.push(ark_bn254::Fr::from(res1.clone()));
+                let res1 = x % U256::from(*slice);
+                xs.push(ark_bn254::Fr::from_uint_unchecked(&res1));
                 rs0.push(ark_bn254::Fr::from(
                     Utils::map_into_sparse_form::<{ BASE }>(
-                        Utils::map_from_sparse_form::<{ BASE }>(res1),
+                        Utils::map_from_sparse_form::<{ BASE }>(num_bigint::BigUint::from(res1)),
                     ),
                 ));
-                x /= *slice;
-                let res2 = &y % slice;
-                ys.push(ark_bn254::Fr::from(res2.clone()));
-                y /= *slice;
+                x /= U256::from(*slice);
+                let res2 = y % U256::from(*slice);
+                ys.push(ark_bn254::Fr::from_uint_unchecked(&res2));
+                y /= U256::from(*slice);
             }
             should_result.extend(xs);
             should_result.extend(ys);
@@ -2550,17 +2556,17 @@ mod field_share {
         let nets0 = LocalNetwork::new_3_parties();
         let nets1 = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
-        let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+        let mask = U256::mask(TOTAL_BIT_SIZE);
         let keys_a = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let keys_b = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
         let x_shares = rep3::share_field_elements(&keys_a, &mut rng);
@@ -2568,17 +2574,17 @@ mod field_share {
 
         let mut should_result = Vec::new();
         for (x, y) in keys_a.into_iter().zip(keys_b) {
-            let mut x: BigUint = x.into();
-            let mut y: BigUint = y.into();
+            let mut x = x.to_uint();
+            let mut y = y.to_uint();
             let mut xs = Vec::with_capacity(slice_sizes.len());
             let mut ys = Vec::with_capacity(slice_sizes.len());
             let mut rs0 = Vec::with_capacity(slice_sizes.len());
             let mut rs1 = Vec::with_capacity(slice_sizes.len());
 
             for slice in slice_sizes.iter() {
-                let res1 = &x % slice;
-                xs.push(ark_bn254::Fr::from(res1.clone()));
-                let byte = Utils::map_from_sparse_form::<{ BASE }>(res1);
+                let res1 = x % U256::from(*slice);
+                xs.push(ark_bn254::Fr::from_uint_unchecked(&res1));
+                let byte = Utils::map_from_sparse_form::<{ BASE }>(num_bigint::BigUint::from(res1));
                 let sbox_value = AES128_SBOX[byte as usize];
                 let swizzled = (sbox_value << 1u8) ^ (((sbox_value >> 7u8) & 1u8) * 0x1b);
                 rs0.push(ark_bn254::Fr::from(
@@ -2587,10 +2593,10 @@ mod field_share {
                 rs1.push(ark_bn254::Fr::from(
                     Utils::map_into_sparse_form::<{ BASE }>((sbox_value ^ swizzled) as u64),
                 ));
-                x /= *slice;
-                let res2 = &y % slice;
-                ys.push(ark_bn254::Fr::from(res2.clone()));
-                y /= *slice;
+                x /= U256::from(*slice);
+                let res2 = y % U256::from(*slice);
+                ys.push(ark_bn254::Fr::from_uint_unchecked(&res2));
+                y /= U256::from(*slice);
             }
             should_result.extend(xs);
             should_result.extend(ys);
@@ -2657,23 +2663,27 @@ mod field_share {
                         )
                         .unwrap();
 
-                    let shift_1 = sbox_value.clone() << 1;
-                    let shift_2 = sbox_value.clone() >> 7;
-                    let and = shift_2 & BigUint::one();
+                    let shift_1 = sbox_value << 1;
+                    let shift_2 = sbox_value >> 7;
+                    let and = shift_2.and_mask(&<ark_bn254::Fr as FieldUint>::Uint::one());
 
                     // This is a multiplication by 0x1b in the binary domain
-                    let mut and2a = &and << 4;
-                    and2a = and2a.bitxor(&and << 3);
-                    and2a = and2a.bitxor(&and << 1);
+                    let mut and2a = and << 4;
+                    and2a = and2a.bitxor(and << 3);
+                    and2a = and2a.bitxor(and << 1);
                     and2a = and2a.bitxor(and);
 
                     let swizzled = shift_1.bitxor(and2a);
-                    let value = swizzled.bitxor(sbox_value.clone());
-                    let mut a_bits_split =
-                        (0..8).map(|i| (&value >> i) & BigUint::one()).collect_vec();
+                    let value = swizzled.bitxor(sbox_value);
+                    let mut a_bits_split = (0..8)
+                        .map(|i| (value >> i).and_mask(&<ark_bn254::Fr as FieldUint>::Uint::one()))
+                        .collect_vec();
                     a_bits_split.extend(
                         (0..8)
-                            .map(|i| (&sbox_value >> i) & BigUint::one())
+                            .map(|i| {
+                                (sbox_value >> i)
+                                    .and_mask(&<ark_bn254::Fr as FieldUint>::Uint::one())
+                            })
                             .collect_vec(),
                     );
                     let bin_share =
@@ -2734,21 +2744,22 @@ mod field_share {
         const VEC_SIZE: usize = 16;
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
-        let mask: BigUint = (BigUint::one() << input_bitsize) - BigUint::one();
+        let mask = U256::mask(input_bitsize);
         let input = (0..VEC_SIZE)
             .map(|_| {
-                let res = BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask;
-                ark_bn254::Fr::from(res)
+                let res = ark_bn254::Fr::rand(&mut rng).to_uint() & mask;
+                ark_bn254::Fr::from_uint_unchecked(&res)
             })
             .collect_vec();
 
         let x_shares = rep3::share_field_elements(&input, &mut rng);
 
+        // `Utils::map_from_sparse_form` is a BigUint API (co-noir-common), so this
+        // oracle stays on BigUint at that boundary.
         let mut accumulator = BigUint::zero();
-        let byte_mask: BigUint = (BigUint::one() << output_bitsize) - BigUint::one();
+        let byte_mask = (BigUint::one() << output_bitsize) - BigUint::one();
         for byte in input.iter() {
-            let mut sparse_byte = BigUint::from(*byte);
-            sparse_byte &= BigUint::from(u64::MAX);
+            let sparse_byte = BigUint::from(byte.to_uint().to_u64_truncating());
             let byte = Utils::map_from_sparse_form::<BASE>(sparse_byte);
             accumulator <<= 8;
             accumulator += BigUint::from(byte) & byte_mask.clone();
@@ -2946,19 +2957,21 @@ mod field_share {
     ) {
         let nets = LocalNetwork::new_3_parties();
         let bases = vec![modulus; num_decomps_per_field];
-        fn slice_input_using_variable_bases(input: BigUint, bases: &[u64]) -> Vec<ark_bn254::Fr> {
+        fn slice_input_using_variable_bases(input: U256, bases: &[u64]) -> Vec<ark_bn254::Fr> {
             let mut target = input;
             let mut slices = Vec::with_capacity(bases.len());
             for i in 0..bases.len() {
-                if target >= bases[i].into() && i == bases.len() - 1 {
+                if target >= U256::from(bases[i]) && i == bases.len() - 1 {
                     panic!("Last key slice greater than {}", bases[i]);
                 }
-                slices.push(ark_bn254::Fr::from(&target % bases[i]));
-                target /= bases[i];
+                slices.push(ark_bn254::Fr::from_uint_unchecked(
+                    &(target % U256::from(bases[i])),
+                ));
+                target /= U256::from(bases[i]);
             }
             slices
         }
-        let should_result = slice_input_using_variable_bases(BigUint::from(a), &bases);
+        let should_result = slice_input_using_variable_bases(U256::from(a), &bases);
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
@@ -3034,9 +3047,11 @@ mod field_share {
         const TEST_RUN: usize = 1;
         for _ in 0..TEST_RUN {
             const TOTAL_BIT_SIZE: usize = 128;
-            let mask: BigUint = (BigUint::one() << TOTAL_BIT_SIZE) - BigUint::one();
+            let mask = U256::mask(TOTAL_BIT_SIZE);
             let mut rng = thread_rng();
-            let a = ark_bn254::Fr::from(BigUint::from(ark_bn254::Fr::rand(&mut rng)) & &mask);
+            let a = ark_bn254::Fr::from_uint_unchecked(
+                &(ark_bn254::Fr::rand(&mut rng).to_uint() & mask),
+            );
             let base: u64 = 16u64.pow(3);
             let num_decomps_per_field = 16;
             rep3_slicing_using_arbitrary_base(a, base, num_decomps_per_field);
@@ -3058,9 +3073,9 @@ mod field_share {
 
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         for x in x.into_iter() {
-            let mut x: BigUint = x.into();
+            let mut x = x.to_uint();
             x >>= divisor_bit;
-            should_result.push(ark_bn254::Fr::from(x));
+            should_result.push(ark_bn254::Fr::from_uint_unchecked(&x));
         }
 
         let (tx1, rx1) = mpsc::channel();
@@ -3101,10 +3116,10 @@ mod field_share {
 
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         for (x, y) in x.into_iter().zip(y) {
-            let x: BigUint = x.into();
-            let y: BigUint = y.into();
+            let x = x.to_uint();
+            let y = y.to_uint();
 
-            should_result.push(ark_bn254::Fr::from(x / y));
+            should_result.push(ark_bn254::Fr::from_uint_unchecked(&(x / y)));
         }
 
         let (tx1, rx1) = mpsc::channel();
@@ -3147,10 +3162,10 @@ mod field_share {
             .collect_vec();
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         for (x, y) in x.into_iter().zip(y.iter().cloned()) {
-            let x: BigUint = x.into();
-            let y: BigUint = y.into();
+            let x = x.to_uint();
+            let y = y.to_uint();
 
-            should_result.push(ark_bn254::Fr::from(x / y));
+            should_result.push(ark_bn254::Fr::from_uint_unchecked(&(x / y)));
         }
 
         let (tx1, rx1) = mpsc::channel();
@@ -3190,10 +3205,10 @@ mod field_share {
 
         let mut should_result = Vec::with_capacity(VEC_SIZE);
         for (x, y) in x.iter().cloned().zip(y) {
-            let x: BigUint = x.into();
-            let y: BigUint = y.into();
+            let x = x.to_uint();
+            let y = y.to_uint();
 
-            should_result.push(ark_bn254::Fr::from(x / y));
+            should_result.push(ark_bn254::Fr::from_uint_unchecked(&(x / y)));
         }
 
         let (tx1, rx1) = mpsc::channel();
@@ -3552,10 +3567,10 @@ mod field_share {
         let mut rng = thread_rng();
         let x = ark_bn254::Fr::rand(&mut rng);
         let bit = rng.gen_range(1..ark_bn254::Fr::MODULUS_BIT_SIZE);
-        let y = ark_bn254::Fr::from(BigUint::one() << bit);
+        let y = ark_bn254::Fr::from_uint_unchecked(&(U256::from(1u64) << bit as usize));
         let x_shares = rep3::share_field_element(x.to_owned(), &mut rng);
 
-        let should_result = ark_bn254::Fr::from(BigUint::from(x) % BigUint::from(y));
+        let should_result = ark_bn254::Fr::from_uint_unchecked(&(x.to_uint() % y.to_uint()));
 
         let (tx1, rx1) = mpsc::channel();
         let (tx2, rx2) = mpsc::channel();
@@ -3566,9 +3581,9 @@ mod field_share {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                let divisor: BigUint = y_c.into();
-                assert_eq!(divisor.count_ones(), 1);
-                let divisor_bit = divisor.bits() as usize - 1;
+                let divisor = y_c.to_uint();
+                let divisor_bit = divisor.bit_len() - 1;
+                assert_eq!(divisor, U256::from(1u64) << divisor_bit);
                 let res = yao::field_mod_power_2(x_, &net, &mut state, divisor_bit).unwrap();
                 tx.send(res)
             });
@@ -3670,16 +3685,16 @@ mod field_share {
 
 mod curve_share {
     use ark_ec::{AffineRepr, CurveGroup};
-    use ark_ff::{One, PrimeField, Zero};
+    use ark_ff::{One, Zero};
     use ark_std::UniformRand;
     use itertools::{izip, Itertools};
     use mpc_core::protocols::rep3::{
         self,
         conversion::{self, A2BType},
-        pointshare, Rep3BigUintShare, Rep3State,
+        pointshare, Rep3State, Rep3UintShare,
     };
+    use mpc_core::uint::FieldUint;
     use mpc_net::local::LocalNetwork;
-    use num_bigint::BigUint;
     use rand::thread_rng;
     use std::sync::mpsc;
 
@@ -3795,9 +3810,8 @@ mod curve_share {
         let (single2, many2) = rx2.recv().unwrap();
         let (single3, many3) = rx3.recv().unwrap();
         let result_single = rep3::combine_binary_element(single1, single2, single3);
-        let result_many =
-            rep3::combine_binary_element(many1[0].clone(), many2[0].clone(), many3[0].clone());
-        assert_eq!(result_many, x.into());
+        let result_many = rep3::combine_binary_element(many1[0], many2[0], many3[0]);
+        assert_eq!(result_many, x.to_uint());
         assert_eq!(result_many, result_single);
     }
 
@@ -3839,13 +3853,13 @@ mod curve_share {
         assert_eq!(single_batch, many_batch);
         assert_eq!(
             many_batch,
-            should_batch.into_iter().map(BigUint::from).collect_vec()
+            should_batch.into_iter().map(|f| f.to_uint()).collect_vec()
         );
     }
 
     fn to_fieldshares<C: CurveGroup>(point: C)
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
     {
         let mut rng = thread_rng();
         let point_shares = rep3::share_curve_point(point, &mut rng);
@@ -3881,7 +3895,7 @@ mod curve_share {
 
     fn to_fieldshares_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
     {
         let mut rng = thread_rng();
         let point_shares = rep3::share_curve_points(points, &mut rng);
@@ -3985,7 +3999,7 @@ mod curve_share {
 
     fn from_fieldshares<C: CurveGroup>(point: C)
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
     {
         let mut rng = thread_rng();
         let (x, y) = point.into_affine().xy().unwrap_or_default();
@@ -4026,7 +4040,7 @@ mod curve_share {
 
     fn from_fieldshares_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
     {
         let mut rng = thread_rng();
         let coords: Vec<_> = points
@@ -4115,7 +4129,8 @@ mod curve_share {
 
     fn point_is_zero<C: CurveGroup>(point: C)
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
+        C::ScalarField: FieldUint,
     {
         let mut rng = thread_rng();
         let shares = rep3::share_curve_point(point, &mut rng);
@@ -4129,9 +4144,9 @@ mod curve_share {
             std::thread::spawn(move || {
                 let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let res = pointshare::is_zero(x, &net, &mut state).unwrap();
-                let res = Rep3BigUintShare::<C::ScalarField>::new(
-                    BigUint::from(res.0),
-                    BigUint::from(res.1),
+                let res = Rep3UintShare::<C::ScalarField>::new(
+                    <C::ScalarField as FieldUint>::Uint::from(res.0),
+                    <C::ScalarField as FieldUint>::Uint::from(res.1),
                 );
                 tx.send(res)
             });
@@ -4140,17 +4155,18 @@ mod curve_share {
         let result2 = rx2.recv().unwrap();
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_binary_element(result1, result2, result3);
-        assert!(is_result <= BigUint::one());
+        assert!(is_result <= <C::ScalarField as FieldUint>::Uint::one());
         if point.is_zero() {
-            assert_eq!(is_result, BigUint::one());
+            assert_eq!(is_result, <C::ScalarField as FieldUint>::Uint::one());
         } else {
-            assert_eq!(is_result, BigUint::zero());
+            assert_eq!(is_result, <C::ScalarField as FieldUint>::Uint::zero());
         }
     }
 
     fn point_is_zero_many<C: CurveGroup>(points: &[C])
     where
-        C::BaseField: PrimeField,
+        C::BaseField: FieldUint,
+        C::ScalarField: FieldUint,
     {
         let mut rng = thread_rng();
         let mut shares: [Vec<_>; 3] = [
@@ -4176,9 +4192,9 @@ mod curve_share {
                 let res = pointshare::is_zero_many(&x, &net, &mut state).unwrap();
                 let mut res_ = Vec::with_capacity(res.len());
                 for r in res {
-                    res_.push(Rep3BigUintShare::<C::ScalarField>::new(
-                        BigUint::from(r.0),
-                        BigUint::from(r.1),
+                    res_.push(Rep3UintShare::<C::ScalarField>::new(
+                        <C::ScalarField as FieldUint>::Uint::from(r.0),
+                        <C::ScalarField as FieldUint>::Uint::from(r.1),
                     ));
                 }
                 tx.send(res_)
@@ -4190,17 +4206,15 @@ mod curve_share {
         let mut is_results = Vec::with_capacity(result1.len());
         for i in 0..result1.len() {
             is_results.push(rep3::combine_binary_element(
-                result1[i].clone(),
-                result2[i].clone(),
-                result3[i].clone(),
+                result1[i], result2[i], result3[i],
             ));
         }
         for (point, is_result) in points.iter().zip(is_results.iter()) {
-            assert!(is_result <= &BigUint::one());
+            assert!(is_result <= &<C::ScalarField as FieldUint>::Uint::one());
             if point.is_zero() {
-                assert_eq!(*is_result, BigUint::one());
+                assert_eq!(*is_result, <C::ScalarField as FieldUint>::Uint::one());
             } else {
-                assert_eq!(*is_result, BigUint::zero());
+                assert_eq!(*is_result, <C::ScalarField as FieldUint>::Uint::zero());
             }
         }
     }

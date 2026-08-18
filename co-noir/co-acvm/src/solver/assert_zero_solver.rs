@@ -149,8 +149,6 @@ where
             .simplify_expression(expr)?
             .to_const()
             .cloned()
-            .ok_or(eyre::eyre!(
-                "cannot evaluate expression to const - has unknown"
-            ))?)
+            .ok_or_else(|| eyre::eyre!("cannot evaluate expression to const - has unknown"))?)
     }
 }

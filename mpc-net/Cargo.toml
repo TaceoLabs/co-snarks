@@ -50,10 +50,10 @@ tokio = { version = "1.48.0", features = [
   "time",
 ], optional = true }
 tokio-util = { version = "0.7.17", features = ["codec"], optional = true }
-toml.workspace = true
 tracing = { workspace = true }
 
 [dev-dependencies]
+toml.workspace = true
 clap = { workspace = true }
 color-eyre = { workspace = true }
 rcgen = { workspace = true }

@@ -36,6 +36,3 @@ rand.workspace = true
 libaes.workspace = true
 num-bigint.workspace = true
 rayon.workspace = true
-
-[dev-dependencies]
-paste.workspace = true

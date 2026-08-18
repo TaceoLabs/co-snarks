@@ -25,6 +25,7 @@ use mpc_core::protocols::{
     rep3::{Rep3State, conversion::A2BType},
     shamir::{ShamirPreprocessing, ShamirState},
 };
+use mpc_core::uint::FieldUint;
 use mpc_net::Network;
 use noir_types::HonkProof;
 use std::marker::PhantomData;
@@ -90,6 +91,9 @@ impl<
 
 impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>>
     Rep3CoUltraHonk<C, H>
+where
+    C::ScalarField: FieldUint,
+    C::BaseField: FieldUint<Uint = <C::ScalarField as FieldUint>::Uint>,
 {
     #[expect(clippy::type_complexity)]
     pub fn prove<N: Network>(

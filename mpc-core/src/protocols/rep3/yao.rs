@@ -9,15 +9,13 @@ pub mod garbler;
 pub mod streaming_evaluator;
 pub mod streaming_garbler;
 
-use super::{
-    Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, id::PartyID, network::Rep3NetworkExt,
-};
-use ark_ff::{PrimeField, Zero};
+use super::{Rep3PrimeFieldShare, Rep3State, Rep3UintShare, id::PartyID, network::Rep3NetworkExt};
+use crate::uint::{FieldUint, UintBackend};
 use circuits::{GarbledCircuits, SHA256Table};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2, hash_wires, util::tweak2};
 use itertools::{Itertools, izip};
 use mpc_net::Network;
-use num_bigint::BigUint;
+use num_traits::{WrappingAdd, Zero};
 use rand::{CryptoRng, Rng};
 use scuttlebutt::Block;
 use subtle::ConditionallySelectable;
@@ -118,16 +116,18 @@ impl GCUtils {
     }
 
     pub(crate) fn garbled_circuits_error<G, T>(input: Result<T, G>) -> eyre::Result<T> {
-        input.or(Err(eyre::eyre!("Garbled Circuit failed")))
+        input.map_err(|_| eyre::eyre!("Garbled Circuit failed"))
     }
 
-    pub(crate) fn collapse_bundle_to_lsb_bits_as_biguint(input: BinaryBundle<WireMod2>) -> BigUint {
-        let mut res = BigUint::zero();
+    pub(crate) fn collapse_bundle_to_lsb_bits_as_uint<U: UintBackend>(
+        input: BinaryBundle<WireMod2>,
+    ) -> U {
+        let mut res = U::zero();
         for wire in input.wires().iter().rev() {
             res <<= 1;
             let lsb = wire.color();
             debug_assert!(lsb < 2);
-            res += lsb as u64;
+            res = res.wrapping_add(&U::from(lsb as u64));
         }
         res
     }
@@ -197,40 +197,48 @@ impl GCUtils {
     }
 
     #[cfg(test)]
-    fn u16_bits_to_field<F: PrimeField>(bits: Vec<u16>) -> eyre::Result<F> {
-        let mut res = BigUint::zero();
+    fn u16_bits_to_field<F: FieldUint>(bits: Vec<u16>) -> eyre::Result<F> {
+        let mut res = F::Uint::zero();
         for bit in bits.iter().rev() {
             assert!(*bit < 2);
             res <<= 1;
-            res += *bit as u64;
+            res = res.wrapping_add(&F::Uint::from(*bit as u64));
         }
-        if res >= F::MODULUS.into() {
+        if res >= F::modulus_uint() {
             eyre::bail!("Invalid field element");
         }
-        Ok(F::from(res))
+        Ok(F::from_uint_unchecked(&res))
     }
 
     /// Converts bits into a field element
-    pub fn bits_to_field<F: PrimeField>(bits: &[bool]) -> eyre::Result<F> {
-        let mut res = BigUint::zero();
-        for bit in bits.iter().rev() {
-            res <<= 1;
-            res += *bit as u64;
+    pub fn bits_to_field<F: FieldUint>(bits: &[bool]) -> eyre::Result<F> {
+        if bits
+            .get(F::Uint::BITS..)
+            .is_some_and(|excess| excess.contains(&true))
+        {
+            eyre::bail!("Invalid field element: bit string exceeds backend width");
         }
-        if res >= F::MODULUS.into() {
+
+        let mut res = F::Uint::zero();
+        for bit in bits[..bits.len().min(F::Uint::BITS)].iter().rev() {
+            res <<= 1;
+            res = res.wrapping_add(&F::Uint::from(*bit));
+        }
+        if res >= F::modulus_uint() {
             eyre::bail!(
                 "Invalid field element, got {:?}, modulus is {:?}",
                 res,
                 F::MODULUS
             );
         }
-        Ok(F::from(res))
+        Ok(F::from_uint_unchecked(&res))
     }
 
-    fn biguint_to_bits(input: &BigUint, n_bits: usize) -> Vec<bool> {
+    pub(crate) fn uint_to_bits<U: UintBackend>(input: &U, n_bits: usize) -> Vec<bool> {
         let mut res = Vec::with_capacity(n_bits);
         let mut bits = 0;
-        for mut el in input.to_u64_digits() {
+        for el in input.as_limbs() {
+            let mut el = *el;
             for _ in 0..64 {
                 res.push(el & 1 == 1);
                 el >>= 1;
@@ -244,24 +252,25 @@ impl GCUtils {
         res
     }
 
-    fn field_to_bits<F: PrimeField>(field: F) -> Vec<bool> {
+    fn field_to_bits<F: FieldUint>(field: F) -> Vec<bool> {
         let n_bits = F::MODULUS_BIT_SIZE as usize;
-        let bigint: BigUint = field.into();
+        let uint = field.to_uint();
 
-        Self::biguint_to_bits(&bigint, n_bits)
+        Self::uint_to_bits(&uint, n_bits)
     }
 
-    fn field_to_bits_as_u16<F: PrimeField>(field: F) -> Vec<u16> {
+    fn field_to_bits_as_u16<F: FieldUint>(field: F) -> Vec<u16> {
         let n_bits = F::MODULUS_BIT_SIZE as usize;
-        let bigint: BigUint = field.into();
+        let uint = field.to_uint();
 
-        Self::biguint_to_bits_as_u16(&bigint, n_bits)
+        Self::uint_to_bits_as_u16(&uint, n_bits)
     }
 
-    fn biguint_to_bits_as_u16(input: &BigUint, n_bits: usize) -> Vec<u16> {
+    fn uint_to_bits_as_u16<U: UintBackend>(input: &U, n_bits: usize) -> Vec<u16> {
         let mut res = Vec::with_capacity(n_bits);
         let mut bits = 0;
-        for mut el in input.to_u64_digits() {
+        for el in input.as_limbs() {
+            let mut el = *el;
             for _ in 0..64 {
                 res.push((el & 1) as u16);
                 el >>= 1;
@@ -326,18 +335,18 @@ impl GCUtils {
     }
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-    pub fn encode_bigint<R: Rng + CryptoRng>(
-        bigint: &BigUint,
+    pub fn encode_uint<U: UintBackend, R: Rng + CryptoRng>(
+        uint: &U,
         n_bits: usize,
         rng: &mut R,
         delta: WireMod2,
     ) -> GCInputs<WireMod2> {
-        let bits = Self::biguint_to_bits_as_u16(bigint, n_bits);
+        let bits = Self::uint_to_bits_as_u16(uint, n_bits);
         Self::encode_bits(bits, rng, delta)
     }
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-    pub fn encode_field<F: PrimeField, R: Rng + CryptoRng>(
+    pub fn encode_field<F: FieldUint, R: Rng + CryptoRng>(
         field: F,
         rng: &mut R,
         delta: WireMod2,
@@ -348,7 +357,7 @@ impl GCUtils {
 }
 
 /// Transforms an arithmetically shared input x = (x_1, x_2, x_3) into three yao shares x_1^Y, x_2^Y, x_3^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_arithmetic<F: PrimeField, N: Network>(
+pub fn joint_input_arithmetic<F: FieldUint, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     net: &N,
@@ -372,7 +381,7 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Network>(
             (x0, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Modify x1
             let x1_bits = GCUtils::field_to_bits_as_u16(x.a);
@@ -392,7 +401,7 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Network>(
             (x0, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Modify x1
             let x1_bits = GCUtils::field_to_bits_as_u16(x.b);
@@ -418,7 +427,7 @@ pub fn joint_input_arithmetic<F: PrimeField, N: Network>(
 }
 
 /// Transforms an arithmetically shared input x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 + x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_arithmetic_added<F: PrimeField, N: Network>(
+pub fn joint_input_arithmetic_added<F: FieldUint, N: Network>(
     x: Rep3PrimeFieldShare<F>,
     delta: Option<WireMod2>,
     net: &N,
@@ -428,7 +437,7 @@ pub fn joint_input_arithmetic_added<F: PrimeField, N: Network>(
 }
 
 /// Transforms a vector of arithmetically shared inputs x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 + x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_arithmetic_added_many<F: PrimeField, N: Network>(
+pub fn joint_input_arithmetic_added_many<F: FieldUint, N: Network>(
     x: &[Rep3PrimeFieldShare<F>],
     delta: Option<WireMod2>,
     net: &N,
@@ -448,7 +457,7 @@ pub fn joint_input_arithmetic_added_many<F: PrimeField, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
@@ -473,7 +482,7 @@ pub fn joint_input_arithmetic_added_many<F: PrimeField, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
@@ -502,8 +511,8 @@ pub fn joint_input_arithmetic_added_many<F: PrimeField, N: Network>(
 }
 
 /// Transforms an binary shared input x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 xor x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_binary_xored<F: PrimeField, N: Network>(
-    x: &Rep3BigUintShare<F>,
+pub fn joint_input_binary_xored<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
     delta: Option<WireMod2>,
     net: &N,
     state: &mut Rep3State,
@@ -519,11 +528,11 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Input x01
-            let xor = &x.a ^ &x.b;
-            let x01 = GCUtils::encode_bigint(&xor, bitlen, &mut state.rng, delta);
+            let xor = x.a ^ x.b;
+            let x01 = GCUtils::encode_uint(&xor, bitlen, &mut state.rng, delta);
 
             // Send x01 to the other parties
             GCUtils::send_inputs(&x01, net, PartyID::ID2)?;
@@ -534,10 +543,10 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Input x2
-            let x2 = GCUtils::encode_bigint(&x.a, bitlen, &mut state.rng, delta);
+            let x2 = GCUtils::encode_uint(&x.a, bitlen, &mut state.rng, delta);
 
             // Send x2 to the other parties
             GCUtils::send_inputs(&x2, net, PartyID::ID1)?;
@@ -553,7 +562,7 @@ pub fn joint_input_binary_xored<F: PrimeField, N: Network>(
 }
 
 /// Lets the party with id2 input a vector field elements, which get shared as Yao wires to the other parties.
-pub fn input_field_id2_many<F: PrimeField, N: Network>(
+pub fn input_field_id2_many<F: FieldUint, N: Network>(
     x: Option<Vec<F>>,
     delta: Option<WireMod2>,
     n_inputs: usize,
@@ -569,8 +578,8 @@ pub fn input_field_id2_many<F: PrimeField, N: Network>(
             GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
-            let x = x.ok_or(eyre::eyre!("No input provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
+            let x = x.ok_or_else(|| eyre::eyre!("No input provided"))?;
 
             if x.len() != n_inputs {
                 eyre::bail!(
@@ -603,7 +612,7 @@ pub fn input_field_id2_many<F: PrimeField, N: Network>(
 
 /// Lets the party with id2 input a vectors of field elements over two different fields, which get shared as Yao wires to the other parties.
 #[expect(clippy::too_many_arguments)]
-pub fn input_two_field_id2_many<F: PrimeField, K: PrimeField, N: Network>(
+pub fn input_two_field_id2_many<F: FieldUint, K: FieldUint, N: Network>(
     x_f: Option<Vec<F>>,
     x_k: Option<Vec<K>>,
     delta: Option<WireMod2>,
@@ -625,9 +634,9 @@ pub fn input_two_field_id2_many<F: PrimeField, K: PrimeField, N: Network>(
             GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
-            let x_f = x_f.ok_or(eyre::eyre!("No input provided"))?;
-            let x_k = x_k.ok_or(eyre::eyre!("No input provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
+            let x_f = x_f.ok_or_else(|| eyre::eyre!("No input provided"))?;
+            let x_k = x_k.ok_or_else(|| eyre::eyre!("No input provided"))?;
 
             if x_f.len() != n_inputs_1 {
                 eyre::bail!(
@@ -675,7 +684,7 @@ pub fn input_two_field_id2_many<F: PrimeField, K: PrimeField, N: Network>(
 }
 
 /// Lets the party with id2 input a field element, which gets shared as Yao wires to the other parties.
-pub fn input_field_id2<F: PrimeField, N: Network>(
+pub fn input_field_id2<F: FieldUint, N: Network>(
     x: Option<F>,
     delta: Option<WireMod2>,
     net: &N,
@@ -686,7 +695,7 @@ pub fn input_field_id2<F: PrimeField, N: Network>(
 }
 
 /// Decomposes a shared field element into chunks, which are also represented as shared field elements. Per field element, the total bit size of the shared chunks is given by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can be smaller) decompose_bit_size bits.
-pub fn decompose_arithmetic<F: PrimeField, N: Network>(
+pub fn decompose_arithmetic<F: FieldUint, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -704,7 +713,7 @@ pub fn decompose_arithmetic<F: PrimeField, N: Network>(
 
 /// Decomposes a shared field element into chunks, which are also represented as shared field elements. Per field element, the total bit size of the shared chunks is given by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can be smaller) decompose_bit_size bits.
 /// The result is then composed into a different field K.
-pub fn decompose_arithmetic_to_other_field<F: PrimeField, K: PrimeField, N: Network>(
+pub fn decompose_arithmetic_to_other_field<F: FieldUint, K: FieldUint, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -723,7 +732,7 @@ pub fn decompose_arithmetic_to_other_field<F: PrimeField, K: PrimeField, N: Netw
 /// Slices a value at given indices (lo, mid).
 /// Only considers bitsize bits.
 /// Result is thus [lo, hi], where lo has all bits from lo to (excluding) mid and hi all bits from mid up to bitsize.
-pub fn slice_arithmetic<F: PrimeField, N: Network>(
+pub fn slice_arithmetic<F: FieldUint, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -735,7 +744,7 @@ pub fn slice_arithmetic<F: PrimeField, N: Network>(
 }
 
 /// Computes input % 2^divisor_bit.
-pub fn field_mod_power_2<F: PrimeField, N: Network>(
+pub fn field_mod_power_2<F: FieldUint, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -748,7 +757,7 @@ pub fn field_mod_power_2<F: PrimeField, N: Network>(
 }
 
 /// Divides a vector of field elements by a power of 2, rounding down.
-pub fn field_int_div_power_2_many<F: PrimeField, N: Network>(
+pub fn field_int_div_power_2_many<F: FieldUint, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -774,7 +783,7 @@ pub fn field_int_div_power_2_many<F: PrimeField, N: Network>(
 }
 
 /// Divides a field element by a power of 2, rounding down.
-pub fn field_int_div_power_2<F: PrimeField, N: Network>(
+pub fn field_int_div_power_2<F: FieldUint, N: Network>(
     inputs: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -785,7 +794,7 @@ pub fn field_int_div_power_2<F: PrimeField, N: Network>(
 }
 
 /// Divides a vector of field elements by another, rounding down.
-pub fn field_int_div_many<F: PrimeField, N: Network>(
+pub fn field_int_div_many<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     input2: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -808,7 +817,7 @@ pub fn field_int_div_many<F: PrimeField, N: Network>(
 }
 
 /// Divides a field element by another, rounding down.
-pub fn field_int_div<F: PrimeField, N: Network>(
+pub fn field_int_div<F: FieldUint, N: Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -819,7 +828,7 @@ pub fn field_int_div<F: PrimeField, N: Network>(
 }
 
 /// Divides a vector of field elements by another, rounding down.
-pub fn field_int_div_by_public_many<F: PrimeField, N: Network>(
+pub fn field_int_div_by_public_many<F: FieldUint, N: Network>(
     input: &[Rep3PrimeFieldShare<F>],
     divisors: &[F],
     net: &N,
@@ -844,7 +853,7 @@ pub fn field_int_div_by_public_many<F: PrimeField, N: Network>(
 }
 
 /// Divides a field element by another, rounding down.
-pub fn field_int_div_by_public<F: PrimeField, N: Network>(
+pub fn field_int_div_by_public<F: FieldUint, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     divisor: F,
     net: &N,
@@ -855,7 +864,7 @@ pub fn field_int_div_by_public<F: PrimeField, N: Network>(
 }
 
 /// Divides a vector of field elements by another, rounding down.
-pub fn field_int_div_by_shared_many<F: PrimeField, N: Network>(
+pub fn field_int_div_by_shared_many<F: FieldUint, N: Network>(
     input: &[F],
     divisors: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -880,7 +889,7 @@ pub fn field_int_div_by_shared_many<F: PrimeField, N: Network>(
 }
 
 /// Computes AES ciphertext from given plaintext, key and initialization vector using a bristol fashion circuit as a garbled circuit.
-pub fn aes_from_bristol<F: PrimeField, N: Network>(
+pub fn aes_from_bristol<F: FieldUint, N: Network>(
     plaintext: &[Rep3PrimeFieldShare<F>],
     key: &[Rep3PrimeFieldShare<F>],
     iv: &[Rep3PrimeFieldShare<F>],
@@ -910,7 +919,7 @@ pub fn aes_from_bristol<F: PrimeField, N: Network>(
 }
 
 /// Divides a field element by another, rounding down.
-pub fn field_int_div_by_shared<F: PrimeField, N: Network>(
+pub fn field_int_div_by_shared<F: FieldUint, N: Network>(
     input: F,
     divisor: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -971,7 +980,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
@@ -1063,7 +1072,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_other_field {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
@@ -1181,7 +1190,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_binary {
 // TODO implement with a2b/b2a as well
 
 /// Decomposes a vector of shared field element into chunks, which are also represented as shared field elements. Per field element, the total bit size of the shared chunks is given by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can be smaller) decompose_bit_size bits.
-pub fn decompose_arithmetic_many<F: PrimeField, N: Network>(
+pub fn decompose_arithmetic_many<F: FieldUint, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1204,7 +1213,7 @@ pub fn decompose_arithmetic_many<F: PrimeField, N: Network>(
 
 /// Decomposes a vector of shared field element into chunks, which are also represented as shared field elements. Per field element, the total bit size of the shared chunks is given by total_bit_size_per_field, whereas each chunk has at most (i.e, the last chunk can be smaller) decompose_bit_size bits.
 /// The result is then composed into a different field K.
-pub fn decompose_arithmetic_to_other_field_many<F: PrimeField, K: PrimeField, N: Network>(
+pub fn decompose_arithmetic_to_other_field_many<F: FieldUint, K: FieldUint, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1228,7 +1237,7 @@ pub fn decompose_arithmetic_to_other_field_many<F: PrimeField, K: PrimeField, N:
 /// Slices a vector of shared field elements at given indices (lo, mid).
 /// Only considers bitsize bits.
 /// Result is thus [lo, hi], where lo has all bits from lo to (excluding) mid and hi all bits from mid up to bitsize.
-pub fn slice_arithmetic_many<F: PrimeField, N: Network>(
+pub fn slice_arithmetic_many<F: FieldUint, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1249,7 +1258,7 @@ pub fn slice_arithmetic_many<F: PrimeField, N: Network>(
 }
 
 /// Slices two vectors of field elements, does XOR on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
-pub fn slice_xor_with_filter_many<F: PrimeField, N: Network>(
+pub fn slice_xor_with_filter_many<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     input2: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -1277,7 +1286,7 @@ pub fn slice_xor_with_filter_many<F: PrimeField, N: Network>(
 }
 
 /// Slices two vectors of field elements, does XOR on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
-pub fn slice_xor_many<F: PrimeField, N: Network>(
+pub fn slice_xor_many<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     input2: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -1306,7 +1315,7 @@ pub fn slice_xor_many<F: PrimeField, N: Network>(
 }
 
 /// Slices two vectors of field elements, does AND on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
-pub fn slice_and_many<F: PrimeField, N: Network>(
+pub fn slice_and_many<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     input2: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -1334,7 +1343,7 @@ pub fn slice_and_many<F: PrimeField, N: Network>(
 }
 
 /// Slices two field elements, does AND on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
-pub fn slice_and<F: PrimeField, N: Network>(
+pub fn slice_and<F: FieldUint, N: Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -1355,7 +1364,7 @@ pub fn slice_and<F: PrimeField, N: Network>(
 }
 
 /// Slices two field elements, does XOR on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
-pub fn slice_xor<F: PrimeField, N: Network>(
+pub fn slice_xor<F: FieldUint, N: Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -1376,7 +1385,7 @@ pub fn slice_xor<F: PrimeField, N: Network>(
 }
 
 /// Computes the SHA256 compression function using a Bristol fashion garbled circuit.
-pub fn sha256_from_bristol<F: PrimeField, N: Network>(
+pub fn sha256_from_bristol<F: FieldUint, N: Network>(
     state: &[Rep3PrimeFieldShare<F>; 8],
     message: &[Rep3PrimeFieldShare<F>; 16],
     net: &N,
@@ -1398,7 +1407,7 @@ pub fn sha256_from_bristol<F: PrimeField, N: Network>(
 }
 
 /// Slices two slices of field elements, does XOR on the slices and then rotates them. The rotation is done on 32-bit values. Base_bit is the size of the slices, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input. It also prepares the (rotated) slices into 32 bits such that these can be multiplied with the base powers and then summed up. See get_sparse_table_with_rotation_values in co-noir/co-builder/src/types/plookup.rs for the intended functionality.
-pub fn get_sparse_table_with_rotation_values_many<F: PrimeField, N: Network>(
+pub fn get_sparse_table_with_rotation_values_many<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     input2: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -1427,7 +1436,7 @@ pub fn get_sparse_table_with_rotation_values_many<F: PrimeField, N: Network>(
 }
 
 /// Slices two field elements, does XOR on the slices and then rotates them. The rotation is done on 32-bit values. Base_bit is the size of the slices, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input. It also prepares the (rotated) slices into 32 bits such that these can be multiplied with the base powers and then summed up. See get_sparse_table_with_rotation_values in co-noir/co-builder/src/types/plookup.rs for the intended functionality.
-pub fn get_sparse_table_with_rotation_values<F: PrimeField, N: Network>(
+pub fn get_sparse_table_with_rotation_values<F: FieldUint, N: Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -1449,7 +1458,7 @@ pub fn get_sparse_table_with_rotation_values<F: PrimeField, N: Network>(
 
 /// Slices two slices of field elements according to base_bits, and again slices these slices according to base. These slices are used as indices for the respective SHA256Table which is done via a Moebius Transformation Matrix.
 #[expect(clippy::too_many_arguments)]
-pub fn get_sparse_normalization_values_many<F: PrimeField, N: Network>(
+pub fn get_sparse_normalization_values_many<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     input2: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -1479,7 +1488,7 @@ pub fn get_sparse_normalization_values_many<F: PrimeField, N: Network>(
 
 /// Slices two field elements according to base_bits, and again slices these slices according to base. These slices are used as indices for the respective SHA256Table which is done via a Moebius Transformation Matrix.
 #[expect(clippy::too_many_arguments)]
-pub fn get_sparse_normalization_values<F: PrimeField, N: Network>(
+pub fn get_sparse_normalization_values<F: FieldUint, N: Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -1502,7 +1511,7 @@ pub fn get_sparse_normalization_values<F: PrimeField, N: Network>(
 }
 
 /// Slices two field elements, does XOR on the slices and then rotates them. The rotation is done on 64-bit values. Base_bit is the size of the slice, rotation the the length of the rotation and total_output_bitlen_per_field is the amount of bits per input.
-pub fn slice_xor_with_filter<F: PrimeField, N: Network>(
+pub fn slice_xor_with_filter<F: FieldUint, N: Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -1515,7 +1524,7 @@ pub fn slice_xor_with_filter<F: PrimeField, N: Network>(
 }
 
 /// Computes the BLAKE2s hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The output is then composed into size 32 Vec of field elements.
-pub fn blake2s<F: PrimeField, N: Network>(
+pub fn blake2s<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1535,7 +1544,7 @@ pub fn blake2s<F: PrimeField, N: Network>(
 }
 
 /// Computes the BLAKE3 hash of 'num_inputs' inputs, each of 'num_bits' bits (rounded to next multiple of 8). The output is then composed into size 32 Vec of field elements.
-pub fn blake3<F: PrimeField, N: Network>(
+pub fn blake3<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1555,7 +1564,7 @@ pub fn blake3<F: PrimeField, N: Network>(
 }
 
 /// Slices two vecs of field elements according to base_bits, and again slices these slices according to base. These slices are then returned as arithmetic shares of the binary representation for the AES normalization values.
-pub fn slice_and_map_from_sparse_form_many<F: PrimeField, N: Network>(
+pub fn slice_and_map_from_sparse_form_many<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     input2: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -1589,7 +1598,7 @@ pub fn slice_and_map_from_sparse_form_many<F: PrimeField, N: Network>(
 }
 
 /// Slices two field elements according to base_bits, and again slices these slices according to base. These slices are then returned as arithmetic shares of the binary representation for the AES normalization values.
-pub fn slice_and_map_from_sparse_form<F: PrimeField, N: Network>(
+pub fn slice_and_map_from_sparse_form<F: FieldUint, N: Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -1610,7 +1619,7 @@ pub fn slice_and_map_from_sparse_form<F: PrimeField, N: Network>(
 }
 
 /// Slices two vecs of field elements according to base_bits, and again slices these slices according to base. These slices are then used to compute the AES sbox values.
-pub fn slice_and_map_from_sparse_form_many_sbox<F: PrimeField, N: Network>(
+pub fn slice_and_map_from_sparse_form_many_sbox<F: FieldUint, N: Network>(
     input1: &[Rep3PrimeFieldShare<F>],
     input2: &[Rep3PrimeFieldShare<F>],
     net: &N,
@@ -1644,7 +1653,7 @@ pub fn slice_and_map_from_sparse_form_many_sbox<F: PrimeField, N: Network>(
 }
 
 /// Slices two field elements according to base_bits, and again slices these slices according to base. These slices are then used to compute the AES sbox values.
-pub fn slice_and_map_from_sparse_form_sbox<F: PrimeField, N: Network>(
+pub fn slice_and_map_from_sparse_form_sbox<F: FieldUint, N: Network>(
     input1: Rep3PrimeFieldShare<F>,
     input2: Rep3PrimeFieldShare<F>,
     net: &N,
@@ -1665,7 +1674,7 @@ pub fn slice_and_map_from_sparse_form_sbox<F: PrimeField, N: Network>(
 }
 
 /// Slices a vector of field elements according to base and computes an accumulator necessary for the AES argument.
-pub fn accumulate_from_sparse_bytes<F: PrimeField, N: Network>(
+pub fn accumulate_from_sparse_bytes<F: FieldUint, N: Network>(
     input: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1686,7 +1695,7 @@ pub fn accumulate_from_sparse_bytes<F: PrimeField, N: Network>(
 }
 
 /// Computes wnaf digits and rows needed in the ECCVM builder.
-pub fn compute_wnaf_digits_and_compute_rows_many<F: PrimeField, N: Network>(
+pub fn compute_wnaf_digits_and_compute_rows_many<F: FieldUint, N: Network>(
     input: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1702,4 +1711,29 @@ pub fn compute_wnaf_digits_and_compute_rows_many<F: PrimeField, N: Network>(
         GarbledCircuits::compute_wnaf_digits_many::<_, F>,
         (input_bitsize)
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bits_to_field_rejects_set_bits_beyond_backend_width() {
+        type F = ark_bn254::Fr;
+
+        let mut bits = vec![false; <F as FieldUint>::Uint::BITS + 1];
+        bits[<F as FieldUint>::Uint::BITS] = true;
+
+        assert!(GCUtils::bits_to_field::<F>(&bits).is_err());
+    }
+
+    #[test]
+    fn bits_to_field_allows_zero_extension_beyond_backend_width() {
+        type F = ark_bn254::Fr;
+
+        let mut bits = vec![false; <F as FieldUint>::Uint::BITS + 1];
+        bits[0] = true;
+
+        assert_eq!(GCUtils::bits_to_field::<F>(&bits).unwrap(), F::from(1u64));
+    }
 }

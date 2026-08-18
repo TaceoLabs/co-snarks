@@ -15,10 +15,11 @@ use mpc_core::protocols::rep3::conversion::A2BType;
 use mpc_core::protocols::rep3::id::PartyID;
 use mpc_core::protocols::rep3::yao::circuits::SHA256Table;
 use mpc_core::protocols::rep3::{
-    Rep3BigUintShare, Rep3PointShare, Rep3State, arithmetic, binary, conversion,
+    Rep3PointShare, Rep3State, Rep3UintShare, arithmetic, binary, conversion,
     network::Rep3NetworkExt, pointshare, yao,
 };
 use mpc_core::protocols::rep3_ring::gadgets::sort::{radix_sort_fields, radix_sort_fields_vec_by};
+use mpc_core::uint::{FieldUint, UintBackend};
 use mpc_core::{
     lut::LookupTableProvider, protocols::rep3::Rep3PrimeFieldShare,
     protocols::rep3_ring::lut_field::Rep3FieldLookupTable,
@@ -45,7 +46,7 @@ pub struct Rep3AcvmSolver<'a, F: PrimeField, N: Network> {
     phantom_data: PhantomData<F>,
 }
 
-impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
+impl<'a, F: PrimeField + FieldUint, N: Network> Rep3AcvmSolver<'a, F, N> {
     pub fn new(net0: &'a N, net1: &'a N, a2b_type: A2BType) -> eyre::Result<Self> {
         let mut state0 = Rep3State::new(net0, a2b_type)?;
         let state1 = state0.fork(0)?;
@@ -89,7 +90,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
                 // Change the sharing field
                 let scalar_high = conversion::a2b(*high, net, state)?;
                 let scalar_high =
-                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
+                    Rep3UintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
                 let scalar_high = conversion::b2a(&scalar_high, net, state)?;
 
                 let res = arithmetic::add_public(scalar_high * scale, scalar_low.into(), state.id);
@@ -99,8 +100,7 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
                 let scalar_high = PlainAcvmSolver::<F>::bn254_fr_to_u128(*high)?;
                 // Change the sharing field
                 let scalar_low = conversion::a2b(*low, net, state)?;
-                let scalar_low =
-                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_low.a, scalar_low.b);
+                let scalar_low = Rep3UintShare::<ark_grumpkin::Fr>::new(scalar_low.a, scalar_low.b);
                 let scalar_low = conversion::b2a(&scalar_low, net, state)?;
 
                 let res = arithmetic::add_public(
@@ -115,13 +115,12 @@ impl<'a, F: PrimeField, N: Network> Rep3AcvmSolver<'a, F, N> {
 
                 // TODO parallelize these
                 let scalar_low = conversion::a2b(*low, net, state)?;
-                let scalar_low =
-                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_low.a, scalar_low.b);
+                let scalar_low = Rep3UintShare::<ark_grumpkin::Fr>::new(scalar_low.a, scalar_low.b);
                 let scalar_low = conversion::b2a(&scalar_low, net, state)?;
 
                 let scalar_high = conversion::a2b(*high, net, state)?;
                 let scalar_high =
-                    Rep3BigUintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
+                    Rep3UintShare::<ark_grumpkin::Fr>::new(scalar_high.a, scalar_high.b);
                 let scalar_high = conversion::b2a(&scalar_high, net, state)?;
 
                 let res = scalar_high * scale + scalar_low;
@@ -320,7 +319,7 @@ impl<F: PrimeField> From<Rep3Type<F>> for Rep3AcvmType<F> {
     }
 }
 
-impl<F: PrimeField> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
+impl<F: PrimeField + FieldUint> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
     fn from(val: Rep3AcvmType<F>) -> Self {
         match val {
             Rep3AcvmType::Public(public) => Rep3BrilligType::public_field(public),
@@ -329,7 +328,7 @@ impl<F: PrimeField> From<Rep3AcvmType<F>> for Rep3BrilligType<F> {
     }
 }
 
-impl<F: PrimeField> Rep3AcvmType<F> {
+impl<F: PrimeField + FieldUint> Rep3AcvmType<F> {
     fn from_brillig_type<N: Network>(
         value: Rep3BrilligType<F>,
         net: &N,
@@ -355,7 +354,9 @@ fn get_base_powers<const NUM_SLICES: usize>(base: u64) -> [BigUint; NUM_SLICES] 
     output
 }
 
-impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3AcvmSolver<'a, F, N> {
+impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
+    for Rep3AcvmSolver<'a, F, N>
+{
     type Lookup = Rep3FieldLookupTable<F>;
 
     type ArithmeticShare = Rep3PrimeFieldShare<F>;
@@ -1017,20 +1018,19 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         num_bits: u32,
     ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
-        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        let mask = <F as FieldUint>::Uint::mask(num_bits as usize);
         match (lhs, rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
-                let lhs: BigUint = lhs.into();
-                let rhs: BigUint = rhs.into();
+                let lhs = lhs.to_uint();
+                let rhs = rhs.to_uint();
                 let res = (lhs & rhs) & mask;
-                let res = F::from(res);
+                let res = F::from_uint_reduced(&res);
                 Ok(Rep3AcvmType::Public(res))
             }
             (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
             | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
                 let shared = conversion::a2b_selector(shared, self.net0, &mut self.state0)?;
-                let public: BigUint = public.into();
-                let public = public & mask;
+                let public = public.to_uint() & mask;
                 let binary = binary::and_with_public(&shared, &public); // Already includes masking
                 let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
                 Ok(Rep3AcvmType::Shared(result))
@@ -1040,7 +1040,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     || conversion::a2b_selector(lhs, self.net0, &mut self.state0),
                     || conversion::a2b_selector(rhs, self.net1, &mut self.state1),
                 );
-                let binary = binary::and(&lhs?, &rhs?, self.net0, &mut self.state0)? & mask;
+                let binary =
+                    binary::and(&lhs?, &rhs?, self.net0, &mut self.state0)?.and_mask(&mask);
                 let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
@@ -1054,20 +1055,20 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         num_bits: u32,
     ) -> eyre::Result<Self::AcvmType> {
         debug_assert!(num_bits <= 128);
-        let mask = (BigUint::one() << num_bits) - BigUint::one();
+        let mask = <F as FieldUint>::Uint::mask(num_bits as usize);
         match (lhs, rhs) {
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
-                let lhs: BigUint = lhs.into();
-                let rhs: BigUint = rhs.into();
+                let lhs = lhs.to_uint();
+                let rhs = rhs.to_uint();
                 let res = (lhs ^ rhs) & mask;
-                let res = F::from(res);
+                let res = F::from_uint_reduced(&res);
                 Ok(Rep3AcvmType::Public(res))
             }
             (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
             | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
                 let shared = conversion::a2b_selector(shared, self.net0, &mut self.state0)?;
-                let public: BigUint = public.into();
-                let binary = binary::xor_public(&shared, &public, self.id) & mask;
+                let public = public.to_uint();
+                let binary = binary::xor_public(&shared, &public, self.id).and_mask(&mask);
                 let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
@@ -1076,7 +1077,7 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
                     || conversion::a2b_selector(lhs, self.net0, &mut self.state0),
                     || conversion::a2b_selector(rhs, self.net1, &mut self.state1),
                 );
-                let binary = binary::xor(&lhs?, &rhs?) & mask;
+                let binary = binary::xor(&lhs?, &rhs?).and_mask(&mask);
                 let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
@@ -1636,11 +1637,8 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             }
             Rep3AcvmPoint::Shared(point) => {
                 let is_zero = pointshare::is_zero(point.to_owned(), self.net0, &mut self.state0)?;
-                let is_zero = Rep3BigUintShare::<C::ScalarField>::new(
-                    BigUint::from(is_zero.0),
-                    BigUint::from(is_zero.1),
-                );
-                let is_zero = conversion::bit_inject(&is_zero, self.net0, &mut self.state0)?;
+                let is_zero: ArithmeticShare<C::ScalarField> =
+                    conversion::bit_inject_from_bits(is_zero, self.net0, &mut self.state0)?;
 
                 let sub = match value {
                     Rep3AcvmPoint::Public(value) => {
@@ -1713,12 +1711,12 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     ) -> eyre::Result<Self::ArithmeticShare> {
         let shared = conversion::a2b_selector(input, self.net0, &mut self.state0)?;
 
-        let mut result = Rep3BigUintShare::default();
-        for i in 32..35 {
-            result.a.set_bit(i as u64 - 32, shared.a.bit(i as u64));
-            result.b.set_bit(i as u64 - 32, shared.b.bit(i as u64));
+        let mut result = Rep3UintShare::<F>::default();
+        for i in 32usize..35usize {
+            result.a.set_bit(i - 32, shared.a.bit(i));
+            result.b.set_bit(i - 32, shared.b.bit(i));
         }
-        conversion::b2a_selector(&result.clone(), self.net0, &mut self.state0)
+        conversion::b2a_selector(&result, self.net0, &mut self.state0)
     }
 
     fn slice_and_get_sparse_table_with_rotation_values(
@@ -2187,20 +2185,22 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
             )?;
             let shift_1 = &sbox_value << 1;
             let shift_2 = &sbox_value >> 7;
-            let and = shift_2 & BigUint::one();
+            let and = shift_2.and_mask(&F::Uint::one());
 
             // This is a multiplication by 0x1b in the binary domain
-            let mut and2a = &and << 4;
-            and2a = and2a.bitxor(&and << 3);
-            and2a = and2a.bitxor(&and << 1);
+            let mut and2a = and << 4;
+            and2a = and2a.bitxor(and << 3);
+            and2a = and2a.bitxor(and << 1);
             and2a = and2a.bitxor(and);
 
             let swizzled = shift_1.bitxor(and2a);
-            let value = swizzled.bitxor(sbox_value.clone());
-            let mut a_bits_split = (0..8).map(|i| (&value >> i) & BigUint::one()).collect_vec();
+            let value = swizzled.bitxor(sbox_value);
+            let mut a_bits_split = (0..8)
+                .map(|i| (value >> i).and_mask(&F::Uint::one()))
+                .collect_vec();
             a_bits_split.extend(
                 (0..8)
-                    .map(|i| (&sbox_value >> i) & BigUint::one())
+                    .map(|i| (sbox_value >> i).and_mask(&F::Uint::one()))
                     .collect_vec(),
             );
             let bin_share = mpc_core::protocols::rep3::conversion::bit_inject_many(
@@ -2358,26 +2358,44 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
     }
 
     // TACEO TODO: we could make the equality check return the basefield element here
+    //
+    // NOTE (uint-backend port): `arithmetic::eq`/`eq_public`/`a2b_selector` now
+    // route through the fixed-width binary domain and require `C::BaseField:
+    // FieldUint`. This trait method only bounds `C::BaseField: PrimeField`
+    // (see `NoirWitnessExtensionProtocol::equals_other_acvm_type` in
+    // `mpc.rs`, which must not change), so that bound cannot be added here
+    // without an E0276 (impl stricter than trait). As with this file's other
+    // cross-curve helpers (e.g. `multi_scalar_mul`), we hardcode to the one
+    // pairing this crate ever instantiates -- native field `ark_bn254::Fr`
+    // with "other" field `ark_bn254::Fq` -- and panic otherwise.
     fn equals_other_acvm_type<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(
         &mut self,
         a: &Self::OtherAcvmType<C>,
         b: &Self::OtherAcvmType<C>,
     ) -> eyre::Result<(Self::AcvmType, Self::OtherAcvmType<C>)> {
+        if let (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) = (a, b) {
+            return Ok((
+                Rep3AcvmType::Public(F::from(a == b)),
+                Rep3AcvmType::Public(C::BaseField::from(a == b)),
+            ));
+        }
+
+        if TypeId::of::<F>() != TypeId::of::<ark_bn254::Fr>() {
+            panic!("Only BN254 is supported");
+        }
+        // Safety: we checked that the types match
+        let a: &Rep3AcvmType<ark_bn254::Fq> = downcast(a).expect("We checked types");
+        // Safety: we checked that the types match
+        let b: &Rep3AcvmType<ark_bn254::Fq> = downcast(b).expect("We checked types");
+
         let res = match (a, b) {
-            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b)) => {
-                return Ok((
-                    Rep3AcvmType::Public(F::from(a == b)),
-                    Rep3AcvmType::Public(C::BaseField::from(a == b)),
-                ));
+            (Rep3AcvmType::Public(_), Rep3AcvmType::Public(_)) => {
+                unreachable!("public/public case is handled above")
             }
-            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared)) => {
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
+            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
                 arithmetic::eq_public(*shared, *public, self.net0, &mut self.state0)?
             }
-
-            (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
-                arithmetic::eq_public(*shared, *public, self.net0, &mut self.state0)?
-            }
-
             (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => {
                 arithmetic::eq(*a, *b, self.net0, &mut self.state0)?
             }
@@ -2386,11 +2404,17 @@ impl<'a, F: PrimeField, N: Network> NoirWitnessExtensionProtocol<F> for Rep3Acvm
         let res_bin = conversion::a2b_selector(res, self.net0, &mut self.state0)?;
 
         let res_fr = conversion::b2a(
-            &Rep3BigUintShare::new(res_bin.a, res_bin.b),
+            &Rep3UintShare::<ark_bn254::Fr>::new(res_bin.a, res_bin.b),
             self.net0,
             &mut self.state0,
         )?;
-        Ok((res_fr.into(), res.into()))
+        // Safety: we checked that the types match
+        let res_fr: Self::ArithmeticShare = *downcast(&res_fr).expect("We checked types");
+        // Safety: we checked that the types match
+        let res_shared = Rep3AcvmType::Shared(res);
+        let res_other: &Self::OtherAcvmType<C> = downcast(&res_shared).expect("We checked types");
+        let res_other = res_other.clone();
+        Ok((Rep3AcvmType::Shared(res_fr), res_other))
     }
 
     fn open_many_other<C: CurveGroup<ScalarField = F, BaseField: PrimeField>>(

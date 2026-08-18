@@ -1,19 +1,24 @@
 use super::VmCircomWitnessExtension;
 use crate::mpc_vm::VMConfig;
-use ark_ff::{One, PrimeField};
+use ark_ff::PrimeField;
 use eyre::Result;
 use eyre::eyre;
 use mpc_core::gadgets::poseidon2::CircomTracePlainHasher;
 use mpc_core::gadgets::poseidon2::Poseidon2;
-use num_bigint::BigUint;
+use mpc_core::uint::{FieldUint, UintBackend};
 
 /// Transforms a field element into an usize if possible.
+///
+/// Allocation-free: reads the limbs of the stack-allocated `BigInt` repr and
+/// only constructs an error if the value exceeds `u64`/`usize` range.
 macro_rules! to_usize {
     ($field: expr) => {{
-        use eyre::eyre;
-        use num_traits::cast::ToPrimitive;
-        let a: BigUint = $field.into();
-        usize::try_from(a.to_u64().ok_or(eyre!("Cannot convert var into usize"))?)?
+        let bigint = ark_ff::PrimeField::into_bigint($field);
+        let limbs: &[u64] = bigint.as_ref();
+        if limbs[1..].iter().any(|&limb| limb != 0) {
+            eyre::bail!("Cannot convert var into usize");
+        }
+        usize::try_from(limbs[0])?
     }};
 }
 pub(crate) use to_usize;
@@ -32,24 +37,15 @@ macro_rules! bool_comp_op {
     }};
 }
 
-macro_rules! to_bigint {
-    ($field: expr) => {{
-        let a: BigUint = $field.into();
-        a
-    }};
-}
-
 pub struct CircomPlainVmWitnessExtension<F: PrimeField> {
-    negative_one: F,
+    pub(crate) negative_one: F,
 }
 
 impl<F: PrimeField> Default for CircomPlainVmWitnessExtension<F> {
     fn default() -> Self {
-        let modulus = to_bigint!(F::MODULUS);
-        let one = BigUint::one();
-        let two = BigUint::from(2u64);
+        // (p + 1) / 2, i.e. the inverse of 2 in F
         Self {
-            negative_one: F::from(modulus / two + one),
+            negative_one: F::from(2u64).inverse().expect("2 is invertible"),
         }
     }
 }
@@ -71,7 +67,7 @@ impl<F: PrimeField> CircomPlainVmWitnessExtension<F> {
     }
 }
 
-impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtension<F> {
+impl<F: PrimeField + FieldUint> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtension<F> {
     type Public = F;
     type ArithmeticShare = F;
 
@@ -98,9 +94,9 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
     }
 
     fn int_div(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_bigint!(a);
-        let rhs = to_bigint!(b);
-        Ok(F::from(lhs / rhs))
+        let lhs = a.to_uint();
+        let rhs = b.to_uint();
+        Ok(F::from_uint_reduced(&(lhs / rhs)))
     }
 
     fn pow(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
@@ -108,13 +104,15 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
     }
 
     fn modulo(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let a = to_bigint!(a);
-        let b = to_bigint!(b);
-        Ok(F::from(a % b))
+        let a = a.to_uint();
+        let b = b.to_uint();
+        Ok(F::from_uint_reduced(&(a % b)))
     }
 
     fn sqrt(&mut self, a: Self::VmType) -> Result<Self::VmType> {
-        let sqrt = a.sqrt().ok_or(eyre!("cannot compute sqrt for {a}"))?;
+        let sqrt = a
+            .sqrt()
+            .ok_or_else(|| eyre!("cannot compute sqrt for {a}"))?;
         if self.is_negative(sqrt) {
             Ok(-sqrt)
         } else {
@@ -163,15 +161,16 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
     }
 
     fn shift_r(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let val = to_bigint!(a);
+        let val = a.to_uint();
         let shift = to_usize!(b);
-        Ok(F::from(val >> shift))
+        // result < p since shifting right only shrinks the value
+        Ok(F::from_uint_unchecked(&(val >> shift)))
     }
 
     fn shift_l(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let val = to_bigint!(a);
+        // (a << shift) mod p == a * 2^shift mod p, without wide intermediates
         let shift = to_usize!(b);
-        Ok(F::from(val << shift))
+        Ok(a * F::from(2u64).pow([shift as u64]))
     }
 
     fn bool_not(&mut self, a: Self::VmType) -> Result<Self::VmType> {
@@ -214,20 +213,15 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
     }
 
     fn bit_xor(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_bigint!(a);
-        let rhs = to_bigint!(b);
-        Ok(F::from(lhs ^ rhs))
+        Ok(F::from_uint_reduced(&(a.to_uint() ^ b.to_uint())))
     }
+
     fn bit_or(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_bigint!(a);
-        let rhs = to_bigint!(b);
-        Ok(F::from(lhs | rhs))
+        Ok(F::from_uint_reduced(&(a.to_uint() | b.to_uint())))
     }
 
     fn bit_and(&mut self, a: Self::VmType, b: Self::VmType) -> Result<Self::VmType> {
-        let lhs = to_bigint!(a);
-        let rhs = to_bigint!(b);
-        Ok(F::from(lhs & rhs))
+        Ok(F::from_uint_reduced(&(a.to_uint() & b.to_uint())))
     }
 
     fn is_zero(&mut self, a: Self::VmType, _: bool) -> Result<bool> {
@@ -263,10 +257,10 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
     }
 
     fn num2bits(&mut self, a: Self::VmType, bits: usize) -> Result<Vec<Self::VmType>> {
-        let a = to_bigint!(a);
+        let a = a.to_uint();
         let mut res = Vec::with_capacity(bits);
         for i in 0..bits {
-            res.push(F::from((&a >> i) & BigUint::one()));
+            res.push(F::from(i < F::Uint::BITS && a.bit(i)));
         }
         Ok(res)
     }
@@ -282,13 +276,11 @@ impl<F: PrimeField> VmCircomWitnessExtension<F> for CircomPlainVmWitnessExtensio
         let acc_a = a.into_iter().fold(F::ZERO, |acc, x| acc.double() + x);
         let acc_b = b.into_iter().fold(F::ZERO, |acc, x| acc.double() + x);
 
-        let sum = acc_a + acc_b;
-        let sum = to_bigint!(sum);
-        let carry_mask = BigUint::one() << bitlen;
-        let carry = F::from((&sum & carry_mask) >> bitlen);
+        let sum = (acc_a + acc_b).to_uint();
+        let carry = F::from(sum.bit(bitlen));
         let mut res = Vec::with_capacity(bitlen);
         for i in 0..bitlen {
-            res.push(F::from((&sum >> i) & BigUint::one()));
+            res.push(F::from(sum.bit(i)));
         }
         res.reverse();
         Ok((res, carry))

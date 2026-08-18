@@ -5,8 +5,20 @@
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use mpc_net::Network;
-use num_bigint::BigUint;
 use std::marker::PhantomData;
+
+/// Converts a public field element to a usize LUT index (`None` if it does
+/// not fit). Plain LUT indices are public values, so this only needs
+/// `PrimeField` — it must not force a `FieldUint` bound onto plain-only
+/// code paths.
+fn field_to_usize<F: PrimeField>(x: F) -> Option<usize> {
+    let bigint = x.into_bigint();
+    let limbs = bigint.as_ref();
+    if limbs[1..].iter().any(|l| *l != 0) {
+        return None;
+    }
+    usize::try_from(limbs[0]).ok()
+}
 
 /// This is some place holder definition. This will change most likely
 pub trait LookupTableProvider<T: Default>: Default {
@@ -100,9 +112,8 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         _state0: &mut (),
         _state1: &mut (),
     ) -> eyre::Result<F> {
-        let index: BigUint = index.into();
-        let index = usize::try_from(index)
-            .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+        let index = field_to_usize(index)
+            .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
         Ok(lut[index])
     }
 
@@ -116,9 +127,8 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         _state0: &mut (),
         _state1: &mut (),
     ) -> eyre::Result<()> {
-        let index: BigUint = index.into();
-        let index = usize::try_from(index)
-            .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+        let index = field_to_usize(index)
+            .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
 
         lut[index] = value;
         Ok(())
@@ -164,9 +174,8 @@ impl<C: CurveGroup> LookupTableProvider<C> for PlainCurveLookupTableProvider<C> 
         _state0: &mut Self::State,
         _state1: &mut Self::State,
     ) -> eyre::Result<Self::SecretShare> {
-        let index: BigUint = index.into();
-        let index = usize::try_from(index)
-            .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+        let index = field_to_usize(index)
+            .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
         Ok(lut[index])
     }
 
@@ -180,9 +189,8 @@ impl<C: CurveGroup> LookupTableProvider<C> for PlainCurveLookupTableProvider<C> 
         _state0: &mut Self::State,
         _state1: &mut Self::State,
     ) -> eyre::Result<()> {
-        let index: BigUint = index.into();
-        let index = usize::try_from(index)
-            .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+        let index = field_to_usize(index)
+            .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
 
         lut[index] = value;
         Ok(())

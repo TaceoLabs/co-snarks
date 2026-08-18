@@ -3,11 +3,12 @@
 //! This module contains implementation of a LUT
 
 use super::{Rep3RingShare, ring::int_ring::IntRing2k};
+use crate::uint::FieldUint;
 use crate::{
     lut::LookupTableProvider,
     protocols::{
         rep3::{
-            self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State, arithmetic,
+            self, Rep3PrimeFieldShare, Rep3State, Rep3UintShare, arithmetic,
             network::Rep3NetworkExt,
         },
         rep3_ring::{conversion, gadgets, ring::bit::Bit},
@@ -63,7 +64,7 @@ impl<F: PrimeField> Default for Rep3FieldLookupTable<F> {
     }
 }
 
-impl<F: PrimeField> Rep3FieldLookupTable<F> {
+impl<F: FieldUint> Rep3FieldLookupTable<F> {
     /// Construct a new [`Rep3FieldLookupTable`]
     pub fn new() -> Self {
         Self::default()
@@ -99,7 +100,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     }
 
     fn get_from_public_luts_internal<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<F>,
+        index: Rep3UintShare<F>,
         luts: &[Vec<F>],
         net0: &N,
         net1: &N,
@@ -109,8 +110,8 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     where
         Standard: Distribution<T>,
     {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
+        let a = T::cast_from_uint(&index.a);
+        let b = T::cast_from_uint(&index.b);
         let share = Rep3RingShare::new(a, b);
 
         let bins_a = gadgets::lut_field::read_multiple_public_lut_low_depth(
@@ -122,7 +123,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
 
         // TODO parallelize this at some point
         for (bin_a, bin_b) in bins_a.into_iter().zip(bins_b) {
-            let bin = Rep3BigUintShare::new(bin_a, bin_b);
+            let bin = Rep3UintShare::new(bin_a, bin_b);
             let res = rep3::conversion::b2a_selector(&bin, net0, state0)?;
             result.push(res);
         }
@@ -131,7 +132,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     }
 
     fn get_from_lut_internal<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<F>,
+        index: Rep3UintShare<F>,
         lut: &PublicPrivateLut<F>,
         net0: &N,
         net1: &N,
@@ -141,8 +142,8 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     where
         Standard: Distribution<T>,
     {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
+        let a = T::cast_from_uint(&index.a);
+        let b = T::cast_from_uint(&index.b);
         let share = Rep3RingShare::new(a, b);
         let val = match lut {
             PublicPrivateLut::Public(vec) => {
@@ -155,7 +156,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
                     state1,
                 )?;
                 let bin_b = net0.reshare(bin_a.to_owned())?;
-                let bin = Rep3BigUintShare::new(bin_a, bin_b);
+                let bin = Rep3UintShare::new(bin_a, bin_b);
                 rep3::conversion::b2a_selector(&bin, net0, state0)?
             }
             PublicPrivateLut::Shared(vec) => {
@@ -170,18 +171,18 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
 
     /// This is a protocol which reads from a public LUT without converting the result back to the arithmetic domain.
     pub fn get_from_public_lut_no_b2a_conversion<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<F>,
+        index: Rep3UintShare<F>,
         lut: &PublicPrivateLut<F>,
         net0: &N,
         net1: &N,
         state0: &mut Rep3State,
         state1: &mut Rep3State,
-    ) -> eyre::Result<Rep3BigUintShare<F>>
+    ) -> eyre::Result<Rep3UintShare<F>>
     where
         Standard: Distribution<T>,
     {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
+        let a = T::cast_from_uint(&index.a);
+        let b = T::cast_from_uint(&index.b);
         let share = Rep3RingShare::new(a, b);
 
         match lut {
@@ -195,7 +196,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
                     state1,
                 )?;
                 let bin_b = net0.reshare(bin_a.to_owned())?;
-                Ok(Rep3BigUintShare::new(bin_a, bin_b))
+                Ok(Rep3UintShare::new(bin_a, bin_b))
             }
             PublicPrivateLut::Shared(_) => {
                 panic!("LUT is not public")
@@ -204,7 +205,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     }
 
     fn write_to_lut_internal<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<F>,
+        index: Rep3UintShare<F>,
         lut: &mut PublicPrivateLut<F>,
         value: &Rep3PrimeFieldShare<F>,
         net0: &N,
@@ -215,8 +216,8 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     where
         Standard: Distribution<T>,
     {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
+        let a = T::cast_from_uint(&index.a);
+        let b = T::cast_from_uint(&index.b);
         let share = Rep3RingShare::new(a, b);
         match lut {
             PublicPrivateLut::Public(vec) => {
@@ -237,15 +238,15 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     }
 
     fn ohv_from_index_internal<T: IntRing2k, N: Network>(
-        index: Rep3BigUintShare<F>,
+        index: Rep3UintShare<F>,
         k: usize,
         net0: &N,
         _net1: &N,
         state0: &mut Rep3State,
         _state1: &mut Rep3State,
     ) -> eyre::Result<Vec<Rep3RingShare<Bit>>> {
-        let a = T::cast_from_biguint(&index.a);
-        let b = T::cast_from_biguint(&index.b);
+        let a = T::cast_from_uint(&index.a);
+        let b = T::cast_from_uint(&index.b);
         let bits = Rep3RingShare::new(a, b);
 
         gadgets::ohv::ohv(k, bits, net0, state0)
@@ -302,7 +303,7 @@ impl<F: PrimeField> Rep3FieldLookupTable<F> {
     }
 }
 
-impl<F: PrimeField> LookupTableProvider<F> for Rep3FieldLookupTable<F> {
+impl<F: FieldUint> LookupTableProvider<F> for Rep3FieldLookupTable<F> {
     type SecretShare = Rep3PrimeFieldShare<F>;
     type IndexSecretShare = Rep3PrimeFieldShare<F>;
     type LutType = PublicPrivateLut<F>;

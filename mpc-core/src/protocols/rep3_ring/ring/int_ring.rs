@@ -3,18 +3,15 @@
 //! Contains the IntRing2k trait that specifies different datatypes for rings Z_{2^k}
 
 use super::bit::Bit;
-use num_bigint::BigUint;
-use num_traits::ToBytes;
-use num_traits::{AsPrimitive, One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
-use ruint::Uint;
+use crate::uint::{RUint, UintBackend};
+use num_traits::{One, WrappingAdd, WrappingMul, WrappingNeg, WrappingSub, Zero};
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::io::{Read, Write};
-use std::ops::{ShlAssign, ShrAssign};
 use std::{
     fmt::Debug,
-    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not, Shl, Shr},
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Shl, Shr},
 };
+
+pub use crate::uint::{U512, U1024};
 
 /// Types implementing this trait can be used as elements of a ring Z_{2^k}
 pub trait IntRing2k:
@@ -64,12 +61,13 @@ pub trait IntRing2k:
     /// Returns the effective number of bits (i.e., how many LSBs are set)
     fn bits(&self) -> usize;
 
-    /// Casts this type to a BigUint
-    fn cast_to_biguint(&self) -> BigUint;
+    /// Casts this type to a fixed-width uint, zero-extending if the target
+    /// is wider and truncating excess bits if it is narrower
+    fn cast_to_uint<U: UintBackend>(&self) -> U;
 
-    /// Casts a BigUint to this type, removing any excess bits
+    /// Casts a fixed-width uint to this type, removing any excess bits
     /// Thus if the value is larger than this type, it will be truncated
-    fn cast_from_biguint(biguint: &BigUint) -> Self;
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self;
 
     /// a += b
     #[inline(always)]
@@ -114,12 +112,15 @@ impl IntRing2k for Bit {
         self.0 as usize
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(self.0 as u64)
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(self.convert())
     }
 
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default().as_()
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        // Truncate to the LSB (LSB truncation commutes with XOR, so casting
+        // each share component yields a valid Bit-sharing; `!is_zero` would
+        // not).
+        Bit::new(u.bit(0))
     }
 }
 
@@ -144,12 +145,12 @@ impl IntRing2k for u8 {
         self.ilog2() as usize + 1
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(*self as u64)
     }
 
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default() as Self
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        u.to_u64_truncating() as Self
     }
 }
 
@@ -174,12 +175,12 @@ impl IntRing2k for u16 {
         self.ilog2() as usize + 1
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(*self as u64)
     }
 
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default() as Self
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        u.to_u64_truncating() as Self
     }
 }
 
@@ -204,12 +205,12 @@ impl IntRing2k for u32 {
         self.ilog2() as usize + 1
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(*self as u64)
     }
 
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default() as Self
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        u.to_u64_truncating() as Self
     }
 }
 
@@ -234,12 +235,12 @@ impl IntRing2k for u64 {
         self.ilog2() as usize + 1
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from(*self)
     }
 
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        biguint.iter_u64_digits().next().unwrap_or_default() as Self
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        u.to_u64_truncating() as Self
     }
 }
 
@@ -264,676 +265,84 @@ impl IntRing2k for u128 {
         self.ilog2() as usize + 1
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from(*self)
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from_limbs_truncating(&[*self as u64, (*self >> 64) as u64])
     }
 
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        let mut iter = biguint.iter_u64_digits();
-        let x0 = iter.next().unwrap_or_default();
-        let x1 = iter.next().unwrap_or_default();
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        let limbs = u.as_limbs();
+        let x0 = limbs.first().copied().unwrap_or_default();
+        let x1 = limbs.get(1).copied().unwrap_or_default();
         ((x1 as u128) << 64) | x0 as u128
     }
 }
 
-/// 512-bit unsigned integer type
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
-#[repr(transparent)]
-pub struct U512(pub Uint<512, 8>);
+impl<const BITS: usize, const LIMBS: usize> IntRing2k for RUint<BITS, LIMBS> {
+    const K: usize = BITS;
+    const BYTES: usize = LIMBS * 8;
 
-impl fmt::Display for U512 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "0x{}",
-            hex::encode(self.0.to_be_bytes::<{ U512::BYTES }>())
-        )
-    }
-}
-
-impl Serialize for U512 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let bytes = self.0.to_le_bytes::<{ Self::BYTES }>();
-        serializer.serialize_bytes(&bytes)
-    }
-}
-impl<'de> Deserialize<'de> for U512 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct U512Visitor;
-
-        impl<'de> serde::de::Visitor<'de> for U512Visitor {
-            type Value = U512;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a byte array of length 64")
-            }
-
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                if v.len() != U512::BYTES {
-                    return Err(E::invalid_length(v.len(), &self));
-                }
-                let mut arr = [0u8; U512::BYTES];
-                arr.copy_from_slice(v);
-                Ok(U512(Uint::<512, 8>::from_le_bytes(arr)))
-            }
+    fn from_reader<R: std::io::Read>(mut reader: R) -> std::io::Result<Self> {
+        let mut limbs = [0u64; LIMBS];
+        let mut buf = [0u8; 8];
+        for limb in &mut limbs {
+            reader.read_exact(&mut buf)?;
+            *limb = u64::from_le_bytes(buf);
         }
-
-        deserializer.deserialize_bytes(U512Visitor)
-    }
-}
-
-// Basic conversions
-impl From<bool> for U512 {
-    fn from(v: bool) -> Self {
-        U512(Uint::<512, 8>::from(if v { 1u8 } else { 0u8 }))
-    }
-}
-impl From<u64> for U512 {
-    fn from(v: u64) -> Self {
-        U512(Uint::<512, 8>::from(v))
-    }
-}
-impl From<u128> for U512 {
-    fn from(v: u128) -> Self {
-        U512(Uint::<512, 8>::from(v))
-    }
-}
-
-impl TryFrom<U512> for usize {
-    type Error = &'static str;
-    fn try_from(v: U512) -> Result<Self, Self::Error> {
-        v.0.try_into()
-            .map_err(|_| "U512 value too large to fit into usize")
-    }
-}
-
-// Bit operations
-impl BitAnd for U512 {
-    type Output = Self;
-    fn bitand(self, rhs: Self) -> Self::Output {
-        U512(self.0 & rhs.0)
-    }
-}
-impl BitOr for U512 {
-    type Output = Self;
-    fn bitor(self, rhs: Self) -> Self::Output {
-        U512(self.0 | rhs.0)
-    }
-}
-impl BitXor for U512 {
-    type Output = Self;
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        U512(self.0 ^ rhs.0)
-    }
-}
-impl BitAndAssign for U512 {
-    fn bitand_assign(&mut self, rhs: Self) {
-        self.0 &= rhs.0;
-    }
-}
-impl BitOrAssign for U512 {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 |= rhs.0;
-    }
-}
-impl BitXorAssign for U512 {
-    fn bitxor_assign(&mut self, rhs: Self) {
-        self.0 ^= rhs.0;
-    }
-}
-
-impl Not for U512 {
-    type Output = Self;
-    fn not(self) -> Self::Output {
-        U512(!self.0)
-    }
-}
-
-impl Shl<usize> for U512 {
-    type Output = Self;
-    fn shl(self, rhs: usize) -> Self::Output {
-        U512(self.0 << rhs)
-    }
-}
-impl Shr<usize> for U512 {
-    type Output = Self;
-    fn shr(self, rhs: usize) -> Self::Output {
-        U512(self.0 >> rhs)
-    }
-}
-impl ShlAssign<usize> for U512 {
-    fn shl_assign(&mut self, rhs: usize) {
-        self.0 <<= rhs;
-    }
-}
-impl ShrAssign<usize> for U512 {
-    fn shr_assign(&mut self, rhs: usize) {
-        self.0 >>= rhs;
-    }
-}
-
-impl Neg for U512 {
-    type Output = Self;
-    fn neg(self) -> Self::Output {
-        U512(-self.0)
-    }
-}
-
-impl std::ops::Add for U512 {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        U512(self.0 + rhs.0)
-    }
-}
-impl std::ops::Sub for U512 {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        U512(self.0 - rhs.0)
-    }
-}
-impl std::ops::Mul for U512 {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        U512(self.0 * rhs.0)
-    }
-}
-
-impl WrappingAdd for U512 {
-    fn wrapping_add(&self, v: &Self) -> Self {
-        U512(self.0 + v.0)
-    }
-}
-impl WrappingSub for U512 {
-    fn wrapping_sub(&self, v: &Self) -> Self {
-        U512(self.0 - v.0)
-    }
-}
-impl WrappingMul for U512 {
-    fn wrapping_mul(&self, v: &Self) -> Self {
-        U512(self.0 * v.0)
-    }
-}
-impl WrappingNeg for U512 {
-    fn wrapping_neg(&self) -> Self {
-        -(*self)
-    }
-}
-
-impl Zero for U512 {
-    fn zero() -> Self {
-        U512(Uint::<512, 8>::from(0u8))
-    }
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
-impl One for U512 {
-    fn one() -> Self {
-        U512(Uint::<512, 8>::from(1u8))
-    }
-}
-
-impl AsPrimitive<U512> for U512 {
-    fn as_(self) -> U512 {
-        self
-    }
-}
-
-impl IntRing2k for U512 {
-    const K: usize = 512;
-    const BYTES: usize = 64;
-
-    fn from_reader<R: Read>(mut reader: R) -> std::io::Result<Self> {
-        let mut bytes = [0u8; Self::BYTES];
-        reader.read_exact(&mut bytes)?;
-        Ok(U512(Uint::<512, 8>::from_le_bytes(bytes)))
+        Ok(Self(ruint::Uint::from_limbs(limbs)))
     }
 
-    fn write<W: Write>(&self, mut writer: W) -> std::io::Result<()> {
-        writer.write_all(&self.0.to_le_bytes::<{ Self::BYTES }>())
+    fn write<W: std::io::Write>(&self, mut writer: W) -> std::io::Result<()> {
+        for limb in self.0.as_limbs() {
+            writer.write_all(&limb.to_le_bytes())?;
+        }
+        Ok(())
     }
 
     fn bits(&self) -> usize {
-        if self.is_zero() {
-            return 0;
-        }
         self.0.bit_len()
     }
 
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from_bytes_le(&self.0.to_le_bytes::<{ Self::BYTES }>())
+    fn cast_to_uint<U: UintBackend>(&self) -> U {
+        U::from_limbs_truncating(<Self as UintBackend>::as_limbs(self))
     }
 
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        let mut bytes = biguint.to_le_bytes();
-        bytes.truncate(Self::BYTES);
-        let mut arr = [0u8; Self::BYTES];
-        arr[..bytes.len()].copy_from_slice(&bytes);
-        U512(Uint::<512, 8>::from_le_bytes(arr))
+    fn cast_from_uint<U: UintBackend>(u: &U) -> Self {
+        <Self as UintBackend>::from_limbs_truncating(u.as_limbs())
     }
 }
 
-impl rand::distributions::Distribution<U512> for rand::distributions::Standard {
-    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> U512 {
-        let mut bytes = [0u8; U512::BYTES];
-        rng.fill_bytes(&mut bytes);
-        U512(Uint::<512, 8>::from_le_bytes(bytes))
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::uint::U256;
+    use rand::{Rng, SeedableRng};
+    use rand_chacha::ChaCha12Rng;
 
-impl AsPrimitive<u128> for U512 {
-    fn as_(self) -> u128 {
-        let le = self.0.to_le_bytes::<{ U512::BYTES }>();
-        let mut arr = [0u8; 16];
-        arr.copy_from_slice(&le[..16]);
-        u128::from_le_bytes(arr)
-    }
-}
-
-impl AsPrimitive<u64> for U512 {
-    fn as_(self) -> u64 {
-        let le = self.0.to_le_bytes::<{ U512::BYTES }>();
-        let mut arr = [0u8; 8];
-        arr.copy_from_slice(&le[..8]);
-        u64::from_le_bytes(arr)
-    }
-}
-impl AsPrimitive<u32> for U512 {
-    fn as_(self) -> u32 {
-        let le = self.0.to_le_bytes::<{ U512::BYTES }>();
-        let mut arr = [0u8; 4];
-        arr.copy_from_slice(&le[..4]);
-        u32::from_le_bytes(arr)
-    }
-}
-
-impl AsPrimitive<u16> for U512 {
-    fn as_(self) -> u16 {
-        let le = self.0.to_le_bytes::<{ U512::BYTES }>();
-        let mut arr = [0u8; 2];
-        arr.copy_from_slice(&le[..2]);
-        u16::from_le_bytes(arr)
-    }
-}
-impl AsPrimitive<u8> for U512 {
-    fn as_(self) -> u8 {
-        let le = self.0.to_le_bytes::<{ U512::BYTES }>();
-        le[0]
-    }
-}
-impl AsPrimitive<Bit> for U512 {
-    fn as_(self) -> Bit {
-        Bit(!self.0.is_zero())
-    }
-}
-
-impl AsPrimitive<U512> for u128 {
-    fn as_(self) -> U512 {
-        U512(Uint::<512, 8>::from(self))
-    }
-}
-impl AsPrimitive<U512> for u64 {
-    fn as_(self) -> U512 {
-        U512(Uint::<512, 8>::from(self))
-    }
-}
-impl AsPrimitive<U512> for u32 {
-    fn as_(self) -> U512 {
-        U512(Uint::<512, 8>::from(self))
-    }
-}
-impl AsPrimitive<U512> for u16 {
-    fn as_(self) -> U512 {
-        U512(Uint::<512, 8>::from(self))
-    }
-}
-impl AsPrimitive<U512> for u8 {
-    fn as_(self) -> U512 {
-        U512(Uint::<512, 8>::from(self))
-    }
-}
-impl AsPrimitive<U512> for Bit {
-    fn as_(self) -> U512 {
-        U512(Uint::<512, 8>::from(if self.0 { 1u8 } else { 0u8 }))
-    }
-}
-
-/// 1024-bit unsigned integer type
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Default)]
-#[repr(transparent)]
-pub struct U1024(pub Uint<1024, 16>);
-
-impl fmt::Display for U1024 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "0x{}",
-            hex::encode(self.0.to_be_bytes::<{ U1024::BYTES }>())
-        )
-    }
-}
-
-impl Serialize for U1024 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let bytes = self.0.to_le_bytes::<{ Self::BYTES }>();
-        serializer.serialize_bytes(&bytes)
-    }
-}
-impl<'de> Deserialize<'de> for U1024 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct U1024Visitor;
-
-        impl<'de> serde::de::Visitor<'de> for U1024Visitor {
-            type Value = U1024;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a byte array of length 128")
-            }
-
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
-            where
-                E: serde::de::Error,
-            {
-                if v.len() != U1024::BYTES {
-                    return Err(E::invalid_length(v.len(), &self));
-                }
-                let mut arr = [0u8; U1024::BYTES];
-                arr.copy_from_slice(v);
-                Ok(U1024(Uint::<1024, 16>::from_le_bytes(arr)))
-            }
+    /// `Bit::cast_from_uint` must truncate to the LSB, NOT map any nonzero
+    /// value to 1: LSB truncation commutes with XOR, so casting each
+    /// replicated share component yields a valid Bit-sharing of `LSB(x)`;
+    /// `!is_zero` does not commute with XOR and would reconstruct garbage on
+    /// full-width share components.
+    #[test]
+    fn bit_cast_from_uint_truncates_to_lsb() {
+        let mut rng = ChaCha12Rng::seed_from_u64(48);
+        let mut vals: Vec<u64> = vec![0, 1, 2, 3];
+        for _ in 0..8 {
+            let r: u64 = rng.r#gen();
+            vals.push(r & !1); // even
+            vals.push(r | 1); // odd
         }
-
-        deserializer.deserialize_bytes(U1024Visitor)
-    }
-}
-
-// Basic conversions
-impl From<bool> for U1024 {
-    fn from(v: bool) -> Self {
-        U1024(Uint::<1024, 16>::from(if v { 1u8 } else { 0u8 }))
-    }
-}
-impl From<u64> for U1024 {
-    fn from(v: u64) -> Self {
-        U1024(Uint::<1024, 16>::from(v))
-    }
-}
-impl From<u128> for U1024 {
-    fn from(v: u128) -> Self {
-        U1024(Uint::<1024, 16>::from(v))
-    }
-}
-
-impl TryFrom<U1024> for usize {
-    type Error = &'static str;
-    fn try_from(v: U1024) -> Result<Self, Self::Error> {
-        v.0.try_into()
-            .map_err(|_| "U1024 value too large to fit into usize")
-    }
-}
-
-// Bit operations
-impl BitAnd for U1024 {
-    type Output = Self;
-    fn bitand(self, rhs: Self) -> Self::Output {
-        U1024(self.0 & rhs.0)
-    }
-}
-impl BitOr for U1024 {
-    type Output = Self;
-    fn bitor(self, rhs: Self) -> Self::Output {
-        U1024(self.0 | rhs.0)
-    }
-}
-impl BitXor for U1024 {
-    type Output = Self;
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        U1024(self.0 ^ rhs.0)
-    }
-}
-impl BitAndAssign for U1024 {
-    fn bitand_assign(&mut self, rhs: Self) {
-        self.0 &= rhs.0;
-    }
-}
-impl BitOrAssign for U1024 {
-    fn bitor_assign(&mut self, rhs: Self) {
-        self.0 |= rhs.0;
-    }
-}
-impl BitXorAssign for U1024 {
-    fn bitxor_assign(&mut self, rhs: Self) {
-        self.0 ^= rhs.0;
-    }
-}
-
-impl Not for U1024 {
-    type Output = Self;
-    fn not(self) -> Self::Output {
-        U1024(!self.0)
-    }
-}
-
-impl Shl<usize> for U1024 {
-    type Output = Self;
-    fn shl(self, rhs: usize) -> Self::Output {
-        U1024(self.0 << rhs)
-    }
-}
-impl Shr<usize> for U1024 {
-    type Output = Self;
-    fn shr(self, rhs: usize) -> Self::Output {
-        U1024(self.0 >> rhs)
-    }
-}
-impl ShlAssign<usize> for U1024 {
-    fn shl_assign(&mut self, rhs: usize) {
-        self.0 <<= rhs;
-    }
-}
-impl ShrAssign<usize> for U1024 {
-    fn shr_assign(&mut self, rhs: usize) {
-        self.0 >>= rhs;
-    }
-}
-
-impl Neg for U1024 {
-    type Output = Self;
-    fn neg(self) -> Self::Output {
-        U1024(-self.0)
-    }
-}
-
-impl std::ops::Add for U1024 {
-    type Output = Self;
-    fn add(self, rhs: Self) -> Self::Output {
-        U1024(self.0 + rhs.0)
-    }
-}
-impl std::ops::Sub for U1024 {
-    type Output = Self;
-    fn sub(self, rhs: Self) -> Self::Output {
-        U1024(self.0 - rhs.0)
-    }
-}
-impl std::ops::Mul for U1024 {
-    type Output = Self;
-    fn mul(self, rhs: Self) -> Self::Output {
-        U1024(self.0 * rhs.0)
-    }
-}
-
-impl WrappingAdd for U1024 {
-    fn wrapping_add(&self, v: &Self) -> Self {
-        U1024(self.0 + v.0)
-    }
-}
-impl WrappingSub for U1024 {
-    fn wrapping_sub(&self, v: &Self) -> Self {
-        U1024(self.0 - v.0)
-    }
-}
-impl WrappingMul for U1024 {
-    fn wrapping_mul(&self, v: &Self) -> Self {
-        U1024(self.0 * v.0)
-    }
-}
-impl WrappingNeg for U1024 {
-    fn wrapping_neg(&self) -> Self {
-        -(*self)
-    }
-}
-
-impl Zero for U1024 {
-    fn zero() -> Self {
-        U1024(Uint::<1024, 16>::from(0u8))
-    }
-    fn is_zero(&self) -> bool {
-        self.0.is_zero()
-    }
-}
-impl One for U1024 {
-    fn one() -> Self {
-        U1024(Uint::<1024, 16>::from(1u8))
-    }
-}
-
-impl AsPrimitive<U1024> for U1024 {
-    fn as_(self) -> U1024 {
-        self
-    }
-}
-
-impl IntRing2k for U1024 {
-    const K: usize = 1024;
-    const BYTES: usize = 128;
-
-    fn from_reader<R: Read>(mut reader: R) -> std::io::Result<Self> {
-        let mut bytes = [0u8; Self::BYTES];
-        reader.read_exact(&mut bytes)?;
-        Ok(U1024(Uint::<1024, 16>::from_le_bytes(bytes)))
-    }
-
-    fn write<W: Write>(&self, mut writer: W) -> std::io::Result<()> {
-        writer.write_all(&self.0.to_le_bytes::<{ Self::BYTES }>())
-    }
-
-    fn bits(&self) -> usize {
-        if self.is_zero() {
-            return 0;
+        for u in vals {
+            let cast = Bit::cast_from_uint(&U256::from(u));
+            assert_eq!(cast, Bit::new(u & 1 == 1), "cast_from_uint({u})");
+            // Also verify that AsPrimitive<Bit> agrees with LSB truncation
+            let as_prim: Bit = <U256 as num_traits::AsPrimitive<Bit>>::as_(U256::from(u));
+            assert_eq!(as_prim, Bit::new(u & 1 == 1), "AsPrimitive<Bit>({u})");
         }
-        self.0.bit_len()
-    }
-
-    fn cast_to_biguint(&self) -> BigUint {
-        BigUint::from_bytes_le(&self.0.to_le_bytes::<{ Self::BYTES }>())
-    }
-
-    fn cast_from_biguint(biguint: &BigUint) -> Self {
-        let mut bytes = biguint.to_le_bytes();
-        bytes.truncate(Self::BYTES);
-        let mut arr = [0u8; Self::BYTES];
-        arr[..bytes.len()].copy_from_slice(&bytes);
-        U1024(Uint::<1024, 16>::from_le_bytes(arr))
-    }
-}
-
-impl rand::distributions::Distribution<U1024> for rand::distributions::Standard {
-    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> U1024 {
-        let mut bytes = [0u8; U1024::BYTES];
-        rng.fill_bytes(&mut bytes);
-        U1024(Uint::<1024, 16>::from_le_bytes(bytes))
-    }
-}
-
-impl AsPrimitive<u128> for U1024 {
-    fn as_(self) -> u128 {
-        let le = self.0.to_le_bytes::<{ U1024::BYTES }>();
-        let mut arr = [0u8; 16];
-        arr.copy_from_slice(&le[..16]);
-        u128::from_le_bytes(arr)
-    }
-}
-
-impl AsPrimitive<u64> for U1024 {
-    fn as_(self) -> u64 {
-        let le = self.0.to_le_bytes::<{ U1024::BYTES }>();
-        let mut arr = [0u8; 8];
-        arr.copy_from_slice(&le[..8]);
-        u64::from_le_bytes(arr)
-    }
-}
-impl AsPrimitive<u32> for U1024 {
-    fn as_(self) -> u32 {
-        let le = self.0.to_le_bytes::<{ U1024::BYTES }>();
-        let mut arr = [0u8; 4];
-        arr.copy_from_slice(&le[..4]);
-        u32::from_le_bytes(arr)
-    }
-}
-
-impl AsPrimitive<u16> for U1024 {
-    fn as_(self) -> u16 {
-        let le = self.0.to_le_bytes::<{ U1024::BYTES }>();
-        let mut arr = [0u8; 2];
-        arr.copy_from_slice(&le[..2]);
-        u16::from_le_bytes(arr)
-    }
-}
-impl AsPrimitive<u8> for U1024 {
-    fn as_(self) -> u8 {
-        let le = self.0.to_le_bytes::<{ U1024::BYTES }>();
-        le[0]
-    }
-}
-impl AsPrimitive<Bit> for U1024 {
-    fn as_(self) -> Bit {
-        Bit(!self.0.is_zero())
-    }
-}
-
-impl AsPrimitive<U1024> for u128 {
-    fn as_(self) -> U1024 {
-        U1024(Uint::<1024, 16>::from(self))
-    }
-}
-impl AsPrimitive<U1024> for u64 {
-    fn as_(self) -> U1024 {
-        U1024(Uint::<1024, 16>::from(self))
-    }
-}
-impl AsPrimitive<U1024> for u32 {
-    fn as_(self) -> U1024 {
-        U1024(Uint::<1024, 16>::from(self))
-    }
-}
-impl AsPrimitive<U1024> for u16 {
-    fn as_(self) -> U1024 {
-        U1024(Uint::<1024, 16>::from(self))
-    }
-}
-impl AsPrimitive<U1024> for u8 {
-    fn as_(self) -> U1024 {
-        U1024(Uint::<1024, 16>::from(self))
-    }
-}
-impl AsPrimitive<U1024> for Bit {
-    fn as_(self) -> U1024 {
-        U1024(Uint::<1024, 16>::from(if self.0 { 1u8 } else { 0u8 }))
+        // a nonzero value with a clear LSB above 64 bits must still cast to 0
+        let high = U256::from_limbs_truncating(&[0, 0, 0, 1]);
+        assert_eq!(Bit::cast_from_uint(&high), Bit::new(false));
+        let high_as_prim: Bit = <U256 as num_traits::AsPrimitive<Bit>>::as_(high);
+        assert_eq!(high_as_prim, Bit::new(false));
     }
 }

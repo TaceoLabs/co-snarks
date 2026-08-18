@@ -5,11 +5,11 @@
 //! This implementation is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs)
 
 use super::{GCInputs, GCUtils, circuits::FancyBinaryConstant};
+use crate::uint::FieldUint;
 use crate::{
     RngType,
     protocols::rep3::{Rep3State, id::PartyID, network::Rep3NetworkExt},
 };
-use ark_ff::PrimeField;
 use core::panic;
 use fancy_garbling::{
     BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::GarblerError, util::output_tweak,
@@ -60,7 +60,7 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
     }
 
     /// This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-    pub fn encode_field<F: PrimeField>(&mut self, field: F) -> GCInputs<WireMod2> {
+    pub fn encode_field<F: FieldUint>(&mut self, field: F) -> GCInputs<WireMod2> {
         GCUtils::encode_field(field, &mut self.rng, self.delta)
     }
 
@@ -85,7 +85,7 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
 
     /// Outputs the values to the evaluator.
     fn output_evaluator(&mut self, x: &[WireMod2]) -> eyre::Result<()> {
-        self.outputs(x).or(Err(eyre::eyre!("Output failed",)))?;
+        self.outputs(x).map_err(|_| eyre::eyre!("Output failed",))?;
         Ok(())
     }
 

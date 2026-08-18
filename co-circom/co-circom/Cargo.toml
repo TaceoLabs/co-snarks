@@ -35,7 +35,6 @@ num-traits.workspace = true
 rand.workspace = true
 serde_json.workspace = true
 serde.workspace = true
-toml.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 tracing.workspace = true
 rustls.workspace = true
@@ -46,3 +45,4 @@ criterion.workspace = true
 [[bench]]
 name = "zkey_parse"
 harness = false
+

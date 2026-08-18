@@ -11,9 +11,9 @@ use mpc_core::{
         ShamirPreprocessing, ShamirPrimeFieldShare, ShamirState, arithmetic,
         network::ShamirNetworkExt,
     },
+    uint::FieldUint,
 };
 use mpc_net::Network;
-use num_bigint::BigUint;
 
 type ArithmeticShare<F> = ShamirPrimeFieldShare<F>;
 
@@ -76,7 +76,7 @@ impl<'a, F: PrimeField, N: Network> CircomShamirVmWitnessExtension<'a, F, N> {
     }
 }
 
-impl<F: PrimeField, N: Network> VmCircomWitnessExtension<F>
+impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
     for CircomShamirVmWitnessExtension<'_, F, N>
 {
     type Public = F;

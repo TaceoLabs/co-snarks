@@ -4,7 +4,7 @@
 
 use crate::protocols::{
     rep3::{
-        self, Rep3BigUintShare, Rep3PrimeFieldShare, Rep3State,
+        self, Rep3PrimeFieldShare, Rep3State, Rep3UintShare,
         id::PartyID,
         yao::{
             GCInputs, GCUtils, circuits::GarbledCircuits, evaluator::Rep3Evaluator,
@@ -13,11 +13,10 @@ use crate::protocols::{
     },
     rep3_ring::conversion,
 };
-use ark_ff::PrimeField;
+use crate::uint::{FieldUint, U512};
 use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
-use num_bigint::BigUint;
 use num_traits::{One, Zero};
 use rand::{CryptoRng, Rng, distributions::Standard, prelude::Distribution};
 use std::{any::TypeId, ops::Neg};
@@ -125,7 +124,7 @@ pub fn joint_input_arithmetic_added_many<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
 
@@ -149,7 +148,7 @@ pub fn joint_input_arithmetic_added_many<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
 
@@ -193,8 +192,8 @@ pub fn input_ring_id2_many<T: IntRing2k, N: Network>(
             GCUtils::receive_bundle_from(bits, net, PartyID::ID2)?
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
-            let x = x.ok_or(eyre::eyre!("No input provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
+            let x = x.ok_or_else(|| eyre::eyre!("No input provided"))?;
 
             if x.len() != n_inputs {
                 eyre::bail!("Invalid number of inputs");
@@ -251,7 +250,7 @@ pub fn joint_input_binary_xored<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Input x01
             let xor = x.a ^ x.b;
@@ -266,7 +265,7 @@ pub fn joint_input_binary_xored<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             // Input x2
             let x2 = GCUtils::encode_ring(x.a, &mut state.rng, delta);
@@ -305,7 +304,7 @@ pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID1 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
 
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
@@ -330,7 +329,7 @@ pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
             (x01, x2)
         }
         PartyID::ID2 => {
-            let delta = delta.ok_or(eyre::eyre!("No delta provided"))?;
+            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler_bundle = Vec::with_capacity(bits);
             let mut evaluator_bundle = Vec::with_capacity(bits);
 
@@ -358,7 +357,7 @@ pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
 }
 
 /// A cast of a vector of Rep3RingShare to a vector of Rep3PrimeFieldShare
-pub fn ring_to_field_many<T: IntRing2k, F: PrimeField, N: Network>(
+pub fn ring_to_field_many<T: IntRing2k, F: FieldUint, N: Network>(
     inputs: &[Rep3RingShare<T>],
     net: &N,
     state: &mut Rep3State,
@@ -371,17 +370,17 @@ where
         // SAFETY: We already checked that the type matches
         let shares =
             unsafe { &*(inputs as *const [Rep3RingShare<T>] as *const [Rep3RingShare<Bit>]) };
-        let biguint_shares = shares
+        let uint_shares = shares
             .iter()
             .map(|share| {
-                Rep3BigUintShare::new(
-                    BigUint::from(share.a.0.convert() as u64),
-                    BigUint::from(share.b.0.convert() as u64),
+                Rep3UintShare::new(
+                    F::Uint::from(share.a.0.convert()),
+                    F::Uint::from(share.b.0.convert()),
                 )
             })
             .collect::<Vec<_>>();
 
-        return rep3::conversion::bit_inject_many(&biguint_shares, net, state);
+        return rep3::conversion::bit_inject_many(&uint_shares, net, state);
     }
 
     // The actual garbled circuit implementation
@@ -431,7 +430,7 @@ where
                 GarbledCircuits::ring_to_field_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-            let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+            let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
             // Compose the bits
             for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
@@ -470,7 +469,7 @@ where
 }
 
 /// A cast of a vector of Rep3PrimeFieldShare to a vector of Rep3RingShare. Truncates the excess bits.
-pub fn field_to_ring_many<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn field_to_ring_many<F: FieldUint, T: IntRing2k, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -530,7 +529,7 @@ where
                 GarbledCircuits::field_to_ring_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-            let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+            let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
             // Compose the bits
             for (res, x1) in izip!(res.iter_mut(), x1.chunks(T::K)) {
@@ -625,7 +624,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
@@ -714,7 +713,7 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(F::MODULUS_BIT_SIZE as usize)) {
@@ -820,7 +819,7 @@ macro_rules! decompose_circuit_compose_to_two_fields_blueprint {
                 let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, res_other, x1) in izip!(res.chunks_mut($output_size), res_other.chunks_mut($output_size_other), x1.chunks(F::MODULUS_BIT_SIZE as usize * $output_size + $output_size_other * K::MODULUS_BIT_SIZE as usize)) {
@@ -980,17 +979,24 @@ where
     )
 }
 
+/// Casts a public divisor (a [`U512`], wide enough for any divisor used here,
+/// e.g. a field modulus) into a ring element, truncating to `T`'s width like
+/// the former `IntRing2k::cast_from_biguint` did.
+fn public_divisor_to_ring<T: IntRing2k>(divisor: &U512) -> RingElement<T> {
+    RingElement(T::cast_from_uint(divisor))
+}
+
 /// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
 #[expect(clippy::type_complexity)]
 pub fn ring_div_by_public_to_fr_limbs_and_fq_many<
     T: IntRing2k,
     N: Network,
-    F: PrimeField,
-    K: PrimeField,
+    F: FieldUint,
+    K: FieldUint,
 >(
     input: &[Rep3RingShare<T>],
     limb_size: usize,
-    divisor: &BigUint,
+    divisor: &U512,
     num_limbs_per_field: usize,
     net: &N,
     state: &mut Rep3State,
@@ -999,7 +1005,7 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = input.len();
-    let divisor_as_bits = GCUtils::ring_to_bits::<T>(RingElement(T::cast_from_biguint(divisor)));
+    let divisor_as_bits = GCUtils::ring_to_bits::<T>(public_divisor_to_ring(divisor));
 
     let mut combined_inputs = Vec::with_capacity(input.len());
     combined_inputs.extend_from_slice(input);
@@ -1018,15 +1024,10 @@ where
 }
 
 /// Divides the quotient by a public divisor and then returns the quotient as field elements in limbs_per_field many limbs in one field F and the remainder in another field K. The field elements are composed using wires_c.
-pub fn ring_div_by_public_to_fr_limbs_and_fq<
-    T: IntRing2k,
-    N: Network,
-    F: PrimeField,
-    K: PrimeField,
->(
+pub fn ring_div_by_public_to_fr_limbs_and_fq<T: IntRing2k, N: Network, F: FieldUint, K: FieldUint>(
     input: Rep3RingShare<T>,
     limb_size: usize,
-    divisor: &BigUint,
+    divisor: &U512,
     num_limbs_per_field: usize,
     net: &N,
     state: &mut Rep3State,
@@ -1046,9 +1047,9 @@ where
 }
 
 /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
-pub fn ring_div_by_public_to_limbs_many<T: IntRing2k, N: Network, F: PrimeField>(
+pub fn ring_div_by_public_to_limbs_many<T: IntRing2k, N: Network, F: FieldUint>(
     input: &[Rep3RingShare<T>],
-    divisor: &BigUint,
+    divisor: &U512,
     limb_size: usize,
     num_limbs_per_field: usize,
     net: &N,
@@ -1058,7 +1059,7 @@ where
     Standard: Distribution<T>,
 {
     let num_inputs = input.len();
-    let divisor_as_bits = GCUtils::ring_to_bits::<T>(RingElement(T::cast_from_biguint(divisor)));
+    let divisor_as_bits = GCUtils::ring_to_bits::<T>(public_divisor_to_ring(divisor));
     let num_outputs = 2 * num_inputs * num_limbs_per_field;
 
     let mut combined_inputs = Vec::with_capacity(input.len());
@@ -1076,9 +1077,9 @@ where
 }
 
 /// Divides the quotient by a public divisor and then returns the quotient and remainder as field elements in limbs_per_field many limbs of size limb_size. The field elements are composed using wires_c.
-pub fn ring_div_by_public_to_limbs<T: IntRing2k, N: Network, F: PrimeField>(
+pub fn ring_div_by_public_to_limbs<T: IntRing2k, N: Network, F: FieldUint>(
     input: Rep3RingShare<T>,
-    divisor: &BigUint,
+    divisor: &U512,
     limb_size: usize,
     num_limbs_per_field: usize,
     net: &N,
@@ -1196,7 +1197,7 @@ where
 }
 
 /// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, there will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
-pub fn decompose_field_to_rings_many<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn decompose_field_to_rings_many<F: FieldUint, T: IntRing2k, N: Network>(
     inputs: &[Rep3PrimeFieldShare<F>],
     net: &N,
     state: &mut Rep3State,
@@ -1273,7 +1274,7 @@ where
             );
             let x1 = GCUtils::garbled_circuits_error(x1)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-            let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+            let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
             // Compose the bits
             for (res, x1) in izip!(res.iter_mut(), x1.chunks(T::K)) {
@@ -1325,7 +1326,7 @@ where
 }
 
 /// Decomposes a FieldElement into a vector of RingElements of size decompose_bitlen each. In total, there will be num_decomps_per_field decompositions. The output is stored in the ring specified by T.
-pub fn decompose_field_to_rings<F: PrimeField, T: IntRing2k, N: Network>(
+pub fn decompose_field_to_rings<F: FieldUint, T: IntRing2k, N: Network>(
     input: Rep3PrimeFieldShare<F>,
     net: &N,
     state: &mut Rep3State,
@@ -1396,7 +1397,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                 let x1 = $circuit(&mut garbler,  &x01, &x2,&y01, &y2, &x23, $($args),*);
                 let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
-                let x1 = x1.ok_or(eyre::eyre!("No output received"))?;
+                let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
