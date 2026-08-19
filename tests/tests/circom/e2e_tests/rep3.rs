@@ -86,6 +86,57 @@ macro_rules! add_test_impl_g16 {
             }
 
             #[test]
+            fn [< e2e_proof_ $name _ $curve:lower _ groth16_shamir_bridge>] () {
+                let zkey_file =
+                    File::open(format!("../test_vectors/{}/{}/{}/circuit.zkey", "Groth16", stringify!([< $curve:lower >]), $name)).unwrap();
+                let r1cs_file =
+                    File::open(format!("../test_vectors/{}/{}/{}/circuit.r1cs", "Groth16", stringify!([< $curve:lower >]), $name)).unwrap();
+                let witness_file =
+                    File::open(format!("../test_vectors/{}/{}/{}/witness.wtns", "Groth16", stringify!([< $curve:lower >]), $name)).unwrap();
+                let witness = Witness::<[< ark_ $curve:lower >]::Fr>::from_reader(witness_file).unwrap();
+                let zkey1 = Groth16ZK::<$curve>::from_reader(zkey_file, CheckElement::No).unwrap();
+                let zkey1: (ConstraintMatrices<_>, ProvingKey<_>) = zkey1.into();
+                let zkey1 = Arc::new(zkey1);
+                let zkey2 = Arc::clone(&zkey1);
+                let zkey3 = Arc::clone(&zkey1);
+                let r1cs = R1CS::<$curve>::from_reader(r1cs_file).unwrap();
+                //ignore leading 1 for verification
+                let public_input = witness.values[1..r1cs.num_inputs].to_vec();
+                let mut rng = thread_rng();
+                let [witness_share1, witness_share2, witness_share3] =
+                    SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng);
+                let nets0 = LocalNetwork::new_3_parties();
+                let nets1 = LocalNetwork::new_3_parties();
+                let mut threads = vec![];
+                for (net0, net1, x, zkey) in izip!(
+                    nets0,
+                    nets1,
+                    [witness_share1, witness_share2, witness_share3].into_iter(),
+                    [zkey1, zkey2, zkey3].into_iter()
+                ) {
+                    threads.push(std::thread::spawn(move || {
+                        Rep3CoGroth16::<$curve>::prove_with_shamir_bridge::<_, CircomReduction>(&net0, &net1, &zkey.1, &zkey.0, x).unwrap()
+                    }));
+                }
+                let result3 = threads.pop().unwrap().join().unwrap();
+                let result2 = threads.pop().unwrap().join().unwrap();
+                let result1 = threads.pop().unwrap().join().unwrap();
+                assert_eq!(result1, result2);
+                assert_eq!(result2, result3);
+                let proof = CircomGroth16Proof::from(result1);
+                let ser_proof = serde_json::to_string(&proof).unwrap();
+                let der_proof = serde_json::from_str::<CircomGroth16Proof<$curve>>(&ser_proof).unwrap();
+                let vk: Groth16VK<$curve> = serde_json::from_reader(
+                    File::open(format!("../test_vectors/{}/{}/{}/verification_key.json", "Groth16", stringify!([< $curve:lower >]), $name)).unwrap(),
+                )
+                .unwrap();
+                let vk = vk.into();
+                let der_proof = der_proof.into();
+                assert_eq!(der_proof, result2);
+                Groth16::<$curve>::verify(&vk, &der_proof, &public_input).expect("can verify");
+            }
+
+            #[test]
             fn [< e2e_proof_verify_snarkjs_proof_ $name _ $curve:lower _ groth16>] () {
                 let snarkjs_proof_file =
                     File::open(format!("../test_vectors/{}/{}/{}/circom.proof", "Groth16", stringify!([< $curve:lower >]), $name)).unwrap();
