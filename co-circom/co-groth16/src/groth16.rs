@@ -5,7 +5,7 @@ use ark_ec::{AffineRepr, CurveGroup};
 use ark_ff::{FftField, LegendreSymbol, PrimeField};
 use ark_groth16::{Proof, ProvingKey};
 use co_circom_types::{Rep3SharedWitness, ShamirSharedWitness, SharedWitness};
-use eyre::Result;
+use eyre::{Context, Result};
 use mpc_core::MpcState;
 use mpc_core::protocols::rep3::Rep3State;
 use mpc_core::protocols::rep3::conversion::A2BType;
@@ -349,7 +349,14 @@ where
     C1: SWCurveConfig<ScalarField = P::ScalarField>,
     C2: SWCurveConfig<ScalarField = P::ScalarField>,
 {
-    /// Create a [`Proof`].
+    /// Create a [`Proof`] by running the collaborative Groth16 prover under 3-party replicated
+    /// (REP3) secret sharing, secure against a single semi-honest corruption.
+    ///
+    /// `net0` and `net1` must be two independent networks connecting the same three parties,
+    /// since the prover runs two network legs concurrently. All three parties return the same
+    /// [`Proof`]. If the Shamir prover is available to all parties,
+    /// [`Self::prove_with_shamir_bridge`] produces a proof under the same trust assumption with a
+    /// cheaper online phase.
     pub fn prove<N: Network, R: R1CSToQAP>(
         net0: &N,
         net1: &N,
@@ -370,6 +377,44 @@ where
             witness,
         )
     }
+
+    /// Create a [`Proof`] by locally translating the REP3 `witness` into a 3-party Shamir
+    /// sharing (threshold 1) via [`ShamirState::translate_primefield_repshare_vec`], and then
+    /// running [`ShamirCoGroth16::prove`]. The translation requires no communication, but it is
+    /// deterministic and consumes no fresh randomness, so it is a hand-off, not a re-sharing: the
+    /// REP3 witness shares must not be reused after calling this.
+    ///
+    /// This is typically faster than [`Self::prove`], since the Shamir prover's online phase is
+    /// cheaper, while keeping the same trust assumption (3 parties, at most one semi-honest
+    /// corruption). The resulting proof differs from one produced by [`Self::prove`] only through
+    /// fresh randomness (`r`, `s`); both verify under the same verification key.
+    ///
+    /// # Errors
+    /// Returns an error if `net0.id()` is not a valid REP3 party id (0, 1, or 2).
+    pub fn prove_with_shamir_bridge<N: Network, R: R1CSToQAP>(
+        net0: &N,
+        net1: &N,
+        pkey: &ProvingKey<P>,
+        matrices: &ConstraintMatrices<P::ScalarField>,
+        witness: Rep3SharedWitness<P::ScalarField>,
+    ) -> eyre::Result<Proof<P>> {
+        let translated_witness = ShamirState::translate_primefield_repshare_vec(
+            witness.witness,
+            net0.id().try_into().context("not a valid party id")?,
+        );
+        ShamirCoGroth16::prove::<_, R>(
+            net0,
+            net1,
+            3, // number of parties is 3 for REP3
+            1, // threshold is 1 for REP3
+            pkey,
+            matrices,
+            SharedWitness {
+                public_inputs: witness.public_inputs,
+                witness: translated_witness,
+            },
+        )
+    }
 }
 
 impl<P, C1, C2> ShamirCoGroth16<P>
@@ -383,7 +428,14 @@ where
     C1: SWCurveConfig<ScalarField = P::ScalarField>,
     C2: SWCurveConfig<ScalarField = P::ScalarField>,
 {
-    /// Create a [`Proof`].
+    /// Create a [`Proof`] by running the collaborative Groth16 prover under Shamir secret
+    /// sharing, secure against `threshold` semi-honest corruptions among `num_parties` parties.
+    /// `num_parties` must be at least `2 * threshold + 1`, since `g_c` is opened as a
+    /// degree-`2*threshold` sharing.
+    ///
+    /// `net0` and `net1` must be two independent networks connecting all parties: correlated
+    /// randomness is preprocessed over `net0` before the online phase, and the online phase
+    /// itself runs two network legs concurrently.
     pub fn prove<N: Network, R: R1CSToQAP>(
         net0: &N,
         net1: &N,
@@ -426,6 +478,9 @@ where
     /// initialized with the [`PlainGroth16Driver`].
     ///
     /// DOES NOT PERFORM ANY MPC. For a plain prover checkout the [Groth16 implementation of arkworks](https://docs.rs/ark-groth16/latest/ark_groth16/).
+    ///
+    /// Takes the proving key and constraint matrices from the zkey, and the full witness (public
+    /// inputs plus private witness) in the clear.
     pub fn plain_prove<R: R1CSToQAP>(
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
