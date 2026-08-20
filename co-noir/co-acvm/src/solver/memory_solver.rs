@@ -40,11 +40,7 @@ where
         Ok(())
     }
 
-    pub(super) fn solve_memory_op(
-        &mut self,
-        block_id: BlockId,
-        op: &MemOp,
-    ) -> CoAcvmResult<()> {
+    pub(super) fn solve_memory_op(&mut self, block_id: BlockId, op: &MemOp) -> CoAcvmResult<()> {
         tracing::trace!("solving memory op {:?}", op);
         let index = Self::witness_to_value(self.witness(), op.index)?.to_owned();
         tracing::trace!("index is {}", index);

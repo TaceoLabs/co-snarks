@@ -197,14 +197,14 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AllRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, first_scalar: P::ScalarField, elements: &[P::ScalarField]) {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
         self.r_arith.scale(&[first_scalar, elements[0]]);
-        self.r_perm.scale(&elements[1..3]);
-        self.r_lookup.scale(&elements[3..6]);
-        self.r_delta.scale(&elements[6..10]);
-        self.r_elliptic.scale(&elements[10..12]);
-        self.r_memory.scale(&elements[12..18]);
-        self.r_nnf.scale(&elements[18..19]);
-        self.r_pos_ext.scale(&elements[19..23]);
-        self.r_pos_int.scale(&elements[23..]);
+        self.r_perm.scale(&elements[1..4]);
+        self.r_lookup.scale(&elements[4..7]);
+        self.r_delta.scale(&elements[7..11]);
+        self.r_elliptic.scale(&elements[11..13]);
+        self.r_memory.scale(&elements[13..19]);
+        self.r_nnf.scale(&elements[19..20]);
+        self.r_pos_ext.scale(&elements[20..24]);
+        self.r_pos_int.scale(&elements[24..]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(

@@ -4082,7 +4082,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         };
         builder.build_constraints(driver, constraint_system, crs, &metadata)?;
 
-        builder.finalize_circuit(true, driver)?;
+        builder.finalize_circuit(false, driver)?;
 
         Ok(builder)
     }
@@ -4111,7 +4111,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         };
         builder.build_constraints(driver, constraint_system, crs, &metadata)?;
 
-        builder.finalize_circuit(true, driver)?;
+        builder.finalize_circuit(false, driver)?;
 
         Ok(builder.compute_dyadic_size())
     }

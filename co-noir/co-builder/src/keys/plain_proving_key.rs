@@ -6,7 +6,7 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_noir_common::{
-    constants::{NUM_WIRES, PERMUTATION_ARGUMENT_VALUE_SEPARATOR},
+    constants::{NUM_WIRES, NUM_ZERO_ROWS, PERMUTATION_ARGUMENT_VALUE_SEPARATOR},
     crs::ProverCrs,
     honk_proof::HonkProofResult,
     keys::{plain_proving_key::PlainProvingKey, types::ActiveRegionData},
@@ -199,16 +199,23 @@ pub fn compute_permutation_argument_polynomials<
     tracing::trace!("Computing permutation argument polynomials");
     let mapping = compute_permutation_mapping(circuit_size, circuit, copy_cycles);
 
+    // Rows [NUM_ZERO_ROWS, first_active_row) are disabled-in-Sumcheck header rows that precede
+    // the first circuit block; bb still fills them in the sigma/id polynomials with the identity
+    // mapping (see `permutation_lib.hpp`'s full-range init pass), so we must too.
+    let first_active_row = circuit.blocks.pub_inputs.trace_offset as usize;
+
     // Compute Honk-style sigma and ID polynomials from the corresponding mappings
     compute_honk_style_permutation_lagrange_polynomials_from_mapping::<P>(
         polys.get_sigmas_mut(),
         mapping.sigmas,
         active_region_data,
+        first_active_row,
     );
     compute_honk_style_permutation_lagrange_polynomials_from_mapping::<P>(
         polys.get_ids_mut(),
         mapping.ids,
         active_region_data,
+        first_active_row,
     );
 }
 
@@ -292,6 +299,7 @@ fn compute_honk_style_permutation_lagrange_polynomials_from_mapping<P: CurveGrou
     permutation_polynomials: &mut [Polynomial<P::ScalarField>],
     permutation_mappings: Mapping,
     active_region_data: &ActiveRegionData,
+    first_active_row: usize,
 ) {
     // SEPARATOR ensures that the evaluations of `id_i` (`sigma_i`) and `id_j`(`sigma_j`) polynomials on the boolean
     // hypercube do not intersect for i != j.
@@ -301,6 +309,14 @@ fn compute_honk_style_permutation_lagrange_polynomials_from_mapping<P: CurveGrou
     // TACEO TODO Barrettenberg uses multithreading here
 
     for (wire_idx, current_permutation_poly) in permutation_polynomials.iter_mut().enumerate() {
+        // The disabled-in-Sumcheck header rows before the first circuit block are outside any
+        // copy cycle, so the mapping there is still the untouched self-referencing identity from
+        // `PermutationMapping::new`; write that identity value explicitly to match bb.
+        for poly_idx in NUM_ZERO_ROWS..first_active_row {
+            current_permutation_poly[poly_idx] = P::ScalarField::from(
+                poly_idx as u32 + PERMUTATION_ARGUMENT_VALUE_SEPARATOR * wire_idx as u32,
+            );
+        }
         for i in 0..domain_size {
             let poly_idx = active_region_data.get_idx(i);
             let idx = poly_idx as isize;
