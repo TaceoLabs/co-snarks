@@ -15,6 +15,7 @@ use ultrahonk::prelude::Univariate;
 pub(crate) struct UltraPermutationRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r0: SharedUnivariate<T, P, 6>,
     pub(crate) r1: SharedUnivariate<T, P, 3>,
+    pub(crate) r2: SharedUnivariate<T, P, 3>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for UltraPermutationRelationAcc<T, P> {
@@ -22,6 +23,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for UltraPermutationRelat
         Self {
             r0: Default::default(),
             r1: Default::default(),
+            r2: Default::default(),
         }
     }
 }
@@ -31,6 +33,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraPermutationRelationAcc<T, P>
         assert!(elements.len() == UltraPermutationRelation::NUM_RELATIONS);
         self.r0.scale_inplace(elements[0]);
         self.r1.scale_inplace(elements[1]);
+        self.r2.scale_inplace(elements[2]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -52,13 +55,20 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> UltraPermutationRelationAcc<T, P>
             partial_evaluation_result,
             true,
         );
+
+        self.r2.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
     }
 }
 
 pub(crate) struct UltraPermutationRelation {}
 
 impl UltraPermutationRelation {
-    pub(crate) const NUM_RELATIONS: usize = 2;
+    pub(crate) const NUM_RELATIONS: usize = 3;
     pub(crate) const CRAND_PAIRS_FACTOR: usize = 8;
 }
 
@@ -244,6 +254,13 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::mul_assign_with_public_many(&mut tmp, scaling_factors);
 
         fold_accumulator!(univariate_accumulator.r1, tmp);
+
+        // Enforce z_perm starts at 0 at the lagrange_first row (row NUM_DISABLED_ROWS_IN_SUMCHECK):
+        // without this, a cheating prover could set z_perm there to a non-zero value.
+        let mut tmp = T::mul_with_public_many(lagrange_first, z_perm);
+        T::mul_assign_with_public_many(&mut tmp, scaling_factors);
+
+        fold_accumulator!(univariate_accumulator.r2, tmp);
 
         Ok(())
     }

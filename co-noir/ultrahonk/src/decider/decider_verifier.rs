@@ -136,7 +136,6 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 gemini_masking_evaluation: sumcheck_output.claimed_gemini_masking_evaluation,
             },
             &mut consistency_checked,
-            &padding_indicator_array,
         )?;
 
         let pairing_points = Self::reduce_verify_shplemini(&mut opening_claim, transcript)?;

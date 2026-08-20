@@ -1494,7 +1494,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
 
         let proof_u8 = result.proof_to_buffer();
         out_file
-            .write(proof_u8.as_slice())
+            .write_all(proof_u8.as_slice())
             .context("while writing proof to file")?;
         tracing::info!("Wrote proof to file {}", out.display());
     }
@@ -1507,7 +1507,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
 
         let public_inputs_u8 = result.public_inputs_to_buffer();
         out_file
-            .write(public_inputs_u8.as_slice())
+            .write_all(public_inputs_u8.as_slice())
             .context("while writing proof to file")?;
         tracing::info!(
             "Wrote public inputs to file {}",
@@ -1710,7 +1710,7 @@ fn run_build_and_generate_proof(
 
         let proof_u8 = result.proof_to_buffer();
         out_file
-            .write(proof_u8.as_slice())
+            .write_all(proof_u8.as_slice())
             .context("while writing proof to file")?;
         tracing::info!("Wrote proof to file {}", out.display());
     }
@@ -1723,7 +1723,7 @@ fn run_build_and_generate_proof(
 
         let public_inputs_u8 = result.public_inputs_to_buffer();
         out_file
-            .write(public_inputs_u8.as_slice())
+            .write_all(public_inputs_u8.as_slice())
             .context("while writing public input to file")?;
         tracing::info!(
             "Wrote public inputs to file {}",
@@ -1825,7 +1825,7 @@ fn run_generate_vk(config: CreateVKConfig) -> color_eyre::Result<ExitCode> {
         TranscriptHash::KECCAK => vk.to_buffer_keccak(),
     };
     out_file
-        .write(vk_u8.as_slice())
+        .write_all(vk_u8.as_slice())
         .context("while writing vk to file")?;
     tracing::info!("Wrote vk to file {}", vk_path.display());
 

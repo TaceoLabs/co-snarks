@@ -804,7 +804,13 @@ impl<F: PrimeField> BigField<F> {
         builder.range_constrain_two_limbs(r0_idx, r1_idx, NUM_LIMB_BITS, NUM_LIMB_BITS, driver)?;
         let r2_idx = r2.get_witness_index(builder, driver);
         let r3_idx = r3.get_witness_index(builder, driver);
-        builder.range_constrain_two_limbs(r2_idx, r3_idx, NUM_LIMB_BITS, NUM_LIMB_BITS, driver)?;
+        builder.range_constrain_two_limbs(
+            r2_idx,
+            r3_idx,
+            NUM_LIMB_BITS,
+            Self::NUM_LAST_LIMB_BITS,
+            driver,
+        )?;
 
         Ok(())
     }
@@ -1061,7 +1067,7 @@ impl<F: PrimeField> BigField<F> {
         let mut quotient = BigField::default();
         quotient.binary_basis_limbs[0] = Limb::new(
             quotient_limb.clone(),
-            BigUint::one() << maximum_quotient_bits,
+            (BigUint::one() << maximum_quotient_bits) - BigUint::one(),
         );
         for i in 1..NUM_LIMBS {
             quotient.binary_basis_limbs[i] = Limb::new(
@@ -2683,7 +2689,9 @@ impl<F: PrimeField> BigField<F> {
             if add_constant {
                 return Ok(BigField::from_constant(&r_const));
             } else {
-                new_to_add.push(BigField::from_constant(&r_const));
+                if !r_const.is_zero() {
+                    new_to_add.push(BigField::from_constant(&r_const));
+                }
 
                 let mut result = Self::sum(&mut new_to_add, builder, driver)?;
 
@@ -2695,7 +2703,9 @@ impl<F: PrimeField> BigField<F> {
             }
         }
 
-        new_to_add.push(BigField::from_constant(&r_const));
+        if !r_const.is_zero() {
+            new_to_add.push(BigField::from_constant(&r_const));
+        }
 
         // Compute added sum
         let mut add_right_final_limbs = vec![];

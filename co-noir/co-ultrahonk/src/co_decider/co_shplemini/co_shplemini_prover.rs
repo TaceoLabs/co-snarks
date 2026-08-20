@@ -177,8 +177,7 @@ impl<
         a_0.add_assign_slice(batched_to_be_shifted.shifted());
 
         // Construct the d-1 Gemini foldings of A₀(X)
-        let fold_polynomials =
-            self.compute_fold_polynomials(log_n, multilinear_challenge, a_0, has_zk);
+        let fold_polynomials = self.compute_fold_polynomials(log_n, multilinear_challenge, a_0);
 
         let mut commitments = Vec::with_capacity(fold_polynomials.len());
         for f_poly in fold_polynomials.iter().take(virtual_log_n - 1) {
@@ -238,7 +237,6 @@ impl<
         log_n: usize,
         multilinear_challenge: &[P::ScalarField],
         a_0: SharedPolynomial<T, P>,
-        has_zk: ZeroKnowledge,
     ) -> Vec<SharedPolynomial<T, P>> {
         tracing::trace!("Compute fold polynomials");
         // Note: bb uses multithreading here
@@ -273,10 +271,10 @@ impl<
             a_l = a_l_fold.coefficients;
         }
 
-        // Perform virtual rounds.
-        // After the first `log_n - 1` rounds, the prover's `fold` univariates stabilize. With ZK, the verifier multiplies
-        // the evaluations by 0, otherwise, when `virtual_log_n > log_n`, the prover honestly computes and sends the
-        // constant folds.
+        // Virtual rounds (indices log_n .. virtual_log_n - 1). After real folding, the fold polynomials are
+        // constant. The prover always honestly computes and sends these constant folds — the corresponding
+        // `batched_evaluation` seed used by the verifier is zero-extended by the same factor via the
+        // sumcheck-side masking-evaluation scaling, so no zeroing/freezing is needed on either side.
         let last = &fold_polynomials[fold_polynomials.len() - 1];
         let u_last = multilinear_challenge[log_n - 1];
         let final_eval = T::add(
@@ -284,12 +282,7 @@ impl<
             T::mul_with_public(u_last, T::sub(last[1], last[0])),
         );
         let mut const_fold = SharedPolynomial::new_zero(1);
-        // Temporary fix: when we're running a zk proof, the verifier uses a `padding_indicator_array`. So the evals in
-        // rounds past `log_n - 1` will be ignored. Hence the prover also needs to ignore them, otherwise Shplonk will fail.
-        const_fold[0] = T::mul_with_public(
-            P::ScalarField::from(if has_zk == ZeroKnowledge::Yes { 0 } else { 1 }),
-            final_eval,
-        );
+        const_fold[0] = final_eval;
         fold_polynomials.push(const_fold);
 
         // FOLD_{log_n+1}, ..., FOLD_{d_v-1}
@@ -301,10 +294,7 @@ impl<
         {
             tail *= P::ScalarField::one() - challenge; // multiply by (1 - u_k)
             let mut next_const = SharedPolynomial::new_zero(1);
-            next_const[0] = T::mul_with_public(
-                P::ScalarField::from(if has_zk == ZeroKnowledge::Yes { 0 } else { 1 }),
-                T::mul_with_public(tail, final_eval),
-            );
+            next_const[0] = T::mul_with_public(tail, final_eval);
             fold_polynomials.push(next_const);
         }
 

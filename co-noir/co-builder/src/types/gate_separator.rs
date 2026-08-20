@@ -70,52 +70,17 @@ impl<P: CurveGroup> GateSeparatorPolynomial<P> {
     ) -> eyre::Result<()> {
         let one = FieldCT::from(P::ScalarField::ONE);
 
-        let current_univariate_eval = self
-            .current_element()
-            .sub(&one, builder, driver)
-            .multiply(round_challenge, builder, driver)?
+        let current_univariate_eval = round_challenge
+            .multiply(
+                &self.current_element().sub(&one, builder, driver),
+                builder,
+                driver,
+            )?
             .add(&one, builder, driver);
 
         self.partial_evaluation_result =
             self.partial_evaluation_result
                 .multiply(&current_univariate_eval, builder, driver)?;
-        self.current_element_idx += 1;
-        self.periodicity *= 2;
-        Ok(())
-    }
-
-    pub fn partially_evaluate_with_padding<T: NoirWitnessExtensionProtocol<P::ScalarField>>(
-        &mut self,
-        round_challenge: &FieldCT<P::ScalarField>,
-        indicator: &FieldCT<P::ScalarField>,
-        builder: &mut GenericUltraCircuitBuilder<P, T>,
-        driver: &mut T,
-    ) -> eyre::Result<()> {
-        let one = FieldCT::from(P::ScalarField::ONE);
-
-        let lhs = [
-            round_challenge.clone(),
-            one.sub(indicator, builder, driver),
-            indicator.clone(),
-        ];
-        let rhs = [
-            self.current_element().sub(&one, builder, driver),
-            self.partial_evaluation_result.clone(),
-            self.partial_evaluation_result.clone(),
-        ];
-        let [curr_by_challenge, minus_ind_by_partial, ind_by_partial] =
-            FieldCT::multiply_many(&lhs, &rhs, builder, driver)?
-                .try_into()
-                .expect("we have exactly 3 elements");
-
-        let current_univariate_eval = one.add(&curr_by_challenge, builder, driver);
-
-        // If dummy round, make no update to the partial_evaluation_result
-        self.partial_evaluation_result = minus_ind_by_partial.add(
-            &ind_by_partial.multiply(&current_univariate_eval, builder, driver)?,
-            builder,
-            driver,
-        );
         self.current_element_idx += 1;
         self.periodicity *= 2;
         Ok(())

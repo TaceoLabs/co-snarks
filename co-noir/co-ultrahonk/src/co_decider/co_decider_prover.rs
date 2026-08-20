@@ -74,7 +74,7 @@ impl<
             let commitment_key = &crs.monomials[..1 << (log_subgroup_size + 1)];
             let mut zk_sumcheck_data: SharedZKSumcheckData<T, P> =
                 SharedZKSumcheckData::<T, P>::new(
-                    Utils::get_msb64(circuit_size as u64) as usize,
+                    virtual_log_n,
                     transcript,
                     commitment_key,
                     self.net,

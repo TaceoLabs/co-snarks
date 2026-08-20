@@ -6,7 +6,7 @@ use ark_ec::CurveGroup;
 use ark_ff::One;
 use co_acvm::{PlainAcvmSolver, mpc::NoirWitnessExtensionProtocol};
 use co_noir_common::{
-    constants::{NUM_WIRES, PERMUTATION_ARGUMENT_VALUE_SEPARATOR},
+    constants::{NUM_WIRES, NUM_ZERO_ROWS, PERMUTATION_ARGUMENT_VALUE_SEPARATOR},
     crs::ProverCrs,
     honk_proof::HonkProofResult,
     keys::{plain_proving_key::PlainProvingKey, types::ActiveRegionData},
@@ -58,8 +58,11 @@ pub fn create_prover_instance<P: CurveGroup>(
     // Construct and add to proving key the wire, selector and copy constraint polynomials
     populate_trace(&mut proving_key, circuit, dyadic_circuit_size);
 
-    // Set the lagrange polynomials
-    proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
+    // Set the lagrange polynomials. lagrange_first marks row NUM_DISABLED_ROWS_IN_SUMCHECK, the
+    // row immediately preceding the first real trace content (rows before it are disabled in
+    // Sumcheck for ZK masking/shift compatibility).
+    proving_key.polynomials.precomputed.lagrange_first_mut()
+        [NUM_DISABLED_ROWS_IN_SUMCHECK as usize] = P::ScalarField::one();
     proving_key.polynomials.precomputed.lagrange_last_mut()[final_active_wire_idx] =
         P::ScalarField::one();
 
@@ -196,16 +199,23 @@ pub fn compute_permutation_argument_polynomials<
     tracing::trace!("Computing permutation argument polynomials");
     let mapping = compute_permutation_mapping(circuit_size, circuit, copy_cycles);
 
+    // Rows [NUM_ZERO_ROWS, first_active_row) are disabled-in-Sumcheck header rows that precede
+    // the first circuit block; bb still fills them in the sigma/id polynomials with the identity
+    // mapping (see `permutation_lib.hpp`'s full-range init pass), so we must too.
+    let first_active_row = circuit.blocks.pub_inputs.trace_offset as usize;
+
     // Compute Honk-style sigma and ID polynomials from the corresponding mappings
     compute_honk_style_permutation_lagrange_polynomials_from_mapping::<P>(
         polys.get_sigmas_mut(),
         mapping.sigmas,
         active_region_data,
+        first_active_row,
     );
     compute_honk_style_permutation_lagrange_polynomials_from_mapping::<P>(
         polys.get_ids_mut(),
         mapping.ids,
         active_region_data,
+        first_active_row,
     );
 }
 
@@ -289,6 +299,7 @@ fn compute_honk_style_permutation_lagrange_polynomials_from_mapping<P: CurveGrou
     permutation_polynomials: &mut [Polynomial<P::ScalarField>],
     permutation_mappings: Mapping,
     active_region_data: &ActiveRegionData,
+    first_active_row: usize,
 ) {
     // SEPARATOR ensures that the evaluations of `id_i` (`sigma_i`) and `id_j`(`sigma_j`) polynomials on the boolean
     // hypercube do not intersect for i != j.
@@ -298,6 +309,14 @@ fn compute_honk_style_permutation_lagrange_polynomials_from_mapping<P: CurveGrou
     // TACEO TODO Barrettenberg uses multithreading here
 
     for (wire_idx, current_permutation_poly) in permutation_polynomials.iter_mut().enumerate() {
+        // The disabled-in-Sumcheck header rows before the first circuit block are outside any
+        // copy cycle, so the mapping there is still the untouched self-referencing identity from
+        // `PermutationMapping::new`; write that identity value explicitly to match bb.
+        for poly_idx in NUM_ZERO_ROWS..first_active_row {
+            current_permutation_poly[poly_idx] = P::ScalarField::from(
+                poly_idx as u32 + PERMUTATION_ARGUMENT_VALUE_SEPARATOR * wire_idx as u32,
+            );
+        }
         for i in 0..domain_size {
             let poly_idx = active_region_data.get_idx(i);
             let idx = poly_idx as isize;
@@ -346,18 +365,12 @@ pub fn construct_lookup_table_polynomials<
     table_polynomials: &mut [Polynomial<P::ScalarField>],
     circuit: &GenericUltraCircuitBuilder<P, T>,
     dyadic_circuit_size: usize,
-    additional_offset: usize,
 ) {
-    // Create lookup selector polynomials which interpolate each table column.
-    // Our selector polys always need to interpolate the full subgroup size, so here we offset so as to
-    // put the table column's values at the end. (The first gates are for non-lookup constraints).
-    // [0, ..., 0, ...table, 0, 0, 0, x]
-    //  ^^^^^^^^^  ^^^^^^^^  ^^^^^^^  ^nonzero to ensure uniqueness and to avoid infinity commitments
-    //  |          table     randomness
-    //  ignored, as used for regular constraints and padding to the next power of 2.
-    // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
-    assert!(dyadic_circuit_size > circuit.get_tables_size() + additional_offset);
-    let mut offset = 0;
+    // Create lookup selector polynomials which interpolate each table column, starting at the row
+    // where the `lookup` gate block actually begins in the execution trace (matching bb's
+    // `construct_lookup_table_polynomials`, which starts at `circuit.blocks.lookup.trace_offset()`).
+    let mut offset = circuit.blocks.lookup.trace_offset as usize;
+    assert!(dyadic_circuit_size >= offset + circuit.get_tables_size());
 
     for table in circuit.lookup_tables.iter() {
         let table_index = table.table_index;
@@ -380,8 +393,11 @@ pub fn construct_lookup_read_counts<
     witness: &mut [Polynomial<T::ArithmeticShare>; 2],
     circuit: &mut GenericUltraCircuitBuilder<P, T>,
 ) -> eyre::Result<()> {
-    // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
-    let mut table_offset = 0;
+    // Starts at the row where the `lookup` gate block begins in the trace, matching bb's
+    // `construct_lookup_read_counts` (`circuit.blocks.lookup.trace_offset()`), and consistent with
+    // `construct_lookup_table_polynomials` above.
+    let mut table_offset = circuit.blocks.lookup.trace_offset as usize;
+    assert!(witness[0].len() >= table_offset + circuit.get_tables_size());
     for table in circuit.lookup_tables.iter_mut() {
         // we need the index_map hash table in this case
         if table.requires_index_map() {
@@ -488,7 +504,6 @@ pub fn construct_lookup_polynomials<P: CurveGroup>(
             .get_table_polynomials_mut(),
         circuit,
         dyadic_circuit_size,
-        NUM_DISABLED_ROWS_IN_SUMCHECK as usize,
     );
     construct_lookup_read_counts(
         driver,

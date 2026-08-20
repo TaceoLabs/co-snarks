@@ -6,9 +6,12 @@ use crate::types::field_ct::BoolCT;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE};
+use co_noir_common::constants::{
+    NUM_SELECTORS, NUM_WIRES, NUM_ZERO_ROWS, PAIRING_POINT_ACCUMULATOR_SIZE,
+};
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
+use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use num_bigint::BigUint;
 use std::array;
 use std::cmp::Ordering;
@@ -245,7 +248,11 @@ impl<F: PrimeField> Default for UltraTraceBlocks<UltraTraceBlock<F>> {
 
 impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
     pub fn compute_offsets(&mut self) {
-        let mut offset = 1; // start at 1 because the 0th row is unused for selectors for Honk
+        // Rows [0, NUM_DISABLED_ROWS_IN_SUMCHECK) are disabled in Sumcheck (ZK masking/shift
+        // compatibility), and row 0 is additionally the unused zero row, so the trace proper
+        // starts at NUM_DISABLED_ROWS_IN_SUMCHECK + NUM_ZERO_ROWS. This is unconditional, even
+        // without ZK, to keep the row layout identical across flavors.
+        let mut offset = NUM_DISABLED_ROWS_IN_SUMCHECK + NUM_ZERO_ROWS as u32;
         for block in self.get_mut() {
             block.trace_offset = offset;
             offset += block.len() as u32;
@@ -397,10 +404,8 @@ pub(crate) struct MultiScalarMul<F: PrimeField> {
 pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) input1_x: WitnessOrConstant<F>,
     pub(crate) input1_y: WitnessOrConstant<F>,
-    pub(crate) input1_infinite: WitnessOrConstant<F>,
     pub(crate) input2_x: WitnessOrConstant<F>,
     pub(crate) input2_y: WitnessOrConstant<F>,
-    pub(crate) input2_infinite: WitnessOrConstant<F>,
     // Predicate indicating whether the constraint should be disabled:
     // - true: the constraint is valid
     // - false: the constraint is disabled, i.e it must not fail and can return whatever.
@@ -817,7 +822,6 @@ impl<F: PrimeField> WitnessOrConstant<F> {
     >(
         input_x: &Self,
         input_y: &Self,
-        input_infinity: &Self,
         predicate: &BoolCT<P::ScalarField, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -825,7 +829,6 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         let constant_coordinates = input_x.is_constant && input_y.is_constant;
         let mut point_x = input_x.to_field_ct();
         let mut point_y = input_y.to_field_ct();
-        let infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
 
         // If a witness is not provided (we are in a write_vk scenario) we ensure the coordinates correspond to a valid
         // point to avoid erroneous failures during circuit construction. We only do this if the coordinates are
@@ -838,9 +841,6 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         if builder.is_write_vk_mode && !constant_coordinates {
             builder.set_variable(input_x.index, F::one().into());
             builder.set_variable(input_y.index, g1_y.into());
-            if !input_infinity.is_constant {
-                builder.set_variable(input_infinity.index, F::zero().into());
-            }
         }
 
         if !predicate.is_constant() {
@@ -858,15 +858,12 @@ impl<F: PrimeField> WitnessOrConstant<F> {
                 builder,
                 driver,
             )?;
-            let _ = BoolCT::conditional_assign(
-                predicate,
-                &infinity,
-                &BoolCT::from(false),
-                builder,
-                driver,
-            )?;
         }
 
+        // Use public constructor which auto-detects infinity from (0, 0) coordinates, matching bb's
+        // equivalent `to_grumpkin_point` — any ACIR-supplied infinity witness for this point is
+        // otherwise unused (co-snarks reconstructs it independently where needed, e.g. via
+        // `point_is_infinity` in the blackbox solver), so it is not threaded through here.
         CycleGroupCT::new(point_x, point_y, true, builder, driver)
     }
 

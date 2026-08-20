@@ -38,26 +38,29 @@ impl<P: HonkCurve<TranscriptFieldType>> SumcheckVerifierRound<P> {
         }
     }
 
+    /// Matches bb's `compute_next_target_sum`, which unconditionally sets
+    /// `target_total_sum = univariate.evaluate(round_challenge)` for every round (real or virtual/padding) —
+    /// bb has no round-skipping/freezing indicator here at all. This previously "worked" for non-ZK only
+    /// because the (structurally trivial) virtual-round univariates always had `evaluations[1] == 0`; ZK's
+    /// virtual rounds carry real Libra-corrected data, so the target sum must keep evolving through them too.
     pub(crate) fn compute_next_target_sum<const SIZE: usize>(
         &mut self,
         univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
         round_challenge: P::ScalarField,
-        indicator: P::ScalarField,
+        _indicator: P::ScalarField,
     ) {
         tracing::trace!("Compute target sum");
-        self.target_total_sum = (P::ScalarField::one() - indicator) * self.target_total_sum
-            + indicator * univariate.evaluate(round_challenge);
+        self.target_total_sum = univariate.evaluate(round_challenge);
     }
 
+    /// See `compute_next_target_sum` — matches bb's unconditional `check_sum` (no indicator-based freeze).
     pub(crate) fn check_sum<const SIZE: usize>(
         &mut self,
         univariate: &SumcheckRoundOutput<P::ScalarField, SIZE>,
-        indicator: P::ScalarField,
+        _indicator: P::ScalarField,
     ) -> bool {
         tracing::trace!("Check sum");
-        let total_sum = (P::ScalarField::one() - indicator) * self.target_total_sum
-            + indicator * univariate.evaluations[0]
-            + univariate.evaluations[1];
+        let total_sum = univariate.evaluations[0] + univariate.evaluations[1];
         let sumcheck_round_failed = self.target_total_sum != total_sum;
 
         self.round_failed = self.round_failed || sumcheck_round_failed;
