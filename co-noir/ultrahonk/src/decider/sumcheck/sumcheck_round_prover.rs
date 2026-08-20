@@ -309,7 +309,7 @@ impl SumcheckProverRound {
         round_univariate + libra_round_univariate - contribution_from_disabled_rows
     }
 
-    fn compute_libra_round_univariate<P: HonkCurve<TranscriptFieldType>>(
+    pub(crate) fn compute_libra_round_univariate<P: HonkCurve<TranscriptFieldType>>(
         zk_sumcheck_data: &ZKSumcheckData<P>,
         round_idx: usize,
     ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
@@ -419,5 +419,53 @@ impl SumcheckProverRound {
         );
 
         Self::batch_over_relations_univariates(univariate_accumulators, alphas, gate_separators)
+    }
+
+    /// ZK-sized counterpart of `compute_virtual_contribution`, additionally multiplied by the
+    /// `(1 - L)` row-disabling factor, matching bb's `compute_virtual_round_univariate`. Unlike
+    /// `compute_disabled_contribution` (which subtracts a raw `L`-weighted correction because our
+    /// main loop does not skip disabled edges), this virtual round has no separately-computed main
+    /// loop to reconcile with, so it uses bb's `(1-L)` convention directly.
+    pub(crate) fn compute_virtual_contribution_zk<P: HonkCurve<TranscriptFieldType>>(
+        polynomials: &AllEntities<Vec<P::ScalarField>>,
+        relation_parameters: &RelationParameters<P::ScalarField>,
+        gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
+        alphas: &[P::ScalarField; crate::NUM_ALPHAS],
+        row_disabling_polynomial: &RowDisablingPolynomial<P::ScalarField>,
+    ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
+        let mut univariate_accumulators = AllRelationAcc::<P::ScalarField>::default();
+        let mut extended_edges = ProverUnivariates::<P::ScalarField>::default();
+
+        let virtual_contribution_edge_idx = 0;
+        Self::extend_edges(
+            &mut extended_edges,
+            polynomials,
+            virtual_contribution_edge_idx,
+        );
+
+        let gate_separator_tail = P::ScalarField::one();
+        Self::accumulate_relation_univariates::<P>(
+            &mut univariate_accumulators,
+            &extended_edges,
+            relation_parameters,
+            &gate_separator_tail,
+        );
+
+        let mut result: SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> =
+            Self::batch_over_relations_univariates(
+                univariate_accumulators,
+                alphas,
+                gate_separators,
+            );
+
+        let mut one_minus_l =
+            Univariate::<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK>::default();
+        one_minus_l.extend_from(&[
+            P::ScalarField::one() - row_disabling_polynomial.eval_at_0,
+            P::ScalarField::one() - row_disabling_polynomial.eval_at_1,
+        ]);
+        result *= one_minus_l;
+
+        result
     }
 }

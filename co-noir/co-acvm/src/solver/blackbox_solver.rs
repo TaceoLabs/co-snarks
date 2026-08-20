@@ -292,7 +292,7 @@ where
             let [x, y] = pair else {
                 return Err(eyre::eyre!("MultiScalarMul points must come in (x, y) pairs").into());
             };
-            let is_infinity = Self::point_is_infinity(driver, x, y)?;
+            let is_infinity = Self::point_is_infinity(driver, x, y)?; //TODO FLORIN Batch this
             points_with_infinity.push(x.to_owned());
             points_with_infinity.push(y.to_owned());
             points_with_infinity.push(is_infinity);
@@ -339,7 +339,7 @@ where
         let input2_x = Self::input_to_value(initial_witness, input2[0])?;
         let input2_y = Self::input_to_value(initial_witness, input2[1])?;
 
-        let input1_infinite = Self::point_is_infinity(driver, &input1_x, &input1_y)?;
+        let input1_infinite = Self::point_is_infinity(driver, &input1_x, &input1_y)?; //TODO FLORIN Batch this
         let input2_infinite = Self::point_is_infinity(driver, &input2_x, &input2_y)?;
 
         let (res_x, res_y, _) = driver.embedded_curve_add(

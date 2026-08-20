@@ -18,10 +18,7 @@ use co_noir_common::{
     transcript::{Transcript, TranscriptHasher},
 };
 use mpc_net::Network;
-use ultrahonk::{
-    Utils,
-    prelude::{GateSeparatorPolynomial, Univariate},
-};
+use ultrahonk::{Utils, prelude::GateSeparatorPolynomial};
 
 // Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
 impl<
@@ -409,16 +406,54 @@ impl<
         }
         tracing::trace!("Completed {multivariate_d} rounds of sumcheck");
 
-        // Zero univariates are used to pad the proof to the fixed size CONST_PROOF_SIZE_LOG_N.
-        let zero_univariate =
-            Univariate::<P::ScalarField, { BATCHED_RELATION_PARTIAL_LENGTH_ZK }>::default();
+        // Virtual rounds: unified path for ZK and non-ZK. The row-disabling polynomial 1-L is
+        // circuit-size independent, so it keeps updating through virtual rounds, and Libra
+        // univariates are generated for all `virtual_log_n` rounds (not just the real `multivariate_d`),
+        // so `compute_libra_round_univariate` and `update_zk_sumcheck_data` work here too.
+        let mut virtual_gate_separator = GateSeparatorPolynomial::construct_virtual_separator(
+            &self.memory.gate_challenges,
+            &multivariate_challenge,
+        );
         for idx in multivariate_d as usize..virtual_log_n {
+            let virtual_round_univariate = SumcheckRound::compute_virtual_contribution_zk::<T, P, N>(
+                self.net,
+                self.state,
+                &partially_evaluated_polys,
+                &self.memory.relation_parameters,
+                &virtual_gate_separator,
+                &self.memory.alphas,
+                &row_disabling_polynomial,
+            )?;
+            let libra_round_univariate =
+                SumcheckRound::compute_libra_round_univariate(zk_sumcheck_data, idx);
+            let round_univariate = virtual_round_univariate.add(&libra_round_univariate);
+
+            let round_univariate =
+                T::open_many(&round_univariate.evaluations, self.net, self.state)?;
+
             transcript.send_fr_iter_to_verifier::<P, _>(
                 format!("Sumcheck:univariate_{idx}"),
-                &zero_univariate.evaluations,
+                &round_univariate,
             );
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
+
+            for poly in partially_evaluated_polys.public_iter_mut() {
+                if !poly.is_empty() {
+                    poly[0] *= P::ScalarField::one() - round_challenge;
+                }
+            }
+            for poly in partially_evaluated_polys.shared_iter_mut() {
+                if !poly.is_empty() {
+                    T::mul_assign_with_public(
+                        &mut poly[0],
+                        P::ScalarField::one() - round_challenge,
+                    );
+                }
+            }
+            zk_sumcheck_data.update_zk_sumcheck_data(round_challenge, idx);
+            row_disabling_polynomial.update_evaluations(round_challenge, idx);
+            virtual_gate_separator.partially_evaluate(round_challenge);
         }
 
         // Claimed evaluations of Prover polynomials are extracted and added to the transcript. When Flavor has ZK, the
