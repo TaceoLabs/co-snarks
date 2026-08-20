@@ -255,7 +255,7 @@ where
         initial_witness: &mut WitnessMap<T::AcvmType>,
         points: &[FunctionInput<GenericFieldElement<F>>],
         scalars: &[FunctionInput<GenericFieldElement<F>>],
-        outputs: &(Witness, Witness, Witness),
+        outputs: &(Witness, Witness),
         pedantic_solving: bool,
     ) -> CoAcvmResult<()> {
         let points: Result<Vec<_>, _> = points
@@ -279,41 +279,35 @@ where
             }
         }
         // Call the backend's multi-scalar multiplication function
-        let (res_x, res_y, is_infinity) =
+        let (res_x, res_y, _is_infinity) =
             driver.multi_scalar_mul(&points, &scalars_lo, &scalars_hi, pedantic_solving)?;
 
         // Insert the resulting point into the witness map
         Self::insert_value(&outputs.0, res_x, initial_witness)?;
         Self::insert_value(&outputs.1, res_y, initial_witness)?;
-        Self::insert_value(&outputs.2, is_infinity, initial_witness)?;
         Ok(())
     }
 
     pub(super) fn embedded_curve_add(
         driver: &mut T,
         initial_witness: &mut WitnessMap<T::AcvmType>,
-        input1: &[FunctionInput<GenericFieldElement<F>>; 3],
-        input2: &[FunctionInput<GenericFieldElement<F>>; 3],
-        outputs: &(Witness, Witness, Witness),
+        input1: &[FunctionInput<GenericFieldElement<F>>; 2],
+        input2: &[FunctionInput<GenericFieldElement<F>>; 2],
+        outputs: &(Witness, Witness, ),
     ) -> CoAcvmResult<()> {
         let input1_x = Self::input_to_value(initial_witness, input1[0])?;
         let input1_y = Self::input_to_value(initial_witness, input1[1])?;
-        let input1_infinite = Self::input_to_value(initial_witness, input1[2])?;
         let input2_x = Self::input_to_value(initial_witness, input2[0])?;
         let input2_y = Self::input_to_value(initial_witness, input2[1])?;
-        let input2_infinite = Self::input_to_value(initial_witness, input2[2])?;
-        let (res_x, res_y, res_infinite) = driver.embedded_curve_add(
+        let (res_x, res_y) = driver.embedded_curve_add(
             input1_x,
             input1_y,
-            input1_infinite,
             input2_x,
             input2_y,
-            input2_infinite,
         )?;
 
         Self::insert_value(&outputs.0, res_x, initial_witness)?;
         Self::insert_value(&outputs.1, res_y, initial_witness)?;
-        Self::insert_value(&outputs.2, res_infinite, initial_witness)?;
         Ok(())
     }
 
