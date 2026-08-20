@@ -58,8 +58,11 @@ pub fn create_prover_instance<P: CurveGroup>(
     // Construct and add to proving key the wire, selector and copy constraint polynomials
     populate_trace(&mut proving_key, circuit, dyadic_circuit_size);
 
-    // Set the lagrange polynomials
-    proving_key.polynomials.precomputed.lagrange_first_mut()[0] = P::ScalarField::one();
+    // Set the lagrange polynomials. lagrange_first marks row NUM_DISABLED_ROWS_IN_SUMCHECK, the
+    // row immediately preceding the first real trace content (rows before it are disabled in
+    // Sumcheck for ZK masking/shift compatibility).
+    proving_key.polynomials.precomputed.lagrange_first_mut()
+        [NUM_DISABLED_ROWS_IN_SUMCHECK as usize] = P::ScalarField::one();
     proving_key.polynomials.precomputed.lagrange_last_mut()[final_active_wire_idx] =
         P::ScalarField::one();
 

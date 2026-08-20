@@ -21,6 +21,7 @@ use co_noir_common::{
     mpc::rep3::Rep3UltraHonkDriver,
     mpc::shamir::ShamirUltraHonkDriver,
     polynomials::entities::Polynomials,
+    polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK,
 };
 use mpc_core::MpcState;
 
@@ -71,8 +72,11 @@ pub fn create_prover_instance<
     // Construct and add to proving key the wire, selector and copy constraint polynomials
     populate_trace(id, &mut proving_key, &mut circuit, dyadic_circuit_size);
 
-    // First and last lagrange polynomials (in the full circuit size)
-    proving_key.polynomials.precomputed.lagrange_first_mut()[0] = C::ScalarField::one();
+    // First and last lagrange polynomials (in the full circuit size). lagrange_first marks row
+    // NUM_DISABLED_ROWS_IN_SUMCHECK, the row immediately preceding the first real trace content
+    // (rows before it are disabled in Sumcheck for ZK masking/shift compatibility).
+    proving_key.polynomials.precomputed.lagrange_first_mut()
+        [NUM_DISABLED_ROWS_IN_SUMCHECK as usize] = C::ScalarField::one();
     proving_key.polynomials.precomputed.lagrange_last_mut()[final_active_wire_idx] =
         C::ScalarField::one();
 

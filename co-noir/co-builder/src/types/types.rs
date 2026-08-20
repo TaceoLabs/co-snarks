@@ -6,9 +6,10 @@ use crate::types::field_ct::BoolCT;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
-use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES, PAIRING_POINT_ACCUMULATOR_SIZE};
+use co_noir_common::constants::{NUM_SELECTORS, NUM_WIRES, NUM_ZERO_ROWS, PAIRING_POINT_ACCUMULATOR_SIZE};
 use co_noir_common::honk_curve::HonkCurve;
 use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
+use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use num_bigint::BigUint;
 use std::array;
 use std::cmp::Ordering;
@@ -245,7 +246,11 @@ impl<F: PrimeField> Default for UltraTraceBlocks<UltraTraceBlock<F>> {
 
 impl<F: PrimeField> UltraTraceBlocks<UltraTraceBlock<F>> {
     pub fn compute_offsets(&mut self) {
-        let mut offset = 1; // start at 1 because the 0th row is unused for selectors for Honk
+        // Rows [0, NUM_DISABLED_ROWS_IN_SUMCHECK) are disabled in Sumcheck (ZK masking/shift
+        // compatibility), and row 0 is additionally the unused zero row, so the trace proper
+        // starts at NUM_DISABLED_ROWS_IN_SUMCHECK + NUM_ZERO_ROWS. This is unconditional, even
+        // without ZK, to keep the row layout identical across flavors.
+        let mut offset = NUM_DISABLED_ROWS_IN_SUMCHECK + NUM_ZERO_ROWS as u32;
         for block in self.get_mut() {
             block.trace_offset = offset;
             offset += block.len() as u32;

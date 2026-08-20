@@ -21,7 +21,7 @@ use super::types::ProverMemory;
 use ark_ff::{One, Zero};
 use co_noir_common::{
     CoUtils,
-    constants::PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
+    constants::{NUM_ZERO_ROWS, PERMUTATION_ARGUMENT_VALUE_SEPARATOR},
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
@@ -31,7 +31,7 @@ use co_noir_common::{
     },
     mpc::NoirUltraHonkProver,
     polynomials::{
-        polynomial::{NUM_MASKED_ROWS, Polynomial},
+        polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, NUM_MASKED_ROWS, Polynomial},
         shared_polynomial::SharedPolynomial,
     },
     transcript::{Transcript, TranscriptHasher},
@@ -473,7 +473,10 @@ impl<
             proving_key.circuit_size as usize,
             T::ArithmeticShare::default(),
         );
-        self.memory.z_perm[1] = T::promote_to_trivial_share(self.state.id(), C::ScalarField::one());
+        // The grand product's boundary value of 1 sits at the trace's start row (the first row
+        // after the disabled/reserved head rows), i.e. NUM_DISABLED_ROWS_IN_SUMCHECK + NUM_ZERO_ROWS.
+        self.memory.z_perm[NUM_DISABLED_ROWS_IN_SUMCHECK as usize + NUM_ZERO_ROWS] =
+            T::promote_to_trivial_share(self.state.id(), C::ScalarField::one());
 
         // Compute grand product values corresponding only to the active regions of the trace
         for (i, mul) in mul.into_iter().enumerate() {

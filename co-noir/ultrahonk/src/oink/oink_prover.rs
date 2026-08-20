@@ -21,12 +21,12 @@ use super::types::ProverMemory;
 use crate::{NUM_ALPHAS, Utils};
 use ark_ff::{One, Zero};
 use co_noir_common::{
-    constants::PERMUTATION_ARGUMENT_VALUE_SEPARATOR,
+    constants::{NUM_ZERO_ROWS, PERMUTATION_ARGUMENT_VALUE_SEPARATOR},
     crs::ProverCrs,
     honk_curve::HonkCurve,
     honk_proof::{HonkProofError, HonkProofResult, TranscriptFieldType},
     keys::{plain_proving_key::PlainProvingKey, verification_key::VerifyingKeyBarretenberg},
-    polynomials::polynomial::Polynomial,
+    polynomials::polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, Polynomial},
     transcript::{Transcript, TranscriptHasher},
     types::ZeroKnowledge,
 };
@@ -382,8 +382,10 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .z_perm
             .resize(proving_key.circuit_size as usize, C::ScalarField::zero());
 
-        // For Ultra/Mega, the first row is an inactive zero row thus the grand prod takes value 1 at both i = 0 and i = 1
-        self.memory.z_perm[1] = C::ScalarField::one();
+        // The grand product's boundary value of 1 sits at the trace's start row (the first row
+        // after the disabled/reserved head rows), i.e. NUM_DISABLED_ROWS_IN_SUMCHECK + NUM_ZERO_ROWS.
+        self.memory.z_perm[NUM_DISABLED_ROWS_IN_SUMCHECK as usize + NUM_ZERO_ROWS] =
+            C::ScalarField::one();
 
         // Compute grand product values corresponding only to the active regions of the trace
         for i in 0..active_domain_size - 1 {
