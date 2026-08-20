@@ -495,21 +495,23 @@ impl<F: PrimeField> RowDisablingPolynomial<F> {
 
         F::one() - evaluation_at_multivariate_challenge
     }
-    /**
-     * @brief A variant of the above that uses `padding_indicator_array`.
-     *
-     * @param multivariate_challenge Sumcheck evaluation challenge
-     * @param padding_indicator_array An array with first log_n entries equal to 1, and the remaining entries are 0.
-     */
+    /// Matches bb's call site `evaluate_at_challenge(multivariate_challenge,
+    /// multivariate_challenge.size())`: "The row-disabling polynomial ... is circuit-size
+    /// independent. The verifier evaluates it over ALL challenges." There is no
+    /// indicator-based exclusion of virtual/padding rounds; `padding_indicator_array` is only
+    /// used here for its length.
     pub fn evaluate_at_challenge_with_padding(
         multivariate_challenge: &[F],
         padding_indicator_array: &[F],
     ) -> F {
         let mut evaluation_at_multivariate_challenge = F::one();
 
-        for (idx, &indicator) in padding_indicator_array.iter().enumerate().skip(2) {
-            evaluation_at_multivariate_challenge *=
-                F::one() - indicator * multivariate_challenge[idx];
+        for val in multivariate_challenge
+            .iter()
+            .take(padding_indicator_array.len())
+            .skip(2)
+        {
+            evaluation_at_multivariate_challenge *= F::one() - *val;
         }
 
         F::one() - evaluation_at_multivariate_challenge
