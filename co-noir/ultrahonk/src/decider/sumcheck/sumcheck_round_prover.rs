@@ -31,8 +31,9 @@ use crate::{
 use ark_ff::One;
 use ark_ff::PrimeField;
 use co_noir_common::{
-    honk_curve::HonkCurve, honk_proof::TranscriptFieldType,
-    polynomials::polynomial::RowDisablingPolynomial,
+    honk_curve::HonkCurve,
+    honk_proof::TranscriptFieldType,
+    polynomials::polynomial::{NUM_DISABLED_ROWS_IN_SUMCHECK, RowDisablingPolynomial},
 };
 
 pub(crate) type SumcheckRoundOutput<F, const U: usize> = Univariate<F, U>;
@@ -298,7 +299,6 @@ impl SumcheckProverRound {
             relation_parameters,
             gate_separators,
             alphas,
-            self.round_size,
             round_index,
             row_disabling_polynomial,
         );
@@ -342,7 +342,6 @@ impl SumcheckProverRound {
         relation_parameters: &RelationParameters<P::ScalarField>,
         gate_separators: &GateSeparatorPolynomial<P::ScalarField>,
         alphas: &[P::ScalarField; crate::NUM_ALPHAS],
-        round_size: usize,
         round_idx: usize,
         row_disabling_polynomial: &RowDisablingPolynomial<P::ScalarField>,
     ) -> SumcheckRoundOutput<P::ScalarField, BATCHED_RELATION_PARTIAL_LENGTH_ZK> {
@@ -352,14 +351,16 @@ impl SumcheckProverRound {
         // Construct extended edge containers
         let mut extended_edges = ProverUnivariates::<P::ScalarField>::default();
 
-        // In Round 0, we have to compute the contribution from 2 edges: n - 1 = (1,1,...,1) and n-4 = (0,1,...,1).
-        let start_edge_idx = if round_idx == 0 {
-            round_size - 4
+        // The disabled head rows always sit at the start of the (current round's) domain. In round 0
+        // there are NUM_DISABLED_ROWS_IN_SUMCHECK of them; after folding once, they collapse to a
+        // single edge pair.
+        let excluded_head_size = if round_idx == 0 {
+            NUM_DISABLED_ROWS_IN_SUMCHECK as usize
         } else {
-            round_size - 2
+            2
         };
 
-        for edge_idx in (start_edge_idx..round_size).step_by(2) {
+        for edge_idx in (0..excluded_head_size).step_by(2) {
             Self::extend_edges(&mut extended_edges, polynomials, edge_idx);
             Self::accumulate_relation_univariates::<P>(
                 &mut univariate_accumulators,

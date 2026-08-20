@@ -83,12 +83,13 @@ impl<
     ) -> HonkProofResult<()> {
         tracing::trace!("mask polynomial");
 
+        // Masked rows sit right after the zero row (row 0): [NUM_ZERO_ROWS, NUM_ZERO_ROWS + NUM_MASKED_ROWS).
         let virtual_size = polynomial.coefficients.len();
         assert!(
-            virtual_size >= NUM_MASKED_ROWS as usize,
+            virtual_size >= NUM_ZERO_ROWS + NUM_MASKED_ROWS as usize,
             "Insufficient space for masking"
         );
-        for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
+        for i in (NUM_ZERO_ROWS..NUM_ZERO_ROWS + NUM_MASKED_ROWS as usize).rev() {
             polynomial.coefficients[i] = T::rand(self.net, self.state)?;
         }
 
