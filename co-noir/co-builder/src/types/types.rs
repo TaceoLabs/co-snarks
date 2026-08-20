@@ -397,10 +397,8 @@ pub(crate) struct MultiScalarMul<F: PrimeField> {
 pub(crate) struct EcAdd<F: PrimeField> {
     pub(crate) input1_x: WitnessOrConstant<F>,
     pub(crate) input1_y: WitnessOrConstant<F>,
-    pub(crate) input1_infinite: WitnessOrConstant<F>,
     pub(crate) input2_x: WitnessOrConstant<F>,
     pub(crate) input2_y: WitnessOrConstant<F>,
-    pub(crate) input2_infinite: WitnessOrConstant<F>,
     // Predicate indicating whether the constraint should be disabled:
     // - true: the constraint is valid
     // - false: the constraint is disabled, i.e it must not fail and can return whatever.
@@ -817,7 +815,10 @@ impl<F: PrimeField> WitnessOrConstant<F> {
     >(
         input_x: &Self,
         input_y: &Self,
-        input_infinity: &Self,
+        // `None` when ACIR does not supply an explicit infinity flag for this point (e.g.
+        // EmbeddedCurveAdd inputs); the point at infinity is then encoded as (0, 0), and the flag
+        // is reconstructed from the coordinates instead.
+        input_infinity: Option<&Self>,
         predicate: &BoolCT<P::ScalarField, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -825,7 +826,14 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         let constant_coordinates = input_x.is_constant && input_y.is_constant;
         let mut point_x = input_x.to_field_ct();
         let mut point_y = input_y.to_field_ct();
-        let infinity = input_infinity.to_field_ct().to_bool_ct(builder, driver);
+        let infinity = match input_infinity {
+            Some(input_infinity) => input_infinity.to_field_ct().to_bool_ct(builder, driver),
+            None => {
+                let x_is_zero = point_x.is_zero(builder, driver)?;
+                let y_is_zero = point_y.is_zero(builder, driver)?;
+                x_is_zero.and(&y_is_zero, builder, driver)?
+            }
+        };
 
         // If a witness is not provided (we are in a write_vk scenario) we ensure the coordinates correspond to a valid
         // point to avoid erroneous failures during circuit construction. We only do this if the coordinates are
@@ -838,7 +846,9 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         if builder.is_write_vk_mode && !constant_coordinates {
             builder.set_variable(input_x.index, F::one().into());
             builder.set_variable(input_y.index, g1_y.into());
-            if !input_infinity.is_constant {
+            if let Some(input_infinity) = input_infinity
+                && !input_infinity.is_constant
+            {
                 builder.set_variable(input_infinity.index, F::zero().into());
             }
         }

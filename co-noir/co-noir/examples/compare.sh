@@ -2,11 +2,11 @@ export CARGO_TERM_QUIET=true
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
 NARGO_VERSION=1.0.0-beta.22 ##specify the desired nargo version here
-BARRETENBERG_VERSION=5.0.0-nightly.20260324 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
+BARRETENBERG_VERSION=5.0.0-nightly.20260522 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
 
-REMOVE_OUTPUT=1
+REMOVE_OUTPUT=0
 PIPE=""
 if [[ $REMOVE_OUTPUT -eq 1 ]];
 then

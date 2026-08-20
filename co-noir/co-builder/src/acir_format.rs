@@ -268,7 +268,6 @@ impl<F: PrimeField> AcirFormat<F> {
                     update_max_witness_index_from_function_input(self, predicate);
                     update_max_witness_index_from_witness(self, &outputs.0);
                     update_max_witness_index_from_witness(self, &outputs.1);
-                    update_max_witness_index_from_witness(self, &outputs.2);
                 }
                 BlackBoxFuncCall::EmbeddedCurveAdd {
                     input1,
@@ -286,7 +285,6 @@ impl<F: PrimeField> AcirFormat<F> {
                     update_max_witness_index_from_function_input(self, predicate);
                     update_max_witness_index_from_witness(self, &outputs.0);
                     update_max_witness_index_from_witness(self, &outputs.1);
-                    update_max_witness_index_from_witness(self, &outputs.2);
                 }
                 BlackBoxFuncCall::Keccakf1600 { inputs, outputs } => {
                     for input in inputs.iter() {
@@ -777,10 +775,8 @@ impl<F: PrimeField> AcirFormat<F> {
                 af.ec_add_constraints.push(EcAdd {
                     input1_x: Self::parse_input(input1[0]),
                     input1_y: Self::parse_input(input1[1]),
-                    input1_infinite: Self::parse_input(input1[2]),
                     input2_x: Self::parse_input(input2[0]),
                     input2_y: Self::parse_input(input2[1]),
-                    input2_infinite: Self::parse_input(input2[2]),
                     predicate: Self::parse_input(predicate),
                     result_x: to_witness(outputs.0),
                     result_y: to_witness(outputs.1),
@@ -906,10 +902,7 @@ impl<F: PrimeField> AcirFormat<F> {
         block
     }
 
-    fn add_memory_op_to_block_constraint(
-        mem_op: AcirMemOp<GenericFieldElement<F>>,
-        block: &mut BlockConstraint<F>,
-    ) {
+    fn add_memory_op_to_block_constraint(mem_op: AcirMemOp, block: &mut BlockConstraint<F>) {
         let access_type = match mem_op.operation {
             MemOpKind::Read => 0,
             MemOpKind::Write => 1,

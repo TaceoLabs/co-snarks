@@ -4550,7 +4550,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             let input_point = WitnessOrConstant::to_grumpkin_point(
                 &input.points[i],
                 &input.points[i + 1],
-                &input.points[i + 2],
+                Some(&input.points[i + 2]),
                 &predicate,
                 self,
                 driver,
@@ -4618,11 +4618,13 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.set_variable(index_x, P::ScalarField::one().into());
             self.set_variable(index_y, g1_y.into());
         }
-        // Input to cycle_group points
+        // Input to cycle_group points. ACIR no longer supplies an explicit infinity flag for
+        // EmbeddedCurveAdd inputs (the point at infinity is encoded as (0, 0)), so it is
+        // reconstructed from the coordinates.
         let input1_point = WitnessOrConstant::to_grumpkin_point(
             &constraint.input1_x,
             &constraint.input1_y,
-            &constraint.input1_infinite,
+            None,
             &predicate,
             self,
             driver,
@@ -4631,7 +4633,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let input2_point = WitnessOrConstant::to_grumpkin_point(
             &constraint.input2_x,
             &constraint.input2_y,
-            &constraint.input2_infinite,
+            None,
             &predicate,
             self,
             driver,
