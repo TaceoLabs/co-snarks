@@ -11,7 +11,6 @@ use co_noir_common::constants::{
 use co_noir_common::types::ZeroKnowledge;
 use co_noir_common::{constants::CONST_PROOF_SIZE_LOG_N, honk_curve::HonkCurve};
 
-use crate::honk_verifier::padding_indicator_array::padding_indicator_array;
 use crate::honk_verifier::verifier_relations::NUM_SUBRELATIONS;
 use crate::types::types::PairingPoints;
 use crate::{
@@ -59,13 +58,6 @@ impl UltraRecursiveVerifier {
 
         // Execute Sumcheck Verifier and extract multivariate opening point u = (u_0, ..., u_{d-1}) and purported
         // multivariate evaluations at u
-        let padding_indicator_array = padding_indicator_array::<_, _, CONST_PROOF_SIZE_LOG_N>(
-            &key.vk_and_hash.vk.log_circuit_size,
-            builder,
-            driver,
-            has_zk,
-        )?;
-
         key.gate_challenges = transcript.get_powers_of_challenge(
             "Sumcheck:gate_challenge".to_string(),
             CONST_PROOF_SIZE_LOG_N,
@@ -91,25 +83,35 @@ impl UltraRecursiveVerifier {
         }
 
         let sumcheck_output = if has_zk == ZeroKnowledge::Yes {
-            SumcheckVerifier::verify::<BATCHED_RELATION_PARTIAL_LENGTH_ZK, C, T, H>(
+            SumcheckVerifier::verify::<
+                BATCHED_RELATION_PARTIAL_LENGTH_ZK,
+                CONST_PROOF_SIZE_LOG_N,
+                C,
+                T,
+                H,
+            >(
                 &mut transcript,
                 &mut key.target_sum,
                 &key.relation_parameters,
                 &key.alphas,
                 &key.gate_challenges,
-                &padding_indicator_array,
                 builder,
                 has_zk,
                 driver,
             )?
         } else {
-            SumcheckVerifier::verify::<BATCHED_RELATION_PARTIAL_LENGTH, C, T, H>(
+            SumcheckVerifier::verify::<
+                BATCHED_RELATION_PARTIAL_LENGTH,
+                CONST_PROOF_SIZE_LOG_N,
+                C,
+                T,
+                H,
+            >(
                 &mut transcript,
                 &mut key.target_sum,
                 &key.relation_parameters,
                 &key.alphas,
                 &key.gate_challenges,
-                &padding_indicator_array,
                 builder,
                 has_zk,
                 driver,
@@ -176,7 +178,6 @@ impl UltraRecursiveVerifier {
         };
 
         let mut opening_claim = ShpleminiVerifier::compute_batch_opening_claim(
-            &padding_indicator_array,
             &mut claim_batcher,
             &sumcheck_output.challenges,
             &BigGroup::one(),

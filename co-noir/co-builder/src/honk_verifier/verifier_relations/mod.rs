@@ -183,14 +183,14 @@ macro_rules! scale_and_batch_all {
 
         // Apply to all relations
         process_relation!(r_arith, &[$first_scalar, $challenges[0].clone()]);
-        process_relation!(r_perm, &$challenges[1..3]);
-        process_relation!(r_lookup, &$challenges[3..6]);
-        process_relation!(r_delta, &$challenges[6..10]);
-        process_relation!(r_elliptic, &$challenges[10..12]);
-        process_relation!(r_memory, &$challenges[12..18]);
-        process_relation!(r_nnf, &$challenges[18..19]);
-        process_relation!(r_pos_ext, &$challenges[19..23]);
-        process_relation!(r_pos_int, &$challenges[23..]);
+        process_relation!(r_perm, &$challenges[1..4]);
+        process_relation!(r_lookup, &$challenges[4..7]);
+        process_relation!(r_delta, &$challenges[7..11]);
+        process_relation!(r_elliptic, &$challenges[11..13]);
+        process_relation!(r_memory, &$challenges[13..19]);
+        process_relation!(r_nnf, &$challenges[19..20]);
+        process_relation!(r_pos_ext, &$challenges[20..24]);
+        process_relation!(r_pos_int, &$challenges[24..]);
 
         HonkProofResult::Ok(())
     }};

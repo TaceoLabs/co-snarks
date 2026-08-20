@@ -1,4 +1,5 @@
 use crate::{
+    constants::NUM_ZERO_ROWS,
     polynomials::entities::{PrecomputedEntities, ProverWitnessEntities},
     utils::Utils,
 };
@@ -235,12 +236,13 @@ impl<F: PrimeField> Polynomial<F> {
      * knowledge.
      */
     pub fn mask<R: Rng + CryptoRng>(&mut self, rng: &mut R) {
+        // Masked rows sit right after the zero row (row 0): [NUM_ZERO_ROWS, NUM_ZERO_ROWS + NUM_MASKED_ROWS).
         let virtual_size = self.coefficients.len();
         assert!(
-            virtual_size >= NUM_MASKED_ROWS as usize,
+            virtual_size >= NUM_ZERO_ROWS + NUM_MASKED_ROWS as usize,
             "Insufficient space for masking"
         );
-        for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
+        for i in (NUM_ZERO_ROWS..NUM_ZERO_ROWS + NUM_MASKED_ROWS as usize).rev() {
             self.coefficients[i] = F::rand(rng);
         }
     }
@@ -477,10 +479,10 @@ impl<F: PrimeField> Default for RowDisablingPolynomial<F> {
 impl<F: PrimeField> RowDisablingPolynomial<F> {
     pub fn update_evaluations(&mut self, round_challenge: F, round_idx: usize) {
         if round_idx == 1 {
-            self.eval_at_0 = F::zero();
+            self.eval_at_1 = F::zero();
         }
         if round_idx >= 2 {
-            self.eval_at_1 *= round_challenge;
+            self.eval_at_0 *= F::one() - round_challenge;
         }
     }
 
@@ -488,26 +490,28 @@ impl<F: PrimeField> RowDisablingPolynomial<F> {
         let mut evaluation_at_multivariate_challenge = F::one();
 
         for val in multivariate_challenge.iter().take(log_circuit_size).skip(2) {
-            evaluation_at_multivariate_challenge *= val;
+            evaluation_at_multivariate_challenge *= F::one() - val;
         }
 
         F::one() - evaluation_at_multivariate_challenge
     }
-    /**
-     * @brief A variant of the above that uses `padding_indicator_array`.
-     *
-     * @param multivariate_challenge Sumcheck evaluation challenge
-     * @param padding_indicator_array An array with first log_n entries equal to 1, and the remaining entries are 0.
-     */
+    /// Matches bb's call site `evaluate_at_challenge(multivariate_challenge,
+    /// multivariate_challenge.size())`: "The row-disabling polynomial ... is circuit-size
+    /// independent. The verifier evaluates it over ALL challenges." There is no
+    /// indicator-based exclusion of virtual/padding rounds; `padding_indicator_array` is only
+    /// used here for its length.
     pub fn evaluate_at_challenge_with_padding(
         multivariate_challenge: &[F],
         padding_indicator_array: &[F],
     ) -> F {
         let mut evaluation_at_multivariate_challenge = F::one();
 
-        for (idx, &indicator) in padding_indicator_array.iter().enumerate().skip(2) {
-            evaluation_at_multivariate_challenge *=
-                F::one() - indicator + indicator * multivariate_challenge[idx];
+        for val in multivariate_challenge
+            .iter()
+            .take(padding_indicator_array.len())
+            .skip(2)
+        {
+            evaluation_at_multivariate_challenge *= F::one() - *val;
         }
 
         F::one() - evaluation_at_multivariate_challenge

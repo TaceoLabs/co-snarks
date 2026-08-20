@@ -31,6 +31,7 @@ impl SumcheckVerifier {
     #[expect(clippy::too_many_arguments)]
     pub(crate) fn verify<
         const SIZE: usize,
+        const VIRTUAL_LOG_N: usize,
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
         H: TranscriptHasherCT<C>,
@@ -40,12 +41,10 @@ impl SumcheckVerifier {
         relation_parameters: &RelationParameters<FieldCT<C::ScalarField>>,
         alphas: &[FieldCT<C::ScalarField>; NUM_SUBRELATIONS - 1],
         gate_challenges: &[FieldCT<C::ScalarField>],
-        padding_indicator_array: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         has_zk: ZeroKnowledge,
         driver: &mut T,
     ) -> HonkProofResult<SumcheckOutput<C>> {
-        let one = FieldCT::from(C::ScalarField::ONE);
         let is_zk = has_zk == ZeroKnowledge::Yes;
 
         let mut gate_separators =
@@ -64,8 +63,8 @@ impl SumcheckVerifier {
         };
 
         // MegaRecursiveFlavor does not have ZK
-        let mut multivariate_challenge = Vec::with_capacity(padding_indicator_array.len());
-        for (round_idx, padding_indicator) in padding_indicator_array.iter().enumerate() {
+        let mut multivariate_challenge = Vec::with_capacity(VIRTUAL_LOG_N);
+        for round_idx in 0..VIRTUAL_LOG_N {
             let round_univariate = transcript
                 .receive_n_from_prover(format!("Sumcheck:univariate_{round_idx}"), SIZE)?;
 
@@ -74,38 +73,21 @@ impl SumcheckVerifier {
 
             multivariate_challenge.push(round_challenge.clone());
 
-            SumcheckVerifier::check_sum(
-                &round_univariate,
-                target_sum,
-                padding_indicator,
-                builder,
-                driver,
-            )?;
+            SumcheckVerifier::check_sum(&round_univariate, target_sum, builder, driver)?;
 
-            // Update the target sum for the next round
-            let lhs = one
-                .sub(padding_indicator, builder, driver)
-                .multiply(target_sum, builder, driver)?;
-            let rhs = padding_indicator.multiply(
-                &FieldCT::evaluate_with_domain_start::<{ SIZE }, _, _>(
-                    &round_univariate.try_into().unwrap(),
-                    &round_challenge,
-                    0,
-                    builder,
-                    driver,
-                )?,
+            // Update the target sum for the next round. Matches bb's `compute_next_target_sum`,
+            // which unconditionally sets target_total_sum for every round (real or virtual/padding) —
+            // bb has no round-skipping/freezing indicator here at all.
+            *target_sum = FieldCT::evaluate_with_domain_start::<{ SIZE }, _, _>(
+                &round_univariate.try_into().unwrap(),
+                &round_challenge,
+                0,
                 builder,
                 driver,
             )?;
-            *target_sum = lhs.add(&rhs, builder, driver);
 
             // Partially evaluate the gate separator polynomial
-            gate_separators.partially_evaluate_with_padding(
-                &round_challenge,
-                padding_indicator,
-                builder,
-                driver,
-            )?;
+            gate_separators.partially_evaluate(&round_challenge, builder, driver)?;
         }
         // Extract claimed evaluations of Libra univariates and compute their sum multiplied by the Libra challenge
         // Final round
@@ -141,7 +123,6 @@ impl SumcheckVerifier {
             full_honk_purported_value = full_honk_purported_value.multiply(
                 &Self::evaluate_at_challenge_with_padding(
                     &multivariate_challenge,
-                    padding_indicator_array,
                     builder,
                     driver,
                 )?,
@@ -180,59 +161,47 @@ impl SumcheckVerifier {
      * @param univariate Round univariate \f$\tilde{S}^{i}\f$ represented by its evaluations over \f$0,\ldots,D\f$.
      *
      */
+    /// Matches bb's unconditional `check_sum` (no indicator-based freeze) — see the target-sum
+    /// update in `verify` above for why the indicator can no longer be used to skip virtual/padding
+    /// rounds.
     fn check_sum<
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         univariate: &[FieldCT<C::ScalarField>],
         target_sum: &FieldCT<C::ScalarField>,
-        indicator: &FieldCT<C::ScalarField>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
-        let one = FieldCT::from(C::ScalarField::ONE);
-
-        let total_sum = (one.sub(indicator, builder, driver))
-            .multiply(target_sum, builder, driver)?
-            .add(
-                &indicator.multiply(
-                    &univariate[0].add(&univariate[1], builder, driver),
-                    builder,
-                    driver,
-                )?,
-                builder,
-                driver,
-            );
+        let total_sum = univariate[0].add(&univariate[1], builder, driver);
 
         target_sum.assert_equal(&total_sum, builder, driver);
         Ok(())
     }
 
     /**
-     * @brief A variant of the above that uses `padding_indicator_array`.
+     * @brief Evaluate the Row Disabling Polynomial (1 - \sum L_i) at the sumcheck challenge.
      *
-     * @param multivariate_challenge Sumcheck evaluation challenge
-     * @param padding_indicator_array An array with first log_n entries equal to 1, and the remaining entries are 0.
+     * @param multivariate_challenge Sumcheck evaluation challenge, of length virtual_log_n.
+     *
+     * Matches bb's call site `evaluate_at_challenge(multivariate_challenge, multivariate_challenge.size())`:
+     * the row-disabling polynomial is circuit-size independent and evaluated over ALL challenges, with no
+     * indicator-based exclusion of virtual/padding rounds.
      */
     pub fn evaluate_at_challenge_with_padding<
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
         multivariate_challenge: &[FieldCT<C::ScalarField>],
-        padding_indicator_array: &[FieldCT<C::ScalarField>],
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> eyre::Result<FieldCT<C::ScalarField>> {
         let one = FieldCT::from(C::ScalarField::ONE);
         let mut evaluation_at_multivariate_challenge = one.clone();
 
-        for (idx, indicator) in padding_indicator_array.iter().enumerate().skip(2) {
+        for val in multivariate_challenge.iter().skip(2) {
             evaluation_at_multivariate_challenge = evaluation_at_multivariate_challenge.multiply(
-                &one.sub(indicator, builder, driver).add(
-                    &indicator.multiply(&multivariate_challenge[idx], builder, driver)?,
-                    builder,
-                    driver,
-                ),
+                &one.sub(val, builder, driver),
                 builder,
                 driver,
             )?;

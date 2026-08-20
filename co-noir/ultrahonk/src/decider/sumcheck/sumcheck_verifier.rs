@@ -72,10 +72,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 round_challenge,
                 padding_value,
             );
-            gate_separators.partially_evaluate_with_padding(
-                round_challenge,
-                padding_indicator_array[round_idx],
-            );
+            gate_separators.partially_evaluate(round_challenge);
         }
 
         // Final round

@@ -110,21 +110,21 @@ impl<F: PrimeField> AllRelationEvaluations<F> {
         self.r_arith
             .scale_and_batch_elements(&[first_scalar, elements[0]], &mut output);
         self.r_perm
-            .scale_and_batch_elements(&elements[1..3], &mut output);
+            .scale_and_batch_elements(&elements[1..4], &mut output);
         self.r_lookup
-            .scale_and_batch_elements(&elements[3..6], &mut output);
+            .scale_and_batch_elements(&elements[4..7], &mut output);
         self.r_delta
-            .scale_and_batch_elements(&elements[6..10], &mut output);
+            .scale_and_batch_elements(&elements[7..11], &mut output);
         self.r_elliptic
-            .scale_and_batch_elements(&elements[10..12], &mut output);
+            .scale_and_batch_elements(&elements[11..13], &mut output);
         self.r_memory
-            .scale_and_batch_elements(&elements[12..18], &mut output);
+            .scale_and_batch_elements(&elements[13..19], &mut output);
         self.r_nnf
-            .scale_and_batch_elements(&elements[18..19], &mut output);
+            .scale_and_batch_elements(&elements[19..20], &mut output);
         self.r_pos_ext
-            .scale_and_batch_elements(&elements[19..23], &mut output);
+            .scale_and_batch_elements(&elements[20..24], &mut output);
         self.r_pos_int
-            .scale_and_batch_elements(&elements[23..], &mut output);
+            .scale_and_batch_elements(&elements[24..], &mut output);
 
         output
     }
@@ -134,14 +134,14 @@ impl<F: PrimeField> AllRelationAcc<F> {
     pub(crate) fn scale(&mut self, first_scalar: F, elements: &[F]) {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
         self.r_arith.scale(&[first_scalar, elements[0]]);
-        self.r_perm.scale(&elements[1..3]);
-        self.r_lookup.scale(&elements[3..6]);
-        self.r_delta.scale(&elements[6..10]);
-        self.r_elliptic.scale(&elements[10..12]);
-        self.r_memory.scale(&elements[12..18]);
-        self.r_nnf.scale(&elements[18..19]);
-        self.r_pos_ext.scale(&elements[19..23]);
-        self.r_pos_int.scale(&elements[23..]);
+        self.r_perm.scale(&elements[1..4]);
+        self.r_lookup.scale(&elements[4..7]);
+        self.r_delta.scale(&elements[7..11]);
+        self.r_elliptic.scale(&elements[11..13]);
+        self.r_memory.scale(&elements[13..19]);
+        self.r_nnf.scale(&elements[19..20]);
+        self.r_pos_ext.scale(&elements[20..24]);
+        self.r_pos_int.scale(&elements[24..]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(

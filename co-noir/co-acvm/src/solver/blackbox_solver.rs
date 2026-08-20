@@ -250,19 +250,58 @@ where
         Ok(())
     }
 
+    /// Derives whether points given by their (x, y) coordinates are the point at infinity, which
+    /// is encoded as (0, 0). The backends still work with an explicit is_infinity flag internally,
+    /// but acir no longer supplies one as an opcode input, so it is reconstructed here. Batches the
+    /// equality and multiplication checks for all points into a single round each.
+    fn point_is_infinity_many(
+        driver: &mut T,
+        xs: &[T::AcvmType],
+        ys: &[T::AcvmType],
+    ) -> CoAcvmResult<Vec<T::AcvmType>> {
+        debug_assert_eq!(xs.len(), ys.len());
+        let zero = T::public_zero();
+        let coords: Vec<_> = xs.iter().chain(ys.iter()).cloned().collect();
+        let zeros = vec![zero; coords.len()];
+        let is_zero = driver.equal_many(&coords, &zeros)?;
+        let (x_is_zero, y_is_zero) = is_zero.split_at(xs.len());
+        Ok(driver.mul_many(x_is_zero, y_is_zero)?)
+    }
+
     pub(super) fn multi_scalar_mul(
         driver: &mut T,
         initial_witness: &mut WitnessMap<T::AcvmType>,
         points: &[FunctionInput<GenericFieldElement<F>>],
         scalars: &[FunctionInput<GenericFieldElement<F>>],
-        outputs: &(Witness, Witness, Witness),
+        outputs: &(Witness, Witness),
         pedantic_solving: bool,
     ) -> CoAcvmResult<()> {
         let points: Result<Vec<_>, _> = points
             .iter()
             .map(|input| Self::input_to_value(initial_witness, *input))
             .collect();
-        let points: Vec<_> = points?.into_iter().collect();
+        let points: Vec<_> = points?;
+
+        // acir encodes each point as an (x, y) pair with no explicit is_infinity input;
+        // reconstruct the (x, y, is_infinity) triples the driver still expects.
+        let num_points = points.len() / 2;
+        let mut xs = Vec::with_capacity(num_points);
+        let mut ys = Vec::with_capacity(num_points);
+        for pair in points.chunks(2) {
+            let [x, y] = pair else {
+                return Err(eyre::eyre!("MultiScalarMul points must come in (x, y) pairs").into());
+            };
+            xs.push(x.to_owned());
+            ys.push(y.to_owned());
+        }
+        let is_infinity = Self::point_is_infinity_many(driver, &xs, &ys)?;
+
+        let mut points_with_infinity = Vec::with_capacity(num_points * 3);
+        for ((x, y), is_infinity) in xs.into_iter().zip(ys).zip(is_infinity) {
+            points_with_infinity.push(x);
+            points_with_infinity.push(y);
+            points_with_infinity.push(is_infinity);
+        }
 
         let scalars: Result<Vec<_>, _> = scalars
             .iter()
@@ -279,30 +318,42 @@ where
             }
         }
         // Call the backend's multi-scalar multiplication function
-        let (res_x, res_y, is_infinity) =
-            driver.multi_scalar_mul(&points, &scalars_lo, &scalars_hi, pedantic_solving)?;
+        let (res_x, res_y, _) = driver.multi_scalar_mul(
+            &points_with_infinity,
+            &scalars_lo,
+            &scalars_hi,
+            pedantic_solving,
+        )?;
 
-        // Insert the resulting point into the witness map
+        // Insert the resulting point into the witness map. The backend already returns (0, 0)
+        // for the point at infinity, so the is_infinity component can be dropped.
         Self::insert_value(&outputs.0, res_x, initial_witness)?;
         Self::insert_value(&outputs.1, res_y, initial_witness)?;
-        Self::insert_value(&outputs.2, is_infinity, initial_witness)?;
         Ok(())
     }
 
     pub(super) fn embedded_curve_add(
         driver: &mut T,
         initial_witness: &mut WitnessMap<T::AcvmType>,
-        input1: &[FunctionInput<GenericFieldElement<F>>; 3],
-        input2: &[FunctionInput<GenericFieldElement<F>>; 3],
-        outputs: &(Witness, Witness, Witness),
+        input1: &[FunctionInput<GenericFieldElement<F>>; 2],
+        input2: &[FunctionInput<GenericFieldElement<F>>; 2],
+        outputs: &(Witness, Witness),
     ) -> CoAcvmResult<()> {
         let input1_x = Self::input_to_value(initial_witness, input1[0])?;
         let input1_y = Self::input_to_value(initial_witness, input1[1])?;
-        let input1_infinite = Self::input_to_value(initial_witness, input1[2])?;
         let input2_x = Self::input_to_value(initial_witness, input2[0])?;
         let input2_y = Self::input_to_value(initial_witness, input2[1])?;
-        let input2_infinite = Self::input_to_value(initial_witness, input2[2])?;
-        let (res_x, res_y, res_infinite) = driver.embedded_curve_add(
+
+        let mut is_infinite = Self::point_is_infinity_many(
+            driver,
+            &[input1_x.clone(), input2_x.clone()],
+            &[input1_y.clone(), input2_y.clone()],
+        )?
+        .into_iter();
+        let input1_infinite = is_infinite.next().expect("has 2 elements");
+        let input2_infinite = is_infinite.next().expect("has 2 elements");
+
+        let (res_x, res_y, _) = driver.embedded_curve_add(
             input1_x,
             input1_y,
             input1_infinite,
@@ -313,7 +364,6 @@ where
 
         Self::insert_value(&outputs.0, res_x, initial_witness)?;
         Self::insert_value(&outputs.1, res_y, initial_witness)?;
-        Self::insert_value(&outputs.2, res_infinite, initial_witness)?;
         Ok(())
     }
 

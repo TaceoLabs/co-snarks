@@ -2,8 +2,6 @@ use crate::barycentric::Barycentric;
 use crate::crs::ProverCrs;
 use crate::honk_curve::HonkCurve;
 use crate::honk_proof::HonkProofResult;
-use crate::polynomials::polynomial::NUM_MASKED_ROWS;
-use crate::polynomials::polynomial::Polynomial;
 use crate::utils::Utils;
 use crate::{
     honk_proof::TranscriptFieldType,
@@ -116,24 +114,6 @@ impl CoUtils {
         T::inv_many_in_place_leaking_zeros(poly, net, state)
     }
 
-    pub fn mask_polynomial<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
-        net: &N,
-        state: &mut T::State,
-        polynomial: &mut Polynomial<T::ArithmeticShare>,
-    ) -> HonkProofResult<()> {
-        tracing::trace!("mask polynomial");
-
-        let virtual_size = polynomial.coefficients.len();
-        assert!(
-            virtual_size >= NUM_MASKED_ROWS as usize,
-            "Insufficient space for masking"
-        );
-        for i in (virtual_size - NUM_MASKED_ROWS as usize..virtual_size).rev() {
-            polynomial.coefficients[i] = T::rand(net, state)?;
-        }
-
-        Ok(())
-    }
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     pub fn array_prod_mul<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         net: &N,

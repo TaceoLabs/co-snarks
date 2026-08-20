@@ -241,7 +241,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         TranscriptHash::KECCAK => vk_barretenberg.to_buffer_keccak(),
     };
     out_file
-        .write(vk_u8.as_slice())
+        .write_all(vk_u8.as_slice())
         .context("while writing vk to file")?;
     tracing::info!("Wrote vk to file {}", out_path.display());
 
@@ -263,7 +263,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             );
             let proof_u8 = proof.to_buffer();
             out_file
-                .write(proof_u8.as_slice())
+                .write_all(proof_u8.as_slice())
                 .context("while writing proof to file")?;
             tracing::info!("Wrote proof to file {}", out_path.display());
 
@@ -274,7 +274,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             );
             let public_inputs_u8 = SerializeF::to_buffer(&public_inputs, false);
             out_file
-                .write(public_inputs_u8.as_slice())
+                .write_all(public_inputs_u8.as_slice())
                 .context("while writing proof to file")?;
             // Get the verifying key
             let verifying_key =
@@ -300,7 +300,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             );
             let proof_u8 = proof.to_buffer();
             out_file
-                .write(proof_u8.as_slice())
+                .write_all(proof_u8.as_slice())
                 .context("while writing proof to file")?;
             tracing::info!("Wrote proof to file {}", out_path.display());
 
@@ -311,7 +311,7 @@ fn main() -> color_eyre::Result<ExitCode> {
             );
             let public_inputs_u8 = noir_types::U256::to_buffer(&public_inputs);
             out_file
-                .write(public_inputs_u8.as_slice())
+                .write_all(public_inputs_u8.as_slice())
                 .context("while writing proof to file")?;
             // Get the verifying key
             let verifying_key =

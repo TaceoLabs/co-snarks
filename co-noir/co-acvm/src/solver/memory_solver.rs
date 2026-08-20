@@ -1,6 +1,5 @@
 use crate::mpc::NoirWitnessExtensionProtocol;
 use acir::{
-    acir_field::GenericFieldElement,
     circuit::opcodes::{BlockId, MemOp, MemOpKind},
     native_types::Witness,
 };
@@ -41,11 +40,7 @@ where
         Ok(())
     }
 
-    pub(super) fn solve_memory_op(
-        &mut self,
-        block_id: BlockId,
-        op: &MemOp<GenericFieldElement<F>>,
-    ) -> CoAcvmResult<()> {
+    pub(super) fn solve_memory_op(&mut self, block_id: BlockId, op: &MemOp) -> CoAcvmResult<()> {
         tracing::trace!("solving memory op {:?}", op);
         let index = Self::witness_to_value(self.witness(), op.index)?.to_owned();
         tracing::trace!("index is {}", index);

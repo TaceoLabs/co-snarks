@@ -101,16 +101,6 @@ impl<F: PrimeField> GateSeparatorPolynomial<F> {
         self.periodicity *= 2;
     }
 
-    pub fn partially_evaluate_with_padding(&mut self, round_challenge: F, indicator: F) {
-        let current_univariate_eval =
-            F::ONE + (round_challenge * (self.betas[self.current_element_idx] - F::ONE));
-        // If dummy round, make no update to the partial_evaluation_result
-        self.partial_evaluation_result = (F::ONE - indicator) * self.partial_evaluation_result
-            + indicator * self.partial_evaluation_result * current_univariate_eval;
-        self.current_element_idx += 1;
-        self.periodicity *= 2;
-    }
-
     pub fn construct_virtual_separator(betas: &[F], round_challenges: &[F]) -> Self {
         let mut separator = Self::new_without_products(betas.to_vec());
         for u_k in round_challenges {
