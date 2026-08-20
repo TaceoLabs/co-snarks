@@ -4822,17 +4822,17 @@ dependencies = [
 
 [[package]]
 name = "taceo-groth16"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875d57ca43e964c44b9c9e462d053d452a0795a9655e84d9cb6113d8c9e7bead"
+checksum = "c15455295f924d5d96712127577ca5857487f159c26578f05774198de328415f"
 dependencies = [
  "ark-ec",
  "ark-ff 0.6.0",
  "ark-groth16",
- "ark-poly",
  "ark-relations",
  "eyre",
  "rayon",
+ "taceo-ark-algebra",
  "tracing",
 ]
 
