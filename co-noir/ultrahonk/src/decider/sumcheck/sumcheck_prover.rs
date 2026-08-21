@@ -319,6 +319,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             &self.memory.gate_challenges,
             &multivariate_challenge,
         );
+        // Tracks the zero-extension scaling factor prod(1 - u_k) applied to `partially_evaluated_polys`
+        // during virtual rounds below, so it can be applied identically to the masking polynomial's
+        // evaluation (which is otherwise computed directly from the real challenges only, and would
+        // then be inconsistent with the other, zero-extended claimed evaluations).
+        let mut zero_extension_factor = P::ScalarField::one();
         for idx in multivariate_d as usize..virtual_log_n {
             let virtual_round_univariate = SumcheckProverRound::compute_virtual_contribution_zk::<P>(
                 &partially_evaluated_polys,
@@ -338,6 +343,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             let round_challenge = transcript.get_challenge::<P>(format!("Sumcheck:u_{idx}"));
             multivariate_challenge.push(round_challenge);
 
+            zero_extension_factor *= P::ScalarField::one() - round_challenge;
             for poly in partially_evaluated_polys.iter_mut() {
                 if !poly.is_empty() {
                     poly[0] *= P::ScalarField::one() - round_challenge;
@@ -356,7 +362,8 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             .gemini_masking_poly
             .as_ref()
             .expect("Gemini masking polynomial must be prepared in Oink")
-            .evaluate_mle(&multivariate_challenge[0..multivariate_d as usize]);
+            .evaluate_mle(&multivariate_challenge[0..multivariate_d as usize])
+            * zero_extension_factor;
         Self::add_evals_to_transcript(
             transcript,
             &multivariate_evaluations,

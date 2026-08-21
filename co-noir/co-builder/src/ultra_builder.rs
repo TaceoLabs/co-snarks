@@ -4537,28 +4537,29 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // Grumpkin, so we don't need to assert on curve.
         let input_result = CycleGroupCT::new(input_result_x, input_result_y, false, self, driver)?;
 
-        // Reconstruct points and scalars
+        // Reconstruct points and scalars. ACIR represents each point as an (x, y) pair (point at
+        // infinity encoded as (0, 0), auto-detected inside `to_grumpkin_point`) and each scalar as
+        // a (lo, hi) pair, so both arrays have the same length: 2 elements per point/scalar.
         assert!(
-            input.points.len() * 2 == input.scalars.len() * 3,
+            input.points.len() == input.scalars.len(),
             "MultiScalarMul input size mismatch"
         );
 
-        let mut points = Vec::with_capacity(input.points.len() / 3);
-        let mut scalars = Vec::with_capacity(input.points.len() / 3);
+        let mut points = Vec::with_capacity(input.points.len() / 2);
+        let mut scalars = Vec::with_capacity(input.points.len() / 2);
 
-        for i in (0..input.points.len()).step_by(3) {
+        for i in (0..input.points.len()).step_by(2) {
             let input_point = WitnessOrConstant::to_grumpkin_point(
                 &input.points[i],
                 &input.points[i + 1],
-                Some(&input.points[i + 2]),
                 &predicate,
                 self,
                 driver,
             )?;
 
             let scalar = WitnessOrConstant::to_grumpkin_scalar(
-                &input.scalars[2 * (i / 3)],
-                &input.scalars[2 * (i / 3) + 1],
+                &input.scalars[i],
+                &input.scalars[i + 1],
                 &predicate,
                 self,
                 driver,
@@ -4619,12 +4620,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             self.set_variable(index_y, g1_y.into());
         }
         // Input to cycle_group points. ACIR no longer supplies an explicit infinity flag for
-        // EmbeddedCurveAdd inputs (the point at infinity is encoded as (0, 0)), so it is
-        // reconstructed from the coordinates.
+        // EmbeddedCurveAdd inputs; the point at infinity is encoded as (0, 0) and auto-detected by
+        // `CycleGroupCT::new` inside `to_grumpkin_point`.
         let input1_point = WitnessOrConstant::to_grumpkin_point(
             &constraint.input1_x,
             &constraint.input1_y,
-            None,
             &predicate,
             self,
             driver,
@@ -4633,7 +4633,6 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         let input2_point = WitnessOrConstant::to_grumpkin_point(
             &constraint.input2_x,
             &constraint.input2_y,
-            None,
             &predicate,
             self,
             driver,

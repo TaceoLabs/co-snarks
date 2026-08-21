@@ -115,7 +115,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         transcript: &mut Transcript<TranscriptFieldType, H>,
         zk_data: ShpleminiZkData<P>,
         consistency_checked: &mut bool,
-        padding_indicator_array: &[P::ScalarField],
         // const std::vector<RefVector<Commitment>>& concatenation_group_commitments = {},
         // RefSpan<P::ScalarField> concatenated_evaluations = {}
     ) -> HonkVerifyResult<ShpleminiVerifierOpeningClaim<P>> {
@@ -258,7 +257,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // for i = 0, ..., n-1.
         // In the case of interleaving, we compute A₀(r) as A₀₊(r) + P₊(r^s).
         let gemini_fold_pos_evaluations = Self::compute_fold_pos_evaluations(
-            padding_indicator_array,
             &batched_evaluation,
             &multivariate_challenge,
             &gemini_eval_challenge_powers,
@@ -270,7 +268,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         // contributions from Aᵢ(−r²ⁱ) for i=1, … , n−1 to the constant term accumulator, add corresponding scalars for
         // the batch mul
         Self::batch_gemini_claims_received_from_prover(
-            padding_indicator_array,
             &fold_commitments,
             &gemini_fold_neg_evaluations,
             &gemini_fold_pos_evaluations,
@@ -434,9 +431,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      * @param scalars Output vector where the computed scalars will be stored.
      * @param constant_term_accumulator The accumulator for the summands of the constant term.
      */
-    #[expect(clippy::too_many_arguments)]
     fn batch_gemini_claims_received_from_prover(
-        padding_indicator_array: &[P::ScalarField],
         fold_commitments: &[P::Affine],
         gemini_neg_evaluations: &[P::ScalarField],
         gemini_pos_evaluations: &[P::ScalarField],
@@ -470,7 +465,7 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
             // Place the scaling factor to the 'scalars' vector
             opening_claim
                 .scalars
-                .push(-padding_indicator_array[j] * (scaling_factor_neg + scaling_factor_pos));
+                .push(-(scaling_factor_neg + scaling_factor_pos));
             // Move com(Aᵢ) to the 'commitments' vector
             opening_claim.commitments.push(fold_commitments[j - 1]);
         }
@@ -500,7 +495,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
      * @return Evaluation \f$ A_0(r) \f$.
      */
     pub fn compute_fold_pos_evaluations(
-        padding_indicator_array: &[P::ScalarField],
         batched_evaluation: &P::ScalarField,
         evaluation_point: &[P::ScalarField], // CONST_PROOF_SIZE
         challenge_powers: &[P::ScalarField], // r_squares CONST_PROOF_SIZE_LOG_N
@@ -514,8 +508,6 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
         let mut eval_pos_prev = *batched_evaluation;
 
         let mut fold_pos_evaluations = Vec::with_capacity(virtual_log_n);
-        // Either a computed eval of A_i at r^{2^i}, or 0
-        let mut value_to_emplace;
 
         // Add the contribution of P-((-r)ˢ) to get A_0(-r), which is 0 if there are no interleaved polynomials
         evals[0] += p_neg;
@@ -536,14 +528,11 @@ impl<P: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 .inverse()
                 .expect("Non-zero denominator");
 
-            // If current index is bigger than log_n, we propagate `batched_evaluation` to the next
-            // round. Otherwise, current `eval_pos` A₍ₗ₋₁₎(−r²⁽ˡ⁻¹⁾) becomes `eval_pos_prev` in the round l-2.
-            eval_pos_prev = padding_indicator_array[l - 1] * eval_pos
-                + (P::ScalarField::one() - padding_indicator_array[l - 1]) * eval_pos_prev;
-            // If current index is bigger than log_n, we emplace 0, which is later multiplied against
-            // Commitment::one().
-            value_to_emplace = padding_indicator_array[l - 1] * eval_pos_prev;
-            fold_pos_evaluations.push(value_to_emplace);
+            // The prover now honestly computes and sends real (non-zeroed) fold constants for virtual
+            // rounds too, matching the zero-extended `batched_evaluation` seed, so the recursion must
+            // always propagate the genuinely computed value here (no indicator-based freeze).
+            eval_pos_prev = eval_pos;
+            fold_pos_evaluations.push(eval_pos_prev);
         }
 
         fold_pos_evaluations.reverse();

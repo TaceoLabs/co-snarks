@@ -822,10 +822,6 @@ impl<F: PrimeField> WitnessOrConstant<F> {
     >(
         input_x: &Self,
         input_y: &Self,
-        // `None` when ACIR does not supply an explicit infinity flag for this point (e.g.
-        // EmbeddedCurveAdd inputs); the point at infinity is then encoded as (0, 0), and the flag
-        // is reconstructed from the coordinates instead.
-        input_infinity: Option<&Self>,
         predicate: &BoolCT<P::ScalarField, T>,
         builder: &mut GenericUltraCircuitBuilder<P, T>,
         driver: &mut T,
@@ -833,14 +829,6 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         let constant_coordinates = input_x.is_constant && input_y.is_constant;
         let mut point_x = input_x.to_field_ct();
         let mut point_y = input_y.to_field_ct();
-        let infinity = match input_infinity {
-            Some(input_infinity) => input_infinity.to_field_ct().to_bool_ct(builder, driver),
-            None => {
-                let x_is_zero = point_x.is_zero(builder, driver)?;
-                let y_is_zero = point_y.is_zero(builder, driver)?;
-                x_is_zero.and(&y_is_zero, builder, driver)?
-            }
-        };
 
         // If a witness is not provided (we are in a write_vk scenario) we ensure the coordinates correspond to a valid
         // point to avoid erroneous failures during circuit construction. We only do this if the coordinates are
@@ -853,11 +841,6 @@ impl<F: PrimeField> WitnessOrConstant<F> {
         if builder.is_write_vk_mode && !constant_coordinates {
             builder.set_variable(input_x.index, F::one().into());
             builder.set_variable(input_y.index, g1_y.into());
-            if let Some(input_infinity) = input_infinity
-                && !input_infinity.is_constant
-            {
-                builder.set_variable(input_infinity.index, F::zero().into());
-            }
         }
 
         if !predicate.is_constant() {
@@ -875,15 +858,12 @@ impl<F: PrimeField> WitnessOrConstant<F> {
                 builder,
                 driver,
             )?;
-            let _ = BoolCT::conditional_assign(
-                predicate,
-                &infinity,
-                &BoolCT::from(false),
-                builder,
-                driver,
-            )?;
         }
 
+        // Use public constructor which auto-detects infinity from (0, 0) coordinates, matching bb's
+        // equivalent `to_grumpkin_point` — any ACIR-supplied infinity witness for this point is
+        // otherwise unused (co-snarks reconstructs it independently where needed, e.g. via
+        // `point_is_infinity` in the blackbox solver), so it is not threaded through here.
         CycleGroupCT::new(point_x, point_y, true, builder, driver)
     }
 

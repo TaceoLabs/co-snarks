@@ -367,16 +367,11 @@ pub fn construct_lookup_table_polynomials<
     dyadic_circuit_size: usize,
     additional_offset: usize,
 ) {
-    // Create lookup selector polynomials which interpolate each table column.
-    // Our selector polys always need to interpolate the full subgroup size, so here we offset so as to
-    // put the table column's values at the end. (The first gates are for non-lookup constraints).
-    // [0, ..., 0, ...table, 0, 0, 0, x]
-    //  ^^^^^^^^^  ^^^^^^^^  ^^^^^^^  ^nonzero to ensure uniqueness and to avoid infinity commitments
-    //  |          table     randomness
-    //  ignored, as used for regular constraints and padding to the next power of 2.
-    // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
+    // Create lookup selector polynomials which interpolate each table column, starting at the row
+    // where the `lookup` gate block actually begins in the execution trace (matching bb's
+    // `construct_lookup_table_polynomials`, which starts at `circuit.blocks.lookup.trace_offset()`).
     assert!(dyadic_circuit_size > circuit.get_tables_size() + additional_offset);
-    let mut offset = 0;
+    let mut offset = circuit.blocks.lookup.trace_offset as usize;
 
     for table in circuit.lookup_tables.iter() {
         let table_index = table.table_index;
@@ -399,8 +394,10 @@ pub fn construct_lookup_read_counts<
     witness: &mut [Polynomial<T::ArithmeticShare>; 2],
     circuit: &mut GenericUltraCircuitBuilder<P, T>,
 ) -> eyre::Result<()> {
-    // AZTEC TODO(https://github.com/AztecProtocol/barretenberg/issues/1033): construct tables and counts at top of trace
-    let mut table_offset = 0;
+    // Starts at the row where the `lookup` gate block begins in the trace, matching bb's
+    // `construct_lookup_read_counts` (`circuit.blocks.lookup.trace_offset()`), and consistent with
+    // `construct_lookup_table_polynomials` above.
+    let mut table_offset = circuit.blocks.lookup.trace_offset as usize;
     for table in circuit.lookup_tables.iter_mut() {
         // we need the index_map hash table in this case
         if table.requires_index_map() {
