@@ -18,13 +18,14 @@ use co_noir_common::{
 pub(crate) struct UltraPermutationRelationEvals<F: PrimeField> {
     pub(crate) r0: FieldCT<F>,
     pub(crate) r1: FieldCT<F>,
+    pub(crate) r2: FieldCT<F>,
 }
 
-impl_relation_evals!(UltraPermutationRelationEvals, r0, r1);
+impl_relation_evals!(UltraPermutationRelationEvals, r0, r1, r2);
 pub(crate) struct UltraPermutationRelation;
 
 impl UltraPermutationRelation {
-    pub(crate) const NUM_RELATIONS: usize = 2;
+    pub(crate) const NUM_RELATIONS: usize = 3;
 }
 
 impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for UltraPermutationRelation {
@@ -157,6 +158,20 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for UltraPermutationRelation
         accumulator
             .r1
             .add_assign(&lagrange_last_by_z_perm_shift_scaled, builder, driver);
+
+        ///////////////////////////////////////////////////////////////////////
+
+        // Enforce z_perm starts at 0 at the lagrange_first row (row NUM_DISABLED_ROWS_IN_SUMCHECK):
+        // without this, a cheating prover could set z_perm there to a non-zero value.
+        let lagrange_first_by_z_perm = lagrange_first.multiply(z_perm, builder, driver)?.multiply(
+            scaling_factor,
+            builder,
+            driver,
+        )?;
+
+        accumulator
+            .r2
+            .add_assign(&lagrange_first_by_z_perm, builder, driver);
 
         Ok(())
     }

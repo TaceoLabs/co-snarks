@@ -334,15 +334,11 @@ impl ShpleminiVerifier {
      * In the case of interleaving, the first "negative" evaluation has to be corrected by the contribution from \f$
      * P_{-}(-r^s)\f$, where \f$ s \f$ is the size of the group to be interleaved.
      *
-     * This method uses `padding_indicator_array`, whose i-th entry is FF{1} if i < log_n and 0 otherwise.
-     * We use these entries to either assign `eval_pos_prev` the value `eval_pos` computed in the current iteration of
-     * the loop, or to propagate the batched evaluation of the multilinear polynomials to the next iteration. This
-     * ensures the correctness of the computation of the required positive evaluations.
+     * The prover honestly computes and sends real (non-zeroed) fold constants for virtual/padding rounds too,
+     * matching the zero-extended `batched_evaluation` seed, so the verifier must always propagate the genuinely
+     * computed value here (no indicator-based freeze) — matches bb, which has no `padding_indicator_array`
+     * concept in this computation at all.
      *
-     * To ensure that dummy evaluations cannot be used to tamper with the final batch_mul result, we multiply dummy
-     * positive evaluations by the entries of `padding_indicator_array`.
-     *
-     * @param padding_indicator_array An array with first log_n entries equal to 1, and the remaining entries are 0.
      * @param batched_evaluation The evaluation of the batched polynomial at \f$ (u_0, \ldots, u_{d-1})\f$.
      * @param evaluation_point Evaluation point \f$ (u_0, \ldots, u_{d-1}) \f$ padded to CONST_PROOF_SIZE_LOG_N.
      * @param challenge_powers Powers of \f$ r \f$, \f$ r^2 \), ..., \( r^{2^{d-1}} \f$.
@@ -353,7 +349,7 @@ impl ShpleminiVerifier {
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        padding_indicator_array: &[FieldCT<C::ScalarField>],
+        _padding_indicator_array: &[FieldCT<C::ScalarField>],
         batched_evaluation: &FieldCT<C::ScalarField>,
         evaluation_point: &[FieldCT<C::ScalarField>],
         challenge_powers: &[FieldCT<C::ScalarField>],
@@ -407,21 +403,11 @@ impl ShpleminiVerifier {
             )?;
             eval_pos = eval_pos.multiply(&tmp, builder, driver)?;
 
-            // If current index is bigger than log_n, we propagate `batched_evaluation` to the next
-            // round.  Otherwise, current `eval_pos` A₍ₗ₋₁₎(−r²⁽ˡ⁻¹⁾) becomes `eval_pos_prev` in the round l-2.
-            let lhs = padding_indicator_array[l - 1].multiply(&eval_pos, builder, driver)?;
-            let rhs = one
-                .sub(&padding_indicator_array[l - 1], builder, driver)
-                .multiply(&eval_pos_prev, builder, driver)?;
-            eval_pos_prev = lhs.add(&rhs, builder, driver);
-
-            // If current index is bigger than log_n, we emplace 0, which is later multiplied against
-            // Commitment::one().
-            fold_pos_evaluations.push(padding_indicator_array[l - 1].multiply(
-                &eval_pos_prev,
-                builder,
-                driver,
-            )?);
+            // The prover now honestly computes and sends real (non-zeroed) fold constants for virtual
+            // rounds too, matching the zero-extended `batched_evaluation` seed, so the recursion must
+            // always propagate the genuinely computed value here (no indicator-based freeze).
+            eval_pos_prev = eval_pos;
+            fold_pos_evaluations.push(eval_pos_prev.clone());
         }
 
         fold_pos_evaluations.reverse();
@@ -461,7 +447,6 @@ impl ShpleminiVerifier {
      *    } for \f$ i = 1, \ldots, d-1 \f$ and adds them to the
      *    'constant_term_accumulator'.
      *
-     * @param padding_indicator_array An array with first log_n entries equal to 1, and the remaining entries are 0.
      * @param fold_commitments A vector containing the commitments to the Gemini fold polynomials \f$ A_i \f$.
      * @param gemini_neg_evaluations The evaluations of Gemini fold polynomials \f$ A_i \f$ at \f$ -r^{2^i} \f$ for \f$
      * i = 0, \ldots, d - 1 \f$.
@@ -479,7 +464,7 @@ impl ShpleminiVerifier {
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        padding_indicator_array: &[FieldCT<C::ScalarField>],
+        _padding_indicator_array: &[FieldCT<C::ScalarField>],
         fold_commitments: &[BigGroup<C::ScalarField, T>],
         gemini_neg_evaluations: &[FieldCT<C::ScalarField>],
         gemini_pos_evaluations: &[FieldCT<C::ScalarField>],
@@ -535,12 +520,15 @@ impl ShpleminiVerifier {
             let rhs = scaling_factor_pos.multiply(&gemini_pos_evaluations[j], builder, driver)?;
             constant_term_accumulator.add_assign(&lhs.add(&rhs, builder, driver), builder, driver);
 
-            // Place the scaling factor to the 'scalars' vector
-            scalars.push(padding_indicator_array[j].neg().multiply(
-                &scaling_factor_neg.add(&scaling_factor_pos, builder, driver),
-                builder,
-                driver,
-            )?);
+            // Place the scaling factor to the 'scalars' vector. The prover sends real (non-zeroed)
+            // fold constants for virtual/padding rounds too, so the recursion must always propagate
+            // the genuinely computed value here (no indicator-based freeze) — matches bb, which has
+            // no `padding_indicator_array` concept in this computation at all.
+            scalars.push(
+                scaling_factor_neg
+                    .add(&scaling_factor_pos, builder, driver)
+                    .neg(),
+            );
 
             // Move com(Aᵢ) to the 'commitments' vector
             commitments.push(fold_commitments[j - 1].clone());
