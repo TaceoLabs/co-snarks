@@ -64,7 +64,7 @@ impl SumcheckVerifier {
 
         // MegaRecursiveFlavor does not have ZK
         let mut multivariate_challenge = Vec::with_capacity(padding_indicator_array.len());
-        for (round_idx, padding_indicator) in padding_indicator_array.iter().enumerate() {
+        for round_idx in 0..padding_indicator_array.len() {
             let round_univariate = transcript
                 .receive_n_from_prover(format!("Sumcheck:univariate_{round_idx}"), SIZE)?;
 
@@ -73,13 +73,7 @@ impl SumcheckVerifier {
 
             multivariate_challenge.push(round_challenge.clone());
 
-            SumcheckVerifier::check_sum(
-                &round_univariate,
-                target_sum,
-                padding_indicator,
-                builder,
-                driver,
-            )?;
+            SumcheckVerifier::check_sum(&round_univariate, target_sum, builder, driver)?;
 
             // Update the target sum for the next round. Matches bb's `compute_next_target_sum`,
             // which unconditionally sets target_total_sum for every round (real or virtual/padding) —
@@ -177,7 +171,6 @@ impl SumcheckVerifier {
     >(
         univariate: &[FieldCT<C::ScalarField>],
         target_sum: &FieldCT<C::ScalarField>,
-        _indicator: &FieldCT<C::ScalarField>,
         builder: &mut GenericUltraCircuitBuilder<C, T>,
         driver: &mut T,
     ) -> HonkProofResult<()> {
