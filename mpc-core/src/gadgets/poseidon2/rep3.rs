@@ -115,8 +115,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             }
             8 | 12 | 16 | 20 | 24 => {
                 // Applying cheap 4x4 MDS matrix to each 4-element part of the state
-                for state in input.chunks_exact_mut(4) {
-                    Self::matmul_m4_rep3(state.try_into().unwrap());
+                for state in input.as_chunks_mut::<4>().0 {
+                    Self::matmul_m4_rep3(state);
                 }
 
                 // Applying second cheap matrix for t > 4
@@ -523,7 +523,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         debug_assert_eq!(state.len() % T, 0);
         let id = PartyID::try_from(net.id())?;
         if id == PartyID::ID0 {
-            for state in state.chunks_exact_mut(T) {
+            for state in state.as_chunks_mut::<T>().0 {
                 for (s, rc) in state
                     .iter_mut()
                     .zip(self.params.round_constants_external[r].iter())
@@ -532,7 +532,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
                 }
             }
         } else if id == PartyID::ID1 {
-            for state in state.chunks_exact_mut(T) {
+            for state in state.as_chunks_mut::<T>().0 {
                 for (s, rc) in state
                     .iter_mut()
                     .zip(self.params.round_constants_external[r].iter())
@@ -542,8 +542,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             }
         }
         Self::sbox_rep3_precomp(state, precomp, net)?;
-        for s in state.chunks_exact_mut(T) {
-            Self::matmul_external_rep3(s.try_into().unwrap());
+        for s in state.as_chunks_mut::<T>().0 {
+            Self::matmul_external_rep3(s);
         }
         Ok(())
     }
@@ -559,17 +559,17 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         debug_assert_eq!(state.len() % T, 0);
         let id = PartyID::try_from(net.id())?;
         if id == PartyID::ID0 {
-            for s in state.chunks_exact_mut(T) {
+            for s in state.as_chunks_mut::<T>().0 {
                 s[0].a += self.params.round_constants_internal[r];
             }
         } else if id == PartyID::ID1 {
-            for s in state.chunks_exact_mut(T) {
+            for s in state.as_chunks_mut::<T>().0 {
                 s[0].b += self.params.round_constants_internal[r];
             }
         }
         Self::single_sbox_rep3_precomp_packed(state, precomp, net)?;
-        for s in state.chunks_exact_mut(T) {
-            self.matmul_internal_rep3(s.try_into().unwrap());
+        for s in state.as_chunks_mut::<T>().0 {
+            self.matmul_internal_rep3(s);
         }
         Ok(())
     }
@@ -622,8 +622,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         // let mut precomp = self.precompute_rep3(num_poseidon, driver)?;
 
         // Linear layer at beginning
-        for s in state.chunks_exact_mut(T) {
-            Self::matmul_external_rep3(s.try_into().unwrap());
+        for s in state.as_chunks_mut::<T>().0 {
+            Self::matmul_external_rep3(s);
         }
 
         // First set of external rounds

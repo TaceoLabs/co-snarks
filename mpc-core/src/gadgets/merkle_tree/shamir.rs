@@ -24,7 +24,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // Prepare for sponge mode
         let mut input = Vec::with_capacity(T * len / ARITY);
-        for inp in input_.chunks_exact(ARITY) {
+        for inp in input_.as_chunks::<ARITY>().0 {
             for i in inp {
                 input.push(*i);
             }
@@ -78,7 +78,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             input_
         } else {
             let mut input = Vec::with_capacity(T * len / ARITY);
-            for inp in input_.chunks_exact(ARITY) {
+            for inp in input_.as_chunks::<ARITY>().0 {
                 for i in inp {
                     input.push(*i);
                 }

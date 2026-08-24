@@ -302,6 +302,8 @@ where
     ) -> HonkProofResult<P::Affine> {
         let elements = self.receive_n_from_prover(label, H::NUM_BASEFIELD_ELEMENTS * 2)?;
 
+        // `as_chunks` is not possible here since associated consts cannot be used as const generics on stable
+        #[allow(clippy::chunks_exact_to_as_chunks)]
         let coords = elements
             .chunks_exact(H::NUM_BASEFIELD_ELEMENTS)
             .map(H::convert_basefield_back::<P>)
@@ -326,6 +328,8 @@ where
     ) -> HonkProofResult<Vec<P::ScalarField>> {
         let elements = self.receive_n_from_prover(label, H::NUM_SCALARFIELD_ELEMENTS * n)?;
 
+        // `as_chunks` is not possible here since associated consts cannot be used as const generics on stable
+        #[allow(clippy::chunks_exact_to_as_chunks)]
         let elements = elements
             .chunks_exact(H::NUM_SCALARFIELD_ELEMENTS)
             .map(H::convert_scalarfield_back::<P>)
@@ -341,6 +345,8 @@ where
         let mut res: [P::ScalarField; SIZE] = [P::ScalarField::zero(); SIZE];
         let elements = self.receive_n_from_prover(label, H::NUM_SCALARFIELD_ELEMENTS * SIZE)?;
 
+        // `as_chunks` is not possible here since associated consts cannot be used as const generics on stable
+        #[allow(clippy::chunks_exact_to_as_chunks)]
         for (src, des) in elements
             .chunks_exact(H::NUM_SCALARFIELD_ELEMENTS)
             .zip(res.iter_mut())

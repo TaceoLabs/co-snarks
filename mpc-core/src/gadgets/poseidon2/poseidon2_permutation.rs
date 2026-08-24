@@ -100,8 +100,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             }
             8 | 12 | 16 | 20 | 24 => {
                 // Applying cheap 4x4 MDS matrix to each 4-element part of the state
-                for state in input.chunks_exact_mut(4) {
-                    Self::matmul_m4(state.try_into().unwrap());
+                for state in input.as_chunks_mut::<4>().0 {
+                    Self::matmul_m4(state);
                 }
 
                 // Applying second cheap matrix for t > 4

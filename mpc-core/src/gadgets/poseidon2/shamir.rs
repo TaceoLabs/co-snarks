@@ -264,12 +264,12 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         shamir_state: &mut ShamirState<F>,
     ) -> eyre::Result<()> {
         debug_assert_eq!(state.len() % T, 0);
-        for s in state.chunks_exact_mut(T) {
-            self.add_rc_external(s.try_into().unwrap(), r);
+        for s in state.as_chunks_mut::<T>().0 {
+            self.add_rc_external(s, r);
         }
         Self::sbox_shamir_precomp(state, precomp, net, shamir_state)?;
-        for s in state.chunks_exact_mut(T) {
-            Self::matmul_external(s.try_into().unwrap());
+        for s in state.as_chunks_mut::<T>().0 {
+            Self::matmul_external(s);
         }
         Ok(())
     }
@@ -284,12 +284,12 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         shamir_state: &mut ShamirState<F>,
     ) -> eyre::Result<()> {
         debug_assert_eq!(state.len() % T, 0);
-        for s in state.chunks_exact_mut(T) {
-            self.add_rc_internal(s.try_into().unwrap(), r);
+        for s in state.as_chunks_mut::<T>().0 {
+            self.add_rc_internal(s, r);
         }
         Self::single_sbox_shamir_precomp_packed(state, precomp, net, shamir_state)?;
-        for s in state.chunks_exact_mut(T) {
-            self.matmul_internal(s.try_into().unwrap());
+        for s in state.as_chunks_mut::<T>().0 {
+            self.matmul_internal(s);
         }
         Ok(())
     }
@@ -338,8 +338,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // Linear layer at beginning
         let state = ShamirPrimeFieldShare::convert_mut(state);
-        for s in state.chunks_exact_mut(T) {
-            Self::matmul_external(s.try_into().unwrap());
+        for s in state.as_chunks_mut::<T>().0 {
+            Self::matmul_external(s);
         }
 
         // First set of external rounds

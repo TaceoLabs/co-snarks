@@ -400,15 +400,15 @@ impl<const BITS: usize, const LIMBS: usize> UintBackend for RUint<BITS, LIMBS> {
     }
     fn to_le_bytes_into(&self, out: &mut [u8]) {
         assert_eq!(out.len(), Self::BYTES);
-        for (chunk, limb) in out.chunks_exact_mut(8).zip(self.0.as_limbs()) {
-            chunk.copy_from_slice(&limb.to_le_bytes());
+        for (chunk, limb) in out.as_chunks_mut::<8>().0.iter_mut().zip(self.0.as_limbs()) {
+            *chunk = limb.to_le_bytes();
         }
     }
     fn from_le_bytes(bytes: &[u8]) -> Self {
         assert_eq!(bytes.len(), Self::BYTES);
         let mut limbs = [0u64; LIMBS];
-        for (limb, chunk) in limbs.iter_mut().zip(bytes.chunks_exact(8)) {
-            *limb = u64::from_le_bytes(chunk.try_into().expect("chunk is 8 bytes"));
+        for (limb, chunk) in limbs.iter_mut().zip(bytes.as_chunks::<8>().0) {
+            *limb = u64::from_le_bytes(*chunk);
         }
         Self(Uint::from_limbs(limbs))
     }

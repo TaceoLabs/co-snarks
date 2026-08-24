@@ -20,7 +20,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // Prepare for sponge mode
         let mut input = Vec::with_capacity(T * len / ARITY);
-        for inp in input_.chunks_exact(ARITY) {
+        for inp in input_.as_chunks::<ARITY>().0 {
             for i in inp {
                 input.push(*i);
             }
@@ -32,9 +32,9 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         while len > 1 {
             debug_assert_eq!(len % ARITY, 0);
             len /= ARITY;
-            for inp in input.chunks_exact_mut(T).take(len) {
+            for inp in input.as_chunks_mut::<T>().0.iter_mut().take(len) {
                 // Sponge mode
-                self.permutation_in_place(inp.try_into().unwrap());
+                self.permutation_in_place(inp);
             }
             // Only take first element as output and pad with 0 for sponge
             for i in 0..len / ARITY {
@@ -63,7 +63,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
 
         // Prepare for sponge mode
         let mut input = Vec::with_capacity(T * len / ARITY);
-        for inp in input_.chunks_exact(ARITY) {
+        for inp in input_.as_chunks::<ARITY>().0 {
             for i in inp {
                 input.push(*i);
             }
@@ -91,9 +91,9 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             });
             i /= ARITY;
 
-            for inp in input.chunks_exact_mut(T).take(len) {
+            for inp in input.as_chunks_mut::<T>().0.iter_mut().take(len) {
                 // Sponge mode
-                self.permutation_in_place(inp.try_into().unwrap());
+                self.permutation_in_place(inp);
             }
             // Only take first element as output and pad with 0 for sponge
             for i in 0..len / ARITY {
@@ -121,7 +121,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             input_
         } else {
             let mut input = Vec::with_capacity(T * len / ARITY);
-            for inp in input_.chunks_exact(ARITY) {
+            for inp in input_.as_chunks::<ARITY>().0 {
                 for i in inp {
                     input.push(*i);
                 }
@@ -135,10 +135,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         while len > 1 {
             debug_assert_eq!(len % ARITY, 0);
             len /= ARITY;
-            for inp in input.chunks_exact_mut(T).take(len) {
+            for inp in input.as_chunks_mut::<T>().0.iter_mut().take(len) {
                 // Compression mode
                 let feed_forward = inp[0];
-                self.permutation_in_place(inp.try_into().unwrap());
+                self.permutation_in_place(inp);
                 inp[0] += feed_forward;
             }
             // Only take first element as output and pad with 0 for compression
@@ -171,7 +171,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             input_
         } else {
             let mut input = Vec::with_capacity(T * len / ARITY);
-            for inp in input_.chunks_exact(ARITY) {
+            for inp in input_.as_chunks::<ARITY>().0 {
                 for i in inp {
                     input.push(*i);
                 }
@@ -201,10 +201,10 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             });
             i /= ARITY;
 
-            for inp in input.chunks_exact_mut(T).take(len) {
+            for inp in input.as_chunks_mut::<T>().0.iter_mut().take(len) {
                 // Compression mode
                 let feed_forward = inp[0];
-                self.permutation_in_place(inp.try_into().unwrap());
+                self.permutation_in_place(inp);
                 inp[0] += feed_forward;
             }
             // Only take first element as output and pad with 0 for compression
@@ -322,7 +322,7 @@ mod test {
 
         while input.len() > 1 {
             let mut output = Vec::with_capacity(input.len() / ARITY);
-            for inp in input.chunks_exact(ARITY) {
+            for inp in input.as_chunks::<ARITY>().0 {
                 let mut perm = [F::zero(); T];
                 for (i, p) in inp.iter().enumerate() {
                     perm[i] = *p;
@@ -353,7 +353,7 @@ mod test {
 
         while input.len() > 1 {
             let mut output = Vec::with_capacity(input.len() / ARITY);
-            for inp in input.chunks_exact(ARITY) {
+            for inp in input.as_chunks::<ARITY>().0 {
                 let mut perm = [F::zero(); T];
                 for (i, p) in inp.iter().enumerate() {
                     perm[i] = *p;

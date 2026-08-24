@@ -63,8 +63,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
                 Self::matmul_m4_shamir(input.as_mut_slice().try_into().unwrap());
             }
             8 | 12 | 16 | 20 | 24 => {
-                for s in input.chunks_exact_mut(4) {
-                    Self::matmul_m4_shamir(s.try_into().unwrap());
+                for s in input.as_chunks_mut::<4>().0 {
+                    Self::matmul_m4_shamir(s);
                 }
                 let mut stored = [ShamirPrimeFieldShare::default(); 4];
                 for l in 0..4 {
@@ -86,8 +86,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
     ) -> Vec<ShamirPrimeFieldShare<F>> {
         assert_eq!(T, 16);
         let mut res = Vec::with_capacity(T);
-        for s in input.chunks_exact_mut(4) {
-            Self::matmul_m4_shamir(s.try_into().unwrap());
+        for s in input.as_chunks_mut::<4>().0 {
+            Self::matmul_m4_shamir(s);
         }
         let mut stored = [ShamirPrimeFieldShare::default(); 4];
         for l in 0..4 {
@@ -108,8 +108,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         input: &mut [ShamirPrimeFieldShare<F>; T],
     ) -> ShamirPrimeFieldShare<F> {
         assert!(T == 8 || T == 12 || T == 16 || T == 20 || T == 24);
-        for s in input.chunks_exact_mut(4) {
-            Self::matmul_m4_shamir(s.try_into().unwrap());
+        for s in input.as_chunks_mut::<4>().0 {
+            Self::matmul_m4_shamir(s);
         }
         let result = input[0];
         let mut stored = [ShamirPrimeFieldShare::default(); 4];
@@ -273,8 +273,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         let mut quads: [_; BATCH_SIZE] = array::from_fn(|_| Vec::with_capacity(T));
         let mut count = 0;
         for (inp, y_chunk, sq, qu) in izip!(
-            input.chunks_exact_mut(T),
-            y.chunks_exact(T),
+            input.as_chunks_mut::<T>().0,
+            y.as_chunks::<T>().0,
             squares.iter_mut(),
             quads.iter_mut()
         ) {
@@ -312,8 +312,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         let mut quads = vec![Vec::with_capacity(T); t2];
         let mut count = 0;
         for (inp, y_chunk, sq, qu) in izip!(
-            input.chunks_exact_mut(T),
-            y.chunks_exact(T),
+            input.as_chunks_mut::<T>().0,
+            y.as_chunks::<T>().0,
             squares.iter_mut(),
             quads.iter_mut()
         ) {
@@ -438,8 +438,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         Option<[Vec<ShamirPrimeFieldShare<F>>; BATCH_SIZE]>,
     )> {
         assert!(state.len().is_multiple_of(T));
-        for chunk in state.chunks_exact_mut(T) {
-            let chunk: &mut [ShamirPrimeFieldShare<F>; T] = chunk.try_into().unwrap();
+        for chunk in state.as_chunks_mut::<T>().0 {
+            let chunk: &mut [ShamirPrimeFieldShare<F>; T] = chunk;
             for (s, &rc) in chunk
                 .iter_mut()
                 .zip(self.params.round_constants_external[r].iter())
@@ -459,15 +459,13 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
             array::from_fn(|i| state.get(i * T + 3).copied().unwrap_or_default());
         let matmul_external = if T == 16 {
             let mut me = Vec::with_capacity(BATCH_SIZE);
-            for chunk in state.chunks_exact_mut(T) {
-                me.push(Self::matmul_external_shamir_intermediate_t16(
-                    chunk.try_into().expect("we checked sizes"),
-                ));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                me.push(Self::matmul_external_shamir_intermediate_t16(chunk));
             }
             Some(me.try_into().expect("we checked sizes"))
         } else {
-            for chunk in state.chunks_exact_mut(T) {
-                Self::matmul_external_shamir_shares(chunk.try_into().expect("we checked sizes"));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                Self::matmul_external_shamir_shares(chunk);
             }
             None
         };
@@ -498,8 +496,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         [ShamirPrimeFieldShare<F>; BATCH_SIZE],
     )> {
         assert!(state.len().is_multiple_of(T));
-        for chunk in state.chunks_exact_mut(T) {
-            let chunk: &mut [ShamirPrimeFieldShare<F>; T] = chunk.try_into().unwrap();
+        for chunk in state.as_chunks_mut::<T>().0 {
+            let chunk: &mut [ShamirPrimeFieldShare<F>; T] = chunk;
             for (s, &rc) in chunk
                 .iter_mut()
                 .zip(self.params.round_constants_external[r].iter())
@@ -514,10 +512,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
             shamir_state,
         )?;
         let mut matmul_results = Vec::with_capacity(BATCH_SIZE);
-        for chunk in state.chunks_exact_mut(T) {
-            matmul_results.push(Self::matmul_external_shamir_intermediate(
-                chunk.try_into().expect("we checked sizes"),
-            ));
+        for chunk in state.as_chunks_mut::<T>().0 {
+            matmul_results.push(Self::matmul_external_shamir_intermediate(chunk));
         }
         Ok((
             squares,
@@ -552,15 +548,13 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         }
         let sum = if T >= 4 {
             let mut sums = Vec::with_capacity(t2);
-            for chunk in state.chunks_exact_mut(T) {
-                sums.push(self.matmul_internal_shamir_return_sum(
-                    chunk.try_into().expect("Chunk size checked"),
-                ));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                sums.push(self.matmul_internal_shamir_return_sum(chunk));
             }
             Some(sums)
         } else {
-            for chunk in state.chunks_exact_mut(T) {
-                self.matmul_internal_shamir_shares(chunk.try_into().expect("Chunk size checked"));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                self.matmul_internal_shamir_shares(chunk);
             }
             None
         };
@@ -584,8 +578,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         Option<Vec<Vec<ShamirPrimeFieldShare<F>>>>,
     )> {
         assert!(state.len().is_multiple_of(T));
-        for chunk in state.chunks_exact_mut(T) {
-            let chunk: &mut [ShamirPrimeFieldShare<F>; T] = chunk.try_into().unwrap();
+        for chunk in state.as_chunks_mut::<T>().0 {
+            let chunk: &mut [ShamirPrimeFieldShare<F>; T] = chunk;
             for (s, &rc) in chunk
                 .iter_mut()
                 .zip(self.params.round_constants_external[r].iter())
@@ -604,15 +598,13 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         };
         let matmul_external = if T == 16 {
             let mut res = Vec::with_capacity(state.len() / T);
-            for chunk in state.chunks_exact_mut(T) {
-                res.push(Self::matmul_external_shamir_intermediate_t16(
-                    chunk.try_into().expect("Chunk size checked"),
-                ));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                res.push(Self::matmul_external_shamir_intermediate_t16(chunk));
             }
             Some(res)
         } else {
-            for chunk in state.chunks_exact_mut(T) {
-                Self::matmul_external_shamir_shares(chunk.try_into().expect("Chunk size checked"));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                Self::matmul_external_shamir_shares(chunk);
             }
             None
         };
@@ -640,8 +632,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         Vec<ShamirPrimeFieldShare<F>>,
     )> {
         assert!(state.len().is_multiple_of(T));
-        for chunk in state.chunks_exact_mut(T) {
-            let chunk: &mut [ShamirPrimeFieldShare<F>; T] = chunk.try_into().unwrap();
+        for chunk in state.as_chunks_mut::<T>().0 {
+            let chunk: &mut [ShamirPrimeFieldShare<F>; T] = chunk;
             for (s, &rc) in chunk
                 .iter_mut()
                 .zip(self.params.round_constants_external[r].iter())
@@ -652,10 +644,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         let (squares, quads) =
             Self::sbox_shamir_precomp_intermediate_vec(state, precomp, net, shamir_state)?;
         let mut matmul_results = Vec::with_capacity(state.len() / T);
-        for chunk in state.chunks_exact_mut(T) {
-            matmul_results.push(Self::matmul_external_shamir_intermediate(
-                chunk.try_into().expect("we checked sizes"),
-            ));
+        for chunk in state.as_chunks_mut::<T>().0 {
+            matmul_results.push(Self::matmul_external_shamir_intermediate(chunk));
         }
         Ok((squares, quads, matmul_results))
     }
@@ -941,15 +931,13 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
 
         let matmul_external: Option<[Vec<ShamirPrimeFieldShare<F>>; BATCH_SIZE]> = if T == 16 {
             let mut me = Vec::with_capacity(BATCH_SIZE);
-            for chunk in state.chunks_exact_mut(T) {
-                me.push(Self::matmul_external_shamir_intermediate_t16(
-                    chunk.try_into().expect("we checked sizes"),
-                ));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                me.push(Self::matmul_external_shamir_intermediate_t16(chunk));
             }
             Some(me.try_into().expect("we checked sizes"))
         } else {
-            for chunk in state.chunks_exact_mut(T) {
-                Self::matmul_external_shamir_shares(chunk.try_into().expect("we checked sizes"));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                Self::matmul_external_shamir_shares(chunk);
             }
             None
         };
@@ -1226,17 +1214,15 @@ impl<F: PrimeField, const T: usize> CircomTraceShamirHasher<F, T> for Poseidon2<
         let matmul_external: Option<Vec<Vec<ShamirPrimeFieldShare<F>>>> = if T == 16 {
             Some(
                 state
-                    .chunks_exact_mut(T)
-                    .map(|chunk| {
-                        Self::matmul_external_shamir_intermediate_t16(
-                            chunk.try_into().expect("we checked sizes"),
-                        )
-                    })
+                    .as_chunks_mut::<T>()
+                    .0
+                    .iter_mut()
+                    .map(Self::matmul_external_shamir_intermediate_t16)
                     .collect(),
             )
         } else {
-            for chunk in state.chunks_exact_mut(T) {
-                Self::matmul_external_shamir_shares(chunk.try_into().expect("we checked sizes"));
+            for chunk in state.as_chunks_mut::<T>().0 {
+                Self::matmul_external_shamir_shares(chunk);
             }
             None
         };

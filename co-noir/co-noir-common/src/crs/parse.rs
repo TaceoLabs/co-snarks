@@ -91,7 +91,7 @@ trait FileProcessor<P: HonkCurve<TranscriptFieldType>> {
         Ok(())
     }
     fn read_elements_from_buffer<G: AffineRepr>(elements: &mut [G], buffer: &mut [u8]) {
-        for (element, chunk) in elements.iter_mut().zip(buffer.chunks_exact_mut(64)) {
+        for (element, chunk) in elements.iter_mut().zip(buffer.as_chunks_mut::<64>().0) {
             Self::convert_endianness_inplace(chunk);
             #[allow(clippy::redundant_slicing)]
             if let Ok(val) = G::deserialize_uncompressed_unchecked(&chunk[..]) {
@@ -152,7 +152,7 @@ impl<P: HonkCurve<TranscriptFieldType>> FileProcessor<P> for NewFileStructure<P>
     }
 
     fn convert_endianness_inplace(buffer: &mut [u8]) {
-        for chunk in buffer.chunks_exact_mut(32) {
+        for chunk in buffer.as_chunks_mut::<32>().0 {
             chunk.reverse();
         }
     }

@@ -2502,23 +2502,29 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BoolCT<F, T> {
             result.witness_index = builder.add_variable(value);
             // norm a, norm b or both inv: 1 - a - b + 2ab
             // inv a or inv b = a + b - 2ab
-            let multiplicative_coefficient;
-            let left_coefficient;
-            let right_coefficient;
-            let constant_coefficient;
-            if (self.witness_inverted && other.witness_inverted)
+
+            let (
+                multiplicative_coefficient,
+                left_coefficient,
+                right_coefficient,
+                constant_coefficient,
+            ) = if (self.witness_inverted && other.witness_inverted)
                 || (!self.witness_inverted && !other.witness_inverted)
             {
-                multiplicative_coefficient = P::ScalarField::from(2);
-                left_coefficient = -P::ScalarField::one();
-                right_coefficient = -P::ScalarField::one();
-                constant_coefficient = P::ScalarField::one();
+                (
+                    P::ScalarField::from(2),
+                    -P::ScalarField::one(),
+                    -P::ScalarField::one(),
+                    P::ScalarField::one(),
+                )
             } else {
-                multiplicative_coefficient = -P::ScalarField::from(2);
-                left_coefficient = P::ScalarField::one();
-                right_coefficient = P::ScalarField::one();
-                constant_coefficient = P::ScalarField::zero();
-            }
+                (
+                    -P::ScalarField::from(2),
+                    P::ScalarField::one(),
+                    P::ScalarField::one(),
+                    P::ScalarField::zero(),
+                )
+            };
             builder.create_arithmetic_gate(&PolyTriple {
                 a: self.witness_index,
                 b: other.witness_index,
