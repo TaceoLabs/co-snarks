@@ -109,6 +109,25 @@ pub fn open_half_point<C: CurveGroup, N: Network>(
     Ok(res)
 }
 
+/// Performs opening of two point shares (potentially on different curves) in a single communication round.
+pub fn open_two_half_points<C1, C2, N: Network>(
+    a: C1,
+    b: C2,
+    net: &N,
+    state: &mut ShamirState<C1::ScalarField>,
+) -> eyre::Result<(C1, C2)>
+where
+    C1: CurveGroup,
+    C2: CurveGroup<ScalarField = C1::ScalarField>,
+{
+    let rcv = net.broadcast_next(state.num_parties, state.threshold * 2 + 1, (a, b))?;
+    let (rcv_a, rcv_b): (Vec<_>, Vec<_>) = rcv.into_iter().unzip();
+    Ok((
+        reconstruct_point(&rcv_a, &state.open_lagrange_2t),
+        reconstruct_point(&rcv_b, &state.open_lagrange_2t),
+    ))
+}
+
 /// Transforms a public value into a shared value: \[a\] = a.
 pub fn promote_to_trivial_share<C: CurveGroup>(a: &C) -> PointShare<C> {
     PointShare::new(*a)
