@@ -531,7 +531,7 @@ mod field_share {
         let nets = LocalNetwork::new(num_parties);
         let mut rng = thread_rng();
         let mut input = vec![ark_bn254::Fr::default(); NUM_POSEIDON * 4];
-        for input in input.chunks_exact_mut(4) {
+        for input in input.as_chunks_mut::<4>().0 {
             input[0] = ark_bn254::Fr::from(0);
             input[1] = ark_bn254::Fr::from(1);
             input[2] = ark_bn254::Fr::from(2);
@@ -604,8 +604,8 @@ mod field_share {
             shamir::combine_field_elements(&results, &(1..=num_parties).collect_vec(), threshold)
                 .unwrap();
 
-        for r in is_result.chunks_exact(4) {
-            assert_eq!(r, expected);
+        for r in is_result.as_chunks::<4>().0 {
+            assert_eq!(r, &expected);
         }
     }
 

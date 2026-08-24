@@ -2262,7 +2262,7 @@ mod field_share {
             result.extend_from_slice(&res[..2 * slices_len]);
             let mut res0 = Vec::with_capacity((res.len() - 2 * slices_len) / 64);
             let mut res1 = Vec::with_capacity((res.len() - 2 * slices_len) / 64);
-            for chunk in res[2 * slices_len..].chunks_exact(64) {
+            for chunk in res[2 * slices_len..].as_chunks::<64>().0 {
                 let mut vec_t0 = chunk[..32].to_vec();
                 let mut vec_t1 = chunk[32..].to_vec();
 
@@ -2527,7 +2527,7 @@ mod field_share {
         for res in is_result.chunks_exact(result_chunk) {
             result.extend_from_slice(&res[..2 * slices_len]);
             let mut res0 = Vec::with_capacity((res.len() - 2 * slices_len) / 8);
-            for chunk in res[2 * slices_len..].chunks_exact(8) {
+            for chunk in res[2 * slices_len..].as_chunks::<8>().0 {
                 let mut vec_t0 = chunk.to_vec();
 
                 for (a, b) in vec_t0.iter_mut().zip(base_powers.iter()) {
@@ -3395,7 +3395,7 @@ mod field_share {
         let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mut input = vec![ark_bn254::Fr::default(); NUM_POSEIDON * 4];
-        for input in input.chunks_exact_mut(4) {
+        for input in input.as_chunks_mut::<4>().0 {
             input[0] = ark_bn254::Fr::from(0);
             input[1] = ark_bn254::Fr::from(1);
             input[2] = ark_bn254::Fr::from(2);
@@ -3447,8 +3447,8 @@ mod field_share {
         let result3 = rx3.recv().unwrap();
         let is_result = rep3::combine_field_elements(&result1, &result2, &result3);
 
-        for r in is_result.chunks_exact(4) {
-            assert_eq!(r, expected);
+        for r in is_result.as_chunks::<4>().0 {
+            assert_eq!(r, &expected);
         }
     }
 

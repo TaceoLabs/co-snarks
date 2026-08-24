@@ -23,8 +23,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             16 => {
                 let mut res = Vec::with_capacity(T);
                 // Applying cheap 4x4 MDS matrix to each 4-element part of the state
-                for state in input.chunks_exact_mut(4) {
-                    Self::matmul_m4_rep3(state.try_into().unwrap());
+                for state in input.as_chunks_mut::<4>().0 {
+                    Self::matmul_m4_rep3(state);
                 }
 
                 // Applying second cheap matrix for t > 4
@@ -361,8 +361,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     )> {
         assert!(state.len().is_multiple_of(T));
         let id = PartyID::try_from(net.id())?;
-        for s in state.chunks_exact_mut(T) {
-            self.add_rc_external_rep3(s.try_into().expect("we checked sizes"), r, id);
+        for s in state.as_chunks_mut::<T>().0 {
+            self.add_rc_external_rep3(s, r, id);
         }
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_packed(state, precomp, net)?;
         let sboxes_0: [_; BATCH_SIZE] = array::from_fn(|i| state[i * T]);
@@ -371,15 +371,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
             array::from_fn(|i| state.get(i * T + 3).copied().unwrap_or_default());
         let matmul_external = if T == 16 {
             let mut res = Vec::with_capacity(state.len() / T);
-            for state_chunk in state.chunks_exact_mut(T) {
-                res.push(Self::matmul_external_rep3_intermediate_t16(
-                    state_chunk.try_into().expect("Chunk size checked"),
-                ));
+            for state_chunk in state.as_chunks_mut::<T>().0 {
+                res.push(Self::matmul_external_rep3_intermediate_t16(state_chunk));
             }
             Some(res.try_into().expect("we checked sizes"))
         } else {
-            for state_chunk in state.chunks_exact_mut(T) {
-                Self::matmul_external_rep3(state_chunk.try_into().expect("Chunk size checked"));
+            for state_chunk in state.as_chunks_mut::<T>().0 {
+                Self::matmul_external_rep3(state_chunk);
             }
             None
         };
@@ -411,15 +409,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     )> {
         assert!(state.len().is_multiple_of(T));
         let id = PartyID::try_from(net.id())?;
-        for s in state.chunks_exact_mut(T) {
-            self.add_rc_external_rep3(s.try_into().expect("we checked sizes"), r, id);
+        for s in state.as_chunks_mut::<T>().0 {
+            self.add_rc_external_rep3(s, r, id);
         }
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_packed(state, precomp, net)?;
         let mut matmul_results = Vec::with_capacity(BATCH_SIZE);
-        for s in state.chunks_exact_mut(T) {
-            matmul_results.push(Self::matmul_external_rep3_intermediate(
-                s.try_into().expect("we checked sizes"),
-            ));
+        for s in state.as_chunks_mut::<T>().0 {
+            matmul_results.push(Self::matmul_external_rep3_intermediate(s));
         }
         Ok((
             squares,
@@ -446,8 +442,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     )> {
         assert!(state.len().is_multiple_of(T));
         let id = PartyID::try_from(net.id())?;
-        for s in state.chunks_exact_mut(T) {
-            self.add_rc_external_rep3(s.try_into().expect("we checked sizes"), r, id);
+        for s in state.as_chunks_mut::<T>().0 {
+            self.add_rc_external_rep3(s, r, id);
         }
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_vec(state, precomp, net)?;
         let sboxes_0 = state.iter().step_by(T).cloned().collect::<Vec<_>>();
@@ -459,15 +455,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         };
         let matmul_external = if T == 16 {
             let mut res = Vec::with_capacity(state.len() / T);
-            for state_chunk in state.chunks_exact_mut(T) {
-                res.push(Self::matmul_external_rep3_intermediate_t16(
-                    state_chunk.try_into().expect("Chunk size checked"),
-                ));
+            for state_chunk in state.as_chunks_mut::<T>().0 {
+                res.push(Self::matmul_external_rep3_intermediate_t16(state_chunk));
             }
             Some(res)
         } else {
-            for state_chunk in state.chunks_exact_mut(T) {
-                Self::matmul_external_rep3(state_chunk.try_into().expect("Chunk size checked"));
+            for state_chunk in state.as_chunks_mut::<T>().0 {
+                Self::matmul_external_rep3(state_chunk);
             }
             None
         };
@@ -496,15 +490,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     )> {
         assert!(state.len().is_multiple_of(T));
         let id = PartyID::try_from(net.id())?;
-        for s in state.chunks_exact_mut(T) {
-            self.add_rc_external_rep3(s.try_into().expect("we checked sizes"), r, id);
+        for s in state.as_chunks_mut::<T>().0 {
+            self.add_rc_external_rep3(s, r, id);
         }
         let (squares, quads) = Self::sbox_rep3_precomp_intermediate_vec(state, precomp, net)?;
         let mut matmul_results = Vec::with_capacity(state.len() / T);
-        for s in state.chunks_exact_mut(T) {
-            matmul_results.push(Self::matmul_external_rep3_intermediate(
-                s.try_into().expect("we checked sizes"),
-            ));
+        for s in state.as_chunks_mut::<T>().0 {
+            matmul_results.push(Self::matmul_external_rep3_intermediate(s));
         }
         Ok((squares, quads, matmul_results))
     }
@@ -564,8 +556,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let mut quad;
         let mut count = 0;
         for (inp, y, squares_, quads_) in izip!(
-            input.chunks_exact_mut(T),
-            y.chunks_exact(T),
+            input.as_chunks_mut::<T>().0,
+            y.as_chunks::<T>().0,
             squares.iter_mut(),
             quads.iter_mut()
         ) {
@@ -612,8 +604,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         let mut quad;
         let mut count = 0;
         for (inp, y, squares_, quads_) in izip!(
-            input.chunks_exact_mut(T),
-            y.chunks_exact(T),
+            input.as_chunks_mut::<T>().0,
+            y.as_chunks::<T>().0,
             squares.iter_mut(),
             quads.iter_mut()
         ) {
@@ -695,15 +687,13 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         }
         let sum = if T >= 4 {
             let mut sum = Vec::with_capacity(t2);
-            for state_chunk in state.chunks_exact_mut(T) {
-                sum.push(self.matmul_internal_rep3_return_sum(
-                    state_chunk.try_into().expect("Chunk size checked"),
-                ));
+            for state_chunk in state.as_chunks_mut::<T>().0 {
+                sum.push(self.matmul_internal_rep3_return_sum(state_chunk));
             }
             Some(sum)
         } else {
-            for state_chunk in state.chunks_exact_mut(T) {
-                self.matmul_internal_rep3(state_chunk.try_into().expect("Chunk size checked"));
+            for state_chunk in state.as_chunks_mut::<T>().0 {
+                self.matmul_internal_rep3(state_chunk);
             }
             None
         };
@@ -797,8 +787,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         match T {
             8 | 12 | 16 | 20 | 24 => {
                 // Applying cheap 4x4 MDS matrix to each 4-element part of the state
-                for state in input.chunks_exact_mut(4) {
-                    Self::matmul_m4_rep3(state.try_into().unwrap());
+                for state in input.as_chunks_mut::<4>().0 {
+                    Self::matmul_m4_rep3(state);
                 }
 
                 let result = input[0].to_owned();
@@ -835,8 +825,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
             16 => {
                 let mut res = Vec::with_capacity(T);
                 // Applying cheap 4x4 MDS matrix to each 4-element part of the state
-                for state in input.chunks_exact_mut(4) {
-                    Self::matmul_m4(state.try_into().unwrap());
+                for state in input.as_chunks_mut::<4>().0 {
+                    Self::matmul_m4(state);
                 }
 
                 // Applying second cheap matrix for t > 4
@@ -897,8 +887,8 @@ impl<F: PrimeField, const T: usize> Poseidon2<F, T, 5> {
         match T {
             8 | 12 | 16 | 20 | 24 => {
                 // Applying cheap 4x4 MDS matrix to each 4-element part of the state
-                for state in input.chunks_exact_mut(4) {
-                    Self::matmul_m4(state.try_into().unwrap());
+                for state in input.as_chunks_mut::<4>().0 {
+                    Self::matmul_m4(state);
                 }
 
                 let result = input[0];
@@ -1267,15 +1257,14 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         // Linear layer at beginning
         let matmul_external: Option<[Vec<Rep3PrimeFieldShare<F>>; BATCH_SIZE]> = if T == 16 {
             let mut matmul_external = Vec::with_capacity(BATCH_SIZE);
-            for state_ in state.chunks_exact_mut(T) {
-                let state_: &mut [Rep3PrimeFieldShare<F>; T] =
-                    state_.try_into().expect("we checked sizes");
+            for state_ in state.as_chunks_mut::<T>().0 {
+                let state_: &mut [Rep3PrimeFieldShare<F>; T] = state_;
                 matmul_external.push(Self::matmul_external_rep3_intermediate_t16(state_));
             }
             Some(matmul_external.try_into().expect("we checked sizes"))
         } else {
-            for s in state.chunks_exact_mut(T) {
-                Self::matmul_external_rep3(s.try_into().unwrap());
+            for s in state.as_chunks_mut::<T>().0 {
+                Self::matmul_external_rep3(s);
             }
             None
         };
@@ -1563,17 +1552,15 @@ impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2
         let matmul_external: Option<Vec<Vec<Rep3PrimeFieldShare<F>>>> = if T == 16 {
             Some(
                 state
-                    .chunks_exact_mut(T)
-                    .map(|state_| {
-                        let state_: &mut [Rep3PrimeFieldShare<F>; T] =
-                            state_.try_into().expect("we checked sizes");
-                        Self::matmul_external_rep3_intermediate_t16(state_)
-                    })
+                    .as_chunks_mut::<T>()
+                    .0
+                    .iter_mut()
+                    .map(Self::matmul_external_rep3_intermediate_t16)
                     .collect::<Vec<_>>(),
             )
         } else {
-            for s in state.chunks_exact_mut(T) {
-                Self::matmul_external_rep3(s.try_into().expect("we checked sizes"));
+            for s in state.as_chunks_mut::<T>().0 {
+                Self::matmul_external_rep3(s);
             }
             None
         };

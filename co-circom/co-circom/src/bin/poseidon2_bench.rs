@@ -299,8 +299,8 @@ where
         let poseidon2 = Poseidon2::<F, T, D>::default();
 
         let start = Instant::now();
-        for input in input.chunks_exact_mut(T) {
-            poseidon2.permutation_in_place(input.try_into().unwrap());
+        for input in input.as_chunks_mut::<T>().0 {
+            poseidon2.permutation_in_place(input);
         }
         let duration = start.elapsed().as_micros() as f64;
         times.push(duration);

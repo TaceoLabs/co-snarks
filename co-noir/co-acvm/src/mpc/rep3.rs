@@ -1767,7 +1767,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
 
         let mut res0 = Vec::with_capacity(rotation_values.len() / 64);
         let mut res1 = Vec::with_capacity(rotation_values.len() / 64);
-        for chunk in rotation_values.chunks_exact(64) {
+        for chunk in rotation_values.as_chunks::<64>().0 {
             let vec_t0 = &chunk[..32];
             let vec_t1 = &chunk[32..];
             let mut sum_a = self.mul_with_public(base_powers[0], vec_t0[0].to_owned());
@@ -2114,7 +2114,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let base_powers = get_base_powers::<32>(base);
         let base_powers: [F; 32] = array::from_fn(|i| F::from(base_powers[i].clone()));
         let mut res0 = Vec::with_capacity(sliced_bits.len() / 8);
-        for chunk in sliced_bits.chunks_exact(8) {
+        for chunk in sliced_bits.as_chunks::<8>().0 {
             let vec_t0 = chunk.to_vec();
             let mut sum_a = self.mul_with_public(base_powers[0], vec_t0[0].clone());
 
