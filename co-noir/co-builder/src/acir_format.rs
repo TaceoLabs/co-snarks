@@ -432,12 +432,12 @@ impl<F: PrimeField> AcirFormat<F> {
                     block_type,
                 } => {
                     let block = Self::memory_init_to_block_constraint(init, block_type);
-                    let block_id = block_id.0;
+                    let block_id = block_id.as_u32();
                     let opcode_indices = vec![i];
                     block_id_to_block_constraint.insert(block_id, (block, opcode_indices));
                 }
                 acir::circuit::Opcode::MemoryOp { block_id, op } => {
-                    let block = block_id_to_block_constraint.get_mut(&block_id.0);
+                    let block = block_id_to_block_constraint.get_mut(&block_id.as_u32());
                     if block.is_none() {
                         panic!(
                             "acir_format::circuit_serde_to_acir_format: uninitialized MemoryOp."

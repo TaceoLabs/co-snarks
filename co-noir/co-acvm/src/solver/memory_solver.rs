@@ -17,13 +17,13 @@ where
         block_id: BlockId,
         init: &[Witness],
     ) -> CoAcvmResult<()> {
-        tracing::trace!("solving memory init block {}", block_id.0);
-        if self.memory_access.get(block_id.0.into()).is_some() {
+        tracing::trace!("solving memory init block {}", block_id.as_u32());
+        if self.memory_access.get(block_id.as_u32().into()).is_some() {
             //there is already a block? This should no be possible
-            tracing::error!("There is already a block for id {}", block_id.0);
+            tracing::error!("There is already a block for id {}", block_id.as_u32());
             Err(eyre::eyre!(
                 "There is already a block for id {}",
-                block_id.0
+                block_id.as_u32()
             ))?;
         }
         // let get all witnesses
@@ -36,7 +36,7 @@ where
                 eyre::eyre!("tried to write not initialized witness to memory - this is a  bug")
             })?;
         let lut = self.driver.init_lut_by_acvm_type(init);
-        self.memory_access.insert(block_id.0.into(), lut);
+        self.memory_access.insert(block_id.as_u32().into(), lut);
         Ok(())
     }
 
@@ -48,9 +48,15 @@ where
             MemOpKind::Read => {
                 // read the value from the LUT
                 tracing::trace!("reading value from LUT");
-                let lut = self.memory_access.get(block_id.0.into()).ok_or_else(|| {
-                    eyre::eyre!("tried to access block {} but not present", block_id.0)
-                })?;
+                let lut = self
+                    .memory_access
+                    .get(block_id.as_u32().into())
+                    .ok_or_else(|| {
+                        eyre::eyre!(
+                            "tried to access block {} but not present",
+                            block_id.as_u32()
+                        )
+                    })?;
                 let value = self.driver.read_lut_by_acvm_type(index, lut)?;
 
                 self.witness().insert(op.value, value);
@@ -61,9 +67,12 @@ where
                 let value = Self::witness_to_value(self.witness(), op.value)?.to_owned();
                 let lut = self
                     .memory_access
-                    .get_mut(block_id.0.into())
+                    .get_mut(block_id.as_u32().into())
                     .ok_or_else(|| {
-                        eyre::eyre!("tried to access block {} but not present", block_id.0)
+                        eyre::eyre!(
+                            "tried to access block {} but not present",
+                            block_id.as_u32()
+                        )
                     })?;
 
                 self.driver.write_lut_by_acvm_type(index, value, lut)?;
