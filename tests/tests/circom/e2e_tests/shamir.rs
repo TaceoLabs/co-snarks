@@ -54,17 +54,15 @@ macro_rules! add_test_impl_g16 {
                 let mut rng = thread_rng();
                 let witness_shares =
                     SharedWitness::share_shamir(witness, r1cs.num_inputs, 1, 3, &mut rng);
-                let nets0 = LocalNetwork::new_3_parties();
-                let nets1 = LocalNetwork::new_3_parties();
+                let nets = LocalNetwork::new_3_parties();
                 let mut threads = vec![];
-                for (net0, net1, x, zkey) in izip!(
-                    nets0,
-                    nets1,
+                for (net, x, zkey) in izip!(
+                    nets,
                     witness_shares.into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(std::thread::spawn(move || {
-                        ShamirCoGroth16::<$curve>::prove::<_, CircomReduction>(&net0, &net1, 3, 1, &zkey.1, &zkey.0, x).unwrap()
+                        ShamirCoGroth16::<$curve>::prove::<_, CircomReduction>(&net, 3, 1, &zkey.1, &zkey.0, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

@@ -119,20 +119,15 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
         b: &C,
     );
 
-    /// Reconstructs a shared point: A = Open(\[A\]).
-    fn open_half_point<N: Network, C>(
-        a: Self::PointHalfShare<C>,
+    /// Reconstructs two shared points (potentially on different curves) in a single
+    /// communication round: (A, B) = (Open(\[A\]), Open(\[B\])).
+    fn open_two_half_points<N: Network, C1, C2>(
+        a: Self::PointHalfShare<C1>,
+        b: Self::PointHalfShare<C2>,
         net: &N,
         state: &mut Self::State,
-    ) -> eyre::Result<C>
+    ) -> eyre::Result<(C1, C2)>
     where
-        C: CurveGroup<ScalarField = P::ScalarField>;
-
-    /// Multiplies a share b to the shared point A: \[A\] *= \[b\]. Requires network communication.
-    fn scalar_mul<N: Network>(
-        a: &Self::PointHalfShare<P::G1>,
-        b: Self::ArithmeticShare,
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<Self::PointHalfShare<P::G1>>;
+        C1: CurveGroup<ScalarField = P::ScalarField>,
+        C2: CurveGroup<ScalarField = P::ScalarField>;
 }

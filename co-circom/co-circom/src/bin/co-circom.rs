@@ -999,8 +999,7 @@ where
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
-            let [net0, net1] =
-                TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
+            let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
             let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
             let (matrices, pkey) = zkey.into();
@@ -1013,13 +1012,12 @@ where
 
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share = co_circom::uncompress_shared_witness(witness_share, &net0)?;
+                    let witness_share = co_circom::uncompress_shared_witness(witness_share, &net)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
                     let proof = Rep3CoGroth16::prove::<_, CircomReduction>(
-                        &net0,
-                        &net1,
+                        &net,
                         &pkey,
                         &matrices,
                         witness_share,
@@ -1036,8 +1034,7 @@ where
 
                     let start = Instant::now();
                     let proof = ShamirCoGroth16::prove::<_, CircomReduction>(
-                        &net0,
-                        &net1,
+                        &net,
                         n,
                         t,
                         &pkey,

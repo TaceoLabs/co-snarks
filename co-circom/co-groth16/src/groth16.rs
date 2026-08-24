@@ -123,10 +123,8 @@ where
     /// This version takes the Circom-generated constraint matrices as input and does not re-calculate them.
     #[instrument(level = "debug", name = "Groth16 - Proof", skip_all)]
     fn prove_inner<N: Network, R: R1CSToQAP>(
-        net0: &N,
-        net1: &N,
-        state0: &mut T::State,
-        state1: &mut T::State,
+        net: &N,
+        state: &mut T::State,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
@@ -149,12 +147,12 @@ where
         }
 
         let h = R::witness_map_from_matrices::<P, T>(
-            state0,
+            state,
             matrices,
             &public_inputs,
             &private_witness.witness,
         )?;
-        let (r, s) = (T::rand(net0, state0)?, T::rand(net0, state0)?);
+        let (r, s) = (T::rand(net, state)?, T::rand(net, state)?);
 
         let private_witness_half_share: Vec<_> = private_witness
             .witness
@@ -163,10 +161,8 @@ where
             .collect();
 
         Self::create_proof_with_assignment(
-            net0,
-            net1,
-            state0,
-            state1,
+            net,
+            state,
             pkey,
             r,
             s,
@@ -205,10 +201,8 @@ where
     #[instrument(level = "debug", name = "create proof with assignment", skip_all)]
     #[expect(clippy::too_many_arguments)]
     fn create_proof_with_assignment<N: Network>(
-        net0: &N,
-        net1: &N,
-        state0: &mut T::State,
-        state1: &mut T::State,
+        net: &N,
+        state: &mut T::State,
         pkey: &ProvingKey<P>,
         r: T::ArithmeticShare,
         s: T::ArithmeticShare,
@@ -218,7 +212,7 @@ where
     ) -> eyre::Result<Proof<P>> {
         let delta_g1 = pkey.delta_g1.into_group();
 
-        let id = state0.id();
+        let id = state.id();
         let alpha_g1 = pkey.vk.alpha_g1;
         let beta_g1 = pkey.beta_g1;
         let beta_g2 = pkey.vk.beta_g2;
@@ -294,20 +288,19 @@ where
         );
 
         let rs_span = tracing::debug_span!("r*s without networking").entered();
-        let rs = T::local_mul_vec(vec![r], vec![s], state0).pop().unwrap();
+        let rs = T::local_mul_vec(vec![r], vec![s], state).pop().unwrap();
         let r_s_delta_g1 = T::scalar_mul_public_point_hs(&delta_g1, rs);
         rs_span.exit();
 
         let g_a = r_g1;
         let g1_b = s_g1;
 
+        // Opening g1_b = B*G1 is safe: B is masked by the fresh uniform s, and its exponent is
+        // published in the proof as b = B*G2 anyway. With B*G1 public, r*B*G1 is a local
+        // scalar multiplication, so both values can be opened in a single round.
         let network_round = tracing::debug_span!("network round after calc coeff").entered();
-        let (g_a_opened, r_g1_b) = mpc_net::join(
-            || T::open_half_point(g_a, net0, state0),
-            || T::scalar_mul(&g1_b, r, net1, state1),
-        );
-        let g_a_opened = g_a_opened?;
-        let r_g1_b = r_g1_b?;
+        let (g_a_opened, g1_b_opened) = T::open_two_half_points(g_a, g1_b, net, state)?;
+        let r_g1_b = T::scalar_mul_public_point_hs(&g1_b_opened, T::to_half_share(r));
         network_round.exit();
 
         let last_round = tracing::debug_span!("finish - open two points and some adds").entered();
@@ -322,12 +315,7 @@ where
         g_c += h_acc;
 
         let g2_b = s_g2;
-        let (g_c_opened, g2_b_opened) = mpc_net::join(
-            || T::open_half_point(g_c, net0, state0),
-            || T::open_half_point(g2_b, net1, state1),
-        );
-        let g_c_opened = g_c_opened?;
-        let g2_b_opened = g2_b_opened?;
+        let (g_c_opened, g2_b_opened) = T::open_two_half_points(g_c, g2_b, net, state)?;
         last_round.exit();
 
         Ok(Proof {
@@ -352,30 +340,18 @@ where
     /// Create a [`Proof`] by running the collaborative Groth16 prover under 3-party replicated
     /// (REP3) secret sharing, secure against a single semi-honest corruption.
     ///
-    /// `net0` and `net1` must be two independent networks connecting the same three parties,
-    /// since the prover runs two network legs concurrently. All three parties return the same
-    /// [`Proof`]. If the Shamir prover is available to all parties,
-    /// [`Self::prove_with_shamir_bridge`] produces a proof under the same trust assumption with a
-    /// cheaper online phase.
+    /// All three parties return the same [`Proof`]. If the Shamir prover is available to all
+    /// parties, [`Self::prove_with_shamir_bridge`] produces a proof under the same trust
+    /// assumption with a cheaper online phase.
     pub fn prove<N: Network, R: R1CSToQAP>(
-        net0: &N,
-        net1: &N,
+        net: &N,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
         witness: Rep3SharedWitness<P::ScalarField>,
     ) -> eyre::Result<Proof<P>> {
-        let mut state0 = Rep3State::new(net0, A2BType::default())?;
-        let mut state1 = state0.fork(0)?;
+        let mut state = Rep3State::new(net, A2BType::default())?;
         // execute prover in MPC
-        Self::prove_inner::<N, R>(
-            net0,
-            net1,
-            &mut state0,
-            &mut state1,
-            pkey,
-            matrices,
-            witness,
-        )
+        Self::prove_inner::<N, R>(net, &mut state, pkey, matrices, witness)
     }
 
     /// Create a [`Proof`] by locally translating the REP3 `witness` into a 3-party Shamir
@@ -390,21 +366,19 @@ where
     /// fresh randomness (`r`, `s`); both verify under the same verification key.
     ///
     /// # Errors
-    /// Returns an error if `net0.id()` is not a valid REP3 party id (0, 1, or 2).
+    /// Returns an error if `net.id()` is not a valid REP3 party id (0, 1, or 2).
     pub fn prove_with_shamir_bridge<N: Network, R: R1CSToQAP>(
-        net0: &N,
-        net1: &N,
+        net: &N,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
         witness: Rep3SharedWitness<P::ScalarField>,
     ) -> eyre::Result<Proof<P>> {
         let translated_witness = ShamirState::translate_primefield_repshare_vec(
             witness.witness,
-            net0.id().try_into().context("not a valid party id")?,
+            net.id().try_into().context("not a valid party id")?,
         );
         ShamirCoGroth16::prove::<_, R>(
-            net0,
-            net1,
+            net,
             3, // number of parties is 3 for REP3
             1, // threshold is 1 for REP3
             pkey,
@@ -433,33 +407,21 @@ where
     /// `num_parties` must be at least `2 * threshold + 1`, since `g_c` is opened as a
     /// degree-`2*threshold` sharing.
     ///
-    /// `net0` and `net1` must be two independent networks connecting all parties: correlated
-    /// randomness is preprocessed over `net0` before the online phase, and the online phase
-    /// itself runs two network legs concurrently.
+    /// Correlated randomness is preprocessed over `net` before the online phase.
     pub fn prove<N: Network, R: R1CSToQAP>(
-        net0: &N,
-        net1: &N,
+        net: &N,
         num_parties: usize,
         threshold: usize,
         pkey: &ProvingKey<P>,
         matrices: &ConstraintMatrices<P::ScalarField>,
         witness: ShamirSharedWitness<P::ScalarField>,
     ) -> eyre::Result<Proof<P>> {
-        // we need 3 number of corr rand pairs. 2 for two rand calls, 1 for scalar_mul
-        let num_pairs = 3;
-        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net0)?;
-        let mut state0 = ShamirState::from(preprocessing);
-        let mut state1 = state0.fork(1)?;
+        // we need 2 corr rand pairs for the two rand calls
+        let num_pairs = 2;
+        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)?;
+        let mut state = ShamirState::from(preprocessing);
         // execute prover in MPC
-        Self::prove_inner::<N, R>(
-            net0,
-            net1,
-            &mut state0,
-            &mut state1,
-            pkey,
-            matrices,
-            witness,
-        )
+        Self::prove_inner::<N, R>(net, &mut state, pkey, matrices, witness)
     }
 }
 
@@ -486,6 +448,6 @@ where
         matrices: &ConstraintMatrices<P::ScalarField>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> Result<Proof<P>> {
-        Self::prove_inner::<_, R>(&(), &(), &mut (), &mut (), pkey, matrices, private_witness)
+        Self::prove_inner::<_, R>(&(), &mut (), pkey, matrices, private_witness)
     }
 }

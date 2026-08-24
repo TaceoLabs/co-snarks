@@ -154,6 +154,16 @@ pub fn open_half_point<C: CurveGroup, N: Network>(a: C, net: &N) -> eyre::Result
     Ok(a + b + c)
 }
 
+/// Open two shared points (potentially on different curves) in a single communication round
+pub fn open_two_half_points<C1: CurveGroup, C2: CurveGroup, N: Network>(
+    a: C1,
+    b: C2,
+    net: &N,
+) -> eyre::Result<(C1, C2)> {
+    let ((a1, b1), (a2, b2)) = net.broadcast((a, b))?;
+    Ok((a + a1 + a2, b + b1 + b2))
+}
+
 /// Open the vector of [`Rep3PointShare`]s
 pub fn open_point_many<C: CurveGroup, N: Network>(
     a: &[PointShare<C>],

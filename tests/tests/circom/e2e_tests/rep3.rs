@@ -54,17 +54,15 @@ macro_rules! add_test_impl_g16 {
                 let mut rng = thread_rng();
                 let [witness_share1, witness_share2, witness_share3] =
                     SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng);
-                let nets0 = LocalNetwork::new_3_parties();
-                let nets1 = LocalNetwork::new_3_parties();
+                let nets = LocalNetwork::new_3_parties();
                 let mut threads = vec![];
-                for (net0, net1, x, zkey) in izip!(
-                    nets0,
-                    nets1,
+                for (net, x, zkey) in izip!(
+                    nets,
                     [witness_share1, witness_share2, witness_share3].into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(std::thread::spawn(move || {
-                        Rep3CoGroth16::<$curve>::prove::<_, CircomReduction>(&net0, &net1, &zkey.1, &zkey.0, x).unwrap()
+                        Rep3CoGroth16::<$curve>::prove::<_, CircomReduction>(&net, &zkey.1, &zkey.0, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();
@@ -105,17 +103,15 @@ macro_rules! add_test_impl_g16 {
                 let mut rng = thread_rng();
                 let [witness_share1, witness_share2, witness_share3] =
                     SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng);
-                let nets0 = LocalNetwork::new_3_parties();
-                let nets1 = LocalNetwork::new_3_parties();
+                let nets = LocalNetwork::new_3_parties();
                 let mut threads = vec![];
-                for (net0, net1, x, zkey) in izip!(
-                    nets0,
-                    nets1,
+                for (net, x, zkey) in izip!(
+                    nets,
                     [witness_share1, witness_share2, witness_share3].into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(std::thread::spawn(move || {
-                        Rep3CoGroth16::<$curve>::prove_with_shamir_bridge::<_, CircomReduction>(&net0, &net1, &zkey.1, &zkey.0, x).unwrap()
+                        Rep3CoGroth16::<$curve>::prove_with_shamir_bridge::<_, CircomReduction>(&net, &zkey.1, &zkey.0, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

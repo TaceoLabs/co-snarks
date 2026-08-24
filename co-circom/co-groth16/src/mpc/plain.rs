@@ -112,23 +112,16 @@ impl<P: Pairing> CircomGroth16Prover<P> for PlainGroth16Driver {
         *a * b
     }
 
-    fn open_half_point<N: Network, C>(
-        a: Self::PointHalfShare<C>,
+    fn open_two_half_points<N: Network, C1, C2>(
+        a: Self::PointHalfShare<C1>,
+        b: Self::PointHalfShare<C2>,
         _: &N,
         _: &mut Self::State,
-    ) -> eyre::Result<C>
+    ) -> eyre::Result<(C1, C2)>
     where
-        C: CurveGroup<ScalarField = P::ScalarField>,
+        C1: CurveGroup<ScalarField = P::ScalarField>,
+        C2: CurveGroup<ScalarField = P::ScalarField>,
     {
-        Ok(a)
-    }
-
-    fn scalar_mul<N: Network>(
-        a: &Self::PointHalfShare<P::G1>,
-        b: Self::ArithmeticShare,
-        _: &N,
-        _: &mut Self::State,
-    ) -> eyre::Result<Self::PointHalfShare<P::G1>> {
-        Ok(*a * b)
+        Ok((a, b))
     }
 }
