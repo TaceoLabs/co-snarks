@@ -210,8 +210,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         index: Self::AcvmType,
         lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> eyre::Result<F> {
-        self.plain_lut
-            .get_from_lut(index, lut, &(), &(), &mut (), &mut ())
+        self.plain_lut.get_from_lut(index, lut, &(), &mut ())
     }
 
     fn read_from_public_luts(
@@ -221,9 +220,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         let mut result = Vec::with_capacity(luts.len());
         for lut in luts {
-            let res = self
-                .plain_lut
-                .get_from_lut(index, lut, &(), &(), &mut (), &mut ())?;
+            let res = self.plain_lut.get_from_lut(index, lut, &(), &mut ())?;
             result.push(res);
         }
         Ok(result)
@@ -235,8 +232,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         value: Self::AcvmType,
         lut: &mut <Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> eyre::Result<()> {
-        self.plain_lut
-            .write_to_lut(index, value, lut, &(), &(), &mut (), &mut ())
+        self.plain_lut.write_to_lut(index, value, lut, &(), &mut ())
     }
 
     fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize {

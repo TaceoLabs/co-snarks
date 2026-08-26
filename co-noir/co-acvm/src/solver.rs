@@ -172,28 +172,26 @@ where
 
 impl<'a, N: Network> Rep3CoSolver<'a, ark_bn254::Fr, N> {
     pub fn new(
-        net0: &'a N,
-        net1: &'a N,
+        net: &'a N,
         compiled_program: ProgramArtifact,
         prover_path: impl AsRef<Path>,
     ) -> eyre::Result<Self> {
         Self::new_bn254(
-            Rep3AcvmSolver::new(net0, net1, A2BType::default())?,
+            Rep3AcvmSolver::new(net, A2BType::default())?,
             compiled_program,
             prover_path,
         )
     }
 
     pub fn new_with_witness(
-        net0: &'a N,
-        net1: &'a N,
+        net: &'a N,
         compiled_program: ProgramArtifact,
         witness: WitnessMap<
             <Rep3AcvmSolver<ark_bn254::Fr, N> as NoirWitnessExtensionProtocol::<ark_bn254::Fr>>::AcvmType,
         >,
     ) -> eyre::Result<Self> {
         Self::new_bn254_with_witness(
-            Rep3AcvmSolver::new(net0, net1, A2BType::default())?,
+            Rep3AcvmSolver::new(net, A2BType::default())?,
             compiled_program,
             witness,
         )

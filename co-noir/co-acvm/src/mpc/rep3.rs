@@ -37,25 +37,20 @@ type ArithmeticShare<F> = Rep3PrimeFieldShare<F>;
 
 pub struct Rep3AcvmSolver<'a, F: PrimeField, N: Network> {
     id: PartyID,
-    net0: &'a N,
-    net1: &'a N,
-    state0: Rep3State,
-    state1: Rep3State,
+    net: &'a N,
+    state: Rep3State,
     lut_provider: Rep3FieldLookupTable<F>,
     plain_solver: PlainAcvmSolver<F>,
     phantom_data: PhantomData<F>,
 }
 
 impl<'a, F: PrimeField + FieldUint, N: Network> Rep3AcvmSolver<'a, F, N> {
-    pub fn new(net0: &'a N, net1: &'a N, a2b_type: A2BType) -> eyre::Result<Self> {
-        let mut state0 = Rep3State::new(net0, a2b_type)?;
-        let state1 = state0.fork(0)?;
+    pub fn new(net: &'a N, a2b_type: A2BType) -> eyre::Result<Self> {
+        let state = Rep3State::new(net, a2b_type)?;
         Ok(Self {
-            id: state0.id,
-            net0,
-            net1,
-            state0,
-            state1,
+            id: state.id,
+            net,
+            state,
             lut_provider: Rep3FieldLookupTable::new(),
             plain_solver: PlainAcvmSolver::<F>::default(),
             phantom_data: PhantomData,
@@ -372,7 +367,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
 
     fn init_brillig_driver(&mut self) -> eyre::Result<Self::BrilligDriver> {
         // TODO we just copy the net ref here this is not safe if used concurrently
-        Ok(Rep3BrilligDriver::new(self.net0, self.state0.fork(0)?))
+        Ok(Rep3BrilligDriver::new(self.net, self.state.fork(0)?))
     }
 
     fn parse_brillig_result(
@@ -381,7 +376,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     ) -> eyre::Result<Vec<Self::AcvmType>> {
         brillig_result
             .into_iter()
-            .map(|value| Rep3AcvmType::from_brillig_type(value, self.net0, &mut self.state0))
+            .map(|value| Rep3AcvmType::from_brillig_type(value, self.net, &mut self.state))
             .collect()
     }
 
@@ -422,9 +417,9 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
 
     fn shared_zeros(&mut self, len: usize) -> eyre::Result<Vec<Self::AcvmType>> {
         let a = (0..len)
-            .map(|_| self.state0.rngs.rand.masking_field_element())
+            .map(|_| self.state.rngs.rand.masking_field_element())
             .collect::<Vec<_>>();
-        let b = self.net0.reshare_many(&a)?;
+        let b = self.net.reshare_many(&a)?;
         let result = izip!(a, b)
             .map(|(a, b)| Rep3AcvmType::Shared(Rep3PrimeFieldShare::new(a, b)))
             .collect();
@@ -537,7 +532,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Rep3AcvmType::Shared(arithmetic::mul_public(secret_1, secret_2)),
             ),
             (Rep3AcvmType::Shared(secret_1), Rep3AcvmType::Shared(secret_2)) => {
-                let result = arithmetic::mul(secret_1, secret_2, self.net0, &mut self.state0)?;
+                let result = arithmetic::mul(secret_1, secret_2, self.net, &mut self.state)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
         }
@@ -552,7 +547,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Ok(Rep3AcvmType::Public(inv))
             }
             Rep3AcvmType::Shared(secret) => {
-                let inv = arithmetic::inv(secret, self.net0, &mut self.state0)?;
+                let inv = arithmetic::inv(secret, self.net, &mut self.state)?;
                 Ok(Rep3AcvmType::Shared(inv))
             }
         }
@@ -619,7 +614,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Rep3AcvmType::Shared(arithmetic::mul_public(mul, c))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let shared_mul = arithmetic::mul(lhs, rhs, self.net0, &mut self.state0)?;
+                let shared_mul = arithmetic::mul(lhs, rhs, self.net, &mut self.state)?;
                 Rep3AcvmType::Shared(arithmetic::mul_public(shared_mul, c))
             }
         };
@@ -640,12 +635,11 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Rep3AcvmType::Shared(arithmetic::div_shared_by_public(arithmetic::neg(c), q_l)?)
             }
             (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Public(c)) => {
-                let result =
-                    arithmetic::div_public_by_shared(-c, q_l, self.net0, &mut self.state0)?;
+                let result = arithmetic::div_public_by_shared(-c, q_l, self.net, &mut self.state)?;
                 Rep3AcvmType::Shared(result)
             }
             (Rep3AcvmType::Shared(q_l), Rep3AcvmType::Shared(c)) => {
-                let result = arithmetic::div(arithmetic::neg(c), q_l, self.net0, &mut self.state0)?;
+                let result = arithmetic::div(arithmetic::neg(c), q_l, self.net, &mut self.state)?;
                 Rep3AcvmType::Shared(result)
             }
         };
@@ -681,30 +675,27 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         index: Self::AcvmType,
         lut: &<Self::Lookup as mpc_core::lut::LookupTableProvider<F>>::LutType,
     ) -> eyre::Result<Self::AcvmType> {
-        let result = match index {
-            Rep3AcvmType::Public(public) => {
-                let index: BigUint = public.into();
-                let index = usize::try_from(index)
-                    .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
+        let result =
+            match index {
+                Rep3AcvmType::Public(public) => {
+                    let index: BigUint = public.into();
+                    let index = usize::try_from(index)
+                        .map_err(|_| eyre::eyre!("Index can not be translated to usize"))?;
 
-                match lut {
-                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(vec) => {
-                        Self::AcvmType::from(vec[index].to_owned())
-                    }
-                    mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(vec) => {
-                        Self::AcvmType::from(vec[index].to_owned())
+                    match lut {
+                        mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(
+                            vec,
+                        ) => Self::AcvmType::from(vec[index].to_owned()),
+                        mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Shared(
+                            vec,
+                        ) => Self::AcvmType::from(vec[index].to_owned()),
                     }
                 }
-            }
-            Rep3AcvmType::Shared(shared) => Self::AcvmType::from(self.lut_provider.get_from_lut(
-                shared,
-                lut,
-                self.net0,
-                self.net1,
-                &mut self.state0,
-                &mut self.state1,
-            )?),
-        };
+                Rep3AcvmType::Shared(shared) => Self::AcvmType::from(
+                    self.lut_provider
+                        .get_from_lut(shared, lut, self.net, &mut self.state)?,
+                ),
+            };
         Ok(result)
     }
 
@@ -727,10 +718,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 let res = Rep3FieldLookupTable::get_from_public_luts(
                     index,
                     luts,
-                    self.net0,
-                    self.net1,
-                    &mut self.state0,
-                    &mut self.state1,
+                    self.net,
+                    &mut self.state,
                 )?;
                 for res in res {
                     result.push(Rep3AcvmType::Shared(res));
@@ -785,26 +774,12 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             (Rep3AcvmType::Shared(index), Rep3AcvmType::Public(value)) => {
                 // TODO there might be a more efficient implementation for this if the table is also public
                 let value = arithmetic::promote_to_trivial_share(self.id, value);
-                self.lut_provider.write_to_lut(
-                    index,
-                    value,
-                    lut,
-                    self.net0,
-                    self.net1,
-                    &mut self.state0,
-                    &mut self.state1,
-                )?;
+                self.lut_provider
+                    .write_to_lut(index, value, lut, self.net, &mut self.state)?;
             }
             (Rep3AcvmType::Shared(index), Rep3AcvmType::Shared(value)) => {
-                self.lut_provider.write_to_lut(
-                    index,
-                    value,
-                    lut,
-                    self.net0,
-                    self.net1,
-                    &mut self.state0,
-                    &mut self.state1,
-                )?;
+                self.lut_provider
+                    .write_to_lut(index, value, lut, self.net, &mut self.state)?;
             }
         }
         Ok(())
@@ -818,10 +793,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<F>::ohv_from_index(
             index,
             len,
-            self.net0,
-            self.net1,
-            &mut self.state0,
-            &mut self.state1,
+            self.net,
+            &mut self.state,
         )
     }
 
@@ -831,7 +804,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         value: Self::ArithmeticShare,
         lut: &mut [Self::ArithmeticShare],
     ) -> eyre::Result<()> {
-        mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<F>::write_to_shared_lut_from_ohv(ohv, value, lut, self.net0, &mut self.state0)
+        mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<F>::write_to_shared_lut_from_ohv(ohv, value, lut, self.net, &mut self.state)
     }
 
     fn get_length_of_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> usize {
@@ -879,7 +852,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
 
     fn open_many(&mut self, a: &[Self::ArithmeticShare]) -> eyre::Result<Vec<F>> {
         let bs = a.iter().map(|x| x.b).collect_vec();
-        let mut cs = self.net0.reshare(bs)?;
+        let mut cs = self.net.reshare(bs)?;
 
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 
@@ -887,11 +860,11 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     }
 
     fn rand(&mut self) -> eyre::Result<Self::ArithmeticShare> {
-        Ok(arithmetic::rand(&mut self.state0))
+        Ok(arithmetic::rand(&mut self.state))
     }
 
     fn common_rng_seed(&mut self) -> eyre::Result<[u8; 32]> {
-        Ok(self.state0.rngs.generate_shared(self.id))
+        Ok(self.state.rngs.generate_shared(self.id))
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
@@ -914,8 +887,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
         yao::decompose_arithmetic(
             input,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             total_bit_size_per_field,
             decompose_bit_size,
         )
@@ -936,8 +909,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         for inp_chunk in input.chunks(BATCH_SIZE) {
             let result = yao::decompose_arithmetic_many(
                 inp_chunk,
-                self.net0,
-                &mut self.state0,
+                self.net,
+                &mut self.state,
                 total_bit_size_per_field,
                 decompose_bit_size,
             )?;
@@ -962,15 +935,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 pub_inputs.push(Self::get_public(val).expect("Already checked it is public"));
             }
         }
-        radix_sort_fields(
-            priv_inputs,
-            pub_inputs,
-            bitsize,
-            self.net0,
-            self.net1,
-            &mut self.state0,
-            &mut self.state1,
-        )
+        radix_sort_fields(priv_inputs, pub_inputs, bitsize, self.net, &mut self.state)
     }
 
     fn slice(
@@ -982,8 +947,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     ) -> eyre::Result<[Self::ArithmeticShare; 2]> {
         let res = yao::slice_arithmetic(
             input,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             lsb as usize,
             msb as usize,
             bitsize,
@@ -1001,8 +966,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     ) -> eyre::Result<Vec<[Self::ArithmeticShare; 2]>> {
         let res = yao::slice_arithmetic_many(
             input,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             lsb as usize,
             msb as usize,
             bitsize,
@@ -1029,20 +994,19 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             }
             (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
             | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
-                let shared = conversion::a2b_selector(shared, self.net0, &mut self.state0)?;
+                let shared = conversion::a2b_selector(shared, self.net, &mut self.state)?;
                 let public = public.to_uint() & mask;
                 let binary = binary::and_with_public(&shared, &public); // Already includes masking
-                let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
+                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let (lhs, rhs) = mpc_net::join(
-                    || conversion::a2b_selector(lhs, self.net0, &mut self.state0),
-                    || conversion::a2b_selector(rhs, self.net1, &mut self.state1),
-                );
-                let binary =
-                    binary::and(&lhs?, &rhs?, self.net0, &mut self.state0)?.and_mask(&mask);
-                let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
+                let [lhs, rhs] =
+                    conversion::a2b_selector_many(&[lhs, rhs], self.net, &mut self.state)?
+                        .try_into()
+                        .expect("a2b_selector_many preserves length");
+                let binary = binary::and(&lhs, &rhs, self.net, &mut self.state)?.and_mask(&mask);
+                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
         }
@@ -1066,19 +1030,19 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             }
             (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
             | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
-                let shared = conversion::a2b_selector(shared, self.net0, &mut self.state0)?;
+                let shared = conversion::a2b_selector(shared, self.net, &mut self.state)?;
                 let public = public.to_uint();
                 let binary = binary::xor_public(&shared, &public, self.id).and_mask(&mask);
-                let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
+                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let (lhs, rhs) = mpc_net::join(
-                    || conversion::a2b_selector(lhs, self.net0, &mut self.state0),
-                    || conversion::a2b_selector(rhs, self.net1, &mut self.state1),
-                );
-                let binary = binary::xor(&lhs?, &rhs?).and_mask(&mask);
-                let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
+                let [lhs, rhs] =
+                    conversion::a2b_selector_many(&[lhs, rhs], self.net, &mut self.state)?
+                        .try_into()
+                        .expect("a2b_selector_many preserves length");
+                let binary = binary::xor(&lhs, &rhs).and_mask(&mask);
+                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
         }
@@ -1099,8 +1063,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let result = yao::slice_and(
             input1,
             input2,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             basis_bits,
             rotation,
             total_bitsize,
@@ -1143,8 +1107,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let result = yao::slice_xor(
             input1,
             input2,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             basis_bits,
             rotation,
             total_bitsize,
@@ -1187,8 +1151,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let result = yao::slice_xor_with_filter(
             input1,
             input2,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             basis_bits,
             rotation,
             filter,
@@ -1244,10 +1208,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             &order,
             inputs,
             bitsize,
-            self.net0,
-            self.net1,
-            &mut self.state0,
-            &mut self.state1,
+            self.net,
+            &mut self.state,
         )
     }
 
@@ -1268,11 +1230,11 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 }
                 Rep3AcvmType::Shared(shared) => shared,
             });
-            let mut precomp = poseidon2.precompute_rep3(1, self.net0, &mut self.state0)?;
+            let mut precomp = poseidon2.precompute_rep3(1, self.net, &mut self.state)?;
             poseidon2.rep3_permutation_in_place_with_precomputation(
                 &mut shared,
                 &mut precomp,
-                self.net0,
+                self.net,
             )?;
 
             for (src, des) in shared.into_iter().zip(input.iter_mut()) {
@@ -1302,7 +1264,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         num_poseidon: usize,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> eyre::Result<Poseidon2Precomputations<Self::ArithmeticShare>> {
-        poseidon2.precompute_rep3(num_poseidon, self.net0, &mut self.state0)
+        poseidon2.precompute_rep3(num_poseidon, self.net, &mut self.state)
     }
 
     fn poseidon2_external_round_inplace_with_precomp<const T: usize, const D: u64>(
@@ -1312,7 +1274,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> eyre::Result<()> {
-        poseidon2.rep3_external_round_precomp(input, r, precomp, self.net0)
+        poseidon2.rep3_external_round_precomp(input, r, precomp, self.net)
     }
 
     fn poseidon2_internal_round_inplace_with_precomp<const T: usize, const D: u64>(
@@ -1322,7 +1284,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         precomp: &mut Poseidon2Precomputations<Self::ArithmeticShare>,
         poseidon2: &Poseidon2<F, T, D>,
     ) -> eyre::Result<()> {
-        poseidon2.rep3_internal_round_precomp(input, r, precomp, self.net0)
+        poseidon2.rep3_internal_round_precomp(input, r, precomp, self.net)
     }
 
     fn is_public_lut(lut: &<Self::Lookup as LookupTableProvider<F>>::LutType) -> bool {
@@ -1338,8 +1300,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Ok(Rep3AcvmType::Shared(arithmetic::eq_public(
                     *shared,
                     *public,
-                    self.net0,
-                    &mut self.state0,
+                    self.net,
+                    &mut self.state,
                 )?))
             }
 
@@ -1347,13 +1309,13 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Ok(Rep3AcvmType::Shared(arithmetic::eq_public(
                     *shared,
                     *public,
-                    self.net0,
-                    &mut self.state0,
+                    self.net,
+                    &mut self.state,
                 )?))
             }
 
             (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => Ok(Rep3AcvmType::Shared(
-                arithmetic::eq(*a, *b, self.net0, &mut self.state0)?,
+                arithmetic::eq(*a, *b, self.net, &mut self.state)?,
             )),
         }
     }
@@ -1388,7 +1350,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                     }
                 })
                 .collect();
-            arithmetic::eq_public_many(&a, &b, self.net0, &mut self.state0)
+            arithmetic::eq_public_many(&a, &b, self.net, &mut self.state)
                 .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
         } else if !bool_a && bool_b {
             let a = a
@@ -1407,7 +1369,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                     }
                 })
                 .collect();
-            arithmetic::eq_public_many(&b, &a, self.net0, &mut self.state0)
+            arithmetic::eq_public_many(&b, &a, self.net, &mut self.state)
                 .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
         } else {
             let a: Vec<Self::ArithmeticShare> = a
@@ -1434,7 +1396,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                     }
                 })
                 .collect();
-            arithmetic::eq_many(&a, &b, self.net0, &mut self.state0)
+            arithmetic::eq_many(&a, &b, self.net, &mut self.state)
                 .map(|shares| shares.into_iter().map(Rep3AcvmType::Shared).collect())
         }
     }
@@ -1474,29 +1436,23 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
 
         // TODO parallelize all points?
         for i in (0..points.len()).step_by(3) {
-            let (point, grumpkin_integer) = mpc_net::join(
-                || {
-                    Self::create_grumpkin_point(
-                        &points[i],
-                        &points[i + 1],
-                        &points[i + 2],
-                        self.net0,
-                        &mut self.state0,
-                        pedantic_solving,
-                    )
-                },
-                || {
-                    Self::combine_grumpkin_scalar_field_limbs(
-                        &scalars_lo[i / 3],
-                        &scalars_hi[i / 3],
-                        self.net1,
-                        &mut self.state1,
-                        pedantic_solving,
-                    )
-                },
-            );
+            let point = Self::create_grumpkin_point(
+                &points[i],
+                &points[i + 1],
+                &points[i + 2],
+                self.net,
+                &mut self.state,
+                pedantic_solving,
+            )?;
+            let grumpkin_integer = Self::combine_grumpkin_scalar_field_limbs(
+                &scalars_lo[i / 3],
+                &scalars_hi[i / 3],
+                self.net,
+                &mut self.state,
+                pedantic_solving,
+            )?;
             let iteration_output_point =
-                Self::scalar_point_mul(grumpkin_integer?, point?, self.net0, &mut self.state0)?;
+                Self::scalar_point_mul(grumpkin_integer, point, self.net, &mut self.state)?;
             Self::add_assign_point(&mut output_point, iteration_output_point, self.id);
         }
 
@@ -1515,13 +1471,13 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             Rep3AcvmPoint::Shared(output_point) => {
                 let (x, y, i) = conversion::point_share_to_fieldshares(
                     output_point,
-                    self.net0,
-                    &mut self.state0,
+                    self.net,
+                    &mut self.state,
                 )?;
                 // Set x,y to 0 if infinity is one.
                 // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(ark_bn254::Fr::one(), i, self.id);
-                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
+                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net, &mut self.state)?;
 
                 let out_x = downcast::<_, Self::ArithmeticShare>(&res[0])
                     .expect("We checked types")
@@ -1555,7 +1511,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let is_infinity = downcast(&is_infinity).expect("We checked types");
 
         let point =
-            Self::create_grumpkin_point(x, y, is_infinity, self.net0, &mut self.state0, true)?;
+            Self::create_grumpkin_point(x, y, is_infinity, self.net, &mut self.state, true)?;
 
         let y = downcast::<_, Self::AcvmPoint<C>>(&point)
             .expect("We checked types")
@@ -1578,11 +1534,11 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             }
             Rep3AcvmPoint::Shared(point) => {
                 let (x, y, i) =
-                    conversion::point_share_to_fieldshares(point, self.net0, &mut self.state0)?;
+                    conversion::point_share_to_fieldshares(point, self.net, &mut self.state)?;
                 // Set x,y to 0 of infinity is one.
                 // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
                 let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
-                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
+                let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net, &mut self.state)?;
 
                 (res[0].into(), res[1].into(), i.into())
             }
@@ -1596,13 +1552,13 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Ok(F::from((a > b) as u64).into())
             }
             (Rep3AcvmType::Public(a), Rep3AcvmType::Shared(b)) => {
-                Ok(arithmetic::lt_public(b, a, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::lt_public(b, a, self.net, &mut self.state)?.into())
             }
             (Rep3AcvmType::Shared(a), Rep3AcvmType::Public(b)) => {
-                Ok(arithmetic::ge_public(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::ge_public(a, b, self.net, &mut self.state)?.into())
             }
             (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => {
-                Ok(arithmetic::ge(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::ge(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -1615,8 +1571,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             }
             Rep3AcvmType::Shared(shared) => Ok(Rep3AcvmType::Shared(yao::field_int_div_power_2(
                 shared,
-                self.net0,
-                &mut self.state0,
+                self.net,
+                &mut self.state,
                 shift,
             )?)),
         }
@@ -1636,9 +1592,9 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 }
             }
             Rep3AcvmPoint::Shared(point) => {
-                let is_zero = pointshare::is_zero(point.to_owned(), self.net0, &mut self.state0)?;
+                let is_zero = pointshare::is_zero(point.to_owned(), self.net, &mut self.state)?;
                 let is_zero: ArithmeticShare<C::ScalarField> =
-                    conversion::bit_inject_from_bits(is_zero, self.net0, &mut self.state0)?;
+                    conversion::bit_inject_from_bits(is_zero, self.net, &mut self.state)?;
 
                 let sub = match value {
                     Rep3AcvmPoint::Public(value) => {
@@ -1649,7 +1605,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                     Rep3AcvmPoint::Shared(value) => pointshare::sub(&value, &point),
                 };
 
-                let mut res = pointshare::scalar_mul(&sub, is_zero, self.net0, &mut self.state0)?;
+                let mut res = pointshare::scalar_mul(&sub, is_zero, self.net, &mut self.state)?;
                 pointshare::add_assign(&mut res, &point);
 
                 Ok(Rep3AcvmPoint::Shared(res))
@@ -1675,7 +1631,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 }
                 Rep3AcvmType::Shared(shared) => shared,
             });
-            let result = yao::sha256_from_bristol(&state, &message, self.net0, &mut self.state0)?;
+            let result = yao::sha256_from_bristol(&state, &message, self.net, &mut self.state)?;
             result
                 .iter()
                 .map(|y| Ok(Rep3AcvmType::Shared(*y)))
@@ -1709,14 +1665,14 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         &mut self,
         input: Self::ArithmeticShare,
     ) -> eyre::Result<Self::ArithmeticShare> {
-        let shared = conversion::a2b_selector(input, self.net0, &mut self.state0)?;
+        let shared = conversion::a2b_selector(input, self.net, &mut self.state)?;
 
         let mut result = Rep3UintShare::<F>::default();
         for i in 32usize..35usize {
             result.a.set_bit(i - 32, shared.a.bit(i));
             result.b.set_bit(i - 32, shared.b.bit(i));
         }
-        conversion::b2a_selector(&result, self.net0, &mut self.state0)
+        conversion::b2a_selector(&result, self.net, &mut self.state)
     }
 
     fn slice_and_get_sparse_table_with_rotation_values(
@@ -1736,8 +1692,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let result = yao::get_sparse_table_with_rotation_values(
             input1,
             input2,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             basis_bits,
             rotation,
             total_bitsize,
@@ -1807,8 +1763,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let result = yao::get_sparse_normalization_values(
             input1,
             input2,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             base_bits,
             base,
             total_output_bitlen_per_field,
@@ -1852,7 +1808,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                     Rep3AcvmType::Shared(shared) => shared,
                 })
                 .collect();
-            let result = yao::blake2s(&message_input, self.net0, &mut self.state0, num_bits)?;
+            let result = yao::blake2s(&message_input, self.net, &mut self.state, num_bits)?;
             result
                 .into_iter()
                 .map(|y| Ok(Rep3AcvmType::Shared(y)))
@@ -1889,7 +1845,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                     Rep3AcvmType::Shared(shared) => shared,
                 })
                 .collect();
-            let result = yao::blake3(&message_input, self.net0, &mut self.state0, num_bits)?;
+            let result = yao::blake3(&message_input, self.net, &mut self.state, num_bits)?;
             result
                 .into_iter()
                 .map(|y| Ok(Rep3AcvmType::Shared(y)))
@@ -1942,8 +1898,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             input1_x,
             input1_y,
             input1_infinite,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             true,
         )?;
 
@@ -1951,8 +1907,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             input2_x,
             input2_y,
             input2_infinite,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             true,
         )?;
 
@@ -1976,8 +1932,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             (Rep3AcvmPoint::Shared(lhs), Rep3AcvmPoint::Shared(rhs)) => pointshare::add(&lhs, &rhs),
         };
 
-        let (x, y, i) =
-            conversion::point_share_to_fieldshares(shared, self.net0, &mut self.state0)?;
+        let (x, y, i) = conversion::point_share_to_fieldshares(shared, self.net, &mut self.state)?;
         let x = *downcast(&x).expect("We checked types");
         let y = *downcast(&y).expect("We checked types");
         let i = *downcast(&i).expect("We checked types");
@@ -1985,7 +1940,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         // Set x,y to 0 of infinity is one.
         // Note: If we don't need the coordinates to be zero in the infinity case, we could add an option to skip this
         let mul = arithmetic::sub_public_by_shared(F::one(), i, self.id);
-        let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net0, &mut self.state0)?;
+        let res = arithmetic::mul_vec(&[x, y], &[mul, mul], self.net, &mut self.state)?;
 
         Ok((res[0].into(), res[1].into(), i.into()))
     }
@@ -2037,7 +1992,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 .iter()
                 .map(|y| match y {
                     Rep3AcvmType::Public(public) => {
-                        arithmetic::promote_to_trivial_share(self.state0.id, *public)
+                        arithmetic::promote_to_trivial_share(self.state.id, *public)
                     }
                     Rep3AcvmType::Shared(shared) => *shared,
                 })
@@ -2046,7 +2001,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 .iter()
                 .map(|y| match y {
                     Rep3AcvmType::Public(public) => {
-                        arithmetic::promote_to_trivial_share(self.state0.id, *public)
+                        arithmetic::promote_to_trivial_share(self.state.id, *public)
                     }
                     Rep3AcvmType::Shared(shared) => *shared,
                 })
@@ -2055,12 +2010,12 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 .iter()
                 .map(|y| match y {
                     Rep3AcvmType::Public(public) => {
-                        arithmetic::promote_to_trivial_share(self.state0.id, *public)
+                        arithmetic::promote_to_trivial_share(self.state.id, *public)
                     }
                     Rep3AcvmType::Shared(shared) => *shared,
                 })
                 .collect();
-            let result = yao::aes_from_bristol(&scalars, &key, &iv, self.net0, &mut self.state0)?;
+            let result = yao::aes_from_bristol(&scalars, &key, &iv, self.net, &mut self.state)?;
 
             result
                 .iter()
@@ -2085,8 +2040,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let results = yao::slice_and_map_from_sparse_form(
             input1,
             input2,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             base_bits,
             base,
             64,
@@ -2144,8 +2099,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         let results = yao::slice_and_map_from_sparse_form_sbox(
             input1,
             input2,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             base_bits,
             base,
             64,
@@ -2165,7 +2120,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             .map(|a| Rep3AcvmType::Shared(*a))
             .collect();
 
-        let res0 = conversion::a2b_many(&results[2 * slices..], self.net0, &mut self.state0)?;
+        let res0 = conversion::a2b_many(&results[2 * slices..], self.net, &mut self.state)?;
 
         let sbox_lut = mpc_core::protocols::rep3_ring::lut_field::PublicPrivateLut::Public(
             sbox.iter().map(|&value| F::from(value)).collect::<Vec<_>>(),
@@ -2178,10 +2133,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             let sbox_value = Rep3FieldLookupTable::get_from_public_lut_no_b2a_conversion::<u8, _>(
                 index_bits,
                 &sbox_lut,
-                self.net0,
-                self.net1,
-                &mut self.state0,
-                &mut self.state1,
+                self.net,
+                &mut self.state,
             )?;
             let shift_1 = &sbox_value << 1;
             let shift_2 = &sbox_value >> 7;
@@ -2205,8 +2158,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             );
             let bin_share = mpc_core::protocols::rep3::conversion::bit_inject_many(
                 &a_bits_split,
-                self.net0,
-                &mut self.state0,
+                self.net,
+                &mut self.state,
             )?;
             let (first_bin_share, second_bin_share) = bin_share.split_at(bin_share.len() / 2);
             let mut sum_a = arithmetic::mul_public(first_bin_share[0], base_powers[0]);
@@ -2252,8 +2205,8 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             .collect();
         let result = yao::accumulate_from_sparse_bytes(
             &inputs,
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
             input_bitsize,
             output_bitsize,
             base,
@@ -2298,7 +2251,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             })
             .multiunzip();
         let mul_all_shared: Vec<Rep3PrimeFieldShare<F>> =
-            arithmetic::mul_vec(&shares_1, &shares_2, self.net0, &mut self.state0)?;
+            arithmetic::mul_vec(&shares_1, &shares_2, self.net, &mut self.state)?;
         let mul_all_shared = mul_all_shared.into_iter().map(Rep3AcvmType::Shared);
         let mul_all_shared_indexed = indices
             .into_iter()
@@ -2394,19 +2347,19 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             }
             (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
             | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
-                arithmetic::eq_public(*shared, *public, self.net0, &mut self.state0)?
+                arithmetic::eq_public(*shared, *public, self.net, &mut self.state)?
             }
             (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b)) => {
-                arithmetic::eq(*a, *b, self.net0, &mut self.state0)?
+                arithmetic::eq(*a, *b, self.net, &mut self.state)?
             }
         };
 
-        let res_bin = conversion::a2b_selector(res, self.net0, &mut self.state0)?;
+        let res_bin = conversion::a2b_selector(res, self.net, &mut self.state)?;
 
         let res_fr = conversion::b2a(
             &Rep3UintShare::<ark_bn254::Fr>::new(res_bin.a, res_bin.b),
-            self.net0,
-            &mut self.state0,
+            self.net,
+            &mut self.state,
         )?;
         // Safety: we checked that the types match
         let res_fr: Self::ArithmeticShare = *downcast(&res_fr).expect("We checked types");
@@ -2431,7 +2384,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             })
             .collect_vec();
         let bs = a.iter().map(|x| x.b).collect_vec();
-        let mut cs = self.net0.reshare(bs)?;
+        let mut cs = self.net.reshare(bs)?;
 
         izip!(a, cs.iter_mut()).for_each(|(x, c)| *c += x.a + x.b);
 
@@ -2528,7 +2481,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Ok(Rep3AcvmType::Shared(arithmetic::mul_public(lhs, rhs)))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let result = arithmetic::mul(lhs, rhs, self.net0, &mut self.state0)?;
+                let result = arithmetic::mul(lhs, rhs, self.net, &mut self.state)?;
                 Ok(Rep3AcvmType::Shared(result))
             }
         }
@@ -2544,7 +2497,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 Ok(Rep3AcvmType::Public(lhs / rhs))
             }
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let rhs_inv = arithmetic::inv(rhs, self.net0, &mut self.state0)?;
+                let rhs_inv = arithmetic::inv(rhs, self.net, &mut self.state)?;
                 self.mul_other_acvm_types::<C>(
                     Rep3AcvmType::Public(lhs),
                     Rep3AcvmType::Shared(rhs_inv),
@@ -2558,7 +2511,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                 )))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
-                let rhs_inv = arithmetic::inv(rhs, self.net0, &mut self.state0)?;
+                let rhs_inv = arithmetic::inv(rhs, self.net, &mut self.state)?;
                 self.mul_other_acvm_types::<C>(
                     Rep3AcvmType::Shared(lhs),
                     Rep3AcvmType::Shared(rhs_inv),
@@ -2578,7 +2531,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
                     .ok_or_else(|| eyre::eyre!("Element has no inverse"))?,
             )),
             Rep3AcvmType::Shared(shared) => {
-                let inv = arithmetic::inv(shared, self.net0, &mut self.state0)?;
+                let inv = arithmetic::inv(shared, self.net, &mut self.state)?;
                 Ok(Rep3AcvmType::Shared(inv))
             }
         }

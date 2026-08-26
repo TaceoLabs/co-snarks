@@ -90,13 +90,12 @@ macro_rules! run_test {
         //install_tracing();
         let mut rng = thread_rng();
         let inputs = rep3::share_field_elements($input, &mut rng);
-        let nets0 = LocalNetwork::new_3_parties();
-        let nets1 = LocalNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut threads = vec![];
 
         let configs = [$config.clone(), $config.clone(), $config];
 
-        for (net0, net1, input, config) in izip!(nets0, nets1, inputs, configs) {
+        for (net, input, config) in izip!(nets, inputs, configs) {
             threads.push(std::thread::spawn(move || {
                 let mut compiler_config = config;
                 compiler_config.simplification =
@@ -107,7 +106,7 @@ macro_rules! run_test {
                 let circuit =
                     CoCircomCompiler::<Bn254>::parse($file.to_owned(), compiler_config).unwrap();
                 let witness_extension =
-                    Rep3WitnessExtension::new(&net0, &net1, &circuit, VMConfig::default()).unwrap();
+                    Rep3WitnessExtension::new(&net, &circuit, VMConfig::default()).unwrap();
                 witness_extension
                     .run_with_flat(
                         input

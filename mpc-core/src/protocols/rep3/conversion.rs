@@ -44,6 +44,18 @@ pub fn a2b_selector<F: FieldUint, N: Network>(
     }
 }
 
+/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the arithmetic-to-binary conversion of a vector of values.
+pub fn a2b_selector_many<F: FieldUint, N: Network>(
+    x: &[Rep3PrimeFieldShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3UintShare<F>>> {
+    match state.a2b_type {
+        A2BType::Direct => a2b_many(x, net, state),
+        A2BType::Yao => a2y2b_many(x, net, state),
+    }
+}
+
 /// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the binary-to-arithmetic conversion.
 pub fn b2a_selector<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,

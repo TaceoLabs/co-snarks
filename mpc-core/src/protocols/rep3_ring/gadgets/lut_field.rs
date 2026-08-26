@@ -59,10 +59,8 @@ where
 pub fn read_public_lut_low_depth<F: FieldUint, T: IntRing2k, N: Network>(
     lut: &[F],
     index: Rep3RingShare<T>,
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<F::Uint>
 where
     Standard: Distribution<T>,
@@ -77,27 +75,23 @@ where
     assert!(k <= T::K);
     let k2 = k >> 1;
 
-    // create two ohv's with half the bitsize in parallel
-    let (a, b) = mpc_net::join(
-        || gadgets::ohv::rand_ohv::<T, _>(k2, net0, state0),
-        || gadgets::ohv::rand_ohv::<T, _>(k2, net1, state1),
-    );
-    let (mut r, e) = a?;
-    let (r_, e_) = b?;
+    // create two ohv's with half the bitsize
+    let (mut r, e) = gadgets::ohv::rand_ohv::<T, _>(k2, net, state)?;
+    let (r_, e_) = gadgets::ohv::rand_ohv::<T, _>(k2, net, state)?;
 
     // Combine r and r_;
     r <<= k2;
     r += r_;
 
     // Open the xor of the index and r
-    let c = binary::open(&(r ^ index), net0)?;
+    let c = binary::open(&(r ^ index), net)?;
     let c: usize =
         c.0.try_into()
             .expect("This transformation should work, otherwise we have another issue")
             & ((1 << k) - 1); // Mask potential overflows from non-well-defined input
 
     // Start the result with a random mask (for potential resharing later)
-    let (mut t, mask_b) = state0
+    let (mut t, mask_b) = state
         .rngs
         .rand
         .random_uint::<F::Uint>(usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"));
@@ -136,10 +130,8 @@ where
 pub fn read_multiple_public_lut_low_depth<F: FieldUint, T: IntRing2k, N: Network>(
     luts: &[Vec<F>],
     index: Rep3RingShare<T>,
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<Vec<F::Uint>>
 where
     Standard: Distribution<T>,
@@ -154,20 +146,16 @@ where
     assert!(k <= T::K);
     let k2 = k >> 1;
 
-    // create two ohv's with half the bitsize in parallel
-    let (a, b) = mpc_net::join(
-        || gadgets::ohv::rand_ohv::<T, _>(k2, net0, state0),
-        || gadgets::ohv::rand_ohv::<T, _>(k2, net1, state1),
-    );
-    let (mut r, e) = a?;
-    let (r_, e_) = b?;
+    // create two ohv's with half the bitsize
+    let (mut r, e) = gadgets::ohv::rand_ohv::<T, _>(k2, net, state)?;
+    let (r_, e_) = gadgets::ohv::rand_ohv::<T, _>(k2, net, state)?;
 
     // Combine r and r_;
     r <<= k2;
     r += r_;
 
     // Open the xor of the index and r
-    let c = binary::open(&(r ^ index), net0)?;
+    let c = binary::open(&(r ^ index), net)?;
     let c: usize =
         c.0.try_into()
             .expect("This transformation should work, otherwise we have another issue")
@@ -176,7 +164,7 @@ where
     let mut results = Vec::with_capacity(luts.len());
     for lut in luts {
         // Start the result with a random mask (for potential resharing later)
-        let (mut t, mask_b) = state0.rngs.rand.random_uint::<F::Uint>(
+        let (mut t, mask_b) = state.rngs.rand.random_uint::<F::Uint>(
             usize::try_from(F::MODULUS_BIT_SIZE).expect("u32 fits into usize"),
         );
         t ^= mask_b;

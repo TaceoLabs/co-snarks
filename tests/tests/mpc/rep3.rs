@@ -2043,8 +2043,7 @@ mod field_share {
         const VEC_SIZE: usize = 20;
         const CHUNK_SIZE: usize = 14;
 
-        let nets0 = LocalNetwork::new_3_parties();
-        let nets1 = LocalNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let x = (0..VEC_SIZE)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
@@ -2069,25 +2068,13 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net0, net1, tx, x_) in izip!(
-            nets0.into_iter(),
-            nets1.into_iter(),
-            [tx1, tx2, tx3],
-            x_shares.into_iter()
-        ) {
+        for (net, tx, x_) in izip!(nets.into_iter(), [tx1, tx2, tx3], x_shares.into_iter()) {
             let x_pub = x[VEC_SIZE / 2..].to_vec();
             std::thread::spawn(move || {
-                let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
-                let mut state1 = state0.fork(0).unwrap();
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
                 let decomposed = rep3_ring::gadgets::sort::radix_sort_fields(
-                    x_,
-                    x_pub,
-                    CHUNK_SIZE,
-                    &net0,
-                    &net1,
-                    &mut state0,
-                    &mut state1,
+                    x_, x_pub, CHUNK_SIZE, &net, &mut state,
                 )
                 .unwrap();
                 tx.send(decomposed)
@@ -2553,8 +2540,7 @@ mod field_share {
         const TOTAL_BIT_SIZE: usize = 64;
         let s_box = AES128_SBOX;
 
-        let nets0 = LocalNetwork::new_3_parties();
-        let nets1 = LocalNetwork::new_3_parties();
+        let nets = LocalNetwork::new_3_parties();
         let mut rng = thread_rng();
         let mask = U256::mask(TOTAL_BIT_SIZE);
         let keys_a = (0..VEC_SIZE)
@@ -2608,9 +2594,8 @@ mod field_share {
         let (tx2, rx2) = mpsc::channel();
         let (tx3, rx3) = mpsc::channel();
 
-        for (net0, net1, tx, x, y) in izip!(
-            nets0,
-            nets1,
+        for (net, tx, x, y) in izip!(
+            nets,
             [tx1, tx2, tx3],
             x_shares.into_iter(),
             y_shares.into_iter(),
@@ -2618,13 +2603,12 @@ mod field_share {
             let base_bits = slice_sizes.clone();
             let slices = slice_sizes.len();
             std::thread::spawn(move || {
-                let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
-                let mut state1 = state0.fork(0).unwrap();
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
                 let res = rep3::yao::slice_and_map_from_sparse_form_many_sbox(
                     &x,
                     &y,
-                    &net0,
-                    &mut state0,
+                    &net,
+                    &mut state,
                     &base_bits,
                     BASE,
                     TOTAL_BIT_SIZE,
@@ -2652,14 +2636,14 @@ mod field_share {
                 let base_powers: [ark_bn254::Fr; 32] =
                     array::from_fn(|i| ark_bn254::Fr::from(base_powers[i].clone()));
 
-                let rs = conversion::a2b_many(&rs, &net0, &mut state0).unwrap();
+                let rs = conversion::a2b_many(&rs, &net, &mut state).unwrap();
                 for key in rs {
                     let sbox_value =
                         rep3_ring::lut_field::Rep3FieldLookupTable::get_from_public_lut_no_b2a_conversion::<
                             u8,
                             _,
                         >(
-                            key, &sbox_lut, &net0, &net1, &mut state0, &mut state1
+                            key, &sbox_lut, &net, &mut state
                         )
                         .unwrap();
 
@@ -2687,8 +2671,7 @@ mod field_share {
                             .collect_vec(),
                     );
                     let bin_share =
-                        rep3::conversion::bit_inject_many(&a_bits_split, &net0, &mut state0)
-                            .unwrap();
+                        rep3::conversion::bit_inject_many(&a_bits_split, &net, &mut state).unwrap();
                     let (bin_share, second_bin_share) = bin_share.split_at(bin_share.len() / 2);
                     let mut sum_a = arithmetic::mul_public(bin_share[0], base_powers[0]);
                     let mut sum_b = arithmetic::mul_public(second_bin_share[0], base_powers[0]);

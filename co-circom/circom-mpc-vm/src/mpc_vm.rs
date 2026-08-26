@@ -1208,12 +1208,11 @@ impl<F: PrimeField + FieldUint> BatchedPlainWitnessExtension<F> {
 impl<'a, F: PrimeField + FieldUint, N: Network> Rep3WitnessExtension<'a, F, N> {
     /// Create a new [Rep3WitnessExtension] VM
     pub fn new(
-        net0: &'a N,
-        net1: &'a N,
+        net: &'a N,
         parser: &CoCircomCompilerParsed<F>,
         config: VMConfig,
     ) -> eyre::Result<Self> {
-        let driver = CircomRep3VmWitnessExtension::new(net0, net1, config.a2b_type)?;
+        let driver = CircomRep3VmWitnessExtension::new(net, config.a2b_type)?;
         let mut signals = vec![Rep3VmType::default(); parser.amount_signals];
         signals[0] = Rep3VmType::Public(F::one());
         let constant_table = parser
@@ -1246,14 +1245,12 @@ impl<'a, F: PrimeField + FieldUint, N: Network> Rep3WitnessExtension<'a, F, N> {
 impl<'a, F: PrimeField + FieldUint, N: Network> BatchedRep3WitnessExtension<'a, F, N> {
     /// Create a new [BatchedRep3WitnessExtension] VM
     pub fn new(
-        net0: &'a N,
-        net1: &'a N,
+        net: &'a N,
         parser: &CoCircomCompilerParsed<F>,
         config: VMConfig,
         batch_size: usize,
     ) -> eyre::Result<Self> {
-        let driver =
-            BatchedCircomRep3VmWitnessExtension::new(net0, net1, config.a2b_type, batch_size)?;
+        let driver = BatchedCircomRep3VmWitnessExtension::new(net, config.a2b_type, batch_size)?;
         let mut signals = vec![
             BatchedRep3VmType::from(Vec::<F>::with_capacity(batch_size));
             parser.amount_signals

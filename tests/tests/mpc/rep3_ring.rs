@@ -2177,32 +2177,23 @@ mod ring_share {
             let x_shares = rep3_ring::share_ring_element_binary(x_, &mut rng);
             let should_result_f = lut[x].to_owned();
 
-            let nets0 = LocalNetwork::new_3_parties();
-            let nets1 = LocalNetwork::new_3_parties();
+            let nets = LocalNetwork::new_3_parties();
             let (tx1, rx1) = mpsc::channel();
             let (tx2, rx2) = mpsc::channel();
             let (tx3, rx3) = mpsc::channel();
 
-            for (net0, net1, tx, x, lut) in izip!(
-                nets0,
-                nets1,
+            for (net, tx, x, lut) in izip!(
+                nets,
                 [tx1, tx2, tx3],
                 x_shares.into_iter(),
                 [lut.clone(), lut.clone(), lut]
             ) {
                 std::thread::spawn(move || {
-                    let mut state0 = Rep3State::new(&net0, A2BType::default()).unwrap();
-                    let mut state1 = state0.fork(0).unwrap();
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
 
-                    let res = gadgets::lut_field::read_public_lut_low_depth(
-                        &lut,
-                        x,
-                        &net0,
-                        &net1,
-                        &mut state0,
-                        &mut state1,
-                    )
-                    .unwrap();
+                    let res =
+                        gadgets::lut_field::read_public_lut_low_depth(&lut, x, &net, &mut state)
+                            .unwrap();
                     tx.send(res).unwrap();
                 });
             }
