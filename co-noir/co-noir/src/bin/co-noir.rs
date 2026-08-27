@@ -1195,13 +1195,11 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
 
     // connect to network
-    let [net0, net1] =
-        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
-    let result_witness_share =
-        co_noir::generate_witness_rep3(input_share, program_artifact, &net0, &net1)?;
+    let result_witness_share = co_noir::generate_witness_rep3(input_share, program_artifact, &net)?;
     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
     tracing::info!("Generate witness took {duration_ms} ms");
 
@@ -1307,8 +1305,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
         )?;
 
     // connect to network
-    let [net0, net1] =
-        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     tracing::info!("Starting proving key generation...");
     match protocol {
@@ -1323,8 +1320,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
             let proving_key = co_noir::generate_proving_key_rep3(
                 &constraint_system,
                 witness_share,
-                &net0,
-                &net1,
+                &net,
                 &prover_crs,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -1345,7 +1341,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 t,
                 &constraint_system,
                 witness_share,
-                &net0,
+                &net,
                 &prover_crs,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -1580,8 +1576,7 @@ fn run_build_and_generate_proof(
         .context("while parsing constraint system")?;
 
     // connect to network
-    let [net0, net1] =
-        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
     let prover_crs =
@@ -1613,8 +1608,7 @@ fn run_build_and_generate_proof(
             let proving_key = co_noir::generate_proving_key_rep3(
                 &constraint_system,
                 witness_share,
-                &net0,
-                &net1,
+                &net,
                 &prover_crs,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -1625,7 +1619,7 @@ fn run_build_and_generate_proof(
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
                     let (proof, public_inputs) = Rep3CoUltraHonk::<_, Poseidon2Sponge>::prove(
-                        &net0,
+                        &net,
                         proving_key,
                         &prover_crs,
                         has_zk,
@@ -1638,7 +1632,7 @@ fn run_build_and_generate_proof(
                 TranscriptHash::KECCAK => {
                     let start = Instant::now();
                     let (proof, public_inputs) = Rep3CoUltraHonk::<_, Keccak256>::prove(
-                        &net0,
+                        &net,
                         proving_key,
                         &prover_crs,
                         has_zk,
@@ -1660,7 +1654,7 @@ fn run_build_and_generate_proof(
                 t,
                 &constraint_system,
                 witness_share,
-                &net0,
+                &net,
                 &prover_crs,
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
@@ -1671,7 +1665,7 @@ fn run_build_and_generate_proof(
                 TranscriptHash::POSEIDON2 => {
                     let start = Instant::now();
                     let (proof, public_inputs) = ShamirCoUltraHonk::<_, Poseidon2Sponge>::prove(
-                        &net0,
+                        &net,
                         n,
                         t,
                         proving_key,
@@ -1687,7 +1681,7 @@ fn run_build_and_generate_proof(
                     // execute prover in MPC
                     let start = Instant::now();
                     let (proof, public_inputs) = ShamirCoUltraHonk::<_, Keccak256>::prove(
-                        &net0,
+                        &net,
                         n,
                         t,
                         proving_key,

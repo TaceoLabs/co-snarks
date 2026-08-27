@@ -65,12 +65,10 @@ macro_rules! add_rep3_acvm_test {
 
                 // create input shares
                 let shares = co_noir::split_input_rep3(inputs);
-                let nets0 = LocalNetwork::new_3_parties();
-                let nets1 = LocalNetwork::new_3_parties();
+                let nets = LocalNetwork::new_3_parties();
                 let mut threads = vec![];
-                for (net0, net1, program_artifact, share) in izip!(
-                    nets0,
-                    nets1,
+                for (net, program_artifact, share) in izip!(
+                    nets,
                     [
                         program_artifact.clone(),
                         program_artifact.clone(),
@@ -81,7 +79,7 @@ macro_rules! add_rep3_acvm_test {
                     threads.push(std::thread::spawn(move || {
                         let input_share = co_noir::witness_map_from_string_map(share, &program_artifact.abi).expect("can translate witness for noir witness extension");
                         let solver =
-                            Rep3CoSolver::new_with_witness(&net0, &net1, program_artifact, input_share).unwrap();
+                            Rep3CoSolver::new_with_witness(&net, program_artifact, input_share).unwrap();
                         let proof = solver.solve().unwrap();
                         proof
                     }));

@@ -58,12 +58,10 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     // create input shares
     let shares = co_noir_types::split_input_rep3::<ark_bn254::Fr>(inputs);
-    let nets0 = LocalNetwork::new_3_parties();
-    let nets1 = LocalNetwork::new_3_parties();
+    let nets = LocalNetwork::new_3_parties();
     let mut threads = vec![];
-    for (net0, net1, program_artifact, share) in itertools::izip!(
-        nets0,
-        nets1,
+    for (net, program_artifact, share) in itertools::izip!(
+        nets,
         [
             program_artifact.clone(),
             program_artifact.clone(),
@@ -75,8 +73,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             let input_share =
                 co_noir::witness_map_from_string_map(share, &program_artifact.abi).unwrap();
             let solver =
-                Rep3CoSolver::new_with_witness(&net0, &net1, program_artifact, input_share)
-                    .unwrap();
+                Rep3CoSolver::new_with_witness(&net, program_artifact, input_share).unwrap();
             solver.solve().unwrap()
         }));
     }

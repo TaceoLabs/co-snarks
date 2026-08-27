@@ -28,10 +28,8 @@ pub fn radix_sort_fields<F: FieldUint, N: Network>(
     mut priv_inputs: Vec<FieldShare<F>>,
     pub_inputs: Vec<F>,
     bitsize: usize,
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<Vec<FieldShare<F>>> {
     let len = priv_inputs.len() + pub_inputs.len();
 
@@ -43,37 +41,26 @@ pub fn radix_sort_fields<F: FieldUint, N: Network>(
         eyre::bail!("Too many inputs for radix sort. Use a larger PermRing.");
     }
 
-    let perm = gen_perm(
-        &priv_inputs,
-        &pub_inputs,
-        bitsize,
-        net0,
-        net1,
-        state0,
-        state1,
-    )?;
+    let perm = gen_perm(&priv_inputs, &pub_inputs, bitsize, net, state)?;
     priv_inputs.reserve(pub_inputs.len());
 
     // Does not matter whether inputs are shares or not
     for value in pub_inputs {
-        priv_inputs.push(rep3::arithmetic::promote_to_trivial_share(state0.id, value));
+        priv_inputs.push(rep3::arithmetic::promote_to_trivial_share(state.id, value));
     }
-    apply_inv_field(&perm, &priv_inputs, net0, net1, state0, state1)
+    apply_inv_field(&perm, &priv_inputs, net, state)
 }
 
 /// Sorts the inputs (both public and shared) using an oblivious radix sort algorithm according to the permutation which comes from sorting the input `key` (but it is not applied to `key`). The values public/shared values need to be organized to match the order given in `order` (false means a public value, true means a private value). Thereby, only the lowest `bitsize` bits are considered. The final results have the size of the inputs, i.e, are not shortened to bitsize. The resulting permutation is then used to sort the vectors in `inputs`.
 /// We use the algorithm described in [https://eprint.iacr.org/2019/695.pdf](https://eprint.iacr.org/2019/695.pdf).
-#[expect(clippy::too_many_arguments)]
 pub fn radix_sort_fields_vec_by<F: FieldUint, N: Network>(
     priv_key: &[FieldShare<F>],
     pub_key: &[F],
     order: &[bool],
     inputs: Vec<&[FieldShare<F>]>,
     bitsize: usize,
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<Vec<Vec<FieldShare<F>>>> {
     let len = priv_key.len() + pub_key.len();
     if len
@@ -84,11 +71,9 @@ pub fn radix_sort_fields_vec_by<F: FieldUint, N: Network>(
         eyre::bail!("Too many inputs for radix sort. Use a larger PermRing.");
     }
     let mut results = Vec::with_capacity(inputs.len());
-    let perm = gen_perm_ordered(
-        priv_key, pub_key, order, bitsize, net0, net1, state0, state1,
-    )?;
+    let perm = gen_perm_ordered(priv_key, pub_key, order, bitsize, net, state)?;
     for inp in inputs {
-        results.push(apply_inv_field(&perm, inp, net0, net1, state0, state1)?)
+        results.push(apply_inv_field(&perm, inp, net, state)?)
     }
     Ok(results)
 }
@@ -96,52 +81,15 @@ pub fn radix_sort_fields_vec_by<F: FieldUint, N: Network>(
 fn decompose<F: FieldUint, N: Network>(
     priv_inputs: &[FieldShare<F>],
     bitsize: usize,
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3UintShare<F>>> {
     let mask = F::Uint::mask(bitsize);
-    let mut priv_bits = vec![Rep3UintShare::zero_share(); priv_inputs.len()];
-    let (split1, split2) = priv_bits.split_at_mut(priv_inputs.len() / 2);
-    let mut result1 = None;
-    let mut result2 = None;
-
-    // TODO: This step could be optimized (I: Pack the a2b's, II: only reconstruct bitsize bits)
-    mpc_net::join(
-        || {
-            for (i, inp) in priv_inputs.iter().take(priv_inputs.len() / 2).enumerate() {
-                let binary = rep3::conversion::a2b_selector(inp.to_owned(), net0, state0);
-                if let Err(err) = binary {
-                    result1 = Some(err);
-                    break;
-                }
-                let mut binary = binary.unwrap();
-                binary.and_mask_assign(&mask);
-                split1[i] = binary;
-            }
-        },
-        || {
-            for (i, inp) in priv_inputs.iter().skip(priv_inputs.len() / 2).enumerate() {
-                let binary = rep3::conversion::a2b_selector(inp.to_owned(), net1, state1);
-                if let Err(err) = binary {
-                    result2 = Some(err);
-                    break;
-                }
-                let mut binary = binary.unwrap();
-                binary.and_mask_assign(&mask);
-                split2[i] = binary;
-            }
-        },
-    );
-
-    if let Some(err) = result1 {
-        return Err(err);
+    // TODO: This step could be optimized (only reconstruct bitsize bits)
+    let mut priv_bits = rep3::conversion::a2b_selector_many(priv_inputs, net, state)?;
+    for binary in priv_bits.iter_mut() {
+        binary.and_mask_assign(&mask);
     }
-    if let Some(err) = result2 {
-        return Err(err);
-    }
-
     Ok(priv_bits)
 }
 
@@ -149,24 +97,22 @@ fn gen_perm<F: FieldUint, N: Network>(
     priv_inputs: &[FieldShare<F>],
     pub_inputs: &[F],
     bitsize: usize,
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3RingShare<PermRing>>> {
     // Decompose all private inputs
-    let priv_bits = decompose(priv_inputs, bitsize, net0, net1, state0, state1)?;
+    let priv_bits = decompose(priv_inputs, bitsize, net, state)?;
 
-    let priv_bit_0 = inject_bit(&priv_bits, 0, net0, state0)?;
+    let priv_bit_0 = inject_bit(&priv_bits, 0, net, state)?;
     let pub_bit_0 = inject_public_bit(pub_inputs, 0);
-    let mut perm = gen_bit_perm(priv_bit_0, pub_bit_0, net0, state0)?;
+    let mut perm = gen_bit_perm(priv_bit_0, pub_bit_0, net, state)?;
 
     for i in 1..bitsize {
-        let priv_bit_i = inject_bit(&priv_bits, i, net0, state0)?;
+        let priv_bit_i = inject_bit(&priv_bits, i, net, state)?;
         let pub_bit_i = inject_public_bit(pub_inputs, i);
-        let bit_i = apply_inv(&perm, &priv_bit_i, &pub_bit_i, net0, net1, state0, state1)?;
-        let perm_i = gen_bit_perm(bit_i, vec![], net0, state0)?;
-        perm = compose(perm, perm_i, net0, state0)?;
+        let bit_i = apply_inv(&perm, &priv_bit_i, &pub_bit_i, net, state)?;
+        let perm_i = gen_bit_perm(bit_i, vec![], net, state)?;
+        perm = compose(perm, perm_i, net, state)?;
     }
 
     Ok(perm)
@@ -195,32 +141,29 @@ fn order_and_promote_inputs(
     perm
 }
 
-#[expect(clippy::too_many_arguments)]
 fn gen_perm_ordered<F: FieldUint, N: Network>(
     priv_inputs: &[FieldShare<F>],
     pub_inputs: &[F],
     order: &[bool],
     bitsize: usize,
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3RingShare<PermRing>>> {
     // Decompose all private inputs
-    let priv_bits = decompose(priv_inputs, bitsize, net0, net1, state0, state1)?;
+    let priv_bits = decompose(priv_inputs, bitsize, net, state)?;
 
-    let priv_bit_0 = inject_bit(&priv_bits, 0, net0, state0)?;
+    let priv_bit_0 = inject_bit(&priv_bits, 0, net, state)?;
     let pub_bit_0 = inject_public_bit(pub_inputs, 0);
-    let perm = order_and_promote_inputs(priv_bit_0, pub_bit_0, order, state0.id);
-    let mut perm = gen_bit_perm(perm, vec![], net0, state0)?; // This first permutation could be optimized by not promoting the public bits
+    let perm = order_and_promote_inputs(priv_bit_0, pub_bit_0, order, state.id);
+    let mut perm = gen_bit_perm(perm, vec![], net, state)?; // This first permutation could be optimized by not promoting the public bits
 
     for i in 1..bitsize {
-        let priv_bit_i = inject_bit(&priv_bits, i, net0, state0)?;
+        let priv_bit_i = inject_bit(&priv_bits, i, net, state)?;
         let pub_bit_i = inject_public_bit(pub_inputs, i);
-        let bit_i = order_and_promote_inputs(priv_bit_i, pub_bit_i, order, state0.id);
-        let bit_i = apply_inv(&perm, &bit_i, &[], net0, net1, state0, state1)?;
-        let perm_i = gen_bit_perm(bit_i, vec![], net0, state0)?;
-        perm = compose(perm, perm_i, net0, state0)?;
+        let bit_i = order_and_promote_inputs(priv_bit_i, pub_bit_i, order, state.id);
+        let bit_i = apply_inv(&perm, &bit_i, &[], net, state)?;
+        let perm_i = gen_bit_perm(bit_i, vec![], net, state)?;
+        perm = compose(perm, perm_i, net, state)?;
     }
 
     Ok(perm)
@@ -325,10 +268,8 @@ fn apply_inv<T: IntRing2k, N: Network>(
     rho: &[Rep3RingShare<PermRing>],
     priv_bits: &[Rep3RingShare<T>],
     pub_bits: &[RingElement<T>],
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3RingShare<T>>>
 where
     Standard: Distribution<T>,
@@ -337,19 +278,18 @@ where
     debug_assert_eq!(len, priv_bits.len() + pub_bits.len());
 
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
-    let (perm_a, perm_b) = state0.rngs.rand.random_perm(unshuffled);
+    let (perm_a, perm_b) = state.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
         .into_iter()
         .zip(perm_b)
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
 
-    let (opened, bits_shuffled) = mpc_net::join(
-        || shuffle_reveal::<PermRing, _>(&perm, rho, net0, state0),
-        || shuffle(&perm, priv_bits, pub_bits, net1, state1),
-    );
+    // TODO execute both shuffles in parallel
+    let opened = shuffle_reveal::<PermRing, _>(&perm, rho, net, state)?;
+    let bits_shuffled = shuffle(&perm, priv_bits, pub_bits, net, state)?;
     let mut result = vec![Rep3RingShare::zero_share(); len];
-    for (p, b) in opened?.into_iter().zip(bits_shuffled?) {
+    for (p, b) in opened.into_iter().zip(bits_shuffled) {
         result[p.0 as usize - 1] = b;
     }
     Ok(result)
@@ -358,28 +298,25 @@ where
 fn apply_inv_field<F: FieldUint, N: Network>(
     rho: &[Rep3RingShare<PermRing>],
     bits: &[Rep3PrimeFieldShare<F>],
-    net0: &N,
-    net1: &N,
-    state0: &mut Rep3State,
-    state1: &mut Rep3State,
+    net: &N,
+    state: &mut Rep3State,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
     let len = rho.len();
     debug_assert_eq!(len, bits.len());
 
     let unshuffled = (0..len as PermRing).collect::<Vec<_>>();
-    let (perm_a, perm_b) = state0.rngs.rand.random_perm(unshuffled);
+    let (perm_a, perm_b) = state.rngs.rand.random_perm(unshuffled);
     let perm: Vec<_> = perm_a
         .into_iter()
         .zip(perm_b)
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
 
-    let (opened, bits_shuffled) = mpc_net::join(
-        || shuffle_reveal(&perm, rho, net0, state0),
-        || shuffle_field(&perm, bits, net1, state1),
-    );
+    // TODO execute both shuffles in parallel
+    let opened = shuffle_reveal(&perm, rho, net, state)?;
+    let bits_shuffled = shuffle_field(&perm, bits, net, state)?;
     let mut result = vec![Rep3PrimeFieldShare::zero_share(); len];
-    for (p, b) in opened?.into_iter().zip(bits_shuffled?) {
+    for (p, b) in opened.into_iter().zip(bits_shuffled) {
         result[p.0 as usize - 1] = b;
     }
     Ok(result)

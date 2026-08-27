@@ -177,14 +177,10 @@ where
     pub fn ohv_from_index<N: Network>(
         index: Rep3PrimeFieldShare<C::ScalarField>,
         len: usize,
-        net0: &N,
-        net1: &N,
-        state0: &mut Rep3State,
-        state1: &mut Rep3State,
+        net: &N,
+        state: &mut Rep3State,
     ) -> eyre::Result<Vec<Rep3PrimeFieldShare<C::ScalarField>>> {
-        Rep3FieldLookupTable::<C::ScalarField>::ohv_from_index(
-            index, len, net0, net1, state0, state1,
-        )
+        Rep3FieldLookupTable::<C::ScalarField>::ohv_from_index(index, len, net, state)
     }
 
     /// Writes to a shared lookup table with the index already being transformed into the shared one-hot-encoded vector
@@ -234,24 +230,22 @@ where
         &mut self,
         index: Self::IndexSecretShare,
         lut: &Self::LutType,
-        net0: &N,
-        _net1: &N,
-        state0: &mut Rep3State,
-        _state1: &mut Rep3State,
+        net: &N,
+        state: &mut Rep3State,
     ) -> eyre::Result<Self::SecretShare> {
         let len = lut.len();
         tracing::debug!("doing read on LUT-map of size {}", len);
-        let bits = rep3::conversion::a2b_selector(index, net0, state0)?;
+        let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2() as usize;
 
         let result = if k == 1 {
-            Self::get_from_lut_internal::<Bit, _>(bits, lut, net0, state0)?
+            Self::get_from_lut_internal::<Bit, _>(bits, lut, net, state)?
         } else if k <= 8 {
-            Self::get_from_lut_internal::<u8, _>(bits, lut, net0, state0)?
+            Self::get_from_lut_internal::<u8, _>(bits, lut, net, state)?
         } else if k <= 16 {
-            Self::get_from_lut_internal::<u16, _>(bits, lut, net0, state0)?
+            Self::get_from_lut_internal::<u16, _>(bits, lut, net, state)?
         } else if k <= 32 {
-            Self::get_from_lut_internal::<u32, _>(bits, lut, net0, state0)?
+            Self::get_from_lut_internal::<u32, _>(bits, lut, net, state)?
         } else {
             panic!("Table is too large")
         };
@@ -264,24 +258,22 @@ where
         index: Self::IndexSecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
-        net0: &N,
-        _net1: &N,
-        state0: &mut Rep3State,
-        _state1: &mut Rep3State,
+        net: &N,
+        state: &mut Rep3State,
     ) -> eyre::Result<()> {
         let len = lut.len();
         tracing::debug!("doing write on LUT-map of size {}", len);
-        let bits = rep3::conversion::a2b_selector(index, net0, state0)?;
+        let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2();
 
         if k == 1 {
-            Self::write_to_lut_internal::<Bit, _>(bits, lut, &value, net0, state0)?
+            Self::write_to_lut_internal::<Bit, _>(bits, lut, &value, net, state)?
         } else if k <= 8 {
-            Self::write_to_lut_internal::<u8, _>(bits, lut, &value, net0, state0)?
+            Self::write_to_lut_internal::<u8, _>(bits, lut, &value, net, state)?
         } else if k <= 16 {
-            Self::write_to_lut_internal::<u16, _>(bits, lut, &value, net0, state0)?
+            Self::write_to_lut_internal::<u16, _>(bits, lut, &value, net, state)?
         } else if k <= 32 {
-            Self::write_to_lut_internal::<u32, _>(bits, lut, &value, net0, state0)?
+            Self::write_to_lut_internal::<u32, _>(bits, lut, &value, net, state)?
         } else {
             panic!("Table is too large")
         };

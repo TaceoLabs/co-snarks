@@ -58,8 +58,7 @@ pub type Bn254G1 = <ark_ec::bn::Bn<ark_bn254::Config> as ark_ec::pairing::Pairin
 pub fn execute_circuit_rep3<'a, N: Network>(
     input: Rep3SharedInput<ark_bn254::Fr>,
     compiled_program: ProgramArtifact,
-    net0: &'a N,
-    net1: &'a N,
+    net: &'a N,
 ) -> Result<(
     Rep3SharedWitness<ark_bn254::Fr>,
     PssStore<Rep3AcvmSolver<'a, ark_bn254::Fr, N>, ark_bn254::Fr>,
@@ -67,7 +66,7 @@ pub fn execute_circuit_rep3<'a, N: Network>(
     let witness = witness_map_from_string_map(input, &compiled_program.abi)?;
 
     // init MPC protocol
-    let rep3_vm = Rep3CoSolver::new_with_witness(net0, net1, compiled_program, witness)
+    let rep3_vm = Rep3CoSolver::new_with_witness(net, compiled_program, witness)
         .context("while creating VM")?;
 
     // execute witness generation in MPC
@@ -82,10 +81,9 @@ pub fn execute_circuit_rep3<'a, N: Network>(
 pub fn generate_witness_rep3<N: Network>(
     input: Rep3SharedInput<ark_bn254::Fr>,
     compiled_program: ProgramArtifact,
-    net0: &N,
-    net1: &N,
+    net: &N,
 ) -> Result<Rep3SharedWitness<ark_bn254::Fr>> {
-    let (witness_stack, _) = execute_circuit_rep3(input, compiled_program, net0, net1)?;
+    let (witness_stack, _) = execute_circuit_rep3(input, compiled_program, net)?;
     Ok(witness_stack)
 }
 
@@ -188,12 +186,11 @@ pub fn compute_circuit_size<P: HonkCurve<TranscriptFieldType>>(
 pub fn generate_proving_key_rep3<N: Network>(
     constraint_system: &AcirFormat<ark_bn254::Fr>,
     witness_share: Rep3SharedWitness<ark_bn254::Fr>,
-    net0: &N,
-    net1: &N,
+    net: &N,
     prover_crs: &ProverCrs<Bn254G1>,
 ) -> Result<Rep3ProvingKey<Bn254G1>> {
-    let id = PartyID::try_from(net0.id())?;
-    let mut driver = Rep3AcvmSolver::new(net0, net1, A2BType::default())?;
+    let id = PartyID::try_from(net.id())?;
+    let mut driver = Rep3AcvmSolver::new(net, A2BType::default())?;
     let witness_share = witness_share.into_iter().map(Rep3AcvmType::from).collect();
     let crs = if constraint_system.is_recursive_verification_circuit() {
         prover_crs // TACEO TODO: Maybe just use a subset of the crs here?

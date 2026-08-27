@@ -8,7 +8,6 @@ use co_circom_types::Rep3InputType;
 use eyre::bail;
 use itertools::Itertools;
 use mpc_core::{
-    MpcState,
     gadgets::poseidon2::Poseidon2,
     protocols::rep3::{
         Rep3PrimeFieldShare, Rep3State,
@@ -70,23 +69,18 @@ impl<F: PrimeField> Default for Rep3VmType<F> {
 
 pub struct CircomRep3VmWitnessExtension<'a, F: PrimeField, N: Network> {
     id: PartyID,
-    net0: &'a N,
-    net1: &'a N,
-    state0: Rep3State,
-    state1: Rep3State,
+    net: &'a N,
+    state: Rep3State,
     plain: CircomPlainVmWitnessExtension<F>,
 }
 
 impl<'a, F: PrimeField, N: Network> CircomRep3VmWitnessExtension<'a, F, N> {
-    pub fn new(net0: &'a N, net1: &'a N, a2b_type: A2BType) -> eyre::Result<Self> {
-        let mut state0 = Rep3State::new(net0, a2b_type)?;
-        let state1 = state0.fork(0)?;
+    pub fn new(net: &'a N, a2b_type: A2BType) -> eyre::Result<Self> {
+        let state = Rep3State::new(net, a2b_type)?;
         Ok(Self {
-            id: state0.id,
-            net0,
-            net1,
-            state0,
-            state1,
+            id: state.id,
+            net,
+            state,
             plain: CircomPlainVmWitnessExtension::default(),
         })
     }
@@ -147,7 +141,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 Ok(arithmetic::mul_public(a, b).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                Ok(arithmetic::mul(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::mul(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -156,7 +150,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.div(a, b)?.into()),
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
-                let b = arithmetic::inv(b, self.net0, &mut self.state0)?;
+                let b = arithmetic::inv(b, self.net, &mut self.state)?;
                 Ok(arithmetic::mul_public(b, a).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
@@ -166,8 +160,8 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 Ok(arithmetic::mul_public(a, b.inverse().unwrap()).into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let b = arithmetic::inv(b, self.net0, &mut self.state0)?;
-                Ok(arithmetic::mul(a, b, self.net0, &mut self.state0)?.into())
+                let b = arithmetic::inv(b, self.net, &mut self.state)?;
+                Ok(arithmetic::mul(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -176,21 +170,21 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.int_div(a, b)?.into()),
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
-                let divided = yao::field_int_div_by_shared(a, b, self.net0, &mut self.state0)?;
+                let divided = yao::field_int_div_by_shared(a, b, self.net, &mut self.state)?;
                 Ok(divided.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let divisor = b.to_uint();
                 let divided = if is_power_of_two(&divisor) {
                     let divisor_bit = divisor.bit_len() - 1;
-                    yao::field_int_div_power_2(a, self.net0, &mut self.state0, divisor_bit)?
+                    yao::field_int_div_power_2(a, self.net, &mut self.state, divisor_bit)?
                 } else {
-                    yao::field_int_div_by_public(a, b, self.net0, &mut self.state0)?
+                    yao::field_int_div_by_public(a, b, self.net, &mut self.state)?
                 };
                 Ok(divided.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let divided = yao::field_int_div(a, b, self.net0, &mut self.state0)?;
+                let divided = yao::field_int_div(a, b, self.net, &mut self.state)?;
                 Ok(divided.into())
             }
         }
@@ -203,7 +197,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 if b.is_zero() {
                     return Ok(Rep3VmType::Public(F::one()));
                 }
-                Ok(arithmetic::pow_public(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::pow_public(a, b, self.net, &mut self.state)?.into())
             }
             _ => todo!("pow with shared exponent not implemented"),
         }
@@ -213,8 +207,8 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
         match (a, b) {
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.modulo(a, b)?.into()),
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
-                let divided = yao::field_int_div_by_shared(a, b, self.net0, &mut self.state0)?;
-                let mul = arithmetic::mul(divided, b, self.net0, &mut self.state0)?;
+                let divided = yao::field_int_div_by_shared(a, b, self.net, &mut self.state)?;
+                let mul = arithmetic::mul(divided, b, self.net, &mut self.state)?;
                 let result = arithmetic::sub_public_by_shared(a, mul, self.id);
                 Ok(result.into())
             }
@@ -222,17 +216,17 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 let divisor = b.to_uint();
                 let result = if is_power_of_two(&divisor) {
                     let divisor_bit = divisor.bit_len() - 1;
-                    yao::field_mod_power_2(a, self.net0, &mut self.state0, divisor_bit)?
+                    yao::field_mod_power_2(a, self.net, &mut self.state, divisor_bit)?
                 } else {
-                    let divided = yao::field_int_div_by_public(a, b, self.net0, &mut self.state0)?;
+                    let divided = yao::field_int_div_by_public(a, b, self.net, &mut self.state)?;
                     let mul = arithmetic::mul_public(divided, b);
                     arithmetic::sub(a, mul)
                 };
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let divided = yao::field_int_div(a, b, self.net0, &mut self.state0)?;
-                let mul = arithmetic::mul(divided, b, self.net0, &mut self.state0)?;
+                let divided = yao::field_int_div(a, b, self.net, &mut self.state)?;
+                let mul = arithmetic::mul(divided, b, self.net, &mut self.state)?;
                 let result = arithmetic::sub(a, mul);
                 Ok(result.into())
             }
@@ -243,14 +237,13 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
         match a {
             Rep3VmType::Public(a) => Ok(self.plain.sqrt(a)?.into()),
             Rep3VmType::Arithmetic(a) => {
-                let sqrt = arithmetic::sqrt(a, self.net0, &mut self.state0)?;
+                let sqrt = arithmetic::sqrt(a, self.net, &mut self.state)?;
                 // Correction to give the result closest to 0
                 // I.e., 2 * is_pos * sqrt - sqrt
                 let sqrt_val = self.val(sqrt);
                 let zero_val = self.plain.val(F::zero());
-                let is_pos =
-                    arithmetic::ge_public(sqrt_val, zero_val, self.net0, &mut self.state0)?;
-                let mut mul = arithmetic::mul(sqrt, is_pos, self.net0, &mut self.state0)?;
+                let is_pos = arithmetic::ge_public(sqrt_val, zero_val, self.net, &mut self.state)?;
+                let mut mul = arithmetic::mul(sqrt, is_pos, self.net, &mut self.state)?;
                 mul.double_in_place();
                 mul -= sqrt;
                 Ok(mul.into())
@@ -271,17 +264,17 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
                 let a = self.plain.val(a);
                 let b = self.val(b);
-                Ok(arithmetic::ge_public(b, a, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::ge_public(b, a, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = self.val(a);
                 let b = self.plain.val(b);
-                Ok(arithmetic::lt_public(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::lt_public(a, b, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let a = self.val(a);
                 let b = self.val(b);
-                Ok(arithmetic::lt(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::lt(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -292,17 +285,17 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
                 let a = self.plain.val(a);
                 let b = self.val(b);
-                Ok(arithmetic::gt_public(b, a, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::gt_public(b, a, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = self.val(a);
                 let b = self.plain.val(b);
-                Ok(arithmetic::le_public(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::le_public(a, b, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let a = self.val(a);
                 let b = self.val(b);
-                Ok(arithmetic::le(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::le(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -313,17 +306,17 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
                 let a = self.plain.val(a);
                 let b = self.val(b);
-                Ok(arithmetic::le_public(b, a, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::le_public(b, a, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = self.val(a);
                 let b = self.plain.val(b);
-                Ok(arithmetic::gt_public(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::gt_public(a, b, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let a = self.val(a);
                 let b = self.val(b);
-                Ok(arithmetic::gt(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::gt(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -334,17 +327,17 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Arithmetic(b)) => {
                 let a = self.plain.val(a);
                 let b = self.val(b);
-                Ok(arithmetic::lt_public(b, a, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::lt_public(b, a, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = self.val(a);
                 let b = self.plain.val(b);
-                Ok(arithmetic::ge_public(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::ge_public(a, b, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let a = self.val(a);
                 let b = self.val(b);
-                Ok(arithmetic::ge(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::ge(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -354,10 +347,10 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.eq(a, b)?.into()),
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                Ok(arithmetic::eq_public(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::eq_public(a, b, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                Ok(arithmetic::eq(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::eq(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -367,10 +360,10 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.neq(a, b)?.into()),
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                Ok(arithmetic::neq_public(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::neq_public(a, b, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                Ok(arithmetic::neq(a, b, self.net0, &mut self.state0)?.into())
+                Ok(arithmetic::neq(a, b, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -386,11 +379,11 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 todo!("Shared shift_right (public by shared) not implemented");
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let bits = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
+                let bits = conversion::a2b_selector(a, self.net, &mut self.state)?;
                 let result = conversion::b2a_selector(
                     &binary::shift_r_public(&bits, b),
-                    self.net0,
-                    &mut self.state0,
+                    self.net,
+                    &mut self.state,
                 )?;
                 Ok(result.into())
             }
@@ -406,8 +399,8 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 if a == F::zero() {
                     Ok(Rep3VmType::Public(F::zero()))
                 } else {
-                    let b = conversion::a2b_selector(b, self.net0, &mut self.state0)?;
-                    let res = binary::shift_l_public_by_shared(a, &b, self.net0, &mut self.state0)?;
+                    let b = conversion::a2b_selector(b, self.net, &mut self.state)?;
+                    let res = binary::shift_l_public_by_shared(a, &b, self.net, &mut self.state)?;
                     Ok(res.into())
                 }
             }
@@ -447,7 +440,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 Ok(sub.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let mul = arithmetic::mul(a, b, self.net0, &mut self.state0)?;
+                let mul = arithmetic::mul(a, b, self.net, &mut self.state)?;
                 let add = arithmetic::add(a, b);
                 let sub = arithmetic::sub(add, mul);
                 Ok(sub.into())
@@ -479,17 +472,16 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.bit_xor(a, b)?.into()),
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let a = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
+                let a = conversion::a2b_selector(a, self.net, &mut self.state)?;
                 let binary = binary::xor_public(&a, &b.to_uint(), self.id);
-                Ok(conversion::b2a_selector(&binary, self.net0, &mut self.state0)?.into())
+                Ok(conversion::b2a_selector(&binary, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let (a, b) = mpc_net::join(
-                    || conversion::a2b_selector(a, self.net0, &mut self.state0),
-                    || conversion::a2b_selector(b, self.net1, &mut self.state1),
-                );
-                let binary = binary::xor(&a?, &b?);
-                let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
+                let [a, b] = conversion::a2b_selector_many(&[a, b], self.net, &mut self.state)?
+                    .try_into()
+                    .expect("a2b_selector_many preserves length");
+                let binary = binary::xor(&a, &b);
+                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
                 Ok(result.into())
             }
         }
@@ -500,18 +492,17 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.bit_or(a, b)?.into()),
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let a = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
+                let a = conversion::a2b_selector(a, self.net, &mut self.state)?;
                 let binary = binary::or_public(&a, &b.to_uint(), self.id);
-                let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
+                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let (a, b) = mpc_net::join(
-                    || conversion::a2b_selector(a, self.net0, &mut self.state0),
-                    || conversion::a2b_selector(b, self.net1, &mut self.state1),
-                );
-                let binary = binary::or(&a?, &b?, self.net0, &mut self.state0)?;
-                Ok(conversion::b2a_selector(&binary, self.net0, &mut self.state0)?.into())
+                let [a, b] = conversion::a2b_selector_many(&[a, b], self.net, &mut self.state)?
+                    .try_into()
+                    .expect("a2b_selector_many preserves length");
+                let binary = binary::or(&a, &b, self.net, &mut self.state)?;
+                Ok(conversion::b2a_selector(&binary, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -521,18 +512,17 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             (Rep3VmType::Public(a), Rep3VmType::Public(b)) => Ok(self.plain.bit_and(a, b)?.into()),
             (Rep3VmType::Public(b), Rep3VmType::Arithmetic(a))
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
-                let a = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
+                let a = conversion::a2b_selector(a, self.net, &mut self.state)?;
                 let binary = binary::and_with_public(&a, &b.to_uint());
-                let result = conversion::b2a_selector(&binary, self.net0, &mut self.state0)?;
+                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
-                let (a, b) = mpc_net::join(
-                    || conversion::a2b_selector(a, self.net0, &mut self.state0),
-                    || conversion::a2b_selector(b, self.net1, &mut self.state1),
-                );
-                let binary = binary::and(&a?, &b?, self.net0, &mut self.state0)?;
-                Ok(conversion::b2a_selector(&binary, self.net0, &mut self.state0)?.into())
+                let [a, b] = conversion::a2b_selector_many(&[a, b], self.net, &mut self.state)?
+                    .try_into()
+                    .expect("a2b_selector_many preserves length");
+                let binary = binary::and(&a, &b, self.net, &mut self.state)?;
+                Ok(conversion::b2a_selector(&binary, self.net, &mut self.state)?.into())
             }
         }
     }
@@ -543,7 +533,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
         }
         match a {
             Rep3VmType::Public(a) => Ok(self.plain.is_zero(a, allow_secret_inputs)?),
-            Rep3VmType::Arithmetic(a) => Ok(arithmetic::is_zero(a, self.net0, &mut self.state0)?),
+            Rep3VmType::Arithmetic(a) => Ok(arithmetic::is_zero(a, self.net, &mut self.state)?),
         }
     }
 
@@ -565,7 +555,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
     fn open(&mut self, a: Self::VmType) -> eyre::Result<F> {
         match a {
             Rep3VmType::Public(a) => Ok(a),
-            Rep3VmType::Arithmetic(a) => arithmetic::open(a, self.net0),
+            Rep3VmType::Arithmetic(a) => arithmetic::open(a, self.net),
         }
     }
 
@@ -586,8 +576,8 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
 
     fn compare_vm_config(&mut self, config: &VMConfig) -> eyre::Result<()> {
         let ser = bincode::serialize(&config)?;
-        self.net0.send_next(ser)?;
-        let recv: Vec<u8> = self.net0.recv_prev()?;
+        self.net.send_next(ser)?;
+        let recv: Vec<u8> = self.net.recv_prev()?;
         let deser = bincode::deserialize(&recv)?;
         if config != &deser {
             eyre::bail!("VM Config does not match: {:?} != {:?}", config, deser);
@@ -604,11 +594,11 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                 .map(Into::into)
                 .collect()),
             Rep3VmType::Arithmetic(a) => {
-                let a_bits = conversion::a2b_selector(a, self.net0, &mut self.state0)?;
+                let a_bits = conversion::a2b_selector(a, self.net, &mut self.state)?;
                 let a_bits_split = (0..bits)
                     .map(|i| (a_bits >> i).and_mask(&F::Uint::one()))
                     .collect_vec();
-                Ok(bit_inject_many(&a_bits_split, self.net0, &mut self.state0)?
+                Ok(bit_inject_many(&a_bits_split, self.net, &mut self.state)?
                     .into_iter()
                     .map(Into::into)
                     .collect())
@@ -638,11 +628,11 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
 
         let sum = a_sum + b_sum;
 
-        let sum_bits = conversion::a2b_selector(sum, self.net0, &mut self.state0)?;
+        let sum_bits = conversion::a2b_selector(sum, self.net, &mut self.state)?;
         let individual_bits = (0..bitlen + 1)
             .map(|i| (sum_bits >> i).and_mask(&F::Uint::one()))
             .collect_vec();
-        let mut result = bit_inject_many(&individual_bits, self.net0, &mut self.state0)?;
+        let mut result = bit_inject_many(&individual_bits, self.net, &mut self.state)?;
         let carry = result.pop().unwrap();
         result.reverse();
         Ok((result.into_iter().map(Into::into).collect(), carry.into()))
@@ -653,7 +643,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             Rep3VmType::Public(public) => self.plain.log(public, allow_leaky_logs),
             Rep3VmType::Arithmetic(share) => {
                 if allow_leaky_logs {
-                    let field = arithmetic::open(share, self.net0)?;
+                    let field = arithmetic::open(share, self.net)?;
                     Ok(field.to_string())
                 } else {
                     Ok("secret".to_string())
@@ -671,7 +661,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             .any(|x| matches!(x, Rep3VmType::Arithmetic(_)))
         {
             let poseidon = Poseidon2::<_, T, 5>::default();
-            let mut precomp = poseidon.precompute_rep3(1, self.net0, &mut self.state0)?;
+            let mut precomp = poseidon.precompute_rep3(1, self.net, &mut self.state)?;
 
             // We promote all inputs to arithmetic shares here
             let mut iter = inputs.into_iter();
@@ -688,7 +678,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             let trace = poseidon.rep3_permutation_in_place_with_precomputation_intermediate(
                 &mut state,
                 &mut precomp,
-                self.net0,
+                self.net,
             )?;
 
             let outputs = state.into_iter().map(Rep3VmType::Arithmetic).collect_vec();

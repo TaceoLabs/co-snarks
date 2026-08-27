@@ -48,8 +48,7 @@ fn main() -> eyre::Result<()> {
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
     let num_public_inputs = parsed.public_inputs().len();
 
-    let nets0 = LocalNetwork::new_3_parties();
-    let nets1 = LocalNetwork::new_3_parties();
+    let nets = LocalNetwork::new_3_parties();
 
     let input_file = BufReader::new(File::open(input)?);
     let input: serde_json::Map<String, serde_json::Value> =
@@ -85,16 +84,11 @@ fn main() -> eyre::Result<()> {
     let compiler = [parsed.clone(), parsed.clone(), parsed];
 
     let mut threads = vec![];
-    for (net0, net1, input, parsed) in izip!(nets0, nets1, batch, compiler) {
+    for (net, input, parsed) in izip!(nets, batch, compiler) {
         threads.push(std::thread::spawn(move || {
-            let witness_extension = BatchedRep3WitnessExtension::new(
-                &net0,
-                &net1,
-                &parsed,
-                VMConfig::default(),
-                batch_size,
-            )
-            .unwrap();
+            let witness_extension =
+                BatchedRep3WitnessExtension::new(&net, &parsed, VMConfig::default(), batch_size)
+                    .unwrap();
             let input = input
                 .into_iter()
                 .map(|(name, value)| {

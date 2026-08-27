@@ -50,10 +50,8 @@ pub trait LookupTableProvider<T: Default>: Default {
         &mut self,
         index: Self::IndexSecretShare,
         lut: &Self::LutType,
-        net0: &N,
-        net1: &N,
-        state0: &mut Self::State,
-        state1: &mut Self::State,
+        net: &N,
+        state: &mut Self::State,
     ) -> eyre::Result<Self::SecretShare>;
 
     /// Writes a value to the LUT.
@@ -64,16 +62,13 @@ pub trait LookupTableProvider<T: Default>: Default {
     ///
     /// #Returns
     /// Can fail due to networking problems.
-    #[expect(clippy::too_many_arguments)]
     fn write_to_lut<N: Network>(
         &mut self,
         index: Self::IndexSecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
-        net0: &N,
-        net1: &N,
-        state0: &mut Self::State,
-        state1: &mut Self::State,
+        net: &N,
+        state: &mut Self::State,
     ) -> eyre::Result<()>;
 
     /// Returns the length of the LUT
@@ -107,10 +102,8 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         &mut self,
         index: Self::IndexSecretShare,
         lut: &Self::LutType,
-        _net0: &N,
-        _net1: &N,
-        _state0: &mut (),
-        _state1: &mut (),
+        _net: &N,
+        _state: &mut (),
     ) -> eyre::Result<F> {
         let index = field_to_usize(index)
             .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
@@ -122,10 +115,8 @@ impl<F: PrimeField> LookupTableProvider<F> for PlainLookupTableProvider<F> {
         index: Self::IndexSecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
-        _net0: &N,
-        _net1: &N,
-        _state0: &mut (),
-        _state1: &mut (),
+        _net: &N,
+        _state: &mut (),
     ) -> eyre::Result<()> {
         let index = field_to_usize(index)
             .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
@@ -169,10 +160,8 @@ impl<C: CurveGroup> LookupTableProvider<C> for PlainCurveLookupTableProvider<C> 
         &mut self,
         index: Self::IndexSecretShare,
         lut: &Self::LutType,
-        _net0: &N,
-        _net1: &N,
-        _state0: &mut Self::State,
-        _state1: &mut Self::State,
+        _net: &N,
+        _state: &mut Self::State,
     ) -> eyre::Result<Self::SecretShare> {
         let index = field_to_usize(index)
             .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;
@@ -184,10 +173,8 @@ impl<C: CurveGroup> LookupTableProvider<C> for PlainCurveLookupTableProvider<C> 
         index: Self::IndexSecretShare,
         value: Self::SecretShare,
         lut: &mut Self::LutType,
-        _net0: &N,
-        _net1: &N,
-        _state0: &mut Self::State,
-        _state1: &mut Self::State,
+        _net: &N,
+        _state: &mut Self::State,
     ) -> eyre::Result<()> {
         let index = field_to_usize(index)
             .ok_or_else(|| eyre::eyre!("Index can not be translated to usize"))?;

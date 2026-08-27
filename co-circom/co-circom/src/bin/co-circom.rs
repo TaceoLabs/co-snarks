@@ -871,8 +871,7 @@ where
     }
 
     // connect to network
-    let [net0, net1] =
-        TcpNetwork::networks::<2>(network_config).context("while connecting to network")?;
+    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
 
     // parse circuit file & put through our compiler
     let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
@@ -890,7 +889,7 @@ where
             tracing::info!("Starting witness generation...");
             let start = Instant::now();
             let result_witness_share =
-                co_circom::generate_witness_rep3(&circuit, input_share, config.vm, &net0, &net1)?;
+                co_circom::generate_witness_rep3(&circuit, input_share, config.vm, &net)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Generate witness took {duration_ms} ms");
 
@@ -913,7 +912,7 @@ where
             let start = Instant::now();
             // TODO we are not creating any randomness here
             let result_witness_share =
-                co_circom::generate_witness_shamir(&circuit, input_share, config.vm, &net0, n, t)?;
+                co_circom::generate_witness_shamir(&circuit, input_share, config.vm, &net, n, t)?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Generate witness took {duration_ms} ms");
 

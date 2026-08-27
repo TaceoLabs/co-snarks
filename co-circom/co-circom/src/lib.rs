@@ -140,12 +140,11 @@ pub fn generate_witness_rep3<F: PrimeField + FieldUint, N: Network>(
     circuit: &CoCircomCompilerParsed<F>,
     input: Rep3SharedInput<F>,
     config: VMConfig,
-    net0: &N,
-    net1: &N,
+    net: &N,
 ) -> eyre::Result<Rep3SharedWitness<F>> {
     // init MPC protocol
-    let rep3_vm = Rep3WitnessExtension::new(net0, net1, circuit, config)
-        .context("while constructing MPC VM")?;
+    let rep3_vm =
+        Rep3WitnessExtension::new(net, circuit, config).context("while constructing MPC VM")?;
 
     let num_public_inputs = input
         .values()

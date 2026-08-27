@@ -52,31 +52,25 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 acc
             });
 
-    let nets0 = LocalNetwork::new_3_parties();
-    let nets1 = LocalNetwork::new_3_parties();
+    let nets = LocalNetwork::new_3_parties();
     let mut threads = Vec::with_capacity(3);
     let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system).unwrap();
     let prover_crs =
         Arc::new(CrsParser::<Bn254G1>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
     // Get vk
     let verifier_crs = CrsParser::<Bn254G1>::get_crs_g2::<Bn254>(CRS_PATH_G2).unwrap();
-    for (net0, net1, witness) in izip!(nets0, nets1, witnesses) {
+    for (net, witness) in izip!(nets, witnesses) {
         let prover_crs = prover_crs.clone();
         let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
         threads.push(std::thread::spawn(move || {
             // generate proving key and vk
-            let pk = co_noir::generate_proving_key_rep3(
-                &constraint_system,
-                witness,
-                &net0,
-                &net1,
-                &prover_crs,
-            )
-            .unwrap();
+            let pk =
+                co_noir::generate_proving_key_rep3(&constraint_system, witness, &net, &prover_crs)
+                    .unwrap();
             let vk: VerifyingKey<Bn254> = pk.create_vk(&prover_crs, verifier_crs).unwrap();
 
             let (proof, public_input) =
-                Rep3CoUltraHonk::<_, H>::prove(&net0, pk, &prover_crs, has_zk, &vk.inner_vk)
+                Rep3CoUltraHonk::<_, H>::prove(&net, pk, &prover_crs, has_zk, &vk.inner_vk)
                     .unwrap();
             (proof, public_input, vk)
         }));
@@ -128,8 +122,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         co_noir::program_artifact_from_reader(File::open(&circuit_file).unwrap())
             .expect("failed to parse program artifact");
 
-    let nets0 = LocalNetwork::new_3_parties();
-    let nets1 = LocalNetwork::new_3_parties();
+    let nets = LocalNetwork::new_3_parties();
     let mut threads = Vec::with_capacity(3);
     let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
     let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system).unwrap();
@@ -139,27 +132,22 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     let verifier_crs = CrsParser::<Bn254G1>::get_crs_g2::<Bn254>(CRS_PATH_G2).unwrap();
     let vk = co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs.clone(), verifier_crs)
         .unwrap();
-    for (net0, net1) in nets0.into_iter().zip(nets1) {
+    for net in nets {
         let prover_crs = prover_crs.clone();
         let vk = vk.clone();
         let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
         let artifact = program_artifact.clone();
         let prover_toml = prover_toml.clone();
         threads.push(std::thread::spawn(move || {
-            let solver = Rep3CoSolver::new(&net0, &net1, artifact, prover_toml).unwrap();
+            let solver = Rep3CoSolver::new(&net, artifact, prover_toml).unwrap();
             let witness = solver.solve().unwrap();
             let witness = co_noir::witness_stack_to_vec_rep3(witness);
             // generate proving key and vk
-            let pk = co_noir::generate_proving_key_rep3(
-                &constraint_system,
-                witness,
-                &net0,
-                &net1,
-                &prover_crs,
-            )
-            .unwrap();
+            let pk =
+                co_noir::generate_proving_key_rep3(&constraint_system, witness, &net, &prover_crs)
+                    .unwrap();
             let (proof, public_input) =
-                Rep3CoUltraHonk::<_, H>::prove(&net0, pk, &prover_crs, has_zk, &vk.inner_vk)
+                Rep3CoUltraHonk::<_, H>::prove(&net, pk, &prover_crs, has_zk, &vk.inner_vk)
                     .unwrap();
             (proof, public_input)
         }));
