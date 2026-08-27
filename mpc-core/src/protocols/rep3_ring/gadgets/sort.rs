@@ -285,6 +285,7 @@ where
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
 
+    // TODO execute both shuffles in parallel
     let opened = shuffle_reveal::<PermRing, _>(&perm, rho, net, state)?;
     let bits_shuffled = shuffle(&perm, priv_bits, pub_bits, net, state)?;
     let mut result = vec![Rep3RingShare::zero_share(); len];
@@ -311,6 +312,7 @@ fn apply_inv_field<F: FieldUint, N: Network>(
         .map(|(a, b)| Rep3RingShare::new(a, b))
         .collect();
 
+    // TODO execute both shuffles in parallel
     let opened = shuffle_reveal(&perm, rho, net, state)?;
     let bits_shuffled = shuffle_field(&perm, bits, net, state)?;
     let mut result = vec![Rep3PrimeFieldShare::zero_share(); len];

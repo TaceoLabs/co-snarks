@@ -75,6 +75,7 @@ where
     assert!(k <= T::K);
     let k2 = k >> 1;
 
+    // TODO add a `rand_ohv_many` function to generate both OHVs together
     // create two ohv's with half the bitsize
     let (mut r, e) = gadgets::ohv::rand_ohv::<T, _>(k2, net, state)?;
     let (r_, e_) = gadgets::ohv::rand_ohv::<T, _>(k2, net, state)?;
