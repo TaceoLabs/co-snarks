@@ -1292,6 +1292,7 @@ dependencies = [
 name = "co-circom-types"
 version = "0.6.0"
 dependencies = [
+ "ark-bn254",
  "ark-ff 0.6.0",
  "ark-serialize 0.6.0",
  "eyre",
