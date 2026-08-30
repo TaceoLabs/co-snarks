@@ -536,12 +536,20 @@ fn parse_field<F>(val: &serde_json::Value) -> eyre::Result<F>
 where
     F: std::str::FromStr + PrimeField,
 {
-    let s = val.as_str().ok_or_else(|| {
-        eyre::eyre!(
-            "expected input to be a field element string, got \"{}\"",
-            val
-        )
-    })?;
+    let number;
+    let s = match val {
+        serde_json::Value::String(value) => value.as_str(),
+        serde_json::Value::Number(value) if value.is_i64() || value.is_u64() => {
+            number = value.to_string();
+            number.as_str()
+        }
+        _ => {
+            eyre::bail!(
+                "expected input to be a field element string or integer, got \"{}\"",
+                val
+            )
+        }
+    };
     let (is_negative, stripped) = if let Some(stripped) = s.strip_prefix('-') {
         (true, stripped)
     } else {
@@ -597,4 +605,79 @@ fn parse_boolean<F: PrimeField>(val: &serde_json::Value) -> eyre::Result<F> {
         .as_bool()
         .with_context(|| format!("expected input to be a bool, got {val}"))?;
     if bool { Ok(F::ONE) } else { Ok(F::ZERO) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ark_bn254::Fr;
+    use serde_json::json;
+
+    #[test]
+    fn split_input_accepts_integral_json_numbers() {
+        let input: Input = serde_json::from_value(json!({
+            "scalar": 20,
+            "large": u64::MAX,
+            "negative": -7,
+            "decimal_string": "20",
+            "hex_string": "0x14",
+            "array": [1, -2]
+        }))
+        .unwrap();
+        let public_inputs = vec![
+            "scalar".to_owned(),
+            "large".to_owned(),
+            "negative".to_owned(),
+            "decimal_string".to_owned(),
+            "hex_string".to_owned(),
+            "array".to_owned(),
+        ];
+
+        let rep3 = split_input::<Fr>(input.clone(), &public_inputs).unwrap();
+        for share in rep3 {
+            assert_public_values(&share);
+        }
+
+        let shamir = split_input_shamir::<Fr>(input, &public_inputs, 1, 3).unwrap();
+        for share in shamir {
+            assert_eq!(share["scalar"].as_public(), Some(Fr::from(20_u64)));
+            assert_eq!(share["large"].as_public(), Some(Fr::from(u64::MAX)));
+            assert_eq!(share["negative"].as_public(), Some(-Fr::from(7_u64)));
+            assert_eq!(
+                share["decimal_string"].as_public(),
+                share["scalar"].as_public()
+            );
+            assert_eq!(share["hex_string"].as_public(), share["scalar"].as_public());
+            assert_eq!(share["array[0]"].as_public(), Some(Fr::from(1_u64)));
+            assert_eq!(share["array[1]"].as_public(), Some(-Fr::from(2_u64)));
+        }
+    }
+
+    #[test]
+    fn split_input_rejects_non_integral_json_numbers() {
+        for input in [
+            r#"{"value": 1.5}"#,
+            r#"{"value": 1.0}"#,
+            r#"{"value": 1e3}"#,
+        ] {
+            let scalar = serde_json::from_str(input).unwrap();
+            assert!(split_input::<Fr>(scalar, &[]).is_err());
+        }
+
+        let array = serde_json::from_value(json!({ "value": [1, 2.5] })).unwrap();
+        assert!(split_input_shamir::<Fr>(array, &[], 1, 3).is_err());
+    }
+
+    fn assert_public_values(share: &Rep3SharedInput<Fr>) {
+        assert_eq!(share["scalar"].as_public(), Some(Fr::from(20_u64)));
+        assert_eq!(share["large"].as_public(), Some(Fr::from(u64::MAX)));
+        assert_eq!(share["negative"].as_public(), Some(-Fr::from(7_u64)));
+        assert_eq!(
+            share["decimal_string"].as_public(),
+            share["scalar"].as_public()
+        );
+        assert_eq!(share["hex_string"].as_public(), share["scalar"].as_public());
+        assert_eq!(share["array[0]"].as_public(), Some(Fr::from(1_u64)));
+        assert_eq!(share["array[1]"].as_public(), Some(-Fr::from(2_u64)));
+    }
 }
