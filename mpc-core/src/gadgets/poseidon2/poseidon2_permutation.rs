@@ -255,6 +255,16 @@ impl<F: PrimeField, const T: usize> Default for Poseidon2<F, T, 5> {
                         )
                     }
                 }
+                8 => {
+                    let params = &super::poseidon2_bn254_t8::POSEIDON2_BN254_T8_PARAMS;
+                    let poseidon2 = Poseidon2::new(params);
+                    // Safety: We checked that the types match
+                    unsafe {
+                        std::mem::transmute::<Poseidon2<ark_bn254::Fr, 8, 5>, Poseidon2<F, T, 5>>(
+                            poseidon2,
+                        )
+                    }
+                }
                 16 => {
                     let params = &super::poseidon2_bn254_t16::POSEIDON2_BN254_T16_PARAMS;
                     let poseidon2 = Poseidon2::new(params);
@@ -280,6 +290,7 @@ mod test {
         poseidon2_bn254_t2::POSEIDON2_BN254_T2_PARAMS,
         poseidon2_bn254_t3::POSEIDON2_BN254_T3_PARAMS,
         poseidon2_bn254_t4::POSEIDON2_BN254_T4_PARAMS,
+        poseidon2_bn254_t8::POSEIDON2_BN254_T8_PARAMS,
     };
     use rand::thread_rng;
 
@@ -437,5 +448,57 @@ mod test {
         ];
 
         poseidon2_kat(&POSEIDON2_BN254_T4_PARAMS, &input, &expected);
+    }
+
+    #[test]
+    fn posedon2_bn254_t8_kat1() {
+        // Parameters are compatible with the original Poseidon2 parameter generation script found at:
+        // [https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage](https://github.com/HorizenLabs/poseidon2/blob/main/poseidon2_rust_params.sage)
+        let input = [
+            ark_bn254::Fr::from(0u64),
+            ark_bn254::Fr::from(1u64),
+            ark_bn254::Fr::from(2u64),
+            ark_bn254::Fr::from(3u64),
+            ark_bn254::Fr::from(4u64),
+            ark_bn254::Fr::from(5u64),
+            ark_bn254::Fr::from(6u64),
+            ark_bn254::Fr::from(7u64),
+        ];
+        let expected = [
+            crate::gadgets::field_from_hex_string(
+                "0x1d1a50bcde871247856df135d56a4ca61af575f1140ed9b1503c77528cf345df",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x2d3943cf476ed49fd8a636660d8a76c83b55f07d06bc082005ad7eb1a21791c5",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x2fcda2dd846fadfde8104b1d05175dcf3cf8bd698ed8ea3ad2fbcf9c06e00310",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x28811ac7e0829171f9d3d81f1c0ff8f34b360d407a16b331a1cb6b5d992de094",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x2c07c1817cfccb67c1297935514885c07abad5a0e15477f6c076c0b0fb1ad6f3",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x1b6114397199bc44e37437dd3ba1754dff007d3315bfcdcdc14ec27d02452f52",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x1431250baf36fb61a07618caee4dd2f500da339a05c553e8f529a3349e617aa2",
+            )
+            .unwrap(),
+            crate::gadgets::field_from_hex_string(
+                "0x0b19bfa00c8f1d505074130e7f8b49a8624b1905e280ceca5ba11099b081b265",
+            )
+            .unwrap(),
+        ];
+
+        poseidon2_kat(&POSEIDON2_BN254_T8_PARAMS, &input, &expected);
     }
 }
