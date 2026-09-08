@@ -3,15 +3,13 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs as _};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use byteorder::{NetworkEndian, ReadBytesExt as _, WriteBytesExt as _};
-use crossbeam_channel::Sender;
-use eyre::Context as _;
 use serde::Deserialize;
 
 use crate::blocking::BlockingChannels;
+use crate::session_blocking::SessionStreams;
 use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network};
 use bytes::Bytes;
 
@@ -50,118 +48,36 @@ fn default_time_to_idle() -> Duration {
     Duration::from_secs(30)
 }
 
-#[derive(Debug)]
-pub(crate) enum MaybeTcpStream {
-    TcpStream(TcpStream),
-    Waiter(Sender<TcpStream>),
-}
-
-#[derive(Default, Debug, Clone)]
-#[expect(clippy::complexity)]
-pub(crate) struct TcpStreams {
-    write_timeout: Option<Duration>,
+/// Configure an accepted stream and read its `(session_id, party_id)` header.
+fn accept_header(
+    stream: &mut TcpStream,
     init_session_timeout: Option<Duration>,
-    streams: Arc<Mutex<HashMap<(u128, usize), (MaybeTcpStream, Instant)>>>,
-}
+    write_timeout: Option<Duration>,
+) -> eyre::Result<(u128, usize)> {
+    stream.set_nodelay(true)?;
+    // set read timeout to init_session_timeout, so that we don't block forever
+    // if the other party doesn't send the session id and party id
+    stream.set_read_timeout(init_session_timeout)?;
+    stream.set_write_timeout(write_timeout)?;
 
-impl TcpStreams {
-    pub(crate) fn new(
-        write_timeout: Option<Duration>,
-        init_session_timeout: Option<Duration>,
-    ) -> Self {
-        Self {
-            write_timeout,
-            init_session_timeout,
-            streams: Arc::default(),
-        }
-    }
+    tracing::trace!("reading session id..");
+    let session_id = stream.read_u128::<NetworkEndian>()?;
+    tracing::trace!("got session id: {session_id:?}");
 
-    pub(crate) fn get(
-        &self,
-        session_id: u128,
-        party_id: usize,
-        timeout: Option<Duration>,
-    ) -> eyre::Result<TcpStream> {
-        let mut streams = self.streams.lock().expect("not poisoned");
-        let maybe_stream = streams.remove(&(session_id, party_id));
-        match maybe_stream {
-            Some((MaybeTcpStream::TcpStream(stream), _)) => Ok(stream),
-            x @ (None | Some((MaybeTcpStream::Waiter(_), _))) => {
-                if x.is_some() {
-                    tracing::warn!(
-                        "got duplicate connection waiter for session_id {session_id} and party_id {party_id}, replacing old waiter"
-                    );
-                }
-                drop(x); // drop old waiter if it exists, so that old waiter doesn't block forever
-                let (tx, rx) = crossbeam_channel::bounded(1);
-                streams.insert(
-                    (session_id, party_id),
-                    (MaybeTcpStream::Waiter(tx), Instant::now()),
-                );
-                drop(streams); // drop to release lock
-                if let Some(timeout) = timeout {
-                    rx.recv_timeout(timeout)
-                        .context("while waiting for incoming connection")
-                } else {
-                    rx.recv().context("while waiting for incoming connection")
-                }
-            }
-        }
-    }
+    tracing::trace!("reading party id..");
+    let party_id = stream.read_u64::<NetworkEndian>()? as usize;
+    tracing::trace!("got party id: {party_id}");
 
-    pub(crate) fn insert(&self, mut stream: TcpStream) -> eyre::Result<()> {
-        stream.set_nodelay(true)?;
-        // set read timeout to init_session_timeout, so that we don't block forever
-        // if the other party doesn't send the session id and party id
-        stream.set_read_timeout(self.init_session_timeout)?;
-        stream.set_write_timeout(self.write_timeout)?;
-
-        tracing::trace!("reading session id..");
-        let session_id = stream.read_u128::<NetworkEndian>()?;
-        tracing::trace!("got session id: {session_id:?}");
-
-        tracing::trace!("reading party id..");
-        let party_id = stream.read_u64::<NetworkEndian>()? as usize;
-        tracing::trace!("got party id: {party_id}");
-
-        // reset read timeout to None, so that we don't timeout in the recv task
-        stream.set_read_timeout(None)?;
-
-        let mut streams = self.streams.lock().expect("not poisoned");
-        let maybe_stream = streams.remove(&(session_id, party_id));
-        match maybe_stream {
-            Some((MaybeTcpStream::TcpStream(_), _)) => {
-                tracing::warn!(
-                    "got duplicate incoming connection for session_id {session_id} and party_id {party_id}, replacing old connection"
-                );
-                streams.insert(
-                    (session_id, party_id),
-                    (MaybeTcpStream::TcpStream(stream), Instant::now()),
-                );
-            }
-            Some((MaybeTcpStream::Waiter(tx), _)) => {
-                tracing::trace!("found waiter, sending stream");
-                if tx.send(stream).is_err() {
-                    tracing::warn!("failed to send stream to waiter, receiver dropped");
-                }
-            }
-            None => {
-                tracing::trace!("no waiter found, inserting stream");
-                streams.insert(
-                    (session_id, party_id),
-                    (MaybeTcpStream::TcpStream(stream), Instant::now()),
-                );
-            }
-        }
-        Ok(())
-    }
+    // reset read timeout to None, so that we don't timeout in the recv task
+    stream.set_read_timeout(None)?;
+    Ok((session_id, party_id))
 }
 
 /// TCP session network handler. Listens for incoming connections and matches them to sessions based on a session id and party id.
 #[derive(Debug, Clone)]
 pub struct TcpNetworkHandler {
     party_id: usize,
-    streams: TcpStreams,
+    streams: SessionStreams<(u128, usize), TcpStream>,
     node_addrs: Vec<String>,
     max_frame_length: usize,
     timeout: Option<Duration>,
@@ -188,46 +104,28 @@ impl TcpNetworkHandler {
         }: NetworkConfig,
     ) -> eyre::Result<Self> {
         let listener = TcpListener::bind(bind_addr)?;
-        let streams = TcpStreams::new(timeout, init_session_timeout);
+        let streams = SessionStreams::new();
 
         std::thread::spawn({
             let streams = streams.clone();
             move || {
                 loop {
-                    if let Ok((stream, addr)) = listener.accept() {
-                        tracing::trace!("accepted incoming connection from {addr}");
-                        if let Err(err) = streams.insert(stream) {
-                            tracing::warn!("failed to insert incoming connection: {err:?}");
+                    match listener.accept() {
+                        Ok((mut stream, addr)) => {
+                            tracing::trace!("accepted incoming connection from {addr}");
+                            match accept_header(&mut stream, init_session_timeout, timeout) {
+                                Ok(key) => streams.insert(key, stream),
+                                Err(err) => tracing::warn!(
+                                    "failed to insert incoming connection from {addr}: {err:?}"
+                                ),
+                            }
                         }
-                    } else {
-                        tracing::warn!("failed to accept incoming connection");
-                    }
-                }
-                #[allow(unreachable_code)]
-                eyre::Ok(())
-            }
-        });
-
-        std::thread::spawn({
-            let streams = streams.clone();
-            move || {
-                loop {
-                    std::thread::sleep(time_to_idle * 2);
-                    let mut streams = streams.streams.lock().expect("not poisoned");
-                    let now = Instant::now();
-                    let before_cleanup = streams.len();
-                    streams
-                        .retain(|_, (_, last_used)| now.duration_since(*last_used) < time_to_idle);
-                    let after_cleanup = streams.len();
-                    let removed = before_cleanup - after_cleanup;
-                    if removed > 0 {
-                        tracing::warn!(
-                            "cleaned up {removed} idle streams - this means that some some MPC operations likely failed"
-                        );
+                        Err(err) => tracing::warn!("failed to accept incoming connection: {err:?}"),
                     }
                 }
             }
         });
+        streams.spawn_cleanup(time_to_idle);
 
         Ok(TcpNetworkHandler {
             party_id,
@@ -268,9 +166,9 @@ impl TcpNetworkHandler {
                 }
                 Ordering::Greater => {
                     tracing::trace!("waiting for peer: {addr}");
-                    let stream =
-                        self.streams
-                            .get(session_id, other_id, self.init_session_timeout)?;
+                    let stream = self
+                        .streams
+                        .get((session_id, other_id), self.init_session_timeout)?;
                     tracing::trace!("got connection from peer");
                     streams.insert(other_id, stream);
                 }

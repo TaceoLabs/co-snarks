@@ -4,7 +4,6 @@ use std::{
     array,
     cmp::Ordering,
     collections::HashMap,
-    io::{IoSlice, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs as _},
     sync::Arc,
     time::{Duration, Instant},
@@ -24,66 +23,7 @@ use rustls::{
 };
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 
-/// A wrapper type for client and server TLS streams
-#[derive(Debug)]
-pub enum TlsStream {
-    /// A Stream with a client connection
-    Client(StreamOwned<ClientConnection, TcpStream>),
-    /// A Stream with a sever connection
-    Server(StreamOwned<ServerConnection, TcpStream>),
-}
-
-impl From<StreamOwned<ClientConnection, TcpStream>> for TlsStream {
-    fn from(value: StreamOwned<ClientConnection, TcpStream>) -> Self {
-        Self::Client(value)
-    }
-}
-
-impl From<StreamOwned<ServerConnection, TcpStream>> for TlsStream {
-    fn from(value: StreamOwned<ServerConnection, TcpStream>) -> Self {
-        Self::Server(value)
-    }
-}
-
-impl Read for TlsStream {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            TlsStream::Client(stream) => stream.read(buf),
-            TlsStream::Server(stream) => stream.read(buf),
-        }
-    }
-}
-
-impl Write for TlsStream {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        match self {
-            TlsStream::Client(stream) => stream.write(buf),
-            TlsStream::Server(stream) => stream.write(buf),
-        }
-    }
-
-    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> std::io::Result<usize> {
-        // rustls' `StreamOwned` does not override `write_vectored`, so the default would
-        // emit only the first slice (e.g. an 8-byte length header) as its own TLS record.
-        // Coalesce into a single buffer and write once so the framed message stays in one
-        // record. This keeps a single copy (as the previous framing did) rather than
-        // producing a tiny header record followed by the payload.
-        let total: usize = bufs.iter().map(|b| b.len()).sum();
-        let mut buf = Vec::with_capacity(total);
-        for b in bufs {
-            buf.extend_from_slice(b);
-        }
-        self.write_all(&buf)?;
-        Ok(total)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        match self {
-            TlsStream::Client(stream) => stream.flush(),
-            TlsStream::Server(stream) => stream.flush(),
-        }
-    }
-}
+pub use crate::blocking::TlsStream;
 
 /// A MPC network using [TlsStream]s
 #[derive(Debug)]

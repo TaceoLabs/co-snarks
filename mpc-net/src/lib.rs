@@ -5,17 +5,28 @@ use std::collections::{BTreeMap, HashMap};
 
 pub use bytes;
 
-// Shared async-transport core, used by the QUIC and ephemeral-TCP-session backends.
-#[cfg(any(feature = "quic", feature = "tcp-session"))]
+// Shared async-transport core, used by the QUIC and ephemeral-TCP/TLS-session backends.
+#[cfg(any(feature = "quic", feature = "tcp-session", feature = "tls-session"))]
 mod async_net;
 // Shared blocking-transport core, used by the TCP and TLS backends.
-#[cfg(any(feature = "tcp", feature = "tls", feature = "tcp-session-blocking"))]
+#[cfg(any(
+    feature = "tcp",
+    feature = "tls",
+    feature = "tcp-session-blocking",
+    feature = "tls-session-blocking"
+))]
 mod blocking;
 pub mod config;
 #[cfg(feature = "local")]
 pub mod local;
 #[cfg(feature = "quic")]
 pub mod quic;
+// Shared session bookkeeping for the ephemeral TCP/TLS-session backends.
+#[cfg(any(feature = "tcp-session", feature = "tls-session"))]
+mod session;
+// Shared session bookkeeping for the blocking ephemeral TCP/TLS-session backends.
+#[cfg(any(feature = "tcp-session-blocking", feature = "tls-session-blocking"))]
+mod session_blocking;
 #[cfg(feature = "tcp")]
 pub mod tcp;
 #[cfg(feature = "tcp-session")]
@@ -24,6 +35,10 @@ pub mod tcp_session;
 pub mod tcp_session_blocking;
 #[cfg(feature = "tls")]
 pub mod tls;
+#[cfg(feature = "tls-session")]
+pub mod tls_session;
+#[cfg(feature = "tls-session-blocking")]
+pub mod tls_session_blocking;
 
 /// The default max frame length for sending messages
 pub const DEFAULT_MAX_FRAME_LENGTH: usize = 64 * 1024 * 1024; // 64MB

@@ -202,31 +202,33 @@ pub struct NetworkConfig {
     pub max_frame_length: Option<usize>,
 }
 
+impl TryFrom<TlsConfigFile> for TlsConfig {
+    type Error = eyre::Report;
+
+    fn try_from(value: TlsConfigFile) -> Result<Self, Self::Error> {
+        let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
+            std::fs::read(value.key).context("while reading key")?,
+        ))
+        .clone_key();
+        let certs = value
+            .certs
+            .into_iter()
+            .map(|cert_path| {
+                let cert =
+                    CertificateDer::from(std::fs::read(cert_path).context("while reading cert")?)
+                        .into_owned();
+                eyre::Ok(cert)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(TlsConfig { key, certs })
+    }
+}
+
 impl TryFrom<NetworkConfigFile> for NetworkConfig {
     type Error = eyre::Report;
 
     fn try_from(value: NetworkConfigFile) -> Result<Self, Self::Error> {
-        let tls_config = match value.tls {
-            Some(tls_config) => {
-                let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(
-                    std::fs::read(tls_config.key).context("while reading key")?,
-                ))
-                .clone_key();
-                let certs = tls_config
-                    .certs
-                    .into_iter()
-                    .map(|cert_path| {
-                        let cert = CertificateDer::from(
-                            std::fs::read(cert_path).context("while reading cert")?,
-                        )
-                        .into_owned();
-                        eyre::Ok(cert)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                Some(TlsConfig { key, certs })
-            }
-            None => None,
-        };
+        let tls_config = value.tls.map(TlsConfig::try_from).transpose()?;
         Ok(NetworkConfig {
             parties: value.parties,
             my_id: value.my_id,

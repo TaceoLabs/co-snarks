@@ -3,16 +3,18 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use futures::StreamExt as _;
 use serde::Deserialize;
-use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-use tokio::{net::TcpStream, sync::oneshot};
+use tokio::io::AsyncWriteExt as _;
+use tokio::net::TcpStream;
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
-use crate::{ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels};
+use crate::{
+    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels,
+    session::SessionStreams,
+};
 use bytes::Bytes;
 
 /// The network configuration file.
@@ -54,94 +56,11 @@ fn default_time_to_idle() -> Duration {
     Duration::from_secs(30)
 }
 
-#[derive(Debug)]
-pub(crate) enum MaybeTcpStream {
-    TcpStream(TcpStream),
-    Waiter(oneshot::Sender<TcpStream>),
-}
-
-#[derive(Default, Debug, Clone)]
-#[expect(clippy::complexity)]
-pub(crate) struct TcpStreams {
-    streams: Arc<tokio::sync::Mutex<HashMap<(u128, usize), (MaybeTcpStream, Instant)>>>,
-}
-
-impl TcpStreams {
-    pub(crate) fn new() -> Self {
-        Self {
-            streams: Arc::default(),
-        }
-    }
-
-    pub(crate) async fn get(&self, session_id: u128, party_id: usize) -> eyre::Result<TcpStream> {
-        let mut streams = self.streams.lock().await;
-        let maybe_stream = streams.remove(&(session_id, party_id));
-        match maybe_stream {
-            Some((MaybeTcpStream::TcpStream(stream), _)) => Ok(stream),
-            x @ (None | Some((MaybeTcpStream::Waiter(_), _))) => {
-                if x.is_some() {
-                    tracing::warn!(
-                        "got duplicate connection waiter for session_id {session_id} and party_id {party_id}, replacing old waiter"
-                    );
-                }
-                drop(x); // drop old waiter if it exists, so that old waiter doesn't block forever
-                let (tx, rx) = oneshot::channel();
-                streams.insert(
-                    (session_id, party_id),
-                    (MaybeTcpStream::Waiter(tx), Instant::now()),
-                );
-                drop(streams); // drop to release lock
-                Ok(rx.await?)
-            }
-        }
-    }
-
-    pub(crate) async fn insert(&self, mut stream: TcpStream) -> eyre::Result<()> {
-        stream.set_nodelay(true)?;
-
-        tracing::trace!("reading session id..");
-        let session_id = stream.read_u128().await?;
-        tracing::trace!("got session id: {session_id:?}");
-
-        tracing::trace!("reading party id..");
-        let party_id = stream.read_u64().await? as usize;
-        tracing::trace!("got party id: {party_id}");
-
-        let mut streams = self.streams.lock().await;
-        let maybe_stream = streams.remove(&(session_id, party_id));
-        match maybe_stream {
-            Some((MaybeTcpStream::TcpStream(_), _)) => {
-                tracing::warn!(
-                    "got duplicate incoming connection for session_id {session_id} and party_id {party_id}, replacing old connection"
-                );
-                streams.insert(
-                    (session_id, party_id),
-                    (MaybeTcpStream::TcpStream(stream), Instant::now()),
-                );
-            }
-            Some((MaybeTcpStream::Waiter(tx), _)) => {
-                tracing::trace!("found waiter, sending stream");
-                if tx.send(stream).is_err() {
-                    tracing::warn!("failed to send stream to waiter, receiver dropped");
-                }
-            }
-            None => {
-                tracing::trace!("no waiter found, inserting stream");
-                streams.insert(
-                    (session_id, party_id),
-                    (MaybeTcpStream::TcpStream(stream), Instant::now()),
-                );
-            }
-        }
-        Ok(())
-    }
-}
-
 /// TCP session network handler. Listens for incoming connections and matches them to sessions based on a session id and party id.
 #[derive(Debug, Clone)]
 pub struct TcpNetworkHandler {
     party_id: usize,
-    streams: TcpStreams,
+    streams: SessionStreams<TcpStream>,
     node_addrs: Vec<String>,
     max_frame_length: usize,
     timeout: Option<Duration>,
@@ -167,47 +86,30 @@ impl TcpNetworkHandler {
         }: NetworkConfig,
     ) -> eyre::Result<Self> {
         let listener = tokio::net::TcpListener::bind(bind_addr).await?;
-        let streams = TcpStreams::new();
+        let streams = SessionStreams::new();
 
         tokio::spawn({
             let streams = streams.clone();
             async move {
                 loop {
-                    if let Ok((stream, addr)) = listener.accept().await {
-                        tracing::trace!("accepted incoming connection from {addr}");
-                        if let Err(err) = streams.insert(stream).await {
-                            tracing::warn!("failed to insert incoming connection: {err:?}");
+                    match listener.accept().await {
+                        Ok((stream, addr)) => {
+                            tracing::trace!("accepted incoming connection from {addr}");
+                            let res = async {
+                                stream.set_nodelay(true)?;
+                                streams.insert(stream).await
+                            }
+                            .await;
+                            if let Err(err) = res {
+                                tracing::warn!("failed to insert incoming connection: {err:?}");
+                            }
                         }
-                    } else {
-                        tracing::warn!("failed to accept incoming connection");
-                    }
-                }
-                #[allow(unreachable_code)]
-                eyre::Ok(())
-            }
-        });
-
-        tokio::spawn({
-            let streams = streams.clone();
-            let mut interval = tokio::time::interval(time_to_idle * 2);
-            async move {
-                loop {
-                    interval.tick().await;
-                    let mut streams = streams.streams.lock().await;
-                    let now = Instant::now();
-                    let before_cleanup = streams.len();
-                    streams
-                        .retain(|_, (_, last_used)| now.duration_since(*last_used) < time_to_idle);
-                    let after_cleanup = streams.len();
-                    let removed = before_cleanup - after_cleanup;
-                    if removed > 0 {
-                        tracing::warn!(
-                            "cleaned up {removed} idle streams - this means that some some MPC operations likely failed"
-                        );
+                        Err(err) => tracing::warn!("failed to accept incoming connection: {err:?}"),
                     }
                 }
             }
         });
+        streams.spawn_cleanup(time_to_idle);
 
         Ok(TcpNetworkHandler {
             party_id,
