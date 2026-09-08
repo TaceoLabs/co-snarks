@@ -25,7 +25,7 @@ async fn handlers(n: usize) -> Vec<TlsNetworkHandler> {
                 party_id: c.my_id,
                 bind_addr: c.bind_addr,
                 node_addrs,
-                tls: c.tls.unwrap(),
+                tls: c.tls,
                 init_session_timeout: None,
                 timeout: c.timeout,
                 flush_timeout: None,

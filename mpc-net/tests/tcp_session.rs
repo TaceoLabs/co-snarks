@@ -7,7 +7,9 @@ use std::{
 };
 
 use mpc_net::{
-    DEFAULT_MAX_FRAME_LENGTH, join, join3,
+    DEFAULT_MAX_FRAME_LENGTH,
+    config::Address,
+    join, join3,
     tcp_session::{NetworkConfig, TcpNetwork, TcpNetworkHandler},
 };
 use reserve_port::ReservedPort;
@@ -18,9 +20,9 @@ async fn handlers(n: usize) -> Vec<TcpNetworkHandler> {
     let ports: Vec<_> = (0..n)
         .map(|_| ReservedPort::random_permanently_reserved().unwrap())
         .collect();
-    let addrs: Vec<String> = ports
+    let addrs: Vec<Address> = ports
         .iter()
-        .map(|port| format!("127.0.0.1:{port}"))
+        .map(|port| Address::new("127.0.0.1".to_string(), *port))
         .collect();
     futures::future::join_all((0..n).map(|id| {
         let addrs = addrs.clone();
@@ -30,6 +32,7 @@ async fn handlers(n: usize) -> Vec<TcpNetworkHandler> {
                 party_id: id,
                 bind_addr,
                 node_addrs: addrs,
+                tls: None,
                 init_session_timeout: None,
                 timeout: None,
                 flush_timeout: None,

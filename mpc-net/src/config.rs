@@ -1,6 +1,9 @@
 //! Data structures and helpers for the network configuration.
 use eyre::Context;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
+use rustls::{
+    ClientConfig, RootCertStore, ServerConfig,
+    pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt::Formatter,
@@ -8,6 +11,7 @@ use std::{
     num::ParseIntError,
     path::PathBuf,
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
 
@@ -119,6 +123,36 @@ impl TlsConfig {
     /// Construct a new [`TlsConfig`] type.
     pub fn new(key: PrivateKeyDer<'static>, certs: Vec<CertificateDer<'static>>) -> Self {
         Self { key, certs }
+    }
+
+    /// Build the rustls client and server configs for `party_id`.
+    ///
+    /// All certificates are trusted as roots, the server presents the certificate at index `party_id`.
+    /// TLS 1.3 session tickets are disabled, as we only ever connect once to each peer and the
+    /// tickets would otherwise be sent on a write half that is never read.
+    pub fn into_rustls_configs(
+        self,
+        party_id: usize,
+    ) -> eyre::Result<(Arc<ClientConfig>, Arc<ServerConfig>)> {
+        let mut root_store = RootCertStore::empty();
+        for cert in &self.certs {
+            root_store.add(cert.clone())?;
+        }
+        let client_config = ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        let own_cert = self
+            .certs
+            .get(party_id)
+            .ok_or_else(|| eyre::eyre!("missing certificate for party {party_id}"))?
+            .clone();
+        let mut server_config = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![own_cert], self.key)?;
+        server_config.send_tls13_tickets = 0;
+
+        Ok((Arc::new(client_config), Arc::new(server_config)))
     }
 }
 

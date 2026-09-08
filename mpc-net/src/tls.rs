@@ -5,7 +5,6 @@ use std::{
     cmp::Ordering,
     collections::HashMap,
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs as _},
-    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -17,10 +16,7 @@ use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use bytes::Bytes;
 use eyre::ContextCompat;
 use itertools::Itertools;
-use rustls::{
-    ClientConfig, ClientConnection, RootCertStore, ServerConfig, ServerConnection, StreamOwned,
-    pki_types::ServerName,
-};
+use rustls::{ClientConnection, ServerConnection, StreamOwned, pki_types::ServerName};
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 
 pub use crate::blocking::TlsStream;
@@ -60,31 +56,11 @@ impl TlsNetwork {
         let tls_config = config
             .tls
             .ok_or_else(|| eyre::eyre!("TLS config is required for TlsNetwork"))?;
-        let key = tls_config.key;
-        let certs = tls_config.certs;
         let timeout = config.timeout;
         let connect_timeout = config.connect_timeout;
         let flush_timeout = config.flush_timeout;
         let max_frame_length = config.max_frame_length.unwrap_or(DEFAULT_MAX_FRAME_LENGTH);
-
-        let mut root_store = RootCertStore::empty();
-        for cert in &certs {
-            root_store.add(cert.clone())?;
-        }
-        let client_config = ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
-
-        let mut server_config = ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(vec![certs[id].clone()], key)?;
-        // Disable TLS 1.3 session tickets to avoid sending data back via the write half.
-        // It never gets read there, thus leading to sporadic errors.
-        // We don't need session tickets anyway, as we only ever connect once to each peer.
-        server_config.send_tls13_tickets = 0;
-
-        let client_config = Arc::new(client_config);
-        let server_config = Arc::new(server_config);
+        let (client_config, server_config) = tls_config.into_rustls_configs(id)?;
 
         let domain = match bind_addr {
             SocketAddr::V4(_) => Domain::IPV4,

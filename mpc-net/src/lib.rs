@@ -27,6 +27,14 @@ mod session;
 // Shared session bookkeeping for the blocking ephemeral TCP/TLS-session backends.
 #[cfg(any(feature = "tcp-session-blocking", feature = "tls-session-blocking"))]
 mod session_blocking;
+// Shared configuration types for the session backends.
+#[cfg(any(
+    feature = "tcp-session",
+    feature = "tcp-session-blocking",
+    feature = "tls-session",
+    feature = "tls-session-blocking"
+))]
+mod session_config;
 #[cfg(feature = "tcp")]
 pub mod tcp;
 #[cfg(feature = "tcp-session")]

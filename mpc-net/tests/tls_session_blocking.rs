@@ -25,7 +25,7 @@ fn handlers(n: usize) -> Vec<TlsNetworkHandler> {
                 party_id: c.my_id,
                 bind_addr: c.bind_addr,
                 node_addrs: node_addrs.clone(),
-                tls: c.tls.unwrap(),
+                tls: c.tls,
                 init_session_timeout: c.connect_timeout,
                 timeout: c.timeout,
                 flush_timeout: None,
