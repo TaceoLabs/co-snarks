@@ -36,6 +36,12 @@ impl Transport for TcpTransport {
     fn socket(stream: &TcpStream) -> &TcpStream {
         stream
     }
+
+    const DUPLEX: bool = true;
+
+    fn split(stream: TcpStream) -> eyre::Result<(TcpStream, TcpStream)> {
+        Ok((stream.try_clone()?, stream))
+    }
 }
 
 /// TCP session network handler.

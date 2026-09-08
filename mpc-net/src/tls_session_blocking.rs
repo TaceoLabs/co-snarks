@@ -1,7 +1,8 @@
 //! Ephemeral TLS MPC network (blocking)
 //!
 //! See [`SessionHandler`] for the session model. Every connection is wrapped in TLS (via
-//! `rustls`). Peers authenticate each other with the certificates from [`TlsConfig`]; the
+//! `rustls`). As a blocking TLS stream cannot be split into independent reader and writer
+//! halves, two connections are opened per peer and session. Peers authenticate each other with the certificates from [`TlsConfig`]; the
 //! connecting side verifies the accepting side's certificate against the hostname in
 //! [`NetworkConfig::node_addrs`].
 
@@ -58,6 +59,12 @@ impl Transport for TlsTransport {
             TlsStream::Client(s) => &s.sock,
             TlsStream::Server(s) => &s.sock,
         }
+    }
+
+    const DUPLEX: bool = false;
+
+    fn split(_stream: TlsStream) -> eyre::Result<(TlsStream, TlsStream)> {
+        eyre::bail!("TLS streams cannot be split")
     }
 }
 

@@ -3,10 +3,10 @@
 //! A [`SessionHandler`] listens for incoming connections; each one announces a
 //! `(session_id, party_id, direction)` header and is parked until the matching
 //! `init_session` call picks it up (or vice versa: `init_session` may register a waiter
-//! before the connection arrives). Since a blocking stream cannot in general be split into
-//! independent reader and writer halves (TLS in particular), two connections are opened per
-//! peer and session, one per direction. The only transport-specific part, wrapping a raw
-//! TCP connection (e.g. in TLS), is abstracted by [`Transport`].
+//! before the connection arrives). The transport-specific parts, wrapping a raw TCP
+//! connection (e.g. in TLS) and splitting it into reader and writer halves, are abstracted
+//! by [`Transport`]. Transports whose streams cannot be split (TLS) open two connections
+//! per peer and session, one per direction.
 
 use std::{
     cmp::Ordering,
@@ -42,14 +42,22 @@ pub trait Transport: Sized + Send + Sync + 'static {
     fn accept(&self, stream: TcpStream) -> eyre::Result<Self::Stream>;
     /// The underlying TCP socket of an established connection.
     fn socket(stream: &Self::Stream) -> &TcpStream;
+    /// Whether one connection serves both directions via [`split`](Self::split).
+    /// If `false`, two connections are opened per peer and session, one per direction.
+    const DUPLEX: bool;
+    /// Split a connection into independent `(write, read)` halves. Only called if [`DUPLEX`](Self::DUPLEX).
+    fn split(stream: Self::Stream) -> eyre::Result<(Self::Stream, Self::Stream)>;
 }
 
 /// Direction tag sent by the connecting party: this connection is its send direction.
 const STREAM_SEND: u8 = 0;
 /// Direction tag sent by the connecting party: this connection is its receive direction.
 const STREAM_RECV: u8 = 1;
+/// Direction tag (local only, not sent) for the single connection of a duplex transport.
+const STREAM_DUPLEX: u8 = 2;
 
 /// `(session_id, party_id, direction)`, where `direction` is from the connecting party's view.
+/// For duplex transports the direction is always [`STREAM_DUPLEX`] and not part of the header.
 type Key = (u128, usize, u8);
 
 #[derive(Debug)]
@@ -164,7 +172,11 @@ fn accept_header<T: Transport>(
     let mut stream = transport.accept(stream)?;
     let session_id = stream.read_u128::<NetworkEndian>()?;
     let party_id = stream.read_u64::<NetworkEndian>()? as usize;
-    let direction = stream.read_u8()?;
+    let direction = if T::DUPLEX {
+        STREAM_DUPLEX
+    } else {
+        stream.read_u8()?
+    };
     tracing::trace!("got header: session {session_id}, party {party_id}, direction {direction}");
 
     // reset read timeout to None, so that we don't timeout in the recv thread
@@ -283,7 +295,9 @@ impl<T: Transport> SessionHandler<T> {
         let mut stream = self.transport.connect(stream, addr)?;
         stream.write_u128::<NetworkEndian>(session_id)?;
         stream.write_u64::<NetworkEndian>(self.party_id as u64)?;
-        stream.write_u8(direction)?;
+        if !T::DUPLEX {
+            stream.write_u8(direction)?;
+        }
         stream.flush()?;
         Ok(stream)
     }
@@ -299,24 +313,32 @@ impl<T: Transport> SessionHandler<T> {
             match other_id.cmp(&self.party_id) {
                 Ordering::Less => {
                     tracing::trace!("connecting to peer: {addr}");
-                    let write_stream = self.connect(addr, session_id, STREAM_SEND)?;
-                    let read_stream = self.connect(addr, session_id, STREAM_RECV)?;
+                    let pair = if T::DUPLEX {
+                        T::split(self.connect(addr, session_id, STREAM_DUPLEX)?)?
+                    } else {
+                        let write_stream = self.connect(addr, session_id, STREAM_SEND)?;
+                        let read_stream = self.connect(addr, session_id, STREAM_RECV)?;
+                        (write_stream, read_stream)
+                    };
                     tracing::trace!("connected");
-                    streams.insert(other_id, (write_stream, read_stream));
+                    streams.insert(other_id, pair);
                 }
                 Ordering::Greater => {
                     tracing::trace!("waiting for peer: {addr}");
-                    // The peer's send direction is our read direction and vice versa.
-                    let read_stream = self.streams.get(
-                        (session_id, other_id, STREAM_SEND),
-                        self.init_session_timeout,
-                    )?;
-                    let write_stream = self.streams.get(
-                        (session_id, other_id, STREAM_RECV),
-                        self.init_session_timeout,
-                    )?;
-                    tracing::trace!("got connections from peer");
-                    streams.insert(other_id, (write_stream, read_stream));
+                    let get = |direction| {
+                        self.streams
+                            .get((session_id, other_id, direction), self.init_session_timeout)
+                    };
+                    let pair = if T::DUPLEX {
+                        T::split(get(STREAM_DUPLEX)?)?
+                    } else {
+                        // The peer's send direction is our read direction and vice versa.
+                        let read_stream = get(STREAM_SEND)?;
+                        let write_stream = get(STREAM_RECV)?;
+                        (write_stream, read_stream)
+                    };
+                    tracing::trace!("got connection from peer");
+                    streams.insert(other_id, pair);
                 }
                 Ordering::Equal => continue,
             }
