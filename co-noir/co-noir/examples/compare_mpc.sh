@@ -2,10 +2,12 @@ export CARGO_TERM_QUIET=true
 export RAYON_NUM_THREADS=$(($(nproc --all)/3)) # Limit the number of threads to prevent parties stealing from each other
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
-NARGO_VERSION=1.0.0-beta.26 ##specify the desired nargo version here
+NARGO_VERSION=1.0.0-rc.0 ##specify the desired nargo version here
 BARRETENBERG_VERSION=5.0.0-nightly.20260522 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 
 exit_code=0
+case_failed=0
+failed_tests=()
 
 REMOVE_OUTPUT=1
 TEST_SLOWER_CIRCUITS=0 ## this is a flag to also run the slower test cases
@@ -77,6 +79,7 @@ run_proof_verification() {
     diff test_vectors/${name}/proof test_vectors/${name}/cosnark_proof
     if [[ $? -ne 0 ]]; then
       exit_code=1
+      case_failed=1
       echo "::error:: $name diff check of proofs failed (with: $algorithm)"
     fi
   fi
@@ -84,30 +87,35 @@ run_proof_verification() {
     diff test_vectors/${name}/public_inputs test_vectors/${name}/cosnark_public_input
     if [[ $? -ne 0 ]]; then
       exit_code=1
+      case_failed=1
       echo "::error:: $name diff check of public inputs failed (with: $algorithm)"
     fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/cosnark_proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/cosnark_vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
+    case_failed=1
     echo "::error:: $name verifying with bb, our proof and our key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/cosnark_proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
+    case_failed=1
     echo "::error:: $name verifying with bb, our proof and their key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/cosnark_vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
+    case_failed=1
     echo "::error:: $name verifying with bb, their proof and our key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
+    case_failed=1
     echo "::error:: $name verifying with bb, their proof and their key failed (with: $algorithm)"
   fi
   return $exit_code
@@ -123,6 +131,7 @@ for f in "${test_cases[@]}"; do
   echo "running ultrahonk example" $f
 
   failed=0
+  case_failed=0
 
   # compile witnesses and bytecode with specified nargo version
   echo "compiling circuits with nargo"
@@ -152,6 +161,7 @@ for f in "${test_cases[@]}"; do
   if [ "$failed" -ne 0 ]
   then
     exit_code=1
+    case_failed=1
     echo "::error::" $f "failed with poseidon"
   fi
 
@@ -169,6 +179,7 @@ for f in "${test_cases[@]}"; do
    if [ "$failed" -ne 0 ]
   then
     exit_code=1
+    case_failed=1
     echo "::error::" $f "failed with poseidon and ZK"
   fi
 
@@ -189,6 +200,7 @@ for f in "${test_cases[@]}"; do
     if [ "$failed" -ne 0 ]
   then
     exit_code=1
+    case_failed=1
     echo "::error::" $f "failed with keccak"
   fi
 
@@ -206,12 +218,29 @@ for f in "${test_cases[@]}"; do
     if [ "$failed" -ne 0 ]
   then
     exit_code=1
+    case_failed=1
     echo "::error::" $f "failed with keccak and zk"
   fi
   run_proof_verification "$f" "keccak_zk"
 
   bash cleanup.sh
+
+  if [ "$case_failed" -ne 0 ]
+  then
+    failed_tests+=("$f")
+  fi
   echo ""
 done
+
+echo "===================="
+if [ "$exit_code" -eq 0 ]
+then
+  echo "Summary: all ${#test_cases[@]} test cases succeeded"
+else
+  echo "Summary: ${#failed_tests[@]}/${#test_cases[@]} test cases failed:"
+  for f in "${failed_tests[@]}"; do
+    echo "  - $f"
+  done
+fi
 
 exit "$exit_code"
