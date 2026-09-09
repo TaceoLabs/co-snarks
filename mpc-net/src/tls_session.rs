@@ -1,9 +1,10 @@
 //! Ephemeral TLS MPC network
 //!
-//! See [`SessionHandler`] for the session model. Every connection is wrapped in TLS (via
-//! `tokio-rustls`). Peers authenticate each other with the certificates from
-//! [`TlsConfig`]; the connecting side verifies the accepting side's certificate against the
-//! hostname in [`NetworkConfig::node_addrs`].
+//! See [`SessionHandler`] for the session model. Every connection is wrapped in mutual TLS (via
+//! `tokio-rustls`). Peers authenticate each other with the certificates from [`TlsConfig`]:
+//! both sides present their certificate, and the peer's certificate must be the one of the
+//! party id it claims. The connecting side additionally verifies the accepting side's
+//! certificate against the hostname in [`NetworkConfig::node_addrs`].
 
 use std::sync::Arc;
 
@@ -27,6 +28,7 @@ pub type TlsStream = tokio_rustls::TlsStream<TcpStream>;
 /// TLS transport.
 #[derive(Debug)]
 pub struct TlsTransport {
+    tls: TlsConfig,
     client_config: Arc<ClientConfig>,
     server_config: Arc<ServerConfig>,
 }
@@ -38,6 +40,7 @@ impl Transport for TlsTransport {
         let tls = tls.ok_or_else(|| eyre::eyre!("TLS config is required for TlsNetworkHandler"))?;
         let (client_config, server_config) = tls.into_rustls_configs(party_id)?;
         Ok(Self {
+            tls,
             client_config,
             server_config,
         })
@@ -56,6 +59,10 @@ impl Transport for TlsTransport {
             .accept(stream)
             .await?;
         Ok(stream.into())
+    }
+
+    fn verify_peer(&self, stream: &TlsStream, party_id: usize) -> eyre::Result<()> {
+        self.tls.verify_peer(stream.get_ref().1, party_id)
     }
 }
 

@@ -32,6 +32,10 @@ impl Transport for TcpTransport {
     async fn accept(&self, stream: TcpStream) -> eyre::Result<TcpStream> {
         Ok(stream)
     }
+
+    fn verify_peer(&self, _stream: &TcpStream, _party_id: usize) -> eyre::Result<()> {
+        Ok(())
+    }
 }
 
 /// TCP session network handler.

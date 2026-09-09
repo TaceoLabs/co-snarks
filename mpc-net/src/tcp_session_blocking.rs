@@ -37,6 +37,10 @@ impl Transport for TcpTransport {
         stream
     }
 
+    fn verify_peer(&self, _stream: &TcpStream, _party_id: usize) -> eyre::Result<()> {
+        Ok(())
+    }
+
     const DUPLEX: bool = true;
 
     fn split(stream: TcpStream) -> eyre::Result<(TcpStream, TcpStream)> {

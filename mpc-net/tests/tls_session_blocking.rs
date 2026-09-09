@@ -4,15 +4,20 @@
 use std::time::Duration;
 
 use mpc_net::{
-    DEFAULT_MAX_FRAME_LENGTH, join, join3,
+    DEFAULT_MAX_FRAME_LENGTH,
+    config::NetworkConfig as BaseConfig,
+    join, join3,
     tls_session_blocking::{NetworkConfig, TlsNetwork, TlsNetworkHandler},
 };
 
 mod common;
 
 fn handlers(n: usize) -> Vec<TlsNetworkHandler> {
+    handlers_from(common::configs(n))
+}
+
+fn handlers_from(configs: Vec<BaseConfig>) -> Vec<TlsNetworkHandler> {
     common::install_crypto_provider();
-    let configs = common::configs(n);
     let node_addrs: Vec<_> = configs[0]
         .parties
         .iter()
@@ -55,6 +60,31 @@ fn three_party_session_round_trip() {
     r0.unwrap();
     r1.unwrap();
     r2.unwrap();
+}
+
+/// Party 1 uses party 2's key and certificate (a trusted root), so the TLS handshakes succeed,
+/// but the certificate does not match the claimed party id.
+#[test]
+fn party_with_wrong_certificate_is_rejected() {
+    let mut configs = common::configs(3);
+    let mut tls = configs[2].tls.clone().unwrap();
+    tls.certs[1] = tls.certs[2].clone();
+    configs[1].tls = Some(tls);
+    for c in &mut configs {
+        c.connect_timeout = Some(Duration::from_secs(3));
+    }
+    let handlers = handlers_from(configs);
+
+    let (n0, n1, n2) = join3(
+        || handlers[0].init_session(1),
+        || handlers[1].init_session(1),
+        || handlers[2].init_session(1),
+    );
+    assert!(n0.is_err());
+    assert!(n1.is_err());
+    // party 2 connects to the impostor and sees the wrong certificate directly
+    let err = n2.err().unwrap().to_string();
+    assert!(err.contains("does not match"), "{err}");
 }
 
 #[test]
