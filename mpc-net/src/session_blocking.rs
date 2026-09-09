@@ -20,7 +20,7 @@ use std::{
 
 use byteorder::{NetworkEndian, ReadBytesExt as _, WriteBytesExt as _};
 use bytes::Bytes;
-use crossbeam_channel::Sender;
+use crossbeam_channel::{SendError, Sender};
 use eyre::{Context as _, ContextCompat as _};
 
 use crate::{
@@ -128,8 +128,11 @@ impl<S: Send + 'static> SessionStreams<S> {
             }
             Some((MaybeStream::Waiter(tx), _)) => {
                 tracing::trace!("found waiter, sending stream");
-                if tx.send(stream).is_err() {
-                    tracing::warn!("failed to send stream to waiter, receiver dropped");
+                // waiter may be gone (e.g. `init_session` timed out) - park the stream instead,
+                // so that a retry can still pick it up (the peer will not reconnect)
+                if let Err(SendError(stream)) = tx.send(stream) {
+                    tracing::warn!("waiter for {key:?} gone, parking stream");
+                    streams.insert(key, (MaybeStream::Stream(stream), Instant::now()));
                 }
             }
             None => {
