@@ -32,7 +32,7 @@ fn handlers(n: usize) -> Vec<TcpNetworkHandler> {
                 bind_addr,
                 node_addrs: addrs.clone(),
                 tls: None,
-                init_session_timeout: None,
+                init_session_timeout: Some(Duration::from_secs(10)),
                 timeout: None,
                 flush_timeout: None,
                 time_to_idle: Duration::from_secs(60),

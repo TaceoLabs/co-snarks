@@ -49,6 +49,9 @@ pub trait Transport: Sized + Send + Sync + 'static {
     fn split(stream: Self::Stream) -> eyre::Result<(Self::Stream, Self::Stream)>;
 }
 
+/// Backoff after a failed `accept` (e.g. EMFILE), so that we don't spin.
+const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(100);
+
 /// Direction tag sent by the connecting party: this connection is its send direction.
 const STREAM_SEND: u8 = 0;
 /// Direction tag sent by the connecting party: this connection is its receive direction.
@@ -260,7 +263,10 @@ impl<T: Transport> SessionHandler<T> {
                                 }
                             });
                         }
-                        Err(err) => tracing::warn!("failed to accept incoming connection: {err:?}"),
+                        Err(err) => {
+                            tracing::warn!("failed to accept incoming connection: {err:?}");
+                            std::thread::sleep(ACCEPT_RETRY_DELAY);
+                        }
                     }
                 }
             }
@@ -291,6 +297,8 @@ impl<T: Transport> SessionHandler<T> {
         };
         stream.set_nodelay(true)?;
         stream.set_write_timeout(self.timeout)?;
+        // bound the handshake (driven by the first write) so that we don't block forever
+        stream.set_read_timeout(self.init_session_timeout)?;
 
         let mut stream = self.transport.connect(stream, addr)?;
         stream.write_u128::<NetworkEndian>(session_id)?;
@@ -299,6 +307,9 @@ impl<T: Transport> SessionHandler<T> {
             stream.write_u8(direction)?;
         }
         stream.flush()?;
+
+        // reset read timeout to None, so that we don't timeout in the recv thread
+        T::socket(&stream).set_read_timeout(None)?;
         Ok(stream)
     }
 

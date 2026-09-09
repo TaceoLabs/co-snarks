@@ -31,6 +31,20 @@ use crate::{
     session_config::SessionConfig,
 };
 
+/// Backoff after a failed `accept` (e.g. EMFILE), so that we don't spin.
+const ACCEPT_RETRY_DELAY: Duration = Duration::from_millis(100);
+
+/// Run `fut` with an optional timeout.
+async fn maybe_timeout<F: Future<Output = eyre::Result<T>>, T>(
+    timeout: Option<Duration>,
+    fut: F,
+) -> eyre::Result<T> {
+    match timeout {
+        Some(timeout) => tokio::time::timeout(timeout, fut).await?,
+        None => fut.await,
+    }
+}
+
 /// How a session transport wraps raw TCP connections (e.g. plain or TLS).
 pub trait Transport: Sized + Send + Sync + 'static {
     /// The established (possibly wrapped) connection.
@@ -165,6 +179,7 @@ pub struct SessionHandler<T: Transport> {
     max_frame_length: usize,
     timeout: Option<Duration>,
     flush_timeout: Option<Duration>,
+    init_session_timeout: Option<Duration>,
 }
 
 impl<T: Transport> Clone for SessionHandler<T> {
@@ -177,6 +192,7 @@ impl<T: Transport> Clone for SessionHandler<T> {
             max_frame_length: self.max_frame_length,
             timeout: self.timeout,
             flush_timeout: self.flush_timeout,
+            init_session_timeout: self.init_session_timeout,
         }
     }
 }
@@ -193,7 +209,7 @@ impl<T: Transport> SessionHandler<T> {
             bind_addr,
             node_addrs,
             tls,
-            init_session_timeout: _,
+            init_session_timeout,
             timeout,
             flush_timeout,
             time_to_idle,
@@ -215,11 +231,12 @@ impl<T: Transport> SessionHandler<T> {
                             let streams = streams.clone();
                             let transport = transport.clone();
                             tokio::spawn(async move {
-                                let res = async {
+                                // bound the handshake + header read, so that we don't hold stalled connections forever
+                                let res = maybe_timeout(init_session_timeout, async {
                                     stream.set_nodelay(true)?;
                                     let stream = transport.accept(stream).await?;
                                     streams.insert(stream).await
-                                }
+                                })
                                 .await;
                                 if let Err(err) = res {
                                     tracing::warn!(
@@ -228,7 +245,10 @@ impl<T: Transport> SessionHandler<T> {
                                 }
                             });
                         }
-                        Err(err) => tracing::warn!("failed to accept incoming connection: {err:?}"),
+                        Err(err) => {
+                            tracing::warn!("failed to accept incoming connection: {err:?}");
+                            tokio::time::sleep(ACCEPT_RETRY_DELAY).await;
+                        }
                     }
                 }
             }
@@ -243,6 +263,7 @@ impl<T: Transport> SessionHandler<T> {
             max_frame_length,
             timeout,
             flush_timeout,
+            init_session_timeout,
         })
     }
 
@@ -250,8 +271,18 @@ impl<T: Transport> SessionHandler<T> {
     ///
     /// All parties must call this method with the same `session_id` to establish the connections for that session.
     /// The `session_id` should be unique for each session, but can be reused across different sessions as long as they are not active at the same time.
+    ///
+    /// Bounded by `init_session_timeout` if set.
     pub async fn init_session(&self, session_id: u128) -> eyre::Result<SessionNetwork> {
         tracing::debug!("initializing session {session_id}");
+        maybe_timeout(
+            self.init_session_timeout,
+            self.init_session_inner(session_id),
+        )
+        .await
+    }
+
+    async fn init_session_inner(&self, session_id: u128) -> eyre::Result<SessionNetwork> {
         let mut streams = HashMap::new();
         for (other_id, addr) in self.node_addrs.iter().enumerate() {
             match other_id.cmp(&self.party_id) {

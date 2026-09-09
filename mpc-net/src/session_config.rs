@@ -31,6 +31,7 @@ pub struct SessionConfigFile {
     #[serde(default)]
     pub tls: Option<TlsConfigFile>,
     /// The `init_session` timeout for the network. If not set, the `init_session` will be unbounded.
+    /// Also bounds the handshake + header read of each incoming connection.
     #[serde(with = "humantime_serde", default)]
     pub init_session_timeout: Option<Duration>,
     /// The send/recv timeout
@@ -61,8 +62,7 @@ pub struct SessionConfig {
     /// The TLS configuration. Required for the TLS transports, ignored by the TCP transports.
     pub tls: Option<TlsConfig>,
     /// The `init_session` timeout for the network. If not set, the `init_session` will be unbounded.
-    ///
-    /// The async transports do not apply this themselves; wrap `init_session` in `tokio::time::timeout` downstream.
+    /// Also bounds the handshake + header read of each incoming connection.
     pub init_session_timeout: Option<Duration>,
     /// The send/recv timeout
     pub timeout: Option<Duration>,

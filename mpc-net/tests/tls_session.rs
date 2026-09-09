@@ -26,7 +26,7 @@ async fn handlers(n: usize) -> Vec<TlsNetworkHandler> {
                 bind_addr: c.bind_addr,
                 node_addrs,
                 tls: c.tls,
-                init_session_timeout: None,
+                init_session_timeout: c.connect_timeout,
                 timeout: c.timeout,
                 flush_timeout: None,
                 time_to_idle: Duration::from_secs(60),
