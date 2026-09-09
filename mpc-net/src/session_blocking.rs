@@ -42,6 +42,8 @@ pub trait Transport: Sized + Send + Sync + 'static {
     fn accept(&self, stream: TcpStream) -> eyre::Result<Self::Stream>;
     /// The underlying TCP socket of an established connection.
     fn socket(stream: &Self::Stream) -> &TcpStream;
+    /// Check that the peer of an established connection is `party_id` (e.g. via its certificate).
+    fn verify_peer(&self, stream: &Self::Stream, party_id: usize) -> eyre::Result<()>;
     /// Whether one connection serves both directions via [`split`](Self::split).
     /// If `false`, two connections are opened per peer and session, one per direction.
     const DUPLEX: bool;
@@ -184,6 +186,7 @@ fn accept_header<T: Transport>(
         stream.read_u8()?
     };
     tracing::trace!("got header: session {session_id}, party {party_id}, direction {direction}");
+    transport.verify_peer(&stream, party_id)?;
 
     // reset read timeout to None, so that we don't timeout in the recv thread
     T::socket(&stream).set_read_timeout(None)?;
@@ -288,7 +291,13 @@ impl<T: Transport> SessionHandler<T> {
         })
     }
 
-    fn connect(&self, addr: &Address, session_id: u128, direction: u8) -> eyre::Result<T::Stream> {
+    fn connect(
+        &self,
+        other_id: usize,
+        addr: &Address,
+        session_id: u128,
+        direction: u8,
+    ) -> eyre::Result<T::Stream> {
         let socket_addr = addr
             .to_socket_addrs()?
             .next()
@@ -310,6 +319,8 @@ impl<T: Transport> SessionHandler<T> {
             stream.write_u8(direction)?;
         }
         stream.flush()?;
+        // the handshake is complete after the first write
+        self.transport.verify_peer(&stream, other_id)?;
 
         // reset read timeout to None, so that we don't timeout in the recv thread
         T::socket(&stream).set_read_timeout(None)?;
@@ -328,10 +339,10 @@ impl<T: Transport> SessionHandler<T> {
                 Ordering::Less => {
                     tracing::trace!("connecting to peer: {addr}");
                     let pair = if T::DUPLEX {
-                        T::split(self.connect(addr, session_id, STREAM_DUPLEX)?)?
+                        T::split(self.connect(other_id, addr, session_id, STREAM_DUPLEX)?)?
                     } else {
-                        let write_stream = self.connect(addr, session_id, STREAM_SEND)?;
-                        let read_stream = self.connect(addr, session_id, STREAM_RECV)?;
+                        let write_stream = self.connect(other_id, addr, session_id, STREAM_SEND)?;
+                        let read_stream = self.connect(other_id, addr, session_id, STREAM_RECV)?;
                         (write_stream, read_stream)
                     };
                     tracing::trace!("connected");

@@ -1,4 +1,4 @@
-//! TLS MPC network
+//! TLS MPC network (mutual TLS, peers are bound to their party id via their certificate)
 
 use std::{
     array,
@@ -9,8 +9,9 @@ use std::{
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, blocking::BlockingChannels,
-    config::NetworkConfig,
+    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network,
+    blocking::BlockingChannels,
+    config::{NetworkConfig, TlsConfig},
 };
 use byteorder::{BigEndian, ReadBytesExt as _, WriteBytesExt as _};
 use bytes::Bytes;
@@ -20,6 +21,14 @@ use rustls::{ClientConnection, ServerConnection, StreamOwned, pki_types::ServerN
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 
 pub use crate::blocking::TlsStream;
+
+fn verify_peer(tls: &TlsConfig, stream: &TlsStream, party_id: usize) -> eyre::Result<()> {
+    let conn: &rustls::CommonState = match stream {
+        TlsStream::Client(s) => &s.conn,
+        TlsStream::Server(s) => &s.conn,
+    };
+    tls.verify_peer(conn, party_id)
+}
 
 /// A MPC network using [TlsStream]s
 #[derive(Debug)]
@@ -133,6 +142,8 @@ impl TlsNetwork {
                             stream.write_u64::<BigEndian>(i as u64)?;
                             stream.write_u64::<BigEndian>(id as u64)?;
                             stream.write_u8(s)?;
+                            // the handshake is complete after the first write
+                            verify_peer(&tls_config, &stream, other_id)?;
 
                             // As the connecting party, STREAM_0 is our send direction
                             // and STREAM_1 is our receive direction.
@@ -158,6 +169,7 @@ impl TlsNetwork {
                             let i = stream.read_u64::<BigEndian>()? as usize;
                             let other_id = stream.read_u64::<BigEndian>()? as usize;
                             let s_ = stream.read_u8()?;
+                            verify_peer(&tls_config, &stream, other_id)?;
 
                             // As the accepting party, the peer's STREAM_0 is our receive
                             // direction and its STREAM_1 is our send direction.

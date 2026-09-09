@@ -59,6 +59,16 @@ pub trait Transport: Sized + Send + Sync + 'static {
     ) -> impl Future<Output = eyre::Result<Self::Stream>> + Send;
     /// Wrap an accepted connection (server side).
     fn accept(&self, stream: TcpStream) -> impl Future<Output = eyre::Result<Self::Stream>> + Send;
+    /// Check that the peer of an established connection is `party_id` (e.g. via its certificate).
+    fn verify_peer(&self, stream: &Self::Stream, party_id: usize) -> eyre::Result<()>;
+}
+
+/// Read the `(session_id, party_id)` header from `stream`.
+async fn read_header<S: AsyncRead + Unpin>(stream: &mut S) -> eyre::Result<(u128, usize)> {
+    let session_id = stream.read_u128().await?;
+    let party_id = stream.read_u64().await? as usize;
+    tracing::trace!("got header: session {session_id}, party {party_id}");
+    Ok((session_id, party_id))
 }
 
 #[derive(Debug)]
@@ -112,12 +122,8 @@ impl<S: AsyncRead + Unpin + Send + 'static> SessionStreams<S> {
         }
     }
 
-    /// Read the `(session_id, party_id)` header from `stream` and park it (or hand it to a waiter).
-    async fn insert(&self, mut stream: S) -> eyre::Result<()> {
-        let session_id = stream.read_u128().await?;
-        let party_id = stream.read_u64().await? as usize;
-        tracing::trace!("got header: session {session_id}, party {party_id}");
-
+    /// Park `stream` under `(session_id, party_id)`, or hand it to a waiter already registered for it.
+    async fn insert(&self, session_id: u128, party_id: usize, stream: S) {
         let mut streams = self.streams.lock().await;
         match streams.remove(&(session_id, party_id)) {
             Some((MaybeStream::Stream(_), _)) => {
@@ -149,7 +155,6 @@ impl<S: AsyncRead + Unpin + Send + 'static> SessionStreams<S> {
                 );
             }
         }
-        Ok(())
     }
 
     /// Spawn a background task that periodically drops entries idle for longer than `time_to_idle`.
@@ -240,8 +245,11 @@ impl<T: Transport> SessionHandler<T> {
                                 // bound the handshake + header read, so that we don't hold stalled connections forever
                                 let res = maybe_timeout(init_session_timeout, async {
                                     stream.set_nodelay(true)?;
-                                    let stream = transport.accept(stream).await?;
-                                    streams.insert(stream).await
+                                    let mut stream = transport.accept(stream).await?;
+                                    let (session_id, party_id) = read_header(&mut stream).await?;
+                                    transport.verify_peer(&stream, party_id)?;
+                                    streams.insert(session_id, party_id, stream).await;
+                                    Ok(())
                                 })
                                 .await;
                                 if let Err(err) = res {
@@ -297,6 +305,7 @@ impl<T: Transport> SessionHandler<T> {
                     let stream = TcpStream::connect(addr.to_string()).await?;
                     stream.set_nodelay(true)?;
                     let mut stream = self.transport.connect(stream, addr).await?;
+                    self.transport.verify_peer(&stream, other_id)?;
                     stream.write_u128(session_id).await?;
                     stream.write_u64(self.party_id as u64).await?;
                     stream.flush().await?;
