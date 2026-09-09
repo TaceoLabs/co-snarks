@@ -1,10 +1,12 @@
 export CARGO_TERM_QUIET=true
 BARRETENBERG_BINARY=~/.bb/bb  ##specify the $BARRETENBERG_BINARY path here
 
-NARGO_VERSION=1.0.0-beta.26 ##specify the desired nargo version here
+NARGO_VERSION=1.0.0-rc.0 ##specify the desired nargo version here
 BARRETENBERG_VERSION=5.0.0-nightly.20260522 ##specify the desired barretenberg version here or use the corresponding one for this nargo version
 PLAINDRIVER="../../../target/release/plaindriver"
 exit_code=0
+case_failed=0
+failed_tests=()
 
 REMOVE_OUTPUT=1
 PIPE=""
@@ -75,6 +77,7 @@ run_proof_verification() {
     diff test_vectors/${name}/proof test_vectors/${name}/proof_plaindriver
     if [[ $? -ne 0 ]]; then
       exit_code=1
+      case_failed=1
       echo "::error::$name diff check of proofs failed (with: $algorithm)"
     fi
   fi
@@ -82,6 +85,7 @@ run_proof_verification() {
   diff test_vectors/${name}/public_inputs test_vectors/${name}/public_inputs_plaindriver
     if [[ $? -ne 0 ]]; then
       exit_code=1
+      case_failed=1
       echo "::error::$name diff check of public_inputs failed (with: $algorithm)"
     fi
 
@@ -89,24 +93,28 @@ run_proof_verification() {
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof_plaindriver -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk_plaindriver $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
+    case_failed=1
     echo "::error::$name verifying with bb, our proof and our key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof_plaindriver -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
+    case_failed=1
     echo "::error::$name verifying with bb, our proof and their key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk_plaindriver $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
+    case_failed=1
     echo "::error::$name verifying with bb, their proof and our key failed (with: $algorithm)"
   fi
 
   bash -c "$BARRETENBERG_BINARY $verify_command -p test_vectors/${name}/proof -i test_vectors/${name}/public_inputs -k test_vectors/${name}/vk $PIPE"
   if [[ $? -ne 0 ]]; then
     exit_code=1
+    case_failed=1
     echo "::error::$name verifying with bb, their proof and their key failed (with: $algorithm)"
   fi
   return $exit_code
@@ -117,6 +125,7 @@ for f in "${test_cases[@]}"; do
   echo "running ultrahonk example" $f
 
   failed=0
+  case_failed=0
 
   # compile witnesses and bytecode with specified nargo version
   echo "computing witnesses with nargo"
@@ -128,6 +137,7 @@ for f in "${test_cases[@]}"; do
   if [ "$failed" -ne 0 ]
   then
     exit_code=1
+    case_failed=1
     echo "::error::" $f "failed"
   fi
   run_proof_verification "$f" "poseidon"
@@ -139,6 +149,7 @@ for f in "${test_cases[@]}"; do
   if [ "$failed" -ne 0 ]
   then
     exit_code=1
+    case_failed=1
     echo "::error::" $f "failed with ZK"
   fi
   run_proof_verification "$f" "poseidon_zk"
@@ -150,6 +161,7 @@ for f in "${test_cases[@]}"; do
   if [ "$failed" -ne 0 ]
   then
     exit_code=1
+    case_failed=1
     echo "::error::" $f "failed"
   fi
   run_proof_verification "$f" "keccak"
@@ -159,11 +171,28 @@ for f in "${test_cases[@]}"; do
   if [ "$failed" -ne 0 ]
   then
     exit_code=1
+    case_failed=1
     echo "::error::" $f "failed with ZK"
   fi
   run_proof_verification "$f" "keccak_zk"
   bash cleanup.sh
+
+  if [ "$case_failed" -ne 0 ]
+  then
+    failed_tests+=("$f")
+  fi
   echo ""
 done
+
+echo "===================="
+if [ "$exit_code" -eq 0 ]
+then
+  echo "Summary: all ${#test_cases[@]} test cases succeeded"
+else
+  echo "Summary: ${#failed_tests[@]}/${#test_cases[@]} test cases failed:"
+  for f in "${failed_tests[@]}"; do
+    echo "  - $f"
+  done
+fi
 
 exit "$exit_code"

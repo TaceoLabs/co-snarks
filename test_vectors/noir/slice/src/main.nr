@@ -3,5 +3,5 @@ fn flatten_slice(slice: [Field]) -> Field {
 }
 
 fn main(vk: [Field; 2]) {
-    assert(vk[0] + flatten_slice(vk.as_slice()) == 4);
+    assert(vk[0] + flatten_slice(vk.as_vector()) == 4);
 }

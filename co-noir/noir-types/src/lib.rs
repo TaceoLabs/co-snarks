@@ -387,6 +387,7 @@ fn create_partial_abi(inputs: Vec<&String>, abi: &Abi) -> eyre::Result<Abi> {
         parameters: Vec::new(),
         return_type: abi.return_type.clone(),
         error_types: BTreeMap::new(),
+        abi_version: abi.abi_version,
     };
 
     // Make a new Abi with only the parameters that are present in the input file.
