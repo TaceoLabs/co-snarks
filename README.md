@@ -1,133 +1,275 @@
-# coSNARKs
+**Step‑by‑Step Guide to Run the **co‑snarks** tools**
 
-[![X (formerly Twitter) Follow](https://img.shields.io/badge/X-%23000000.svg?style=for-the-badge&logo=X&logoColor=white)](https://twitter.com/TACEO_IO)
-[![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/collaborativeSNARK)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/gWZW2TANpk)
+---
 
-[![docs.io](https://img.shields.io/badge/coCircom-docs-green)](https://docs.taceo.io/)
+## 1. Prerequisites – Install Required Software
 
-<!--[![crates.io](https://img.shields.io/badge/crates.io-v0.1.0-blue)](https://crates.io/)-->
+| Tool / Library | Installation Command (Linux/macOS) | Notes |
+|----------------|-----------------------------------|-------|
+| **Rust toolchain** (stable) | ```bash\ncurl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh\nsource $HOME/.cargo/env\n``` | Adds `cargo` and `rustc` to your PATH. |
+| **Git** | ```bash\nsudo apt-get install -y git   # Debian/Ubuntu\n# or\nbrew install git   # macOS\n``` | Needed to clone the repo. |
+| **Node.js & npm** (v20+) | ```bash\ncurl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -\nsudo apt-get install -y nodejs   # Debian/Ubuntu\n# or\nbrew install node   # macOS\n``` | Required for `circom` and `snarkjs`. |
+| **circom** (circuit compiler) | ```bash\nnpm install -g circom\n``` | |
+| **snarkjs** (proof verifier) | ```bash\nnpm install -g snarkjs\n``` | |
+| **Python 3.9+** (optional helpers) | ```bash\nsudo apt-get install -y python3 python3-pip   # Debian/Ubuntu\n``` | |
+| **OpenSSL development headers** | ```bash\nsudo apt-get install -y libssl-dev   # Debian/Ubuntu\n``` | Needed for some Rust crates. |
+| **Build‑essential tools** (gcc, make, etc.) | ```bash\nsudo apt-get install -y build-essential   # Debian/Ubuntu\n``` | macOS users need Xcode Command Line Tools (`xcode-select --install`). |
 
-**coCircom** and **coNoir** are tools for building **coSNARKs**, a new technology that enables
-multiple distrusting parties to collaboratively compute a **zero-knowledge
-proof** (ZKP). They leverage the existing domain-specific languages
-[circom](https://github.com/iden3/circom) and [Noir](https://github.com/noir-lang/noir) to define arithmetic circuits. With
-coCircom, all existing circom circuits can be promoted to coSNARKs without any
-modification to the original circuit.
-
-Additionally, **coCircom** is fully compatible with the **Groth16** and **Plonk** backends of
-[snarkjs](https://github.com/iden3/snarkjs), the native proving systems for
-circom. Proofs generated with **coCircom** can be verified using snarkjs, and vice
-versa.
-The same applies to **coNoir**, generated proofs can be verified with Barretenberg, and vice versa.
-
-The project is built with pure Rust and consists of multiple libraries:
-
-- **coCircom**:
-  - **co-circom**: The main library that exposes the functionality of **coCircom**.
-  - **circom-mpc-vm**: A MPC-VM that executes the circom file in a distributed
-    manner (building the extended witness).
-  - **circom-mpc-compiler**: A compiler that generates the MPC-VM code from the
-    circom file.
-  - **circom-types**: A library for serialization and deserialization of snarkjs
-    artifacts, such as ZKeys and R1CS files.
-  - **co-groth16**: A library for verifying and proving a Groth16
-    coSNARK, verifiable by snarkjs.
-  - **co-plonk**: A library for verifying and proving a Plonk
-    coSNARK, verifiable by snarkjs.
-  - **co-circom-types**: A library for the shared types and code of co-plonk and co-groth16.
-
-- **coNoir**:
-  - **co-noir**: The main library that exposes the functionality of **coNoir**.
-  - **co-acvm**: A MPC version of Noir's ACVM that executes ACIR.
-  - **co-brillig**: A MPC version of Noir's Brillig VM that executes unconstrained functions.
-  - **co-builder**: A library that transforms the generated shared witness into a shared proving key.
-  - **co-ultrahonk**: A MPC version of Aztec's UltraHonk prover, compatible with Barretenberg.
-  - **ultrahonk**: A a Rust rewrite of Aztec's UltraHonk prover, compatible with Barretenberg.
-
-The following libraries are agnostic to **coCircom**/**coNoir** and will be used in the future
-for other coSNARKs:
-
-- **mpc-core**: Implementation of MPC protocols.
-- **mpc-net**: Network library for MPC protocols.
-
-The `co-circom` and `co-noir` binaries are CLI tools that use these libraries to build a **coSNARK**.
-Both libraries also expose all functionality used by the binaries, so that you can integrate them into you projects.
-Checkout the [coCircom examples](./co-circom/co-circom/examples) and [coNoir examples](./co-noir/co-noir/examples) to see more.
-
-## Installation
-
-### Prerequisites
-
-1. Install Rust. You can find the instructions
-   [here](https://www.rust-lang.org/tools/install).
-2. Install the circom ecosystem. You can find the instructions
-   [here](https://docs.circom.io/getting-started/installation/).
-
-### Install from Source
-
-- **coCircom**
+Verify installations:
 
 ```bash
-cargo install --git https://github.com/TaceoLabs/co-snarks --branch main co-circom
+rustc --version   # e.g., rustc 1.78.0
+cargo --version
+node -v
+npm -v
+circom --version
+snarkjs --version
 ```
 
-- **coNoir**
+---
+
+## 2. Clone the Repository
 
 ```bash
-cargo install --git https://github.com/TaceoLabs/co-snarks --branch main co-noir
+git clone https://github.com/0xgetz/co-snarks.git
+cd co-snarks
 ```
 
-### Download Binary from Release
+The repo layout (relevant parts):
 
-1. You can find the latest release
-   [here](https://github.com/TaceoLabs/co-snarks/releases/latest).
-2. Download the binary for your operating system.
+```
+co-snarks/
+├─ coCircom/
+│   ├─ co-circom/          # Rust binary for Circom‑based MPC
+│   └─ circom-mpc-vm/      # VM implementation
+├─ coNoir/
+│   └─ co-noir/            # Rust binary for Noir‑based MPC
+├─ mpc-core/
+└─ mpc-net/
+```
 
-3. Extract the binary from the archive
+---
+
+## 3. Build the Binaries
+
+### 3.1. Build **co‑circom**
 
 ```bash
-tar xf co-circom-YOUR_ARCHITECTURE.tar.gz
+cd coCircom/co-circom
+cargo build --release
 ```
 
-4. Make the binary executable (if necessary):
+The compiled binary will be at `target/release/co-circom`. Add it to your PATH for convenience:
 
 ```bash
-chmod +x co-circom
+export PATH=$PWD/target/release:$PATH   # add to ~/.bashrc or ~/.zshrc for persistence
 ```
 
-## Documentation
+### 3.2. Build **co‑noir**
 
-You can find the documentation of coCircom [here](https://docs.taceo.io/).
+```bash
+cd ../../coNoir/co-noir
+cargo build --release
+```
 
-## Contributing
+Again, add the binary to your PATH:
 
-If you would like to contribute to the project, please refer to the [contribution page](CONTRIBUTING.md).
+```bash
+export PATH=$PWD/target/release:$PATH
+```
 
-## License
+> **Tip:** If you plan to call these binaries from other languages (Python, Go, etc.), you can also build a shared library (`cd … && cargo build --release --features python`) – see the repo’s `README` for optional features.
 
-This project is licensed under either the [MIT License](LICENSE-MIT) or the
-[Apache](LICENSE-APACHE), at your choice.
+---
 
-`SPDX-License-Identifier: Apache-2.0 OR MIT`
+## 4. Prepare a Sample Circuit (Circom)
 
-Select sub-libraries within this project have different licenses, reflecting
-their dependencies on
-[circom](https://github.com/iden3/circom?tab=GPL-3.0-1-ov-file).
+Create a simple multiplication circuit `example.circom`:
 
-- **co-circom**: Licensed under [GPL-3.0](LICENSE-GPL) `SPDX-License-Identifier: GPL-3.0-only`.
-- **circom-mpc-compiler**: Licensed under [GPL-3.0](LICENSE-GPL) `SPDX-License-Identifier: GPL-3.0-only`.
+```circom
+pragma circom 2.0.0;
 
-## Disclaimer
+template Multiplier() {
+    signal input a;
+    signal input b;
+    signal output c;
 
-This software is **experimental** and **un-audited**, provided on an "as is" and
-"as available" basis. We do **not provide any warranties**, express or implied,
-including but not limited to warranties of merchantability or fitness for a
-particular purpose. We will **not be liable for any losses, damages, or issues**
-arising from the use of this software, whether direct or indirect.
+    c <== a * b;
+}
 
-Users are encouraged to exercise caution and conduct their own independent
-assessments and testing. **By using this software, you acknowledge and accept
-the risks associated with its experimental** nature and **agree that the
-developers and contributors are not responsible for any consequences** resulting
-from its use.
+component main = Multiplier();
+```
+
+Compile it with `circom`:
+
+```bash
+circom example.circom --r1cs --wasm --sym
+```
+
+You will obtain:
+
+- `example.r1cs` – the arithmetic circuit
+- `example.wasm` – witness generator
+- `example.sym` – symbol file (optional)
+
+---
+
+## 5. Convert the Circuit to a **co‑SNARK** (Distributed Setup)
+
+Run the `co-circom` setup command on the generated R1CS file:
+
+```bash
+co-circom setup example.r1cs
+```
+
+What happens:
+
+1. The tool splits the witness generation into **shares** for each participant.
+2. It creates **key shares** (proving and verification keys) that can be distributed.
+3. Output files (e.g., `example.co.r1cs`, `vk_*.json`, `pk_*.json`) are placed in the same folder.
+
+---
+
+## 6. Run a Multi‑Party Computation (MPC) Session
+
+`co-circom` provides two binary modes:
+
+- **coordinator** – optional central node that only forwards messages.
+- **participant** – each party that holds a private input share.
+
+You can run a simple 2‑party demo locally.
+
+### 6.1. Start the Coordinator (optional)
+
+```bash
+co-circom coordinator --port 9000 &
+COORD_PID=$!
+```
+
+The coordinator just relays encrypted messages between participants.
+
+### 6.2. Launch Participant 1
+
+```bash
+co-circom participant \
+    --host localhost \
+    --port 9000 \
+    --id 1 \
+    --input a=5,b=7 &
+```
+
+### 6.3. Launch Participant 2
+
+```bash
+co-circom participant \
+    --host localhost \
+    --port 9000 \
+    --id 2 \
+    --input a=5,b=7 &
+```
+
+Both participants will:
+
+1. **Generate their share of the witness** using the `example.wasm` file.
+2. **Run the MPC‑VM** to compute the multiplication securely.
+3. **Produce a SNARK proof** (e.g., Groth16 or PLONK, depending on the setup).
+4. **Write proof files** (`proof.json`, `public.json`) to the working directory.
+
+### 6.4. Verify the Proof
+
+You can verify with either `snarkjs` or the built‑in verifier:
+
+```bash
+snarkjs verify verification_key.json proof.json public.json
+# or
+co-circom verify \
+    --vk verification_key.json \
+    --proof proof.json \
+    --public public.json
+```
+
+A successful verification prints `true`.
+
+---
+
+## 7. End‑to‑End Bash Script (2‑Party Demo)
+
+Save the following as `run_cosnark_demo.sh` and make it executable (`chmod +x run_cosnark_demo.sh`).
+
+```bash
+#!/usr/bin/env bash
+set -e
+
+# 1. Compile the circuit
+circom example.circom --r1cs --wasm --sym
+
+# 2. Distributed setup
+co-circom setup example.r1cs
+
+# 3. Start coordinator (background)
+co-circom coordinator --port 9000 &
+COORD_PID=$!
+
+# 4. Participant 1 (background)
+co-circom participant --host localhost --port 9000 --id 1 --input a=3,b=4 &
+P1_PID=$!
+
+# 5. Participant 2 (background)
+co-circom participant --host localhost --port 9000 --id 2 --input a=3,b=4 &
+P2_PID=$!
+
+# 6. Wait for both participants to finish
+wait $P1_PID $P2_PID
+
+# 7. Verify the generated proof
+snarkjs verify verification_key.json proof.json public.json
+
+# 8. Clean up coordinator process
+kill $COORD_PID
+```
+
+Run it:
+
+```bash
+./run_cosnark_demo.sh
+```
+
+If everything works, you’ll see `true` at the verification step.
+
+---
+
+## 8. Using **co‑noir** (Noir Circuits)
+
+### 8.1. Write a Noir circuit (`example.nr`)
+
+```noir
+fn main(a: Field, b: Field) -> Field {
+    a * b
+}
+```
+
+### 8.2. Compile with Noir CLI
+
+```bash
+cargo install noir   # if you haven’t installed it yet
+noir compile example.nr
+```
+
+This produces `example.circuit` (or similar) and a proving key.
+
+### 8.3. Distributed setup with `co-noir`
+
+```bash
+co-noir setup example.circuit
+```
+
+The rest of the flow (coordinator → participants → verify) mirrors the `co-circom` steps, just swapping the binary name.
+
+---
+
+## 9. Common Pitfalls & Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|---------------|-----|
+| `cargo: command not found` | `$HOME/.cargo/bin` not in `$PATH` | Add `export PATH=$HOME/.cargo/bin:$PATH` to your shell rc file. |
+| Build fails with `openssl` errors |
