@@ -32,11 +32,11 @@ publish = false
 readme = "./README.md"
 
 [workspace.dependencies]
-acir = { version = "1.0.0-rc.0", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.0", package = "acir" }
-acvm = { version = "1.0.0-rc.0", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.0", package = "acvm" }
-brillig = { version = "1.0.0-rc.0", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.0", package = "brillig" }
-noirc-abi = { version = "1.0.0-rc.0", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.0", package = "noirc_abi" }
-noirc-artifacts = { version = "1.0.0-rc.0", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.0", package = "noirc_artifacts" }
+acir = { version = "1.0.0-rc.2", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.2", package = "acir" }
+acvm = { version = "1.0.0-rc.2", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.2", package = "acvm" }
+brillig = { version = "1.0.0-rc.2", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.2", package = "brillig" }
+noirc-abi = { version = "1.0.0-rc.2", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.2", package = "noirc_abi" }
+noirc-artifacts = { version = "1.0.0-rc.2", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.2", package = "noirc_artifacts" }
 
 ark-bls12-377 = "0.6"
 ark-bls12-381 = "0.6"
