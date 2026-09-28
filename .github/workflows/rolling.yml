@@ -20,11 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     name: Nightly tests
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
       - name: Install nightly
-        uses: dtolnay/rust-toolchain@nightly
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: nightly
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
@@ -41,12 +43,14 @@ jobs:
     # Unfortunately, hashFiles only works in if on steps, so we reepeat it.
     # if: hashFiles('Cargo.lock') != ''
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
       - name: Install beta
         if: hashFiles('Cargo.lock') != ''
-        uses: dtolnay/rust-toolchain@beta
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
+        with:
+          toolchain: beta
       - name: cargo update
         if: hashFiles('Cargo.lock') != ''
         run: cargo update
@@ -60,8 +64,8 @@ jobs:
     name: Nightly lints
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@master
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master
         with:
           toolchain: nightly
           components: rustfmt, clippy
