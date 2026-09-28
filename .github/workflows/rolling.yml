@@ -24,7 +24,9 @@ jobs:
         with:
           submodules: true
       - name: Install nightly
-        uses: dtolnay/rust-toolchain@be39649afda95dbf70f87cce95f68b8d5797b296 # nightly
+        uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # nightly (master commit the nightly branch is built on)
+        with:
+          toolchain: nightly
       - name: cargo generate-lockfile
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
@@ -46,7 +48,9 @@ jobs:
           submodules: true
       - name: Install beta
         if: hashFiles('Cargo.lock') != ''
-        uses: dtolnay/rust-toolchain@75ef5f7374a49e8cd1c1287d38248c877096d1f0 # beta
+        uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # beta (master commit the beta branch is built on)
+        with:
+          toolchain: beta
       - name: cargo update
         if: hashFiles('Cargo.lock') != ''
         run: cargo update
