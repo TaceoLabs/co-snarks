@@ -43,10 +43,12 @@ pub enum MpcOpCode {
     ///
     /// If all inputs are provided, the component will run, resulting in a context switch of the VM.
     InputSubComp(bool, usize, usize),
-    /// Creates a component identified by its name (`String`).
+    /// Creates components of the template identified by its name (`String`).
     ///
-    /// The second element specifies the amount of components to create.
-    CreateCmp(String, usize),
+    /// The second element lists the positions of the components to create, relative to the
+    /// sub component index on the index stack. Components of an array that are never assigned
+    /// are not created, so the positions need not be contiguous.
+    CreateCmp(String, Vec<usize>),
     /// Call to an unconstrained function identified by its name (`String`).
     ///
     /// The second element specifies the amount of return values of the function.
@@ -154,8 +156,8 @@ impl std::fmt::Display for MpcOpCode {
             MpcOpCode::Call(symbol, return_vals) => {
                 format!("CALL_OP {symbol} {return_vals}")
             }
-            MpcOpCode::CreateCmp(header, amount) => {
-                format!("CREATE_CMP_OP {header} [{amount}]")
+            MpcOpCode::CreateCmp(header, positions) => {
+                format!("CREATE_CMP_OP {header} {positions:?}")
             }
             MpcOpCode::Assert(line) => format!("ASSERT_OP {line}"),
             MpcOpCode::If(jump) => format!("IF_OP {jump}"),
