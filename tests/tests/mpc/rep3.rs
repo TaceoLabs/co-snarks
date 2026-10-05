@@ -2110,8 +2110,7 @@ mod field_share {
             blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
         }
 
-        let blocks = blocks.into();
-        sha2::compress256(state.as_mut_slice().try_into().unwrap(), &[blocks]);
+        sha2::block_api::compress256(state.as_mut_slice().try_into().unwrap(), &[blocks]);
         let should_result: Vec<_> = state
             .iter()
             .map(|x| ark_bn254::Fr::from(*x as u128))

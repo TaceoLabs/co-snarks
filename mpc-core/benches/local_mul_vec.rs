@@ -33,7 +33,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.bench_function("current impl (with_min_len 1024)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(local_mul_vec_current(&vec_a, &vec_b, &mut rep3_rand));
+                    std::hint::black_box(local_mul_vec_current(&vec_a, &vec_b, &mut rep3_rand));
                 })
             })
         });
@@ -42,7 +42,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.bench_function("no rayon, just iter", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(local_mul_vec_no_rayon(&vec_a, &vec_b, &mut rep3_rand));
+                    std::hint::black_box(local_mul_vec_no_rayon(&vec_a, &vec_b, &mut rep3_rand));
                 });
             })
         });
@@ -51,7 +51,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.bench_function("no rayon, just iter/squeeze at beginning", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(local_mul_vec_no_rayon_squeeze_at_beginning(
+                    std::hint::black_box(local_mul_vec_no_rayon_squeeze_at_beginning(
                         &vec_a,
                         &vec_b,
                         &mut rep3_rand,
@@ -64,7 +64,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.bench_function("ordinary rayon no min_len", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(local_mul_vec_no_min_len(&vec_a, &vec_b, &mut rep3_rand));
+                    std::hint::black_box(local_mul_vec_no_min_len(&vec_a, &vec_b, &mut rep3_rand));
                 });
             })
         });
@@ -73,7 +73,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.bench_function("local_mul_vec with min len(8)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(local_mul_vec_rayon_min_lem(
+                    std::hint::black_box(local_mul_vec_rayon_min_lem(
                         &vec_a,
                         &vec_b,
                         &mut rep3_rand,
@@ -87,7 +87,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.bench_function("local_mul_vec with min len(256)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(local_mul_vec_rayon_min_lem(
+                    std::hint::black_box(local_mul_vec_rayon_min_lem(
                         &vec_a,
                         &vec_b,
                         &mut rep3_rand,
@@ -101,7 +101,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.bench_function("local_mul_vec with min len(4096)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(local_mul_vec_rayon_min_lem(
+                    std::hint::black_box(local_mul_vec_rayon_min_lem(
                         &vec_a,
                         &vec_b,
                         &mut rep3_rand,
@@ -115,7 +115,7 @@ fn run_bench(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
         group.bench_function("local_mul_vec with min len(vec.len()/threads)", |b| {
             b.iter(|| {
                 thread_pool.install(|| {
-                    black_box(local_mul_vec_rayon_min_lem(
+                    std::hint::black_box(local_mul_vec_rayon_min_lem(
                         &vec_a,
                         &vec_b,
                         &mut rep3_rand,

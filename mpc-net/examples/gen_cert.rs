@@ -21,8 +21,10 @@ struct CliArgs {
 fn main() -> Result<()> {
     let args = CliArgs::parse();
 
-    let CertifiedKey { cert, key_pair } =
-        rcgen::generate_simple_self_signed(args.sans).context("generating self-signed cert")?;
+    let CertifiedKey {
+        cert,
+        signing_key: key_pair,
+    } = rcgen::generate_simple_self_signed(args.sans).context("generating self-signed cert")?;
     let key = key_pair.serialize_der();
     std::fs::write(args.key_path, key).context("writing key file")?;
     let cert = cert.der();

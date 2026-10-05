@@ -1,11 +1,11 @@
 use nom::{
-    Finish, IResult,
+    Finish, IResult, Parser,
     branch::alt,
     bytes::complete::tag,
     character::complete::{line_ending, multispace0, one_of, space1, u32 as char_u32},
     combinator::{all_consuming, opt},
     multi::{count, length_count},
-    sequence::{preceded, separated_pair, terminated, tuple},
+    sequence::{preceded, separated_pair, terminated},
 };
 
 use crate::protocols::rep3::yao::bristol_fashion::CircuitBuilderError;
@@ -14,7 +14,7 @@ use super::{BristolFashionGate, builder::UnverifiedBristolFashionCircuit};
 
 fn wire_and_gate_count(input: &str) -> IResult<&str, (u32, u32)> {
     // 123 123/n
-    terminated(separated_pair(char_u32, space1, char_u32), line_ending)(input)
+    terminated(separated_pair(char_u32, space1, char_u32), line_ending).parse(input)
 }
 
 fn io_and_their_sizes(input: &str) -> IResult<&str, Vec<u32>> {
@@ -25,15 +25,16 @@ fn io_and_their_sizes(input: &str) -> IResult<&str, Vec<u32>> {
             opt(space1),
         ),
         line_ending,
-    )(input)
+    )
+    .parse(input)
 }
 fn bool1(input: &str) -> IResult<&str, bool> {
-    let (stream, c) = one_of("01")(input)?;
+    let (stream, c) = one_of("01").parse(input)?;
     Ok((stream, c == '1'))
 }
 
 fn eq_gate(input: &str) -> IResult<&str, BristolFashionGate> {
-    let (stream, (_, _, _, _, val, _, wire, _, _)) = tuple((
+    let (stream, (_, _, _, _, val, _, wire, _, _)) = (
         tag("1"),
         space1,
         tag("1"),
@@ -43,7 +44,8 @@ fn eq_gate(input: &str) -> IResult<&str, BristolFashionGate> {
         char_u32,
         space1,
         tag("EQ"),
-    ))(input)?;
+    )
+        .parse(input)?;
 
     Ok((
         stream,
@@ -54,7 +56,7 @@ fn eq_gate(input: &str) -> IResult<&str, BristolFashionGate> {
     ))
 }
 fn eqw_gate(input: &str) -> IResult<&str, BristolFashionGate> {
-    let (stream, (_, _, _, _, wire1, _, wire2, _, _)) = tuple((
+    let (stream, (_, _, _, _, wire1, _, wire2, _, _)) = (
         tag("1"),
         space1,
         tag("1"),
@@ -64,7 +66,8 @@ fn eqw_gate(input: &str) -> IResult<&str, BristolFashionGate> {
         char_u32,
         space1,
         tag("EQW"),
-    ))(input)?;
+    )
+        .parse(input)?;
 
     Ok((
         stream,
@@ -75,7 +78,7 @@ fn eqw_gate(input: &str) -> IResult<&str, BristolFashionGate> {
     ))
 }
 fn inv_gate(input: &str) -> IResult<&str, BristolFashionGate> {
-    let (stream, (_, _, _, _, wire1, _, wire2, _, _)) = tuple((
+    let (stream, (_, _, _, _, wire1, _, wire2, _, _)) = (
         tag("1"),
         space1,
         tag("1"),
@@ -85,7 +88,8 @@ fn inv_gate(input: &str) -> IResult<&str, BristolFashionGate> {
         char_u32,
         space1,
         tag("INV"),
-    ))(input)?;
+    )
+        .parse(input)?;
 
     Ok((
         stream,
@@ -96,7 +100,7 @@ fn inv_gate(input: &str) -> IResult<&str, BristolFashionGate> {
     ))
 }
 fn and_gate(input: &str) -> IResult<&str, BristolFashionGate> {
-    let (stream, (_, _, _, _, wire1, _, wire2, _, wire3, _, _)) = tuple((
+    let (stream, (_, _, _, _, wire1, _, wire2, _, wire3, _, _)) = (
         tag("2"),
         space1,
         tag("1"),
@@ -108,7 +112,8 @@ fn and_gate(input: &str) -> IResult<&str, BristolFashionGate> {
         char_u32,
         space1,
         tag("AND"),
-    ))(input)?;
+    )
+        .parse(input)?;
 
     Ok((
         stream,
@@ -120,7 +125,7 @@ fn and_gate(input: &str) -> IResult<&str, BristolFashionGate> {
     ))
 }
 fn xor_gate(input: &str) -> IResult<&str, BristolFashionGate> {
-    let (stream, (_, _, _, _, wire1, _, wire2, _, wire3, _, _)) = tuple((
+    let (stream, (_, _, _, _, wire1, _, wire2, _, wire3, _, _)) = (
         tag("2"),
         space1,
         tag("1"),
@@ -132,7 +137,8 @@ fn xor_gate(input: &str) -> IResult<&str, BristolFashionGate> {
         char_u32,
         space1,
         tag("XOR"),
-    ))(input)?;
+    )
+        .parse(input)?;
 
     Ok((
         stream,
@@ -148,20 +154,22 @@ fn gate(input: &str) -> IResult<&str, BristolFashionGate> {
     terminated(
         alt((xor_gate, and_gate, inv_gate, eq_gate, eqw_gate)),
         line_ending,
-    )(input)
+    )
+    .parse(input)
 }
 
 fn gates(input: &str, num_gates: usize) -> IResult<&str, Vec<BristolFashionGate>> {
-    all_consuming(terminated(count(gate, num_gates), multispace0))(input)
+    all_consuming(terminated(count(gate, num_gates), multispace0)).parse(input)
 }
 
 type BristolCircuitHeader = ((u32, u32), Vec<u32>, Vec<u32>);
 
 fn header(input: &str) -> IResult<&str, BristolCircuitHeader> {
     terminated(
-        tuple((wire_and_gate_count, io_and_their_sizes, io_and_their_sizes)),
+        (wire_and_gate_count, io_and_their_sizes, io_and_their_sizes),
         line_ending,
-    )(input)
+    )
+    .parse(input)
 }
 
 pub fn parse(input: &str) -> Result<UnverifiedBristolFashionCircuit, CircuitBuilderError> {
