@@ -4,8 +4,8 @@ version = 4
 
 [[package]]
 name = "acir"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "acir_field",
  "base64",
@@ -25,8 +25,8 @@ dependencies = [
 
 [[package]]
 name = "acir_field"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "ark-bn254",
  "ark-ff 0.6.0",
@@ -40,8 +40,8 @@ dependencies = [
 
 [[package]]
 name = "acvm"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "acir",
  "acvm_blackbox_solver",
@@ -56,8 +56,8 @@ dependencies = [
 
 [[package]]
 name = "acvm_blackbox_solver"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "acir",
  "aes 0.9.3",
@@ -944,8 +944,8 @@ dependencies = [
 
 [[package]]
 name = "brillig"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "acir_field",
  "itertools 0.15.0",
@@ -955,8 +955,8 @@ dependencies = [
 
 [[package]]
 name = "brillig_vm"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "acir",
  "acvm_blackbox_solver",
@@ -2366,8 +2366,8 @@ dependencies = [
 
 [[package]]
 name = "fm"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "codespan-reporting 0.13.1",
  "iter-extended",
@@ -2785,8 +2785,8 @@ checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "iter-extended"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 
 [[package]]
 name = "itertools"
@@ -3257,8 +3257,8 @@ dependencies = [
 
 [[package]]
 name = "msgpack_tagged"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "msgpack_tagged_derive",
  "rmp",
@@ -3269,8 +3269,8 @@ dependencies = [
 
 [[package]]
 name = "msgpack_tagged_derive"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3315,8 +3315,8 @@ dependencies = [
 
 [[package]]
 name = "noirc_abi"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "acvm",
  "iter-extended",
@@ -3332,8 +3332,8 @@ dependencies = [
 
 [[package]]
 name = "noirc_artifacts"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "acir",
  "acvm",
@@ -3352,8 +3352,8 @@ dependencies = [
 
 [[package]]
 name = "noirc_errors"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "codespan-reporting 0.13.1",
  "fm",
@@ -3365,8 +3365,8 @@ dependencies = [
 
 [[package]]
 name = "noirc_printable_type"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "acvm",
  "iter-extended",
@@ -3377,8 +3377,8 @@ dependencies = [
 
 [[package]]
 name = "noirc_span"
-version = "1.0.0-rc.2"
-source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.2#0ecc97a242ed37c0d1567e25747ed8d4c59cae49"
+version = "1.0.0-rc.3"
+source = "git+https://github.com/noir-lang/noir/?tag=v1.0.0-rc.3#5a7ee9bf5ed8973076df7bb0d2b723024db09ae7"
 dependencies = [
  "codespan 0.13.1",
  "serde",
@@ -3867,9 +3867,9 @@ dependencies = [
 
 [[package]]
 name = "powerfmt"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
+checksum = "4a6394b9e965e73d0a289ee54f589087e2c676aedf60885baf52c76b771e4958"
 
 [[package]]
 name = "ppv-lite86"
