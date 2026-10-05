@@ -6,6 +6,7 @@ use std::{
 };
 
 use clap::Parser;
+use digest_io::IoWrapper;
 use eyre::{Context, bail};
 use sha2::{Digest, Sha256};
 
@@ -106,7 +107,7 @@ fn map_file_to_output(
 }
 
 fn hash_file(file_name: impl AsRef<Path>) -> eyre::Result<Hash> {
-    let mut hasher = Sha256::new();
+    let mut hasher = IoWrapper(Sha256::new());
     let mut file = BufReader::new(File::open(file_name.as_ref()).with_context(|| {
         format!(
             "while trying to open file {} for hashing",
@@ -116,5 +117,5 @@ fn hash_file(file_name: impl AsRef<Path>) -> eyre::Result<Hash> {
 
     std::io::copy(&mut file, &mut hasher)
         .with_context(|| format!("while hashing file {}", file_name.as_ref().display()))?;
-    Ok(hasher.finalize().into())
+    Ok(hasher.0.finalize().into())
 }

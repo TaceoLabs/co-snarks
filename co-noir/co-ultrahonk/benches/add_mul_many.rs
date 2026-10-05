@@ -74,7 +74,7 @@ fn add_mul_many(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
                         <D as P<B>>::add_assign(a, *b);
                     }
 
-                    criterion::black_box(acc);
+                    std::hint::black_box(acc);
                 });
             })
         });
@@ -98,7 +98,7 @@ fn add_mul_many(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
                     let a = &mut acc[i % MAX_PARTIAL_RELATION_LENGTH];
                     <D as P<B>>::add_assign(a, tmp);
                 }
-                criterion::black_box(acc);
+                std::hint::black_box(acc);
             })
         });
         group.finish();
@@ -140,7 +140,7 @@ fn add_mul_many(c: &mut Criterion, num_threads: usize, todo_list: &[usize]) {
                             acc
                         },
                     );
-                criterion::black_box(acc);
+                std::hint::black_box(acc);
             })
         });
         group.finish();

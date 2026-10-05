@@ -743,8 +743,7 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
             blocks[i * 4..i * 4 + 4].copy_from_slice(&bytes);
         }
 
-        let blocks = blocks.into();
-        sha2::compress256(&mut state_as_u32, &[blocks]);
+        sha2::block_api::compress256(&mut state_as_u32, &[blocks]);
         state_as_u32.iter().map(|x| Ok(F::from(*x))).collect()
     }
 

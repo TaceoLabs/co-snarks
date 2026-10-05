@@ -1,8 +1,8 @@
+use std::hint::black_box;
+
 use ark_bn254::Fr;
 use ark_ff::{Field, UniformRand};
-use criterion::{
-    BatchSize, BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main,
-};
+use criterion::{BatchSize, BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use mpc_core::protocols::{
     rep3::{Rep3PrimeFieldShare, id::PartyID},
     shamir::{ShamirPrimeFieldShare, ShamirState},

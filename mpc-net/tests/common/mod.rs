@@ -29,7 +29,8 @@ pub fn configs(num_parties: usize) -> Vec<NetworkConfig> {
     let tls_configs: Vec<_> = certified_keys
         .into_iter()
         .map(|ck| {
-            let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(ck.key_pair.serialize_der()));
+            let key =
+                PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(ck.signing_key.serialize_der()));
             TlsConfig::new(key, certs.clone())
         })
         .collect();
