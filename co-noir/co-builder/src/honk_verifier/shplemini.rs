@@ -16,7 +16,10 @@ use co_noir_common::{
     polynomials::entities::WITNESS_ENTITIES_SIZE,
 };
 use co_noir_common::{
-    constants::{NUM_SMALL_IPA_EVALUATIONS, SHIFTED_WITNESS_ENTITIES_SIZE},
+    constants::{
+        NUM_SMALL_IPA_OPENING_CLAIMS, SHIFTED_WITNESS_ENTITIES_SIZE,
+        SMALL_IPA_CLAIM_COMMITMENT_INDICES,
+    },
     polynomials::entities::PRECOMPUTED_ENTITIES_SIZE,
     types::ZeroKnowledge,
 };
@@ -99,7 +102,9 @@ impl ShpleminiVerifier {
             );
         }
 
-        let mut libra_evaluations: [FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS] =
+        // The SmallSubgroupIPA evaluations G(r), A(g*r), A(r), A(1) = 0, Q(r). The boundary value A(1) = 0 is not
+        // part of the transcript.
+        let mut libra_evaluations: [FieldCT<C::ScalarField>; NUM_SMALL_IPA_OPENING_CLAIMS] =
             array::from_fn(|_| FieldCT::default());
         if has_zk == ZeroKnowledge::Yes {
             libra_evaluations[0] =
@@ -108,7 +113,7 @@ impl ShpleminiVerifier {
                 transcript.receive_fr_from_prover("Libra:shifted_grand_sum_eval".to_string())?;
             libra_evaluations[2] =
                 transcript.receive_fr_from_prover("Libra:grand_sum_eval".to_string())?;
-            libra_evaluations[3] =
+            libra_evaluations[4] =
                 transcript.receive_fr_from_prover("Libra:quotient_eval".to_string())?;
         }
 
@@ -611,7 +616,7 @@ impl ShpleminiVerifier {
         scalars: &mut Vec<FieldCT<C::ScalarField>>,
         constant_term_accumulator: &mut FieldCT<C::ScalarField>,
         libra_commitments: &[BigGroup<C::ScalarField, T>; NUM_LIBRA_COMMITMENTS],
-        libra_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS],
+        libra_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_OPENING_CLAIMS],
         gemini_evaluation_challenge: &FieldCT<C::ScalarField>,
         shplonk_batching_challenge_powers: &[FieldCT<C::ScalarField>],
         shplonk_evaluation_challenge: &FieldCT<C::ScalarField>,
@@ -621,22 +626,15 @@ impl ShpleminiVerifier {
         // Add Libra commitments to the vector of commitments
         commitments.extend_from_slice(libra_commitments);
 
-        // Compute corresponding scalars and the correction to the constant term
-        let mut denominators: [FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS] =
-            array::from_fn(|_| FieldCT::default());
-        let mut batching_scalars: [FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS] =
-            array::from_fn(|_| FieldCT::default());
-
-        // Compute Shplonk denominators and invert them
+        // Compute Shplonk denominators 1 / (z - x_i) for the opening points {r, g*r, r, 1, r}
         let one = FieldCT::from(C::ScalarField::ONE);
-        denominators[0] = one.divide(
+        let inv_z_minus_challenge = one.divide(
             &shplonk_evaluation_challenge.sub(gemini_evaluation_challenge, builder, driver),
             builder,
             driver,
         )?;
-
         let subgroup_generator = FieldCT::from(C::get_subgroup_generator());
-        denominators[1] = one.divide(
+        let inv_z_minus_shifted = one.divide(
             &shplonk_evaluation_challenge.sub(
                 &subgroup_generator.multiply(gemini_evaluation_challenge, builder, driver)?,
                 builder,
@@ -645,29 +643,38 @@ impl ShpleminiVerifier {
             builder,
             driver,
         )?;
+        let inv_z_minus_one = one.divide(
+            &shplonk_evaluation_challenge.sub(&one, builder, driver),
+            builder,
+            driver,
+        )?;
+        let denominators = [
+            &inv_z_minus_challenge,
+            &inv_z_minus_shifted,
+            &inv_z_minus_challenge,
+            &inv_z_minus_one,
+            &inv_z_minus_challenge,
+        ];
 
-        denominators[2] = denominators[0].clone();
-        denominators[3] = denominators[0].clone();
-
-        // Compute the scalars to be multiplied against the commitments
-        for idx in 0..NUM_SMALL_IPA_EVALUATIONS {
+        // Compute the per-claim batching scalars and group them by commitment, so that claims referring to the same
+        // commitment are folded into a single scalar mul
+        let mut grouped_scalars: [FieldCT<C::ScalarField>; NUM_LIBRA_COMMITMENTS] =
+            array::from_fn(|_| FieldCT::from(C::ScalarField::ZERO));
+        for idx in 0..NUM_SMALL_IPA_OPENING_CLAIMS {
             let scaling_factor = denominators[idx].multiply(
                 &shplonk_batching_challenge_powers[2 * virtual_log_n + idx],
                 builder,
                 driver,
             )?;
-            batching_scalars[idx] = scaling_factor.neg();
+            let grouped = &mut grouped_scalars[SMALL_IPA_CLAIM_COMMITMENT_INDICES[idx]];
+            *grouped = grouped.sub(&scaling_factor, builder, driver);
             *constant_term_accumulator = constant_term_accumulator.add(
                 &scaling_factor.multiply(&libra_evaluations[idx], builder, driver)?,
                 builder,
                 driver,
             );
         }
-
-        // To save a scalar mul, add the sum of the batching scalars corresponding to the big sum evaluations
-        scalars.push(batching_scalars[0].clone());
-        scalars.push(batching_scalars[1].add(&batching_scalars[2], builder, driver));
-        scalars.push(batching_scalars[3].clone());
+        scalars.extend(grouped_scalars);
 
         Ok(())
     }
@@ -680,7 +687,7 @@ impl ShpleminiVerifier {
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        libra_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS],
+        libra_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_OPENING_CLAIMS],
         gemini_evaluation_challenge: &FieldCT<C::ScalarField>,
         multilinear_challenge: &[FieldCT<C::ScalarField>],
         inner_product_eval_claim: &FieldCT<C::ScalarField>,
@@ -768,7 +775,7 @@ impl ShpleminiVerifier {
         C: HonkCurve<TranscriptFieldType>,
         T: NoirWitnessExtensionProtocol<C::ScalarField>,
     >(
-        small_ipa_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_EVALUATIONS],
+        small_ipa_evaluations: &[FieldCT<C::ScalarField>; NUM_SMALL_IPA_OPENING_CLAIMS],
         small_ipa_eval_challenge: &FieldCT<C::ScalarField>,
         challenge_polynomial: &[FieldCT<C::ScalarField>],
         inner_product_eval_claim: &FieldCT<C::ScalarField>,
@@ -792,7 +799,8 @@ impl ShpleminiVerifier {
         let concatenated_at_r = &small_ipa_evaluations[0];
         let grand_sum_shifted_eval = &small_ipa_evaluations[1];
         let grand_sum_eval = &small_ipa_evaluations[2];
-        let quotient_eval = &small_ipa_evaluations[3];
+        // small_ipa_evaluations[3] is the boundary value A(1) = 0, enforced by the PCS opening
+        let quotient_eval = &small_ipa_evaluations[4];
 
         // Compute the evaluation of L_1(X) * A(X) + (X - 1/g) (A(gX) - A(X) - F(X) G(X)) + L_{|H|}(X)(A(X) - s) -
         // Z_H(X) * Q(X)
@@ -914,7 +922,7 @@ impl ShpleminiVerifier {
         let mut num_powers = 2 * virtual_log_n;
 
         if has_zk {
-            num_powers += NUM_SMALL_IPA_EVALUATIONS;
+            num_powers += NUM_SMALL_IPA_OPENING_CLAIMS;
         }
 
         let mut result = Vec::with_capacity(num_powers);

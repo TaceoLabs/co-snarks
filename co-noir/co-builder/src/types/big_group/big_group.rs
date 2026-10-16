@@ -299,29 +299,23 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             "biggroup batch_mul: points and scalars size mismatch after handling edgecases"
         );
 
-        // Separate out zero scalars and corresponding points (because NAF(0) = NAF(modulus) which is 254 bits long)
-        // Also add the last point and scalar to big_points and big_scalars (because its a 254-bit scalar)
-        // We do this only if max_num_bits != 0 (i.e. we are not forced to use 254 bits anyway)
+        // Partition scalars into big and small paths using compile-time information.
+        // Since `with_edgecases` appends a 254-bit randomization scalar at the end (via
+        // `mask_points`), the last scalar must go to big. Everything else routes by
+        // `max_num_bits`: `0` forces the full-width path, anything else uses the small path.
         let original_size = scalars.len();
         let mut big_scalars = Vec::new();
         let mut big_points = Vec::new();
         let mut small_scalars = Vec::new();
         let mut small_points = Vec::new();
         for i in 0..original_size {
-            if max_num_bits == 0 {
+            let is_last_scalar_big = (i == original_size - 1) && with_edgecases;
+            if max_num_bits == 0 || is_last_scalar_big {
                 big_points.push(points[i].clone());
                 big_scalars.push(scalars[i].clone());
             } else {
-                let is_last_scalar_big = (i == original_size - 1) && with_edgecases;
-                let scalar_value = scalars[i].get_value(builder, driver);
-
-                if scalar_value == F::zero().into() || is_last_scalar_big {
-                    big_points.push(points[i].clone());
-                    big_scalars.push(scalars[i].clone());
-                } else {
-                    small_points.push(points[i].clone());
-                    small_scalars.push(scalars[i].clone());
-                }
+                small_points.push(points[i].clone());
+                small_scalars.push(scalars[i].clone());
             }
         }
 
@@ -795,13 +789,16 @@ impl<F: PrimeField, T: NoirWitnessExtensionProtocol<F>> BigGroup<F, T> {
             naf_entries[num_rounds - 1 - i] = bit;
         }
 
-        // The most significant NAF entry is always (+1) as we are working with scalars < 2^{max_num_bits}.
-        // Recall that true represents (-1) and false represents (+1).
+        // The most significant NAF entry is always (+1) for scalars < 2^{max_num_bits} (false = +1).
+        // We need to pin it to false: `process_strauss_msm_rounds` does not consume `naf_entries[0]`
+        // (it hardcodes the +1 contribution), so the 0-th naf entry is effectively used only for
+        // reconstructing the scalar.
         naf_entries[0] = BoolCT::from_witness_ct(
             WitnessCT::from_acvm_type(F::zero().into(), builder),
             builder,
             true,
         );
+        builder.fix_witness(naf_entries[0].witness_index, F::zero());
 
         // Validate correctness of NAF
         let mut accumulators = Vec::with_capacity(num_rounds + 1);

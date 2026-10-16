@@ -107,12 +107,12 @@ impl<F: PrimeField> AllRelationEvaluations<F> {
     pub(crate) fn scale_and_batch_elements(&self, first_scalar: F, elements: &[F]) -> F {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
         let mut output = F::zero();
-        self.r_arith
-            .scale_and_batch_elements(&[first_scalar, elements[0]], &mut output);
         self.r_perm
-            .scale_and_batch_elements(&elements[1..4], &mut output);
+            .scale_and_batch_elements(&[first_scalar, elements[0], elements[1]], &mut output);
         self.r_lookup
-            .scale_and_batch_elements(&elements[4..7], &mut output);
+            .scale_and_batch_elements(&elements[2..5], &mut output);
+        self.r_arith
+            .scale_and_batch_elements(&elements[5..7], &mut output);
         self.r_delta
             .scale_and_batch_elements(&elements[7..11], &mut output);
         self.r_elliptic
@@ -133,9 +133,9 @@ impl<F: PrimeField> AllRelationEvaluations<F> {
 impl<F: PrimeField> AllRelationAcc<F> {
     pub(crate) fn scale(&mut self, first_scalar: F, elements: &[F]) {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
-        self.r_arith.scale(&[first_scalar, elements[0]]);
-        self.r_perm.scale(&elements[1..4]);
-        self.r_lookup.scale(&elements[4..7]);
+        self.r_perm.scale(&[first_scalar, elements[0], elements[1]]);
+        self.r_lookup.scale(&elements[2..5]);
+        self.r_arith.scale(&elements[5..7]);
         self.r_delta.scale(&elements[7..11]);
         self.r_elliptic.scale(&elements[11..13]);
         self.r_memory.scale(&elements[13..19]);
