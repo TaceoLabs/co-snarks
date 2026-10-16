@@ -2570,10 +2570,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 Self::generate_sparse_table_with_rotation::<28, 11, 6>(id, index)
             }
             BasicTableId::Sha256Base28Rotate3 => {
-                Self::generate_sparse_table_with_rotation::<28, 11, 3>(id, index)
+                // 10-bit (not 11) for use with L2 slot of SHA256_CH_INPUT
+                Self::generate_sparse_table_with_rotation::<28, 10, 3>(id, index)
             }
             BasicTableId::Sha256Base16 => {
-                Self::generate_sparse_table_with_rotation::<16, 11, 0>(id, index)
+                // 10-bit (not 11) for use with L2 slot of SHA256_MAJ_INPUT
+                Self::generate_sparse_table_with_rotation::<16, 10, 0>(id, index)
             }
             BasicTableId::Sha256WitnessSlice3 => {
                 Self::generate_sparse_table_with_rotation::<16, 3, 0>(id, index)

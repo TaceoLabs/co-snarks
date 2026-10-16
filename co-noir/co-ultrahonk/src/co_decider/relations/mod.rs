@@ -196,9 +196,9 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for AllRelationAccHalfSha
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AllRelationAcc<T, P> {
     pub(crate) fn scale(&mut self, first_scalar: P::ScalarField, elements: &[P::ScalarField]) {
         assert!(elements.len() == NUM_SUBRELATIONS - 1);
-        self.r_arith.scale(&[first_scalar, elements[0]]);
-        self.r_perm.scale(&elements[1..4]);
-        self.r_lookup.scale(&elements[4..7]);
+        self.r_perm.scale(&[first_scalar, elements[0], elements[1]]);
+        self.r_lookup.scale(&elements[2..5]);
+        self.r_arith.scale(&elements[5..7]);
         self.r_delta.scale(&elements[7..11]);
         self.r_elliptic.scale(&elements[11..13]);
         self.r_memory.scale(&elements[13..19]);

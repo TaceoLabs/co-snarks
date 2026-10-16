@@ -10,7 +10,7 @@ use co_noir_common::constants::{
     NUM_SELECTORS, NUM_WIRES, NUM_ZERO_ROWS, PAIRING_POINT_ACCUMULATOR_SIZE,
 };
 use co_noir_common::honk_curve::HonkCurve;
-use co_noir_common::polynomials::entities::{PrecomputedEntities, ProverWitnessEntities};
+use co_noir_common::polynomials::entities::ProverWitnessEntities;
 use co_noir_common::polynomials::polynomial::NUM_DISABLED_ROWS_IN_SUMCHECK;
 use num_bigint::BigUint;
 use std::array;
@@ -273,20 +273,21 @@ impl<F: PrimeField> UltraTraceBlock<F> {
     const W_R: usize = ProverWitnessEntities::<F>::W_R;
     const W_O: usize = ProverWitnessEntities::<F>::W_O;
     const W_4: usize = ProverWitnessEntities::<F>::W_4;
-    const Q_M: usize = PrecomputedEntities::<F>::Q_M;
-    const Q_C: usize = PrecomputedEntities::<F>::Q_C;
-    const Q_1: usize = PrecomputedEntities::<F>::Q_L;
-    const Q_2: usize = PrecomputedEntities::<F>::Q_R;
-    const Q_3: usize = PrecomputedEntities::<F>::Q_O;
-    const Q_4: usize = PrecomputedEntities::<F>::Q_4;
-    const Q_ARITH: usize = PrecomputedEntities::<F>::Q_ARITH;
-    const Q_DELTA_RANGE: usize = PrecomputedEntities::<F>::Q_DELTA_RANGE;
-    const Q_ELLIPTIC: usize = PrecomputedEntities::<F>::Q_ELLIPTIC;
-    const Q_MEMORY: usize = PrecomputedEntities::<F>::Q_MEMORY;
-    const Q_NNF: usize = PrecomputedEntities::<F>::Q_NNF;
-    const Q_LOOKUP_TYPE: usize = PrecomputedEntities::<F>::Q_LOOKUP;
-    const Q_POSEIDON2_EXTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_EXTERNAL;
-    const Q_POSEIDON2_INTERNAL: usize = PrecomputedEntities::<F>::Q_POSEIDON2_INTERNAL;
+    // Selector positions within a block, in the order of `PrecomputedEntities::SELECTORS`
+    const Q_M: usize = 0;
+    const Q_C: usize = 1;
+    const Q_1: usize = 2;
+    const Q_2: usize = 3;
+    const Q_3: usize = 4;
+    const Q_4: usize = 5;
+    const Q_LOOKUP_TYPE: usize = 6;
+    const Q_ARITH: usize = 7;
+    const Q_DELTA_RANGE: usize = 8;
+    const Q_ELLIPTIC: usize = 9;
+    const Q_MEMORY: usize = 10;
+    const Q_NNF: usize = 11;
+    const Q_POSEIDON2_EXTERNAL: usize = 12;
+    const Q_POSEIDON2_INTERNAL: usize = 13;
 
     pub(crate) fn w_l(&mut self) -> &mut Vec<u32> {
         &mut self.wires[Self::W_L]

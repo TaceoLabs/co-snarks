@@ -254,61 +254,80 @@ impl<T: Default> ProverWitnessEntities<T> {
 
 impl<T: Default> PrecomputedEntities<T> {
     /// column 0
-    pub const Q_M: usize = 0;
+    const SIGMA_1: usize = 0;
     /// column 1
-    pub const Q_C: usize = 1;
+    const SIGMA_2: usize = 1;
     /// column 2
-    pub const Q_L: usize = 2;
+    const SIGMA_3: usize = 2;
     /// column 3
-    pub const Q_R: usize = 3;
+    const SIGMA_4: usize = 3;
     /// column 4
-    pub const Q_O: usize = 4;
+    const ID_1: usize = 4;
     /// column 5
-    pub const Q_4: usize = 5;
+    const ID_2: usize = 5;
     /// column 6
-    pub const Q_LOOKUP: usize = 6;
+    const ID_3: usize = 6;
     /// column 7
-    pub const Q_ARITH: usize = 7;
+    const ID_4: usize = 7;
     /// column 8
-    pub const Q_DELTA_RANGE: usize = 8;
+    const LAGRANGE_FIRST: usize = 8;
     /// column 9
-    pub const Q_ELLIPTIC: usize = 9;
+    const LAGRANGE_LAST: usize = 9;
     /// column 10
-    pub const Q_MEMORY: usize = 10;
+    pub const Q_LOOKUP: usize = 10;
     /// column 11
-    pub const Q_NNF: usize = 11;
+    const TABLE_1: usize = 11;
     /// column 12
-    pub const Q_POSEIDON2_EXTERNAL: usize = 12;
+    const TABLE_2: usize = 12;
     /// column 13
-    pub const Q_POSEIDON2_INTERNAL: usize = 13;
+    const TABLE_3: usize = 13;
     /// column 14
-    const SIGMA_1: usize = 14;
+    const TABLE_4: usize = 14;
     /// column 15
-    const SIGMA_2: usize = 15;
+    pub const Q_M: usize = 15;
     /// column 16
-    const SIGMA_3: usize = 16;
+    pub const Q_R: usize = 16;
     /// column 17
-    const SIGMA_4: usize = 17;
+    pub const Q_O: usize = 17;
     /// column 18
-    const ID_1: usize = 18;
+    pub const Q_C: usize = 18;
     /// column 19
-    const ID_2: usize = 19;
+    pub const Q_L: usize = 19;
     /// column 20
-    const ID_3: usize = 20;
+    pub const Q_4: usize = 20;
     /// column 21
-    const ID_4: usize = 21;
+    pub const Q_ARITH: usize = 21;
     /// column 22
-    const TABLE_1: usize = 22;
+    pub const Q_DELTA_RANGE: usize = 22;
     /// column 23
-    const TABLE_2: usize = 23;
+    pub const Q_ELLIPTIC: usize = 23;
     /// column 24
-    const TABLE_3: usize = 24;
+    pub const Q_MEMORY: usize = 24;
     /// column 25
-    const TABLE_4: usize = 25;
+    pub const Q_NNF: usize = 25;
     /// column 26
-    const LAGRANGE_FIRST: usize = 26;
+    pub const Q_POSEIDON2_EXTERNAL: usize = 26;
     /// column 27
-    const LAGRANGE_LAST: usize = 27;
+    pub const Q_POSEIDON2_INTERNAL: usize = 27;
+
+    /// Positions of the selectors in the order used by the execution trace blocks
+    /// (non-gate selectors q_m, q_c, q_l, q_r, q_o, q_4 followed by the gate selectors).
+    pub const SELECTORS: [usize; 14] = [
+        Self::Q_M,
+        Self::Q_C,
+        Self::Q_L,
+        Self::Q_R,
+        Self::Q_O,
+        Self::Q_4,
+        Self::Q_LOOKUP,
+        Self::Q_ARITH,
+        Self::Q_DELTA_RANGE,
+        Self::Q_ELLIPTIC,
+        Self::Q_MEMORY,
+        Self::Q_NNF,
+        Self::Q_POSEIDON2_EXTERNAL,
+        Self::Q_POSEIDON2_INTERNAL,
+    ];
 
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.elements.iter()
@@ -322,8 +341,11 @@ impl<T: Default> PrecomputedEntities<T> {
         &self.elements[Self::TABLE_1..=Self::TABLE_4]
     }
 
-    pub fn get_selectors_mut(&mut self) -> &mut [T] {
-        &mut self.elements[Self::Q_M..=Self::Q_POSEIDON2_INTERNAL]
+    /// Returns the selectors in the order given by [`Self::SELECTORS`].
+    pub fn get_selectors_mut(&mut self) -> [&mut T; 14] {
+        self.elements
+            .get_disjoint_mut(Self::SELECTORS)
+            .expect("selector indices are distinct")
     }
 
     pub fn get_sigmas_mut(&mut self) -> &mut [T] {
