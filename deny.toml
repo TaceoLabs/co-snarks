@@ -25,7 +25,6 @@ ignore = [
     { id = "RUSTSEC-2022-0081", reason = "ignore json unmaintained, dependency of circom" },
     { id = "RUSTSEC-2024-0388", reason = "ignore drivative unmaintained, dependency of circom" },
     { id = "RUSTSEC-2024-0436", reason = "ignore paste unmaintained" },
-    { id = "RUSTSEC-2025-0055", reason = "ignore vulnerability in tracing-subscriber < 0.3.20, used by ark-relation in examples but as normal dependency" },
     { id = "RUSTSEC-2025-0141", reason = "ignore bincode unmaintained" },
     { id = "RUSTSEC-2026-0194", reason = "ignore vulnerability in quick-xml, locked by swanky/ocelot, not used at runtime" },
     { id = "RUSTSEC-2026-0195", reason = "ignore vulnerability in quick-xml, locked by swanky/ocelot, not used at runtime" },
