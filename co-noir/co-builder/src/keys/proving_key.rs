@@ -183,7 +183,7 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<
 
     let wires: &mut [_; NUM_WIRES] = polynomials.witness.get_wires_mut().try_into().unwrap();
 
-    let selectors = polynomials.precomputed.get_selectors_mut();
+    let mut selectors = polynomials.precomputed.get_selectors_mut();
 
     // For each block in the trace, populate wire polys, copy cycles and selector polys.
     for block in builder.blocks.get() {

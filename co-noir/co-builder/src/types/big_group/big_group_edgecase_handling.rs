@@ -1,5 +1,8 @@
 use crate::types::big_group::BigGroup;
-use crate::{types::field_ct::FieldCT, ultra_builder::GenericUltraCircuitBuilder};
+use crate::{
+    types::field_ct::{BoolCT, FieldCT},
+    ultra_builder::GenericUltraCircuitBuilder,
+};
 use ark_ec::CurveGroup;
 use ark_ff::{One, PrimeField, UniformRand};
 use co_acvm::mpc::NoirWitnessExtensionProtocol;
@@ -36,6 +39,12 @@ pub(crate) fn mask_points<
     let offset_generator_element =
         BigGroup::from_witness(&native_offset_generator, driver, builder)?;
 
+    // Disallow offset generator G = ∞ (point at infinity) because the downstream ROM table logic relies on
+    // none of the points being at infinity.
+    offset_generator_element
+        .is_infinity
+        .assert_equal(&BoolCT::from(false), builder, driver);
+
     let mut running_point = offset_generator_element;
 
     // Start the running scalar at 1
@@ -47,7 +56,12 @@ pub(crate) fn mask_points<
         masked_scalars.push(scalar.clone());
 
         // Convert point into point + 2ⁱ⋅G_offset
-        masked_points.push(point.add(&mut running_point, builder, driver)?);
+        let masked = point.add(&mut running_point, builder, driver)?;
+        // Each masked point must also be finite, for the same ROM table reason as the offset generator above.
+        masked
+            .is_infinity
+            .assert_equal(&BoolCT::from(false), builder, driver);
+        masked_points.push(masked);
 
         // Add 2ⁱ⋅scalar_i to the last scalar
         let tmp = scalar.multiply(&running_scalar, builder, driver)?;

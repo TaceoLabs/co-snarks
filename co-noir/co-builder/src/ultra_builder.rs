@@ -1954,11 +1954,14 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             })
             .collect();
         records.sort();
-        for record in records {
+        let num_records = records.len();
+        let rom_size = self.rom_arrays[rom_id].state.len();
+        for (i, record) in records.into_iter().enumerate() {
             let index = record.index;
             let value1 = self.get_variable(record.value_column1_witness.try_into().unwrap());
             let value2 = self.get_variable(record.value_column2_witness.try_into().unwrap());
-            let index_witness = self.add_variable(T::AcvmType::from(index));
+            let index_witness =
+                self.rom_sorted_index_witness(i, num_records, rom_size, T::AcvmType::from(index));
             let value1_witness = self.add_variable(value1);
             let value2_witness = self.add_variable(value2);
             let mut sorted_record = RomRecord::<T::AcvmType> {
@@ -2019,8 +2022,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
         let sorted = T::sort_vec_by(driver, &key, inputs, 32)?;
         let records = self.rom_arrays[rom_id].records.clone();
-        for (record, index, col1, col2) in izip!(records, &sorted[0], &sorted[1], &sorted[2]) {
-            let index_witness = self.add_variable(index.clone().into());
+        let num_records = records.len();
+        let rom_size = self.rom_arrays[rom_id].state.len();
+        for (i, (record, index, col1, col2)) in
+            izip!(records, &sorted[0], &sorted[1], &sorted[2]).enumerate()
+        {
+            let index_witness =
+                self.rom_sorted_index_witness(i, num_records, rom_size, index.clone().into());
             let value1_witness = self.add_variable(col1.clone().into());
             let value2_witness = self.add_variable(col2.clone().into());
             let mut sorted_record = RomRecord::<T::AcvmType> {
@@ -2049,10 +2057,9 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.create_tag(sorted_list_tag, read_tag);
 
         // Make sure that every cell has been initialized
-        for i in 0..self.rom_arrays[rom_id].state.len() {
-            if self.rom_arrays[rom_id].state[i][0] == Self::UNINITIALIZED_MEMORY_RECORD {
-                self.set_rom_element_pair(rom_id, i, [self.zero_idx, self.zero_idx]);
-            }
+        for cell in self.rom_arrays[rom_id].state.iter() {
+            assert_ne!(cell[0], Self::UNINITIALIZED_MEMORY_RECORD);
+            assert_ne!(cell[1], Self::UNINITIALIZED_MEMORY_RECORD);
         }
 
         let records = &self.rom_arrays[rom_id].records;
@@ -2097,9 +2104,26 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             },
             false,
         );
-        // N.B. If the above check holds, we know the sorted list begins with an index value of 0,
-        // because the first cell is explicitly initialized using zero_idx as the index field.
         Ok(())
+    }
+
+    /// The index-delta sub-relation has roots {0,-1} in the field, so a sorted chain starting at p-1 satisfies the
+    /// delta=1 check when transitioning to 0. We symbolically pin the chain at both ends: the first sorted record's
+    /// index witness is the constant zero and the last one is the constant `rom_size - 1`.
+    fn rom_sorted_index_witness(
+        &mut self,
+        i: usize,
+        num_records: usize,
+        rom_size: usize,
+        index: T::AcvmType,
+    ) -> u32 {
+        if i == 0 {
+            self.zero_idx
+        } else if i == num_records - 1 {
+            self.put_constant_variable(P::ScalarField::from(rom_size as u64 - 1))
+        } else {
+            self.add_variable(index)
+        }
     }
 
     fn process_ram_array_public_inner(
@@ -2130,7 +2154,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         for (i, record) in records.into_iter().enumerate() {
             let index = record.index;
             let value = self.get_variable(record.value_witness.try_into().unwrap());
-            let index_witness = self.add_variable(T::AcvmType::from(index));
+            // Pin the first sorted record's index to the constant zero, so that a malicious prover cannot start the
+            // chain at p-1
+            let index_witness = if i == 0 {
+                self.zero_idx
+            } else {
+                self.add_variable(T::AcvmType::from(index))
+            };
 
             let timestamp_witness =
                 self.add_variable(T::AcvmType::from(P::ScalarField::from(record.timestamp)));
@@ -2277,7 +2307,13 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         for (i, (record, index, value, stamp, access_type)) in
             izip!(records, &sorted[0], &sorted[1], &sorted[2], &sorted[3]).enumerate()
         {
-            let index_witness = self.add_variable(index.clone().into());
+            // Pin the first sorted record's index to the constant zero, so that a malicious prover cannot start the
+            // chain at p-1
+            let index_witness = if i == 0 {
+                self.zero_idx
+            } else {
+                self.add_variable(index.clone().into())
+            };
             let timestamp_witness = self.add_variable(stamp.clone().into());
             let value_witness = self.add_variable(value.clone().into());
             let mut sorted_record = RamRecord::<T::AcvmType> {
@@ -4315,9 +4351,10 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let len = self.lookup_tables.len();
         if index == len {
-            // Table doesn't exist! So try to create it.
+            // Table doesn't exist! So try to create it. Indices start at 1 so that the relation batched term always
+            // contains at least beta cubed.
             self.lookup_tables
-                .push(PlookupBasicTable::create_basic_table(id, len));
+                .push(PlookupBasicTable::create_basic_table(id, len + 1));
             self.lookup_tables.last_mut().unwrap()
         } else {
             &mut self.lookup_tables[index]

@@ -20,7 +20,7 @@ use co_noir_common::{
 use itertools::izip;
 use mpc_core::MpcState as _;
 use mpc_net::Network;
-use ultrahonk::{NUM_SMALL_IPA_EVALUATIONS, Utils};
+use ultrahonk::{NUM_SMALL_IPA_EVALUATIONS, NUM_SMALL_IPA_OPENING_CLAIMS, Utils};
 
 impl<
     T: NoirUltraHonkProver<P>,
@@ -738,35 +738,48 @@ impl<
         state: &mut T::State,
     ) -> HonkProofResult<Vec<ShpleminiOpeningClaim<T, P>>> {
         tracing::trace!("Compute libra opening claims");
-        let mut libra_opening_claims = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);
+        let mut libra_opening_claims = Vec::with_capacity(NUM_SMALL_IPA_OPENING_CLAIMS);
 
         let subgroup_generator = P::get_subgroup_generator();
 
-        let libra_eval_labels = [
-            "Libra:concatenation_eval",
-            "Libra:shifted_grand_sum_eval",
-            "Libra:grand_sum_eval",
-            "Libra:quotient_eval",
+        // The polynomials are {G, A, A, Q}; the claims are G(r), A(g*r), A(r), A(1) = 0, Q(r). The boundary
+        // opening A(1) = 0 is not sent to the verifier.
+        let [concatenated, grand_sum_shifted, grand_sum, quotient] = libra_polynomials;
+        let claims = [
+            (Some("Libra:concatenation_eval"), concatenated, gemini_r),
+            (
+                Some("Libra:shifted_grand_sum_eval"),
+                grand_sum_shifted,
+                gemini_r * subgroup_generator,
+            ),
+            (Some("Libra:grand_sum_eval"), grand_sum.clone(), gemini_r),
+            (None, grand_sum, P::ScalarField::one()),
+            (Some("Libra:quotient_eval"), quotient, gemini_r),
         ];
-        let evaluation_points = [gemini_r, gemini_r * subgroup_generator, gemini_r, gemini_r];
 
-        let mut to_open = Vec::with_capacity(libra_eval_labels.len());
-        for (poly, point) in izip!(libra_polynomials, evaluation_points) {
-            let eval = T::eval_poly(&poly.coefficients, point);
-
-            let new_claim = ShpleminiOpeningClaim {
+        let mut to_open = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);
+        let mut labels = Vec::with_capacity(NUM_SMALL_IPA_EVALUATIONS);
+        for (label, poly, point) in claims {
+            let eval = match label {
+                Some(label) => {
+                    let eval = T::eval_poly(&poly.coefficients, point);
+                    to_open.push(eval);
+                    labels.push(label);
+                    eval
+                }
+                None => T::ArithmeticShare::default(),
+            };
+            libra_opening_claims.push(ShpleminiOpeningClaim {
                 polynomial: poly,
                 opening_pair: OpeningPair {
                     challenge: point,
                     evaluation: eval,
                 },
                 gemini_fold: false,
-            };
-            to_open.push(new_claim.opening_pair.evaluation);
-            libra_opening_claims.push(new_claim);
+            });
         }
         let opened = T::open_many(&to_open, net, state)?;
-        for (val, label) in izip!(opened, libra_eval_labels) {
+        for (val, label) in izip!(opened, labels) {
             transcript.send_fr_to_verifier::<P>(label.to_string(), val);
         }
 

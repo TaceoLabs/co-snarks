@@ -12,6 +12,12 @@ pub const CONST_PROOF_SIZE_LOG_N: usize = 25;
 // For ZK Flavors: the number of the commitments required by Libra and SmallSubgroupIPA.
 pub const NUM_LIBRA_COMMITMENTS: usize = 3;
 pub const NUM_SMALL_IPA_EVALUATIONS: usize = 4;
+/// Number of SmallSubgroupIPA opening claims: the transmitted evaluations plus the boundary opening A(1) = 0.
+pub const NUM_SMALL_IPA_OPENING_CLAIMS: usize = 5;
+/// For each SmallSubgroupIPA opening claim G(r), A(g*r), A(r), A(1) = 0, Q(r), the index of the commitment
+/// (`[G]`, `[A]` or `[Q]`) it refers to.
+pub const SMALL_IPA_CLAIM_COMMITMENT_INDICES: [usize; NUM_SMALL_IPA_OPENING_CLAIMS] =
+    [0, 1, 1, 1, 2];
 
 pub const SHIFTED_WITNESS_ENTITIES_SIZE: usize = 5;
 

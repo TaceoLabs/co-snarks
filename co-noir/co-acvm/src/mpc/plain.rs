@@ -966,19 +966,15 @@ impl<F: PrimeField> NoirWitnessExtensionProtocol<F> for PlainAcvmSolver<F> {
         scalar: &Self::AcvmType,
         max_num_bits: usize,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
-        let modulus: BigUint = F::MODULUS.into();
-        let mut scalar_multiplier = scalar.into_bigint().into();
+        let mut scalar_multiplier: BigUint = scalar.into_bigint().into();
 
-        let num_rounds = if max_num_bits == 0 || scalar_multiplier.is_zero() {
+        // The number of rounds is determined purely by `max_num_bits`, where `0` means the full scalar-field width.
+        // A zero scalar needs no special handling: it is even, so the skew makes it 1, whose NAF reconstructs to 0.
+        let num_rounds = if max_num_bits == 0 {
             F::MODULUS_BIT_SIZE as usize
         } else {
             max_num_bits
         };
-
-        // NAF can't handle 0 so we set scalar = r in this case.
-        if scalar_multiplier.is_zero() {
-            scalar_multiplier = modulus;
-        }
 
         let skew = (&scalar_multiplier & BigUint::one()).is_zero();
         if skew {

@@ -201,7 +201,7 @@ fn test_batch_mul_short_non_trivial_scalars_plaindriver() {
     let mut rng = StdRng::seed_from_u64(SEED);
     let mut driver = PlainAcvmSolver::<Fr>::new();
     let mut builder = GenericUltraCircuitBuilder::<Bn254G1, _>::new(10);
-    let scalar_values = [2u64, 3, 42, 127];
+    let scalar_values = [0u64, 2, 3, 42, 127];
     let mut points = Vec::new();
     let mut scalars = Vec::new();
     let mut expected_result = G1Affine::identity();
