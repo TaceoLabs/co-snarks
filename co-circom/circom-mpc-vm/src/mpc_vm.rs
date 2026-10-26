@@ -112,7 +112,8 @@ struct Component<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     if_stack: IfCtxStack<F, C>,
     functions_ctx: Stack<FunctionCtx<C::VmType>>,
     mappings: Vec<usize>,
-    sub_components: Vec<Component<F, C>>,
+    /// indexed by the sub component index, `None` if not (yet) created
+    sub_components: Vec<Option<Component<F, C>>>,
     component_body: Arc<CodeBlock>,
     log_buf: String,
 }
@@ -278,7 +279,9 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
             if_stack: IfCtxStack::new(),
             functions_ctx: Stack::default(),
             mappings: templ_decl.mappings.clone(),
-            sub_components: Vec::with_capacity(templ_decl.sub_components),
+            sub_components: std::iter::repeat_with(|| None)
+                .take(templ_decl.sub_components)
+                .collect(),
             component_body: Arc::clone(&templ_decl.body),
             log_buf: String::with_capacity(1024),
         }
@@ -460,35 +463,54 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         continue;
                     }
                 }
-                op_codes::MpcOpCode::CreateCmp(symbol, amount) => {
+                op_codes::MpcOpCode::CreateCmp(symbol, positions) => {
                     let new_components = {
                         let offset_jump = self.pop_index();
                         let relative_offset = self.pop_index();
+                        let sub_comp_index = self.pop_index();
                         let templ_decl = ctx.templ_decls.get(symbol).ok_or_else(|| {
                             eyre!("{symbol} not found in template declarations. This must be a bug")
                         })?;
-                        let mut offset = self.my_offset + relative_offset;
-                        (0..*amount)
-                            .map(|i| {
-                                if i != 0 {
-                                    offset += offset_jump;
-                                }
-                                Component::<F, C>::init(templ_decl, offset)
+                        // only the created components occupy signals, one after the other
+                        let offset = self.my_offset + relative_offset;
+                        positions
+                            .iter()
+                            .enumerate()
+                            .map(|(i, position)| {
+                                (
+                                    sub_comp_index + position,
+                                    Component::<F, C>::init(templ_decl, offset + i * offset_jump),
+                                )
                             })
                             .collect_vec()
                     };
                     //check if we can run it instantly
-                    for mut component in new_components {
+                    for (index, mut component) in new_components {
                         if component.input_signals == 0 {
                             component.run(protocol, ctx, config, traces)?;
                         }
-                        self.sub_components.push(component);
+                        let slot = self.sub_components.get_mut(index).ok_or_else(|| {
+                            eyre!(
+                                "sub component index {index} out of range in {}. This must be a bug",
+                                self.symbol
+                            )
+                        })?;
+                        *slot = Some(component);
                     }
                 }
                 op_codes::MpcOpCode::OutputSubComp(mapped, signal_code, amount) => {
                     let sub_comp_index = self.pop_index();
                     let mut index = self.pop_index();
-                    let component = &mut self.sub_components[sub_comp_index];
+                    let component = self
+                        .sub_components
+                        .get_mut(sub_comp_index)
+                        .and_then(Option::as_mut)
+                        .ok_or_else(|| {
+                            eyre!(
+                                "sub component {sub_comp_index} of {} used before it was created",
+                                self.symbol
+                            )
+                        })?;
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
@@ -510,7 +532,16 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                         input_signals[*amount - i - 1] = self.pop_field();
                     }
 
-                    let component = &mut self.sub_components[sub_comp_index];
+                    let component = self
+                        .sub_components
+                        .get_mut(sub_comp_index)
+                        .and_then(Option::as_mut)
+                        .ok_or_else(|| {
+                            eyre!(
+                                "sub component {sub_comp_index} of {} used before it was created",
+                                self.symbol
+                            )
+                        })?;
                     if *mapped {
                         index += component.mappings[*signal_code];
                     }
