@@ -163,7 +163,7 @@ fn low_depth_sub_p_cmux_many<F: FieldUint, N: Network>(
     binary::cmux_many(&ov, &y, &x, net, state)
 }
 
-fn low_depth_sub_p_cmux<F: FieldUint, N: Network>(
+pub(super) fn low_depth_sub_p_cmux<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,
     net: &N,
     state: &mut Rep3State,

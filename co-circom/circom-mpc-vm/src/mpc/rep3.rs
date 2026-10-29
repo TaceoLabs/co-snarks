@@ -474,14 +474,14 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = conversion::a2b_selector(a, self.net, &mut self.state)?;
                 let binary = binary::xor_public(&a, &b.to_uint(), self.id);
-                Ok(conversion::b2a_selector(&binary, self.net, &mut self.state)?.into())
+                Ok(conversion::b2a_selector_mod_p(&binary, self.net, &mut self.state)?.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
                 let [a, b] = conversion::a2b_selector_many(&[a, b], self.net, &mut self.state)?
                     .try_into()
                     .expect("a2b_selector_many preserves length");
                 let binary = binary::xor(&a, &b);
-                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
+                let result = conversion::b2a_selector_mod_p(&binary, self.net, &mut self.state)?;
                 Ok(result.into())
             }
         }
@@ -494,7 +494,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
             | (Rep3VmType::Arithmetic(a), Rep3VmType::Public(b)) => {
                 let a = conversion::a2b_selector(a, self.net, &mut self.state)?;
                 let binary = binary::or_public(&a, &b.to_uint(), self.id);
-                let result = conversion::b2a_selector(&binary, self.net, &mut self.state)?;
+                let result = conversion::b2a_selector_mod_p(&binary, self.net, &mut self.state)?;
                 Ok(result.into())
             }
             (Rep3VmType::Arithmetic(a), Rep3VmType::Arithmetic(b)) => {
@@ -502,7 +502,7 @@ impl<F: PrimeField + FieldUint, N: Network> VmCircomWitnessExtension<F>
                     .try_into()
                     .expect("a2b_selector_many preserves length");
                 let binary = binary::or(&a, &b, self.net, &mut self.state)?;
-                Ok(conversion::b2a_selector(&binary, self.net, &mut self.state)?.into())
+                Ok(conversion::b2a_selector_mod_p(&binary, self.net, &mut self.state)?.into())
             }
         }
     }

@@ -692,6 +692,21 @@ impl GarbledCircuits {
         Ok(BinaryBundle::new(res))
     }
 
+    /// Like [Self::adder_mod_p], but `wires_a` may hold any value `< 2^MODULUS_BIT_SIZE` (e.g., the XOR of two field elements) and is reduced mod p first.
+    pub fn adder_mod_p_reduce_lhs<G: FancyBinaryConstant, F: FieldUint>(
+        g: &mut G,
+        wires_a: &BinaryBundle<G::Item>,
+        wires_b: &BinaryBundle<G::Item>,
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
+        let bitlen = wires_a.size();
+        debug_assert_eq!(bitlen, wires_b.size());
+        let zero = g.const_zero()?;
+        let reduced =
+            Self::sub_p_and_mux_with_output_size::<_, F>(g, wires_a.wires(), zero, bitlen)?;
+        let res = Self::adder_mod_p_with_output_size::<_, F>(g, &reduced, wires_b.wires(), bitlen)?;
+        Ok(BinaryBundle::new(res))
+    }
+
     /// Adds two vectors of shared field elements mod p. The field elements are encoded as Yao shared wires.
     pub fn adder_mod_p_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,

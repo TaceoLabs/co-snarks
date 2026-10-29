@@ -119,6 +119,7 @@ witness_extension_test_plain!(babycheck_test);
 witness_extension_test_plain!(babypbk_test);
 witness_extension_test_plain!(binsub_test);
 witness_extension_test_plain!(binsum_test);
+witness_extension_test_plain!(bitwise_field);
 witness_extension_test_plain!(constants_test);
 witness_extension_test_plain!(control_flow);
 witness_extension_test_plain!(eddsa_test);

@@ -56,7 +56,7 @@ pub fn a2b_selector_many<F: FieldUint, N: Network>(
     }
 }
 
-/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the binary-to-arithmetic conversion.
+/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the binary-to-arithmetic conversion. The input must be a binary sharing of a valid field element (< p), see [b2a_selector_mod_p] otherwise.
 pub fn b2a_selector<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,
     net: &N,
@@ -65,6 +65,18 @@ pub fn b2a_selector<F: FieldUint, N: Network>(
     match state.a2b_type {
         A2BType::Direct => b2a(x, net, state),
         A2BType::Yao => b2y2a(x, net, state),
+    }
+}
+
+/// Like [b2a_selector], but accepts any x < 2^MODULUS_BIT_SIZE (e.g., the XOR/OR of two field elements) and returns an arithmetic sharing of x mod p.
+pub fn b2a_selector_mod_p<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Rep3PrimeFieldShare<F>> {
+    match state.a2b_type {
+        A2BType::Direct => b2a_mod_p(x, net, state),
+        A2BType::Yao => b2y2a_mod_p(x, net, state),
     }
 }
 
@@ -160,10 +172,7 @@ pub fn a2b_many<F: FieldUint, N: Network>(
     )
 }
 
-/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
-///
-/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
-/// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
+/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation only works for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p; use [b2a_mod_p] for inputs that may be >= p.
 pub fn b2a<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,
     net: &N,
@@ -230,6 +239,16 @@ pub fn b2a<F: FieldUint, N: Network>(
         }
     }
     Ok(res)
+}
+
+/// Like [b2a], but accepts any x < 2^MODULUS_BIT_SIZE (e.g., the XOR/OR of two field elements) and returns an arithmetic sharing of x mod p.
+pub fn b2a_mod_p<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Rep3PrimeFieldShare<F>> {
+    let x = detail::low_depth_sub_p_cmux::<F, N>(x, net, state, F::MODULUS_BIT_SIZE as usize + 1)?;
+    b2a(&x, net, state)
 }
 
 /// A variant of [b2a] that operates on vectors of shared values instead.
@@ -554,14 +573,18 @@ pub fn a2y_many<F: FieldUint, N: Network>(
 }
 
 macro_rules! y2a_impl_p1 {
-    ($garbler:ty,$x:expr,$delta:expr,$net:expr,$state:expr,$res:expr) => {{
+    ($garbler:ty,$x:expr,$delta:expr,$net:expr,$state:expr,$res:expr,$reduce:expr) => {{
         let delta = $delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
         let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
         $res.a = (k2.0 + k2.1 + k2.2).neg();
         let x23 = yao::input_field_id2::<F, _>(None, None, $net, $state)?;
 
         let mut garbler = <$garbler>::new_with_delta($net, $state, delta);
-        let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &$x, &x23)?;
+        let x1 = if $reduce {
+            GarbledCircuits::adder_mod_p_reduce_lhs::<_, F>(&mut garbler, &$x, &x23)?
+        } else {
+            GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &$x, &x23)?
+        };
         let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
         let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
         $res.b = GCUtils::bits_to_field(&x1)?;
@@ -569,7 +592,7 @@ macro_rules! y2a_impl_p1 {
 }
 
 macro_rules! y2a_impl_p2 {
-    ($garbler:ty,$x:expr,$delta:expr,$net:expr,$state:expr,$res:expr) => {{
+    ($garbler:ty,$x:expr,$delta:expr,$net:expr,$state:expr,$res:expr,$reduce:expr) => {{
         let delta = $delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
         let k2 = $state.rngs.bitcomp1.random_fes_3keys::<F>();
         let k3 = $state.rngs.bitcomp2.random_fes_3keys::<F>();
@@ -581,7 +604,11 @@ macro_rules! y2a_impl_p2 {
         let x23 = yao::input_field_id2(x23, Some(delta), $net, $state)?;
 
         let mut garbler = <$garbler>::new_with_delta($net, $state, delta);
-        let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &$x, &x23)?;
+        let x1 = if $reduce {
+            GarbledCircuits::adder_mod_p_reduce_lhs::<_, F>(&mut garbler, &$x, &x23)?
+        } else {
+            GarbledCircuits::adder_mod_p::<_, F>(&mut garbler, &$x, &x23)?
+        };
         let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
         if x1.is_some() {
             eyre::bail!("Unexpected output received",);
@@ -591,13 +618,32 @@ macro_rules! y2a_impl_p2 {
 
 /// Transforms the shared value x from a yao sharing to an arithmetic sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 + x_2 + x_3.
 ///
-/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
-/// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
+/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element (< p), see [y2a_mod_p] otherwise.
 pub fn y2a<F: FieldUint, N: Network>(
     x: BinaryBundle<WireMod2>,
     delta: Option<WireMod2>,
     net: &N,
     state: &mut Rep3State,
+) -> eyre::Result<Rep3PrimeFieldShare<F>> {
+    y2a_impl(x, delta, net, state, false)
+}
+
+/// Like [y2a], but accepts any x < 2^MODULUS_BIT_SIZE (e.g., the XOR/OR of two field elements) and returns an arithmetic sharing of x mod p.
+pub fn y2a_mod_p<F: FieldUint, N: Network>(
+    x: BinaryBundle<WireMod2>,
+    delta: Option<WireMod2>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Rep3PrimeFieldShare<F>> {
+    y2a_impl(x, delta, net, state, true)
+}
+
+fn y2a_impl<F: FieldUint, N: Network>(
+    x: BinaryBundle<WireMod2>,
+    delta: Option<WireMod2>,
+    net: &N,
+    state: &mut Rep3State,
+    reduce: bool,
 ) -> eyre::Result<Rep3PrimeFieldShare<F>> {
     let mut res = Rep3PrimeFieldShare::zero_share();
 
@@ -609,15 +655,19 @@ pub fn y2a<F: FieldUint, N: Network>(
 
             let mut evaluator = Rep3Evaluator::new(net);
             evaluator.receive_circuit()?;
-            let x1 = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23)?;
+            let x1 = if reduce {
+                GarbledCircuits::adder_mod_p_reduce_lhs::<_, F>(&mut evaluator, &x, &x23)?
+            } else {
+                GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &x, &x23)?
+            };
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
             res.a = GCUtils::bits_to_field(&x1)?;
         }
         PartyID::ID1 => {
-            y2a_impl_p1!(Rep3Garbler<N>, x, delta, net, state, res)
+            y2a_impl_p1!(Rep3Garbler<N>, x, delta, net, state, res, reduce)
         }
         PartyID::ID2 => {
-            y2a_impl_p2!(Rep3Garbler<N>, x, delta, net, state, res)
+            y2a_impl_p2!(Rep3Garbler<N>, x, delta, net, state, res, reduce)
         }
     };
 
@@ -648,10 +698,10 @@ pub fn y2a_streaming<F: FieldUint, N: Network>(
             res.a = GCUtils::bits_to_field(&x1)?;
         }
         PartyID::ID1 => {
-            y2a_impl_p1!(StreamingRep3Garbler<N>, x, delta, net, state, res)
+            y2a_impl_p1!(StreamingRep3Garbler<N>, x, delta, net, state, res, false)
         }
         PartyID::ID2 => {
-            y2a_impl_p2!(StreamingRep3Garbler<N>, x, delta, net, state, res)
+            y2a_impl_p2!(StreamingRep3Garbler<N>, x, delta, net, state, res, false)
         }
     };
 
@@ -811,8 +861,7 @@ pub fn a2y2b_many<F: FieldUint, N: Network>(
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementations goes through the yao protocol and currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
 ///
-/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
-/// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
+/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element (< p), see [b2y2a_mod_p] otherwise.
 pub fn b2y2a<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,
     net: &N,
@@ -821,6 +870,17 @@ pub fn b2y2a<F: FieldUint, N: Network>(
     let delta = state.rngs.generate_random_garbler_delta(state.id);
     let y = b2y(x, delta, net, state)?;
     y2a(y, delta, net, state)
+}
+
+/// Like [b2y2a], but accepts any x < 2^MODULUS_BIT_SIZE (e.g., the XOR/OR of two field elements) and returns an arithmetic sharing of x mod p.
+pub fn b2y2a_mod_p<F: FieldUint, N: Network>(
+    x: &Rep3UintShare<F>,
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Rep3PrimeFieldShare<F>> {
+    let delta = state.rngs.generate_random_garbler_delta(state.id);
+    let y = b2y(x, delta, net, state)?;
+    y2a_mod_p(y, delta, net, state)
 }
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementations goes through the yao protocol and currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p. Uses the Streaming Garbler/Evaluator.
