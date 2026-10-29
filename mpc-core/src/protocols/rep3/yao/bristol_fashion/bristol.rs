@@ -266,11 +266,11 @@ impl BristolFashionCircuit {
     }
 
     /// Evaluate the Bristol-Fashion circuit
-    pub(crate) fn evaluate<T>(
+    pub(crate) fn evaluate<T, E: BristolFashionEvaluator<WireValue = T>>(
         &self,
         inputs: &[impl AsRef<[T]>],
-        evaluator: &mut impl BristolFashionEvaluator<WireValue = T>,
-    ) -> Result<Vec<Vec<T>>, CircuitExecutionError>
+        evaluator: &mut E,
+    ) -> Result<Vec<Vec<T>>, E::Error>
     where
         T: Clone + Default,
     {
@@ -278,12 +278,12 @@ impl BristolFashionCircuit {
     }
 
     /// Evaluate the Bristol-Fashion circuit from a given default value, such that the Default trait not being required
-    pub(crate) fn evaluate_with_default<T>(
+    pub(crate) fn evaluate_with_default<T, E: BristolFashionEvaluator<WireValue = T>>(
         &self,
         inputs: &[impl AsRef<[T]>],
-        evaluator: &mut impl BristolFashionEvaluator<WireValue = T>,
+        evaluator: &mut E,
         default: T,
-    ) -> Result<Vec<Vec<T>>, CircuitExecutionError>
+    ) -> Result<Vec<Vec<T>>, E::Error>
     where
         T: Clone,
     {
@@ -294,7 +294,8 @@ impl BristolFashionCircuit {
                 "Provided {} input bundles, circuit requires {} input bundles",
                 inputs.len(),
                 self.input_wires.len()
-            )));
+            ))
+            .into());
         }
 
         for (j, (bools, wires)) in inputs.iter().zip(self.input_wires.iter()).enumerate() {
@@ -305,7 +306,8 @@ impl BristolFashionCircuit {
                     j,
                     bools.len(),
                     wires.len()
-                )));
+                ))
+                .into());
             }
             for (val, &wire_id) in bools.iter().zip(wires) {
                 execution_wires[wire_id] = val.clone();
@@ -452,11 +454,11 @@ impl LeveledBristolFashionCircuit {
     }
 
     /// Evaluate the Bristol-Fashion circuit
-    pub(crate) fn evaluate<T>(
+    pub(crate) fn evaluate<T, E: BristolFashionEvaluator<WireValue = T>>(
         &self,
         inputs: &[impl AsRef<[T]>],
-        evaluator: &mut impl BristolFashionEvaluator<WireValue = T>,
-    ) -> Result<Vec<Vec<T>>, CircuitExecutionError>
+        evaluator: &mut E,
+    ) -> Result<Vec<Vec<T>>, E::Error>
     where
         T: Default + Clone,
     {
@@ -464,12 +466,12 @@ impl LeveledBristolFashionCircuit {
     }
 
     /// Evaluate the Bristol-Fashion circuit from a given default value, such that the Default trait not being required
-    pub(crate) fn evaluate_with_default<T>(
+    pub(crate) fn evaluate_with_default<T, E: BristolFashionEvaluator<WireValue = T>>(
         &self,
         inputs: &[impl AsRef<[T]>],
-        evaluator: &mut impl BristolFashionEvaluator<WireValue = T>,
+        evaluator: &mut E,
         default: T,
-    ) -> Result<Vec<Vec<T>>, CircuitExecutionError>
+    ) -> Result<Vec<Vec<T>>, E::Error>
     where
         T: Clone,
     {
@@ -480,7 +482,8 @@ impl LeveledBristolFashionCircuit {
                 "Provided {} input bundles, circuit requires {} input bundles",
                 inputs.len(),
                 self.input_wires.len()
-            )));
+            ))
+            .into());
         }
 
         for (j, (bools, wires)) in inputs.iter().zip(self.input_wires.iter()).enumerate() {
@@ -491,7 +494,8 @@ impl LeveledBristolFashionCircuit {
                     j,
                     bools.len(),
                     wires.len()
-                )));
+                ))
+                .into());
             }
             for (val, &wire_id) in bools.iter().zip(wires) {
                 execution_wires[wire_id] = val.clone();
@@ -585,27 +589,28 @@ pub trait BristolFashionEvaluator {
     /// e.g., for a standard boolean circuit evaluation this could be `bool`
     /// e.g., for a evaluating a circuit using FHE, this could be an FHE ciphertext encrypting 0 or 1
     type WireValue: Sized + std::fmt::Debug + Clone;
-    // TODO: once GATs are stable, see if we can maybe specify the error type here better
+    /// The error type of the evaluator
+    type Error: From<CircuitExecutionError>;
 
     /// Produce a `WireValue` equal to a zero/false bit if `input == false`,
     /// otherwise produce a `WireValue` equal to a one/true bit.
-    fn constant(&mut self, input: bool) -> Result<Self::WireValue, CircuitExecutionError>;
+    fn constant(&mut self, input: bool) -> Result<Self::WireValue, Self::Error>;
     /// Produce a `WireValue` equal to the inverse of the input `WireValue`
     ///
     /// i.e., if the input `WireValue` represents 0, return 1 and vice versa
-    fn inv(&mut self, input: &Self::WireValue) -> Result<Self::WireValue, CircuitExecutionError>;
+    fn inv(&mut self, input: &Self::WireValue) -> Result<Self::WireValue, Self::Error>;
     /// Produce a `WireValue` equal to the XOR of the two input `WireValue`s
     fn xor(
         &mut self,
         input1: &Self::WireValue,
         input2: &Self::WireValue,
-    ) -> Result<Self::WireValue, CircuitExecutionError>;
+    ) -> Result<Self::WireValue, Self::Error>;
     /// Produce a `WireValue` equal to the AND of the two input `WireValue`s
     fn and(
         &mut self,
         input1: &Self::WireValue,
         input2: &Self::WireValue,
-    ) -> Result<Self::WireValue, CircuitExecutionError>;
+    ) -> Result<Self::WireValue, Self::Error>;
 
     /// An interface for evaluating many ANDs at once, for optimized networking etc
     ///
@@ -623,7 +628,7 @@ pub trait BristolFashionEvaluator {
         &mut self,
         inputs1: &[&Self::WireValue],
         inputs2: &[&Self::WireValue],
-    ) -> Result<Vec<Self::WireValue>, CircuitExecutionError> {
+    ) -> Result<Vec<Self::WireValue>, Self::Error> {
         assert_eq!(inputs1.len(), inputs2.len());
         inputs1
             .iter()
@@ -638,6 +643,7 @@ pub struct BoolBristolFashionEvaluator;
 
 impl BristolFashionEvaluator for BoolBristolFashionEvaluator {
     type WireValue = bool;
+    type Error = CircuitExecutionError;
 
     fn constant(&mut self, input: bool) -> Result<Self::WireValue, CircuitExecutionError> {
         Ok(input)

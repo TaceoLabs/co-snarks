@@ -7,6 +7,7 @@ use super::{
     ring::{bit::Bit, int_ring::IntRing2k, ring_impl::RingElement},
     yao,
 };
+use crate::protocols::rep3::yao::fancy::{BinaryBundle, WireMod2};
 use crate::protocols::rep3::{
     Rep3PrimeFieldShare, Rep3State,
     conversion::A2BType,
@@ -18,7 +19,6 @@ use crate::protocols::rep3::{
     },
 };
 use ark_ff::PrimeField;
-use fancy_garbling::{BinaryBundle, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
 use rand::{distributions::Standard, prelude::Distribution};
@@ -670,14 +670,12 @@ pub fn a2y<T: IntRing2k, N: Network>(
         PartyID::ID0 => {
             let mut evaluator = Rep3Evaluator::new(net);
             evaluator.receive_circuit()?;
-            let res = GarbledCircuits::adder_mod_2k(&mut evaluator, &x01, &x2);
-            GCUtils::garbled_circuits_error(res)?
+            GarbledCircuits::adder_mod_2k(&mut evaluator, &x01, &x2)?
         }
         PartyID::ID1 | PartyID::ID2 => {
             let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
-            let res = GarbledCircuits::adder_mod_2k(&mut garbler, &x01, &x2);
-            let res = GCUtils::garbled_circuits_error(res)?;
+            let res = GarbledCircuits::adder_mod_2k(&mut garbler, &x01, &x2)?;
             garbler.send_circuit()?;
             res
         }
@@ -698,16 +696,14 @@ pub fn a2y_streaming<T: IntRing2k, N: Network>(
     let converted = match state.id {
         PartyID::ID0 => {
             let mut evaluator = StreamingRep3Evaluator::new(net);
-            let res = GarbledCircuits::adder_mod_2k(&mut evaluator, &x01, &x2);
-            let res = GCUtils::garbled_circuits_error(res)?;
+            let res = GarbledCircuits::adder_mod_2k(&mut evaluator, &x01, &x2)?;
             evaluator.receive_hash()?;
             res
         }
         PartyID::ID1 | PartyID::ID2 => {
             let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler = StreamingRep3Garbler::new_with_delta(net, state, delta);
-            let res = GarbledCircuits::adder_mod_2k(&mut garbler, &x01, &x2);
-            let res = GCUtils::garbled_circuits_error(res)?;
+            let res = GarbledCircuits::adder_mod_2k(&mut garbler, &x01, &x2)?;
             garbler.send_hash()?;
             res
         }
@@ -727,8 +723,7 @@ macro_rules! y2a_impl_p1 {
         let x23 = yao::input_ring_id2::<T, _>(None, None, $net, $state)?;
 
         let mut garbler = <$garbler>::new_with_delta($net, $state, delta);
-        let x1 = GarbledCircuits::adder_mod_2k(&mut garbler, &$x, &x23);
-        let x1 = GCUtils::garbled_circuits_error(x1)?;
+        let x1 = GarbledCircuits::adder_mod_2k(&mut garbler, &$x, &x23)?;
         let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
         let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
         $res.b = GCUtils::bits_to_ring(&x1)?;
@@ -754,8 +749,7 @@ macro_rules! y2a_impl_p2 {
         let x23 = yao::input_ring_id2(x23, Some(delta), $net, $state)?;
 
         let mut garbler = <$garbler>::new_with_delta($net, $state, delta);
-        let x1 = GarbledCircuits::adder_mod_2k(&mut garbler, &$x, &x23);
-        let x1 = GCUtils::garbled_circuits_error(x1)?;
+        let x1 = GarbledCircuits::adder_mod_2k(&mut garbler, &$x, &x23)?;
         let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
         if x1.is_some() {
             eyre::bail!("Unexpected output received");
@@ -786,8 +780,7 @@ where
 
             let mut evaluator = Rep3Evaluator::new(net);
             evaluator.receive_circuit()?;
-            let x1 = GarbledCircuits::adder_mod_2k(&mut evaluator, &x, &x23);
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = GarbledCircuits::adder_mod_2k(&mut evaluator, &x, &x23)?;
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
             res.a = GCUtils::bits_to_ring(&x1)?;
         }
@@ -824,8 +817,7 @@ where
             let x23 = yao::input_ring_id2::<T, _>(None, None, net, state)?;
 
             let mut evaluator = StreamingRep3Evaluator::new(net);
-            let x1 = GarbledCircuits::adder_mod_2k(&mut evaluator, &x, &x23);
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            let x1 = GarbledCircuits::adder_mod_2k(&mut evaluator, &x, &x23)?;
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
             res.a = GCUtils::bits_to_ring(&x1)?;
         }
@@ -854,15 +846,13 @@ pub fn b2y<T: IntRing2k, N: Network>(
             // There is no code difference between Rep3Evaluator and StreamingRep3Evaluator
             let mut evaluator = Rep3Evaluator::new(net);
             // evaluator.receive_circuit()?; // No network used here
-            let res = GarbledCircuits::xor_many(&mut evaluator, &x01, &x2);
-            GCUtils::garbled_circuits_error(res)?
+            GarbledCircuits::xor_many(&mut evaluator, &x01, &x2)?
         }
         PartyID::ID1 | PartyID::ID2 => {
             // There is no code difference between Rep3Garbler and StreamingRep3Garbler
             let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
-            let res = GarbledCircuits::xor_many(&mut garbler, &x01, &x2);
-            GCUtils::garbled_circuits_error(res)?
+            GarbledCircuits::xor_many(&mut garbler, &x01, &x2)?
             // garbler.send_circuit()?; // No network used here
         }
     };
@@ -884,15 +874,13 @@ pub fn b2y_many<T: IntRing2k, N: Network>(
             // There is no code difference between Rep3Evaluator and StreamingRep3Evaluator
             let mut evaluator = Rep3Evaluator::new(net);
             // evaluator.receive_circuit()?; // No network used here
-            let res = GarbledCircuits::xor_many(&mut evaluator, &x01, &x2);
-            GCUtils::garbled_circuits_error(res)?
+            GarbledCircuits::xor_many(&mut evaluator, &x01, &x2)?
         }
         PartyID::ID1 | PartyID::ID2 => {
             // There is no code difference between Rep3Garbler and StreamingRep3Garbler
             let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
             let mut garbler = Rep3Garbler::new_with_delta(net, state, delta);
-            let res = GarbledCircuits::xor_many(&mut garbler, &x01, &x2);
-            GCUtils::garbled_circuits_error(res)?
+            GarbledCircuits::xor_many(&mut garbler, &x01, &x2)?
             // garbler.send_circuit()?; // No network used here
         }
     };
@@ -944,13 +932,12 @@ where
     Standard: Distribution<T>,
 {
     let bits = T::K;
-    let vec = x.extract();
-    if !vec.size().is_multiple_of(bits) {
+    if !x.size().is_multiple_of(bits) {
         eyre::bail!("Invalid input length");
     }
-    let num_elements = vec.size() / bits;
+    let num_elements = x.size() / bits;
     let mut collapsed = Vec::with_capacity(num_elements);
-    for chunk in vec.wires().chunks(bits) {
+    for chunk in x.wires().chunks(bits) {
         let bundle = BinaryBundle::new(chunk.to_vec());
         collapsed.push(GCUtils::collapse_bundle_to_lsb_bits_as_ring(bundle)?);
     }

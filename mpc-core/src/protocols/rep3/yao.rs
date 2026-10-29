@@ -5,6 +5,7 @@
 pub mod bristol_fashion;
 pub mod circuits;
 pub mod evaluator;
+pub mod fancy;
 pub mod garbler;
 pub mod streaming_evaluator;
 pub mod streaming_garbler;
@@ -12,13 +13,11 @@ pub mod streaming_garbler;
 use super::{Rep3PrimeFieldShare, Rep3State, Rep3UintShare, id::PartyID, network::Rep3NetworkExt};
 use crate::uint::{FieldUint, UintBackend};
 use circuits::{GarbledCircuits, SHA256Table};
-use fancy_garbling::{BinaryBundle, WireLabel, WireMod2, hash_wires, util::tweak2};
+use fancy::{BinaryBundle, Block, WireMod2};
 use itertools::{Itertools, izip};
 use mpc_net::Network;
 use num_traits::{WrappingAdd, Zero};
 use rand::{CryptoRng, Rng};
-use scuttlebutt::Block;
-use subtle::ConditionallySelectable;
 
 /// A structure that contains both the garbler and the evaluators wires
 pub struct GCInputs<F> {
@@ -34,91 +33,6 @@ pub struct GCInputs<F> {
 pub struct GCUtils {}
 
 impl GCUtils {
-    /// Evaluates an 'and' gate given two inputs wires and two half-gates from the garbler.
-    ///
-    /// Outputs C = A & B
-    ///
-    /// Used internally as a subroutine to implement 'and' gates for `FancyBinary`.
-    pub(crate) fn evaluate_and_gate(
-        gate_num: usize,
-        a: &WireMod2,
-        b: &WireMod2,
-        gate0: &Block,
-        gate1: &Block,
-    ) -> WireMod2 {
-        let g = tweak2(gate_num as u64, 0);
-
-        let [hash_a, hash_b] = hash_wires([a, b], g);
-
-        // garbler's half gate
-        let l = WireMod2::from_block(
-            Block::conditional_select(&hash_a, &(hash_a ^ *gate0), (a.color() as u8).into()),
-            2,
-        );
-
-        // evaluator's half gate
-        let r = WireMod2::from_block(
-            Block::conditional_select(&hash_b, &(hash_b ^ *gate1), (b.color() as u8).into()),
-            2,
-        );
-
-        l.plus_mov(&r.plus_mov(&a.cmul(b.color())))
-    }
-
-    /// Garbles an 'and' gate given two input wires and the delta.
-    ///
-    /// Outputs a tuple consisting of the two gates (that should be transferred to the evaluator)
-    /// and the next wire label for the garbler.
-    ///
-    /// Used internally as a subroutine to implement 'and' gates for `FancyBinary`.
-    pub(crate) fn garble_and_gate(
-        gate_num: usize,
-        a: &WireMod2,
-        b: &WireMod2,
-        delta: &WireMod2,
-    ) -> (Block, Block, WireMod2) {
-        let q = 2;
-        let d = delta;
-
-        let r = b.color(); // secret value known only to the garbler (ev knows r+b)
-
-        let g = tweak2(gate_num as u64, 0);
-
-        // X = H(A+aD) + arD such that a + A.color == 0
-        let alpha = a.color(); // alpha = -A.color
-        let x1 = a.plus(&d.cmul(alpha));
-
-        // Y = H(B + bD) + (b + r)A such that b + B.color == 0
-        let beta = (q - b.color()) % q;
-        let y1 = b.plus(&d.cmul(beta));
-
-        let ad = a.plus(d);
-        let bd = b.plus(d);
-
-        // idx is always boolean for binary gates, so it can be represented as a `u8`
-        let a_selector = (a.color() as u8).into();
-        let b_selector = (b.color() as u8).into();
-
-        let b = WireMod2::conditional_select(&bd, b, b_selector);
-        let new_a = WireMod2::conditional_select(&ad, a, a_selector);
-        let idx = u8::conditional_select(&(r as u8), &0u8, a_selector);
-
-        let [hash_a, hash_b, hash_x, hash_y] = hash_wires([&new_a, &b, &x1, &y1], g);
-
-        let x = WireMod2::hash_to_mod(hash_x, q).plus_mov(&d.cmul(alpha * r % q));
-        let y = WireMod2::hash_to_mod(hash_y, q);
-
-        let gate0 =
-            hash_a ^ Block::conditional_select(&x.as_block(), &x.plus(d).as_block(), idx.into());
-        let gate1 = hash_b ^ y.plus(a).as_block();
-
-        (gate0, gate1, x.plus_mov(&y))
-    }
-
-    pub(crate) fn garbled_circuits_error<G, T>(input: Result<T, G>) -> eyre::Result<T> {
-        input.map_err(|_| eyre::eyre!("Garbled Circuit failed"))
-    }
-
     pub(crate) fn collapse_bundle_to_lsb_bits_as_uint<U: UintBackend>(
         input: BinaryBundle<WireMod2>,
     ) -> U {
@@ -134,13 +48,10 @@ impl GCUtils {
 
     fn receive_block_from<N: Network>(net: &N, id: PartyID) -> eyre::Result<Block> {
         let data: Vec<u8> = net.recv_from(id)?;
-        if data.len() != 16 {
-            eyre::bail!("To little elements received");
-        }
-        let mut v = Block::default();
-        v.as_mut().copy_from_slice(&data);
-
-        Ok(v)
+        let data: [u8; 16] = data
+            .try_into()
+            .map_err(|data: Vec<u8>| eyre::eyre!("Expected 16 bytes, received {}", data.len()))?;
+        Ok(Block::from(data))
     }
 
     pub(crate) fn receive_bundle_from<N: Network>(
@@ -154,9 +65,7 @@ impl GCUtils {
         }
         let mut result = Vec::with_capacity(rcv.len());
         for block in rcv {
-            let mut v = Block::default();
-            v.as_mut().copy_from_slice(&block);
-            result.push(WireMod2::from_block(v, 2));
+            result.push(WireMod2::from_block(Block::from(block)));
         }
         Ok(BinaryBundle::new(result))
     }
@@ -168,10 +77,7 @@ impl GCUtils {
     ) -> eyre::Result<()> {
         let mut blocks = Vec::with_capacity(input.size());
         for val in input.iter() {
-            let block = val.as_block();
-            let mut gate = [0; 16];
-            gate.copy_from_slice(block.as_ref());
-            blocks.push(gate);
+            blocks.push(<[u8; 16]>::from(val.as_block()));
         }
         net.send_many(id, &blocks)
     }
@@ -193,21 +99,7 @@ impl GCUtils {
 
     /// Samples a random delta
     pub fn random_delta<R: Rng + CryptoRng>(rng: &mut R) -> WireMod2 {
-        WireMod2::rand_delta(rng, 2)
-    }
-
-    #[cfg(test)]
-    fn u16_bits_to_field<F: FieldUint>(bits: Vec<u16>) -> eyre::Result<F> {
-        let mut res = F::Uint::zero();
-        for bit in bits.iter().rev() {
-            assert!(*bit < 2);
-            res <<= 1;
-            res = res.wrapping_add(&F::Uint::from(*bit as u64));
-        }
-        if res >= F::modulus_uint() {
-            eyre::bail!("Invalid field element");
-        }
-        Ok(F::from_uint_unchecked(&res))
+        WireMod2::rand_delta(rng)
     }
 
     /// Converts bits into a field element
@@ -290,8 +182,8 @@ impl GCUtils {
         delta: &WireMod2,
         val: u16,
     ) -> (WireMod2, WireMod2) {
-        let zero = WireMod2::rand(rng, 2);
-        let enc = zero.plus(&delta.cmul(val));
+        let zero = WireMod2::rand(rng);
+        let enc = zero ^ delta.cmul(val);
         (zero, enc)
     }
 
@@ -368,7 +260,7 @@ pub fn joint_input_arithmetic<F: FieldUint, N: Network>(
     // x1 is known by both garblers, we can do a shortcut to share it without communication.
     // See https://eprint.iacr.org/2019/1168.pdf, p18, last paragraph of "Joint Yao Input".
     let mut x1 = (0..n_bits)
-        .map(|_| WireMod2::from_block(state.rngs.generate_shared::<Block>(state.id), 2))
+        .map(|_| WireMod2::from_block(state.rngs.generate_shared::<Block>(state.id)))
         .collect_vec();
 
     let (x0, x2) = match state.id {
@@ -386,7 +278,7 @@ pub fn joint_input_arithmetic<F: FieldUint, N: Network>(
             // Modify x1
             let x1_bits = GCUtils::field_to_bits_as_u16(x.a);
             x1.iter_mut().zip(x1_bits).for_each(|(x, bit)| {
-                x.plus_eq(&delta.cmul(bit));
+                *x ^= delta.cmul(bit);
             });
 
             // Input x0
@@ -406,7 +298,7 @@ pub fn joint_input_arithmetic<F: FieldUint, N: Network>(
             // Modify x1
             let x1_bits = GCUtils::field_to_bits_as_u16(x.b);
             x1.iter_mut().zip(x1_bits).for_each(|(x, bit)| {
-                x.plus_eq(&delta.cmul(bit));
+                *x ^= delta.cmul(bit);
             });
 
             // Input x2
@@ -956,8 +848,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let mut evaluator = yao::evaluator::Rep3Evaluator::new($net);
                 evaluator.receive_circuit()?;
 
-                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*)?;
                 let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
                 // Compose the bits
@@ -977,8 +868,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let mut garbler =
                     yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -1005,8 +895,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let mut garbler =
                    yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 if x1.is_some() {
                     eyre::bail!(
@@ -1048,8 +937,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_other_field {
                 let mut evaluator = yao::evaluator::Rep3Evaluator::new($net);
                 evaluator.receive_circuit()?;
 
-                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*)?;
                 let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
                 // Compose the bits
@@ -1069,8 +957,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_other_field {
                 let mut garbler =
                     yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -1097,8 +984,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_other_field {
                 let mut garbler =
                    yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 if x1.is_some() {
                     eyre::bail!(
@@ -1134,8 +1020,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_binary {
                 let mut evaluator = yao::evaluator::Rep3Evaluator::new($io_context);
                 evaluator.receive_circuit()?;
 
-                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*)?;
                 let mut x1_vec= Vec::new();
                 for chunk in x1.wires().chunks(F::MODULUS_BIT_SIZE as usize) {
                     x1_vec.push(BinaryBundle::new(chunk.to_vec()));
@@ -1149,8 +1034,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_binary {
                 let mut garbler =
                     yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let mut x1_vec= Vec::new();
                 for chunk in x1.wires().chunks(F::MODULUS_BIT_SIZE as usize) {
                     x1_vec.push(BinaryBundle::new(chunk.to_vec()));
@@ -1173,8 +1057,7 @@ macro_rules! decompose_circuit_compose_blueprint_to_binary {
                 let mut garbler =
                    yao::garbler::Rep3Garbler::new_with_delta($io_context, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let mut x1_vec= Vec::new();
                 for chunk in x1.wires().chunks(F::MODULUS_BIT_SIZE as usize) {
                     x1_vec.push(BinaryBundle::new(chunk.to_vec()));

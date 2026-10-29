@@ -38,6 +38,7 @@ brillig = { version = "1.0.0-rc.5", git = "https://github.com/noir-lang/noir/", 
 noirc-abi = { version = "1.0.0-rc.5", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.5", package = "noirc_abi" }
 noirc-artifacts = { version = "1.0.0-rc.5", git = "https://github.com/noir-lang/noir/", tag = "v1.0.0-rc.5", package = "noirc_artifacts" }
 
+aes = "0.9"
 ark-bls12-377 = "0.6"
 ark-bls12-381 = "0.6"
 ark-bn254 = "0.6"
