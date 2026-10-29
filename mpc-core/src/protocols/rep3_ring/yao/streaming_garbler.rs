@@ -1,8 +1,8 @@
+use crate::protocols::rep3::yao::fancy::WireMod2;
 use crate::protocols::{
     rep3::yao::{GCInputs, GCUtils, streaming_garbler::StreamingRep3Garbler},
     rep3_ring::ring::{int_ring::IntRing2k, ring_impl::RingElement},
 };
-use fancy_garbling::WireMod2;
 use mpc_net::Network;
 
 impl<N: Network> StreamingRep3Garbler<'_, N> {

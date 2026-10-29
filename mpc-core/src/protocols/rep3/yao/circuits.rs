@@ -1,13 +1,17 @@
+// Parts of this file are adapted from swanky (https://github.com/GaloisInc/swanky),
+// rev 5ff648457218b74da9d8323b7ca47166ff5be4b3. Copyright © 2019-2022 Galois, Inc.
+// Licensed under the MIT license, see THIRD_PARTY_NOTICES in the mpc-core crate root.
+
 //! Circuits
 //!
 //! This module contains some garbled circuit implementations.
 
 use super::bristol_fashion::BristolFashionEvaluator;
+use super::fancy::{BinaryBundle, FancyBinary, GcError};
 use crate::protocols::rep3::yao::{GCUtils, bristol_fashion::BristolFashionCircuit};
 use crate::uint::FieldUint;
 use ark_ff::One;
 use core::panic;
-use fancy_garbling::{BinaryBundle, FancyBinary, FancyError};
 use itertools::izip;
 use num_traits::WrappingSub;
 use std::ops::Not;
@@ -15,10 +19,35 @@ use std::ops::Not;
 /// This trait allows to lazily initialize the constants 0 and 1 for the garbled circuit, such that these constants are only send at most once each.
 pub trait FancyBinaryConstant: FancyBinary {
     /// Takes an already initialized constant 0 or adds it to the garbled circuit if not yet present
-    fn const_zero(&mut self) -> Result<Self::Item, Self::Error>;
+    fn const_zero(&mut self) -> Result<Self::Item, GcError>;
 
     /// Takes an already initialized constant 1 or adds it to the garbled circuit if not yet present
-    fn const_one(&mut self) -> Result<Self::Item, Self::Error>;
+    fn const_one(&mut self) -> Result<Self::Item, GcError>;
+}
+
+impl<G: FancyBinary + FancyBinaryConstant> BristolFashionEvaluator for G {
+    type WireValue = G::Item;
+    type Error = GcError;
+
+    fn constant(&mut self, input: bool) -> Result<G::Item, GcError> {
+        if input {
+            self.const_one()
+        } else {
+            self.const_zero()
+        }
+    }
+
+    fn inv(&mut self, input: &G::Item) -> Result<G::Item, GcError> {
+        FancyBinary::negate(self, input)
+    }
+
+    fn xor(&mut self, input1: &G::Item, input2: &G::Item) -> Result<G::Item, GcError> {
+        FancyBinary::xor(self, input1, input2)
+    }
+
+    fn and(&mut self, input1: &G::Item, input2: &G::Item) -> Result<G::Item, GcError> {
+        FancyBinary::and(self, input1, input2)
+    }
 }
 
 /// An enum used for using the right table in the garbled circuit implementation of SHA256.
@@ -46,7 +75,7 @@ impl GarbledCircuits {
         g: &mut G,
         c: u32,
         size: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         Self::constant_bundle_from_usize(g, c as usize, size)
     }
 
@@ -54,7 +83,7 @@ impl GarbledCircuits {
         g: &mut G,
         c: usize,
         size: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let mut result = Vec::with_capacity(size);
 
         for i in 0..size {
@@ -73,7 +102,7 @@ impl GarbledCircuits {
         a: &G::Item,
         b: bool,
         c: &G::Item,
-    ) -> Result<(G::Item, G::Item), G::Error> {
+    ) -> Result<(G::Item, G::Item), GcError> {
         let (s, c) = if b {
             let z1 = g.negate(a)?;
             let s = g.xor(&z1, c)?;
@@ -97,7 +126,7 @@ impl GarbledCircuits {
         g: &mut G,
         a: &G::Item,
         b: &G::Item,
-    ) -> Result<(G::Item, G::Item), G::Error> {
+    ) -> Result<(G::Item, G::Item), GcError> {
         let s = g.xor(a, b)?;
         let c = g.and(a, b)?;
         Ok((s, c))
@@ -107,7 +136,7 @@ impl GarbledCircuits {
         g: &mut G,
         a: &G::Item,
         b: bool,
-    ) -> Result<(G::Item, G::Item), G::Error> {
+    ) -> Result<(G::Item, G::Item), GcError> {
         let s = if b { g.negate(a)? } else { a.to_owned() };
         let c = a.to_owned();
         Ok((s, c))
@@ -119,7 +148,7 @@ impl GarbledCircuits {
         a: &G::Item,
         b: &G::Item,
         c: &G::Item,
-    ) -> Result<G::Item, G::Error> {
+    ) -> Result<G::Item, GcError> {
         let z1 = g.xor(a, b)?;
         let z3 = g.xor(a, c)?;
         let z4 = g.and(&z1, &z3)?;
@@ -132,7 +161,7 @@ impl GarbledCircuits {
         a: &G::Item,
         b: &G::Item,
         c: &G::Item,
-    ) -> Result<(G::Item, G::Item), G::Error> {
+    ) -> Result<(G::Item, G::Item), GcError> {
         let z1 = g.xor(a, b)?;
         let s = g.xor(&z1, c)?;
         let z3 = g.xor(a, c)?;
@@ -146,7 +175,7 @@ impl GarbledCircuits {
         g: &mut G,
         a: &G::Item,
         b: &G::Item,
-    ) -> Result<(G::Item, G::Item), G::Error> {
+    ) -> Result<(G::Item, G::Item), GcError> {
         let z1 = g.xor(a, b)?;
         let s = g.negate(&z1)?;
         let z3 = g.negate(a)?;
@@ -160,7 +189,7 @@ impl GarbledCircuits {
         g: &mut G,
         a: &G::Item,
         b: bool,
-    ) -> Result<(G::Item, G::Item), G::Error> {
+    ) -> Result<(G::Item, G::Item), GcError> {
         let (s, c) = if b {
             (a.clone(), g.const_one()?)
         } else {
@@ -174,7 +203,7 @@ impl GarbledCircuits {
         g: &mut G,
         a: &G::Item,
         b: &G::Item,
-    ) -> Result<G::Item, G::Error> {
+    ) -> Result<G::Item, GcError> {
         let z1 = g.xor(a, b)?;
         let z3 = g.negate(a)?;
         let z4 = g.and(&z1, &z3)?;
@@ -183,12 +212,11 @@ impl GarbledCircuits {
     }
 
     /// Binary addition. Returns the result and the carry.
-    #[expect(clippy::type_complexity)]
     fn bin_addition<G: FancyBinary>(
         g: &mut G,
         xs: &[G::Item],
         ys: &[G::Item],
-    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+    ) -> Result<(Vec<G::Item>, G::Item), GcError> {
         debug_assert_eq!(xs.len(), ys.len());
         let mut result = Vec::with_capacity(xs.len());
 
@@ -210,7 +238,7 @@ impl GarbledCircuits {
         g: &mut G,
         xs: &[G::Item],
         ys: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         debug_assert_eq!(xs.len(), ys.len());
         if xs.len() == 1 {
             return Ok(vec![g.xor(&xs[0], &ys[0])?]);
@@ -241,7 +269,7 @@ impl GarbledCircuits {
         g: &mut G,
         xs: &[G::Item],
         ys: &[bool],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         debug_assert_eq!(xs.len(), ys.len());
         if xs.len() == 1 {
             if ys[0] {
@@ -277,12 +305,11 @@ impl GarbledCircuits {
 
     /// Binary subtraction. Returns the result and whether it underflowed.
     /// I.e., calculates 2^k + x1 - x2
-    #[expect(clippy::type_complexity)]
     pub fn bin_subtraction<G: FancyBinary>(
         g: &mut G,
         xs: &[G::Item],
         ys: &[G::Item],
-    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+    ) -> Result<(Vec<G::Item>, G::Item), GcError> {
         debug_assert_eq!(xs.len(), ys.len());
         let mut result = Vec::with_capacity(xs.len());
         // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
@@ -303,12 +330,11 @@ impl GarbledCircuits {
     }
 
     /// Needed for subtraction in binary division (for shared/shared) where xs is (conceptually) a constant 0 bundle with only some values set
-    #[expect(clippy::type_complexity)]
     fn bin_subtraction_partial<G: FancyBinary>(
         g: &mut G,
         xs: &[G::Item],
         ys: &[G::Item],
-    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+    ) -> Result<(Vec<G::Item>, G::Item), GcError> {
         let mut result = Vec::with_capacity(xs.len());
         // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
         let length = xs.len();
@@ -335,12 +361,11 @@ impl GarbledCircuits {
     }
 
     /// Needed for subtraction in binary division (for shared/public) where xs is (conceptually) a constant 0 bundle with only some values set and the subtrahend is a constant/public
-    #[expect(clippy::type_complexity)]
     fn bin_subtraction_partial_by_constant<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         xs: &[G::Item],
         ys: &[bool],
-    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+    ) -> Result<(Vec<G::Item>, G::Item), GcError> {
         let mut result = Vec::with_capacity(xs.len());
         // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
         let length = xs.len();
@@ -369,12 +394,11 @@ impl GarbledCircuits {
     }
 
     /// Needed for subtraction in binary division (public/shared) where xs is (conceptually) a constant 0 bundle with only some constant/public values set
-    #[expect(clippy::type_complexity)]
     fn bin_subtraction_partial_from_constant<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         xs: &[bool],
         ys: &[G::Item],
-    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+    ) -> Result<(Vec<G::Item>, G::Item), GcError> {
         let mut result = Vec::with_capacity(xs.len());
         // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
         let length = xs.len();
@@ -408,7 +432,7 @@ impl GarbledCircuits {
         g: &mut G,
         xs: &[G::Item],
         ys: &[G::Item],
-    ) -> Result<G::Item, G::Error> {
+    ) -> Result<G::Item, GcError> {
         debug_assert_eq!(xs.len(), ys.len());
         // Twos complement is negation + 1, we implement by having cin in adder = 1, so only negation is required
 
@@ -429,7 +453,7 @@ impl GarbledCircuits {
         g: &mut G,
         lhs: &[G::Item],
         rhs: &[bool],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let zero = g.const_zero()?;
         let mut sum = if rhs[0] {
             lhs.to_vec()
@@ -461,7 +485,7 @@ impl GarbledCircuits {
         g: &mut G,
         dividend: &[G::Item],
         divisor: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let mut acc: Vec<G::Item> = Vec::with_capacity(dividend.len());
         let mut qs: Vec<G::Item> = vec![];
         for x in dividend.iter().rev() {
@@ -485,7 +509,7 @@ impl GarbledCircuits {
         g: &mut G,
         dividend: &[G::Item],
         divisor: &[bool],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let mut acc: Vec<G::Item> = Vec::with_capacity(dividend.len());
         let mut qs: Vec<G::Item> = vec![];
         for x in dividend.iter().rev() {
@@ -509,7 +533,7 @@ impl GarbledCircuits {
         g: &mut G,
         dividend: &[bool],
         divisor: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let mut acc: Vec<bool> = vec![false; divisor.len() - 1];
         let mut acc_g;
         let mut qs: Vec<G::Item> = vec![];
@@ -549,11 +573,11 @@ impl GarbledCircuits {
         b: &G::Item,
         x: &[G::Item],
         y: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         x.iter()
             .zip(y.iter())
             .map(|(xwire, ywire)| g.mux(b, xwire, ywire))
-            .collect::<Result<Vec<G::Item>, G::Error>>()
+            .collect::<Result<Vec<G::Item>, GcError>>()
     }
 
     /// Multiplex gadget for public/shared
@@ -562,7 +586,7 @@ impl GarbledCircuits {
         b: &G::Item,
         x: &[bool],
         y: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         x.iter()
             .zip(y.iter())
             .map(|(xwire, ywire)| {
@@ -573,16 +597,15 @@ impl GarbledCircuits {
                     g.and(b, ywire)
                 }
             })
-            .collect::<Result<Vec<G::Item>, G::Error>>()
+            .collect::<Result<Vec<G::Item>, GcError>>()
     }
 
     /// Subtracts p from wires (with carry) and returns the result and the overflow bit.
-    #[expect(clippy::type_complexity)]
     fn sub_p<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires: &[G::Item],
         carry: G::Item,
-    ) -> Result<(Vec<G::Item>, G::Item), G::Error> {
+    ) -> Result<(Vec<G::Item>, G::Item), GcError> {
         let bitlen = wires.len();
         debug_assert_eq!(bitlen, F::MODULUS_BIT_SIZE as usize);
 
@@ -620,7 +643,7 @@ impl GarbledCircuits {
         wires: &[G::Item],
         carry: G::Item,
         outlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let (subtracted, ov) = Self::sub_p::<_, F>(g, wires, carry)?;
 
         // multiplex for result
@@ -640,7 +663,7 @@ impl GarbledCircuits {
         wires_a: &[G::Item],
         wires_b: &[G::Item],
         outlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let bitlen = wires_a.len();
         debug_assert_eq!(bitlen, wires_b.len());
         debug_assert_eq!(bitlen, F::MODULUS_BIT_SIZE as usize);
@@ -657,7 +680,7 @@ impl GarbledCircuits {
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let bitlen = wires_a.size();
         debug_assert_eq!(bitlen, wires_b.size());
         let res = Self::adder_mod_p_with_output_size::<_, F>(
@@ -674,7 +697,7 @@ impl GarbledCircuits {
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
-    ) -> Result<Vec<BinaryBundle<G::Item>>, G::Error> {
+    ) -> Result<Vec<BinaryBundle<G::Item>>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut results = Vec::with_capacity(wires_a.size() / input_bitlen);
         for (chunk_a, chunk_b) in izip!(
@@ -693,7 +716,7 @@ impl GarbledCircuits {
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         debug_assert_eq!(wires_a.size(), wires_b.size());
         let res = Self::bin_addition_no_carry(g, wires_a.wires(), wires_b.wires())?;
         Ok(BinaryBundle::new(res))
@@ -704,7 +727,7 @@ impl GarbledCircuits {
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
         wires_b: &BinaryBundle<G::Item>,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let bitlen = wires_a.size();
         debug_assert_eq!(bitlen, wires_b.size());
 
@@ -721,7 +744,7 @@ impl GarbledCircuits {
         g: &mut G,
         wires_a: &[G::Item],
         wires_b: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let bitlen = wires_a.len();
         debug_assert_eq!(bitlen, wires_b.len());
 
@@ -737,7 +760,7 @@ impl GarbledCircuits {
         g: &mut G,
         field_wires: &[G::Item],
         rand_wires: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = field_wires.len();
         debug_assert!(input_bitlen <= F::MODULUS_BIT_SIZE as usize);
         debug_assert_eq!(rand_wires.len(), F::MODULUS_BIT_SIZE as usize);
@@ -781,7 +804,7 @@ impl GarbledCircuits {
         num_decomps_per_field: usize,
         decompose_bitlen: usize,
         output_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let total_output_bitlen = decompose_bitlen * num_decomps_per_field;
         debug_assert_eq!(wires_a.len(), wires_b.len());
         let input_bitlen = wires_a.len();
@@ -848,7 +871,7 @@ impl GarbledCircuits {
         num_decomps_per_field: usize,
         decompose_bitlen: usize,
         output_bitlen: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         debug_assert_eq!(wires_a.size(), wires_b.size());
         let input_size = wires_a.size();
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
@@ -894,7 +917,7 @@ impl GarbledCircuits {
         wires_c: &[G::Item],
         decompose_bitlen: usize,
         total_output_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let num_decomps_per_field = total_output_bitlen.div_ceil(decompose_bitlen);
         debug_assert_eq!(wires_a.len(), wires_b.len());
         let input_bitlen = wires_a.len();
@@ -927,7 +950,7 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         decompose_bitlen: usize,
         total_output_bitlen_per_field: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         debug_assert_eq!(wires_a.size(), wires_b.size());
         let input_size = wires_a.size();
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
@@ -970,7 +993,7 @@ impl GarbledCircuits {
         wires_c: &[G::Item],
         decompose_bitlen: usize,
         total_output_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let num_decomps_per_field = total_output_bitlen.div_ceil(decompose_bitlen);
         debug_assert_eq!(wires_a.len(), wires_b.len());
         let input_bitlen = wires_a.len();
@@ -1008,7 +1031,7 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         decompose_bitlen: usize,
         total_output_bitlen_per_field: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         debug_assert_eq!(wires_a.size(), wires_b.size());
         let input_size = wires_a.size();
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
@@ -1055,7 +1078,7 @@ impl GarbledCircuits {
         lo: usize,
         mid: usize,
         bitsize: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         debug_assert_eq!(wires_a.len(), wires_b.len());
         let input_bitlen = wires_a.len();
         debug_assert_eq!(input_bitlen, F::MODULUS_BIT_SIZE as usize);
@@ -1087,7 +1110,7 @@ impl GarbledCircuits {
         lo: usize,
         mid: usize,
         bitsize: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         debug_assert_eq!(wires_a.size(), wires_b.size());
         let input_size = wires_a.size();
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
@@ -1120,7 +1143,7 @@ impl GarbledCircuits {
         g: &mut G,
         a: &[G::Item],
         b: &[G::Item],
-    ) -> Result<G::Item, G::Error> {
+    ) -> Result<G::Item, GcError> {
         debug_assert_eq!(a.len(), b.len());
         Self::bin_subtraction_get_carry_only(g, a, b)
     }
@@ -1129,7 +1152,7 @@ impl GarbledCircuits {
         g: &mut G,
         a: &[G::Item],
         b: &[G::Item],
-    ) -> Result<G::Item, G::Error> {
+    ) -> Result<G::Item, GcError> {
         let ge = Self::unsigned_ge(g, a, b)?;
         g.negate(&ge)
     }
@@ -1139,7 +1162,7 @@ impl GarbledCircuits {
         g: &mut G,
         a: &[G::Item],
         b: &[G::Item],
-    ) -> Result<G::Item, G::Error> {
+    ) -> Result<G::Item, GcError> {
         Self::unsigned_ge(g, b, a)
     }
 
@@ -1147,14 +1170,14 @@ impl GarbledCircuits {
         g: &mut G,
         a: &[G::Item],
         b: &[G::Item],
-    ) -> Result<G::Item, G::Error> {
+    ) -> Result<G::Item, GcError> {
         Self::unsigned_lt(g, b, a)
     }
 
     fn batcher_odd_even_merge_sort_inner<G: FancyBinary>(
         g: &mut G,
         inputs: &mut [Vec<G::Item>],
-    ) -> Result<(), G::Error>
+    ) -> Result<(), GcError>
     where
         G::Item: Default,
     {
@@ -1213,7 +1236,7 @@ impl GarbledCircuits {
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         bitlen: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -1256,7 +1279,7 @@ impl GarbledCircuits {
         wires_a: &[G::Item],
         wires_b: &[G::Item],
         wires_c: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let output_bitlen = wires_c.len();
         debug_assert_eq!(input_bitlen, wires_a.len());
@@ -1276,7 +1299,7 @@ impl GarbledCircuits {
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         output_bitlen: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -1307,7 +1330,7 @@ impl GarbledCircuits {
         wires_a: &[G::Item],
         wires_b: &[G::Item],
         wires_c: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = wires_a.len();
         let output_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(input_bitlen, wires_b.len());
@@ -1325,7 +1348,7 @@ impl GarbledCircuits {
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         input_bitlen: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -1356,7 +1379,7 @@ impl GarbledCircuits {
         wires_a: &[G::Item],
         wires_b: &[G::Item],
         wires_c: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = wires_a.len();
         let output_bitlen = wires_c.len();
         debug_assert_eq!(input_bitlen, wires_b.len());
@@ -1402,7 +1425,7 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         input_bitlen: usize,
         output_bitlen: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -1433,7 +1456,7 @@ impl GarbledCircuits {
         wires_b: &[G::Item],
         wires_c: &[G::Item],
         divisor_bit: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = wires_a.len();
         debug_assert_eq!(input_bitlen, wires_b.len());
         debug_assert_eq!(input_bitlen, wires_c.len());
@@ -1480,7 +1503,7 @@ impl GarbledCircuits {
         wires_b: &[G::Item],
         wires_c: &[G::Item],
         divisor_bit: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = wires_a.len();
         let n_bits = F::MODULUS_BIT_SIZE as usize;
         assert_eq!(input_bitlen, n_bits);
@@ -1516,7 +1539,7 @@ impl GarbledCircuits {
         y2s: &[G::Item],
         wires_c: &[G::Item],
         input_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
         let divisor = Self::bin_addition_no_carry(g, y1s, y2s)?;
 
@@ -1552,7 +1575,7 @@ impl GarbledCircuits {
         divisor: &[bool],
         wires_c: &[G::Item],
         input_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
 
         debug_assert_eq!(dividend.len(), input_bitlen);
@@ -1587,7 +1610,7 @@ impl GarbledCircuits {
         dividend: &[bool],
         wires_c: &[G::Item],
         input_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let divisor = Self::bin_addition_no_carry(g, x1s, x2s)?;
 
         debug_assert_eq!(dividend.len(), input_bitlen);
@@ -1623,7 +1646,7 @@ impl GarbledCircuits {
         y2s: &[G::Item],
         wires_c: &[G::Item],
         input_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let n_bits = F::MODULUS_BIT_SIZE as usize;
         assert_eq!(input_bitlen, n_bits);
         debug_assert_eq!(input_bitlen, x1s.len());
@@ -1652,7 +1675,7 @@ impl GarbledCircuits {
         divisor: &[bool],
         wires_c: &[G::Item],
         input_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let n_bits = F::MODULUS_BIT_SIZE as usize;
         assert_eq!(input_bitlen, n_bits);
         debug_assert_eq!(input_bitlen, x1s.len());
@@ -1678,7 +1701,7 @@ impl GarbledCircuits {
         dividend: &[bool],
         wires_c: &[G::Item],
         input_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let n_bits = F::MODULUS_BIT_SIZE as usize;
         assert_eq!(input_bitlen, n_bits);
         debug_assert_eq!(input_bitlen, x1s.len());
@@ -1704,7 +1727,7 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         input_bitlen: usize,
         divisor_bit: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -1741,7 +1764,7 @@ impl GarbledCircuits {
         wires_b: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         divisor_bit: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -1780,7 +1803,7 @@ impl GarbledCircuits {
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         input_bitlen: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
         debug_assert_eq!(length % 2, 0);
@@ -1824,7 +1847,7 @@ impl GarbledCircuits {
         limb_size: usize,
         num_limbs_per_field: usize,
         divisor: &[bool],
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let length = wires_x1.size();
 
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
@@ -1875,7 +1898,7 @@ impl GarbledCircuits {
         input_bitlen: usize,
         output_bitlen: usize,
         limbs_per_field: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
 
         debug_assert_eq!(dividend.len(), input_bitlen);
@@ -1921,7 +1944,7 @@ impl GarbledCircuits {
         divisor: &[bool],
         limb_size: usize,
         num_limbs_per_field: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let length = wires_x1.size();
 
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
@@ -1966,7 +1989,7 @@ impl GarbledCircuits {
         input_bitlen: usize,
         limb_size: usize,
         num_limbs_per_field: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let dividend = Self::bin_addition_no_carry(g, x1s, x2s)?;
 
         debug_assert_eq!(dividend.len(), input_bitlen);
@@ -2007,7 +2030,7 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         input_bitlen: usize,
         divisor: Vec<bool>,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
         debug_assert_eq!(length % 2, 0);
@@ -2043,7 +2066,7 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         input_bitlen: usize,
         dividend: Vec<bool>,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
         debug_assert_eq!(length % 2, 0);
@@ -2077,7 +2100,7 @@ impl GarbledCircuits {
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -2117,7 +2140,7 @@ impl GarbledCircuits {
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         divisor: Vec<bool>,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -2156,7 +2179,7 @@ impl GarbledCircuits {
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         dividend: Vec<bool>,
-    ) -> Result<BinaryBundle<G::Item>, G::Error>
+    ) -> Result<BinaryBundle<G::Item>, GcError>
     where
         G::Item: Default,
     {
@@ -2200,7 +2223,7 @@ impl GarbledCircuits {
         base_bit: usize,
         rotation: usize,
         total_output_bitlen_per_field: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
@@ -2252,7 +2275,7 @@ impl GarbledCircuits {
         base_bits: &[u64],
         rotation: &[usize],
         filter: &[bool],
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
@@ -2296,7 +2319,7 @@ impl GarbledCircuits {
         base_bit: usize,
         rotation: usize,
         total_output_bitlen_per_field: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
@@ -2351,7 +2374,7 @@ impl GarbledCircuits {
         base_bit: usize,
         rotation: usize,
         total_output_bitlen_per_field: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bit);
         debug_assert_eq!(x1s.len(), input_bitlen);
@@ -2425,7 +2448,7 @@ impl GarbledCircuits {
         base_bits: &[u64],
         rotation: &[usize],
         filter: &[bool],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut base_bits = base_bits.to_vec();
         let base_bits = base_bits.iter_mut().map(|x| x.ilog2()).collect::<Vec<_>>();
@@ -2534,7 +2557,7 @@ impl GarbledCircuits {
         base_bit: usize,
         rotation: usize,
         total_output_bitlen_per_field: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let num_decomps_per_field = total_output_bitlen_per_field.div_ceil(base_bit);
         debug_assert_eq!(x1s.len(), input_bitlen);
@@ -2605,7 +2628,7 @@ impl GarbledCircuits {
         base_bits: &[u64],
         rotation: &[u32],
         total_output_bitlen_per_field: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
@@ -2662,7 +2685,7 @@ impl GarbledCircuits {
         base_bits: &[u64],
         rotation: &[u32],
         total_output_bitlen_per_field: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut base_bits = base_bits.to_vec();
         let base_bits = base_bits.iter_mut().map(|x| x.ilog2()).collect::<Vec<_>>();
@@ -2762,7 +2785,7 @@ impl GarbledCircuits {
         base: u64,
         total_output_bitlen_per_field: usize,
         table_type: &SHA256Table,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
@@ -2819,7 +2842,7 @@ impl GarbledCircuits {
         base: u64,
         total_output_bitlen_per_field: usize,
         table_type: &SHA256Table,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let base_bit = base_bits[0] as usize; // For SHA all base_bits are the same
         if !base_bits.iter().all(|&x| x as usize == base_bit) {
@@ -2965,7 +2988,7 @@ impl GarbledCircuits {
         base: u64,
         total_output_bitlen_per_field: usize,
         return_type: ReturnType,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
@@ -3030,7 +3053,7 @@ impl GarbledCircuits {
         base: u64,
         total_output_bitlen_per_field: usize,
         return_type: ReturnType,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let base_bit = base_bits[0] as usize; // For AES all base_bits are the same
         if !base_bits.iter().all(|&x| x as usize == base_bit) {
@@ -3211,7 +3234,7 @@ impl GarbledCircuits {
         input_bitsize: usize,
         output_bitsize: usize,
         base: u64,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
@@ -3257,7 +3280,7 @@ impl GarbledCircuits {
         x: &[G::Item],
         base: u64,
         num_decomps_per_field: usize,
-    ) -> Result<Vec<Vec<G::Item>>, G::Error> {
+    ) -> Result<Vec<Vec<G::Item>>, GcError> {
         let mut slices_inp: Vec<Vec<_>> = Vec::with_capacity(num_decomps_per_field);
         let mut input = x.to_vec();
         for _ in 0..num_decomps_per_field {
@@ -3275,7 +3298,7 @@ impl GarbledCircuits {
         g: &mut G,
         x: &[G::Item],
         modulus: u64,
-    ) -> Result<(Vec<G::Item>, Vec<G::Item>), G::Error> {
+    ) -> Result<(Vec<G::Item>, Vec<G::Item>), GcError> {
         let mut base_bit_vec: Vec<bool> = (0..u64::BITS)
             .rev()
             .map(|i| (modulus & (1 << i)) != 0)
@@ -3300,7 +3323,7 @@ impl GarbledCircuits {
     pub(crate) fn get_majority_normalization_table_value<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         x: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         debug_assert!(x.len() >= 3);
         let x1_and_x2 = g.and(&x[1], &x[2])?;
         let x1_xor_x2 = g.xor(&x[1], &x[2])?;
@@ -3311,7 +3334,7 @@ impl GarbledCircuits {
     pub(crate) fn get_choose_normalization_table_value<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         x: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         debug_assert_eq!(x.len(), 5);
         let x0_and_x1 = g.and(&x[0], &x[1])?;
         let x0_and_x2 = g.and(&x[0], &x[2])?;
@@ -3359,7 +3382,7 @@ impl GarbledCircuits {
     >(
         g: &mut G,
         x: &[G::Item],
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         debug_assert!(x.len() >= 3);
         let x0_and_x2 = g.and(&x[0], &x[2])?;
         let x0_xor_x2 = g.xor(&x[0], &x[2])?;
@@ -3367,16 +3390,13 @@ impl GarbledCircuits {
     }
 
     /// Computes the SHA256 compression using a Bristol fashion circuit which is first parsed from a .txt file. The field elements are represented as bitdecompositions x1s, x2s, y1s and y2s which need to be added first to get the two inputs. The output is composed using wires_c.
-    pub(crate) fn sha256_compression<
-        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
-        F: FieldUint,
-    >(
+    pub(crate) fn sha256_compression<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         state_length: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
 
         // Reading the circuit from txt file
@@ -3414,12 +3434,8 @@ impl GarbledCircuits {
 
         let input = [message, state];
         let zero = g.const_zero()?;
-        let mut output = circuit_read
-            .evaluate_with_default::<G::Item>(&input, g, zero)
-            .map_err(|e| e.into())?;
-        let mut result = output.pop().ok_or(FancyError::InvalidArg(
-            "No output found in circuit evaluation".to_string(),
-        ))?;
+        let mut output = circuit_read.evaluate_with_default(&input, g, zero)?;
+        let mut result = output.pop().ok_or(GcError::NoCircuitOutput)?;
         let mut results = Vec::with_capacity(result.len());
 
         // the input (and the output) for the bristol circuit is in reversed order
@@ -3444,7 +3460,7 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         num_inputs: usize,
         num_bits: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut input = Vec::new();
         let mut rands = wires_c.wires().chunks(input_bitlen);
@@ -3535,7 +3551,7 @@ impl GarbledCircuits {
         h: &[Vec<G::Item>],
         t: [u32; 2],
         f: [u32; 2],
-    ) -> Result<Vec<Vec<G::Item>>, G::Error> {
+    ) -> Result<Vec<Vec<G::Item>>, GcError> {
         let mut state = Vec::with_capacity(16);
         for inp in h {
             state.push(inp.to_vec());
@@ -3673,7 +3689,7 @@ impl GarbledCircuits {
         d: &[G::Item],
         x: &[G::Item],
         y: &[G::Item],
-    ) -> Result<(Vec<G::Item>, Vec<G::Item>, Vec<G::Item>, Vec<G::Item>), G::Error> {
+    ) -> Result<(Vec<G::Item>, Vec<G::Item>, Vec<G::Item>, Vec<G::Item>), GcError> {
         let mut a = Self::bin_addition_no_carry(g, a, b)?;
         a = Self::bin_addition_no_carry(g, &a, x)?;
         let mut d = Self::xor_many_as_wires(g, d, &a)?;
@@ -3717,7 +3733,7 @@ impl GarbledCircuits {
         wires_c: &BinaryBundle<G::Item>,
         num_inputs: usize,
         num_bits: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         let mut input = Vec::new();
         let mut rands = wires_c.wires().chunks(input_bitlen);
@@ -3820,7 +3836,7 @@ impl GarbledCircuits {
         input: &[Vec<G::Item>],
         chunk_index: u64,
         flag: u32,
-    ) -> Result<Vec<Vec<G::Item>>, G::Error> {
+    ) -> Result<Vec<Vec<G::Item>>, GcError> {
         let num_inputs = input.len();
         assert!(num_inputs <= 1024);
         let blocks = num_inputs.div_ceil(64);
@@ -3887,7 +3903,7 @@ impl GarbledCircuits {
         t: [u32; 2],
         blocklen: u32,
         flags: u32,
-    ) -> Result<Vec<Vec<G::Item>>, G::Error> {
+    ) -> Result<Vec<Vec<G::Item>>, GcError> {
         let mut state = Vec::with_capacity(16);
         for inp in h {
             state.push(inp.to_vec());
@@ -4023,7 +4039,7 @@ impl GarbledCircuits {
         d: &[G::Item],
         x: &[G::Item],
         y: &[G::Item],
-    ) -> Result<(Vec<G::Item>, Vec<G::Item>, Vec<G::Item>, Vec<G::Item>), G::Error> {
+    ) -> Result<(Vec<G::Item>, Vec<G::Item>, Vec<G::Item>, Vec<G::Item>), GcError> {
         let mut a = Self::bin_addition_no_carry(g, a, b)?;
         a = Self::bin_addition_no_carry(g, &a, x)?;
         let mut d = Self::xor_many_as_wires(g, d, &a)?;
@@ -4053,10 +4069,7 @@ impl GarbledCircuits {
     ];
 
     /// Computes AES ct with given pt, iv and key which are represented as wires_x1 and wires_x2 which need to be added first get the inputs. The output is composed using wires_c. If the plaintext is not of size 0 mod 16 it is padded using PKCS7 padding.
-    pub(crate) fn aes128<
-        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
-        F: FieldUint,
-    >(
+    pub(crate) fn aes128<G: FancyBinary + FancyBinaryConstant, F: FieldUint>(
         g: &mut G,
         wires_x1: &BinaryBundle<G::Item>,
         wires_x2: &BinaryBundle<G::Item>,
@@ -4064,7 +4077,7 @@ impl GarbledCircuits {
         pt_length: usize,
         key_length: usize,
         bitsize: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         const AES_BLOCK_SIZE: usize = 16;
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
 
@@ -4134,7 +4147,7 @@ impl GarbledCircuits {
 
             block.iter_mut().zip(my_iv.iter()).try_for_each(|(x, y)| {
                 *x = FancyBinary::xor(g, x, y)?;
-                Ok::<(), G::Error>(())
+                Ok::<(), GcError>(())
             })?;
 
             block.clone_from_slice(&Self::aes128_block::<_>(g, &key, block, &circuit_read)?);
@@ -4169,31 +4182,21 @@ impl GarbledCircuits {
     }
 
     /// Computes one single AES block using the parsed Bristol circuit.
-    pub(crate) fn aes128_block<
-        G: FancyBinary + FancyBinaryConstant + BristolFashionEvaluator<WireValue = G::Item>,
-    >(
+    pub(crate) fn aes128_block<G: FancyBinary + FancyBinaryConstant>(
         g: &mut G,
         key: &[G::Item],
         plaintext: &[G::Item],
         circuit: &BristolFashionCircuit,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         debug_assert_eq!(key.len(), 128);
         debug_assert_eq!(plaintext.len(), 128);
 
         let input = [key, plaintext];
         let one = g.const_one()?;
-        let result = match circuit.evaluate_with_default::<G::Item>(&input, g, one) {
-            Ok(mut outputs) => match outputs.pop() {
-                Some(output) => output,
-                None => {
-                    return Err(G::Error::from(FancyError::InvalidArg(
-                        "No output found in circuit evaluation".to_string(),
-                    )));
-                }
-            },
-            Err(e) => return Err(G::Error::from(FancyError::from(e))),
-        };
-        Ok(result)
+        circuit
+            .evaluate_with_default(&input, g, one)?
+            .pop()
+            .ok_or(GcError::NoCircuitOutput)
     }
 
     /// Computes wnaf digits and rows needed in the ECCVM builder.
@@ -4203,7 +4206,7 @@ impl GarbledCircuits {
         wires_x2: &BinaryBundle<G::Item>,
         wires_c: &BinaryBundle<G::Item>,
         total_output_bitlen_per_field: usize,
-    ) -> Result<BinaryBundle<G::Item>, G::Error> {
+    ) -> Result<BinaryBundle<G::Item>, GcError> {
         let input_bitlen = F::MODULUS_BIT_SIZE as usize;
         debug_assert_eq!(wires_x1.size(), wires_x2.size());
         let length = wires_x1.size();
@@ -4243,7 +4246,7 @@ impl GarbledCircuits {
         wires_b: &[G::Item],
         wires_c: &[G::Item],
         total_output_bitlen: usize,
-    ) -> Result<Vec<G::Item>, G::Error> {
+    ) -> Result<Vec<G::Item>, GcError> {
         const NUM_SCALAR_BITS: usize = 128; // The length of scalars handled by the ECCVVM
         const NUM_WNAF_DIGIT_BITS: usize = 4; // Scalars are decompose into base 16 in wNAF form
         const NUM_WNAF_DIGITS_PER_SCALAR: usize = NUM_SCALAR_BITS / NUM_WNAF_DIGIT_BITS; // 32
@@ -4418,177 +4421,132 @@ impl GarbledCircuits {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::protocols::rep3::yao::GCInputs;
-    use fancy_garbling::BinaryGadgets;
-    use fancy_garbling::{Evaluator, Fancy, Garbler, WireMod2};
-    use rand::{CryptoRng, Rng, SeedableRng, thread_rng};
-    use rand_chacha::ChaCha12Rng;
-    use scuttlebutt::{AbstractChannel, Channel};
-    use std::{
-        io::{BufReader, BufWriter},
-        os::unix::net::UnixStream,
+    use crate::protocols::rep3::{
+        Rep3State,
+        conversion::A2BType,
+        yao::{evaluator::Rep3Evaluator, fancy::WireMod2, garbler::Rep3Garbler},
     };
+    use ark_ff::BigInteger;
+    use mpc_net::local::LocalNetwork;
+    use rand::{Rng, thread_rng};
+    use std::marker::PhantomData;
 
     const TESTRUNS: usize = 5;
 
-    // This puts the X_0 values into garbler_wires and X_c values into evaluator_wires
-    fn encode_field<F: FieldUint, C: AbstractChannel, R: Rng + CryptoRng>(
-        field: F,
-        garbler: &mut Garbler<C, R, WireMod2>,
-    ) -> GCInputs<WireMod2> {
-        let bits = GCUtils::field_to_bits_as_u16(field);
-        let mut garbler_wires = Vec::with_capacity(bits.len());
-        let mut evaluator_wires = Vec::with_capacity(bits.len());
-        for bit in bits {
-            let (mine, theirs) = garbler.encode_wire(bit, 2);
-            garbler_wires.push(mine);
-            evaluator_wires.push(theirs);
-        }
-        GCInputs {
-            garbler_wires: BinaryBundle::new(garbler_wires),
-            evaluator_wires: BinaryBundle::new(evaluator_wires),
-            delta: garbler.delta(2),
+    /// A circuit on two encoded field elements, run by the garblers and the evaluator alike.
+    trait TestCircuit: Sync {
+        fn build<G: FancyBinary<Item = WireMod2> + FancyBinaryConstant>(
+            &self,
+            g: &mut G,
+            x: &BinaryBundle<WireMod2>,
+            y: &BinaryBundle<WireMod2>,
+        ) -> Result<Vec<WireMod2>, GcError>;
+    }
+
+    /// Runs `circuit` on `x` and `y` with [`Rep3Garbler`] (ID1, ID2) and [`Rep3Evaluator`] (ID0) and returns the output bits of all three parties.
+    fn run_3party<F: FieldUint>(circuit: &impl TestCircuit, x: F, y: F) -> [Vec<bool>; 3] {
+        let [net0, net1, net2] = LocalNetwork::new_3_parties();
+        std::thread::scope(|s| {
+            let [garbler1, garbler2] = [net1, net2].map(|net| {
+                s.spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let mut garbler = Rep3Garbler::new(&net, &mut state);
+                    let x = garbler.encode_field(x);
+                    let y = garbler.encode_field(y);
+
+                    // This is without OT, just a simulation
+                    garbler.add_bundle_to_circuit(&x.evaluator_wires);
+                    garbler.add_bundle_to_circuit(&y.evaluator_wires);
+
+                    let output = circuit
+                        .build(&mut garbler, &x.garbler_wires, &y.garbler_wires)
+                        .unwrap();
+                    garbler.output_all_parties(&output).unwrap()
+                })
+            });
+            let evaluator = s.spawn(move || {
+                let _state = Rep3State::new(&net0, A2BType::default()).unwrap(); // DONT REMOVE
+                let mut evaluator = Rep3Evaluator::new(&net0);
+                let n_bits = F::MODULUS_BIT_SIZE as usize;
+
+                // This is without OT, just a simulation
+                evaluator.receive_circuit().unwrap();
+                let x = evaluator.receive_bundle_from_circuit(n_bits).unwrap();
+                let y = evaluator.receive_bundle_from_circuit(n_bits).unwrap();
+
+                let output = circuit.build(&mut evaluator, &x, &y).unwrap();
+                evaluator.output_all_parties(&output).unwrap()
+            });
+            [evaluator, garbler1, garbler2].map(|h| h.join().unwrap())
+        })
+    }
+
+    /// `x + y mod p`.
+    struct AdderModP<F>(PhantomData<F>);
+
+    impl<F: FieldUint> TestCircuit for AdderModP<F> {
+        fn build<G: FancyBinary<Item = WireMod2> + FancyBinaryConstant>(
+            &self,
+            g: &mut G,
+            x: &BinaryBundle<WireMod2>,
+            y: &BinaryBundle<WireMod2>,
+        ) -> Result<Vec<WireMod2>, GcError> {
+            Ok(GarbledCircuits::adder_mod_p::<_, F>(g, x, y)?
+                .wires()
+                .to_vec())
         }
     }
 
-    fn gc_test<F: FieldUint>() {
+    /// The lowest 64 bits of `x`, each xored with the corresponding bit of the public constant.
+    struct XorConstant(u64);
+
+    impl TestCircuit for XorConstant {
+        fn build<G: FancyBinary<Item = WireMod2> + FancyBinaryConstant>(
+            &self,
+            g: &mut G,
+            x: &BinaryBundle<WireMod2>,
+            _: &BinaryBundle<WireMod2>,
+        ) -> Result<Vec<WireMod2>, GcError> {
+            let c = GarbledCircuits::constant_bundle_from_usize(g, self.0 as usize, 64)?;
+            x.iter().zip(&c).map(|(x, c)| g.xor(x, c)).collect()
+        }
+    }
+
+    fn gc_test_adder_mod_p<F: FieldUint>() {
         let mut rng = thread_rng();
+        let x = F::rand(&mut rng);
+        let y = F::rand(&mut rng);
 
-        let a = F::rand(&mut rng);
-        let b = F::rand(&mut rng);
-        let is_result = a + b;
-
-        let (sender, receiver) = UnixStream::pair().unwrap();
-
-        std::thread::spawn(move || {
-            let rng = ChaCha12Rng::from_entropy();
-            let reader = BufReader::new(sender.try_clone().unwrap());
-            let writer = BufWriter::new(sender);
-            let channel_sender = Channel::new(reader, writer);
-
-            let mut garbler = Garbler::<_, _, WireMod2>::new(channel_sender, rng);
-
-            // This is without OT, just a simulation
-            let a = encode_field(a, &mut garbler);
-            let b = encode_field(b, &mut garbler);
-            for a in a.evaluator_wires.wires().iter() {
-                garbler.send_wire(a).unwrap();
-            }
-            for b in b.evaluator_wires.wires().iter() {
-                garbler.send_wire(b).unwrap();
-            }
-
-            let garble_result = GarbledCircuits::adder_mod_p::<_, F>(
-                &mut garbler,
-                &a.garbler_wires,
-                &b.garbler_wires,
-            )
-            .unwrap();
-
-            // Output
-            garbler.outputs(garble_result.wires()).unwrap();
-        });
-
-        let reader = BufReader::new(receiver.try_clone().unwrap());
-        let writer = BufWriter::new(receiver);
-        let channel_rcv = Channel::new(reader, writer);
-
-        let mut evaluator = Evaluator::<_, WireMod2>::new(channel_rcv);
-
-        // This is without OT, just a simulation
-        let n_bits = F::MODULUS_BIT_SIZE as usize;
-        let mut a = Vec::with_capacity(n_bits);
-        let mut b = Vec::with_capacity(n_bits);
-        for _ in 0..n_bits {
-            let a_ = evaluator.read_wire(2).unwrap();
-            a.push(a_);
+        for output in run_3party(&AdderModP::<F>(PhantomData), x, y) {
+            assert_eq!(GCUtils::bits_to_field::<F>(&output).unwrap(), x + y);
         }
-        for _ in 0..n_bits {
-            let b_ = evaluator.read_wire(2).unwrap();
-            b.push(b_);
+    }
+
+    fn gc_test_xor_constant<F: FieldUint>() {
+        let mut rng = thread_rng();
+        let x = F::rand(&mut rng);
+        let c = rng.r#gen::<u64>();
+
+        let x_bits = x.into_bigint().to_bits_le();
+        let expected = (0..64)
+            .map(|i| x_bits[i] ^ ((c >> i) & 1 == 1))
+            .collect::<Vec<_>>();
+        for output in run_3party(&XorConstant(c), x, F::zero()) {
+            assert_eq!(output, expected);
         }
-        let a = BinaryBundle::new(a);
-        let b = BinaryBundle::new(b);
-
-        let eval_result = GarbledCircuits::adder_mod_p::<_, F>(&mut evaluator, &a, &b).unwrap();
-
-        let result = evaluator.outputs(eval_result.wires()).unwrap().unwrap();
-        let result = GCUtils::u16_bits_to_field::<F>(result).unwrap();
-        assert_eq!(result, is_result);
     }
 
     #[test]
-    fn gc_test_bn254() {
+    fn gc_test_bn254_adder_mod_p() {
         for _ in 0..TESTRUNS {
-            gc_test::<ark_bn254::Fr>();
+            gc_test_adder_mod_p::<ark_bn254::Fr>();
         }
-    }
-
-    fn gc_test_div_int<F: FieldUint>() {
-        let mut rng = thread_rng();
-
-        let a = F::rand(&mut rng);
-        let b = F::rand(&mut rng);
-        let is_result = F::from_uint_unchecked(&(a.to_uint() / b.to_uint()));
-        let (sender, receiver) = UnixStream::pair().unwrap();
-
-        std::thread::spawn(move || {
-            let rng = ChaCha12Rng::from_entropy();
-            let reader = BufReader::new(sender.try_clone().unwrap());
-            let writer = BufWriter::new(sender);
-            let channel_sender = Channel::new(reader, writer);
-
-            let mut garbler = Garbler::<_, _, WireMod2>::new(channel_sender, rng);
-
-            // This is without OT, just a simulation
-            let a = encode_field(a, &mut garbler);
-            let b = encode_field(b, &mut garbler);
-            for a in a.evaluator_wires.wires().iter() {
-                garbler.send_wire(a).unwrap();
-            }
-            for b in b.evaluator_wires.wires().iter() {
-                garbler.send_wire(b).unwrap();
-            }
-
-            let garble_result =
-                BinaryGadgets::bin_div(&mut garbler, &a.garbler_wires, &b.garbler_wires).unwrap();
-
-            // Output
-            garbler.outputs(garble_result.wires()).unwrap();
-        });
-
-        let reader = BufReader::new(receiver.try_clone().unwrap());
-        let writer = BufWriter::new(receiver);
-        let channel_rcv = Channel::new(reader, writer);
-
-        let mut evaluator = Evaluator::<_, WireMod2>::new(channel_rcv);
-
-        // This is without OT, just a simulation
-        let n_bits = F::MODULUS_BIT_SIZE as usize;
-        let mut a = Vec::with_capacity(n_bits);
-        let mut b = Vec::with_capacity(n_bits);
-        for _ in 0..n_bits {
-            let a_ = evaluator.read_wire(2).unwrap();
-            a.push(a_);
-        }
-        for _ in 0..n_bits {
-            let b_ = evaluator.read_wire(2).unwrap();
-            b.push(b_);
-        }
-        let a = BinaryBundle::new(a);
-        let b = BinaryBundle::new(b);
-
-        let eval_result = BinaryGadgets::bin_div(&mut evaluator, &a, &b).unwrap();
-
-        let result = evaluator.outputs(eval_result.wires()).unwrap().unwrap();
-        let result = GCUtils::u16_bits_to_field::<F>(result).unwrap();
-        assert_eq!(result, is_result);
     }
 
     #[test]
-    fn gc_test_bn254_div_int() {
+    fn gc_test_bn254_xor_constant() {
         for _ in 0..TESTRUNS {
-            gc_test_div_int::<ark_bn254::Fr>();
+            gc_test_xor_constant::<ark_bn254::Fr>();
         }
     }
 }

@@ -2,6 +2,7 @@
 //!
 //! This module contains operations with Yao's garbled circuits
 
+use crate::protocols::rep3::yao::fancy::{BinaryBundle, WireMod2};
 use crate::protocols::{
     rep3::{
         self, Rep3PrimeFieldShare, Rep3State, Rep3UintShare,
@@ -14,7 +15,6 @@ use crate::protocols::{
     rep3_ring::conversion,
 };
 use crate::uint::{FieldUint, U512};
-use fancy_garbling::{BinaryBundle, WireLabel, WireMod2};
 use itertools::izip;
 use mpc_net::Network;
 use num_traits::{One, Zero};
@@ -405,8 +405,7 @@ where
             evaluator.receive_circuit()?;
 
             let x1 =
-                GarbledCircuits::ring_to_field_many::<_, F>(&mut evaluator, &x01, &x2, &x23, T::K);
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+                GarbledCircuits::ring_to_field_many::<_, F>(&mut evaluator, &x01, &x2, &x23, T::K)?;
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
             // Compose the bits
@@ -427,8 +426,7 @@ where
                 Rep3Garbler::new_with_delta(net, state, delta.expect("Delta not provided"));
 
             let x1 =
-                GarbledCircuits::ring_to_field_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+                GarbledCircuits::ring_to_field_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
             let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -456,8 +454,7 @@ where
                 Rep3Garbler::new_with_delta(net, state, delta.expect("Delta not provided"));
 
             let x1 =
-                GarbledCircuits::ring_to_field_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+                GarbledCircuits::ring_to_field_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
             if x1.is_some() {
                 eyre::bail!("Unexpected output received");
@@ -501,8 +498,7 @@ where
             evaluator.receive_circuit()?;
 
             let x1 =
-                GarbledCircuits::field_to_ring_many::<_, F>(&mut evaluator, &x01, &x2, &x23, T::K);
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+                GarbledCircuits::field_to_ring_many::<_, F>(&mut evaluator, &x01, &x2, &x23, T::K)?;
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
             // Compose the bits
@@ -526,8 +522,7 @@ where
                 Rep3Garbler::new_with_delta(net, state, delta.expect("Delta not provided"));
 
             let x1 =
-                GarbledCircuits::field_to_ring_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+                GarbledCircuits::field_to_ring_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
             let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -561,8 +556,7 @@ where
                 Rep3Garbler::new_with_delta(net, state, delta.expect("Delta not provided"));
 
             let x1 =
-                GarbledCircuits::field_to_ring_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K);
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+                GarbledCircuits::field_to_ring_many::<_, F>(&mut garbler, &x01, &x2, &x23, T::K)?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
             if x1.is_some() {
                 eyre::bail!("Unexpected output received");
@@ -600,8 +594,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($net);
                 evaluator.receive_circuit()?;
 
-                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*)?;
                 let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
                 // Compose the bits
@@ -621,8 +614,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let mut garbler =
                     rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -649,8 +641,7 @@ macro_rules! decompose_circuit_compose_blueprint {
                 let mut garbler =
                    rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 if x1.is_some() {
                     eyre::bail!("Unexpected output received");
@@ -689,8 +680,7 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
                 let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($net);
                 evaluator.receive_circuit()?;
 
-                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*)?;
                 let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
                 // Compose the bits
@@ -710,8 +700,7 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
                 let mut garbler =
                     rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -738,8 +727,7 @@ macro_rules! decompose_circuit_compose_to_fields_blueprint {
                 let mut garbler =
                    rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 if x1.is_some() {
                     eyre::bail!("Unexpected output received");
@@ -785,8 +773,7 @@ macro_rules! decompose_circuit_compose_to_two_fields_blueprint {
                 let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($net);
                 evaluator.receive_circuit()?;
 
-                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut evaluator, &x01, &x2, &x23, $($args),*)?;
                 let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
                 // Compose the bits
@@ -816,8 +803,7 @@ macro_rules! decompose_circuit_compose_to_two_fields_blueprint {
                 let mut garbler =
                     rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -861,8 +847,7 @@ macro_rules! decompose_circuit_compose_to_two_fields_blueprint {
                 let mut garbler =
                    rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 if x1.is_some()  {
                     eyre::bail!("Unexpected output received");
@@ -1239,8 +1224,7 @@ where
                 num_decomps_per_field,
                 decompose_bitlen,
                 T::K,
-            );
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            )?;
             let x1 = evaluator.output_to_id0_and_id1(x1.wires())?;
 
             // Compose the bits
@@ -1271,8 +1255,7 @@ where
                 num_decomps_per_field,
                 decompose_bitlen,
                 T::K,
-            );
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            )?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
             let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -1313,8 +1296,7 @@ where
                 num_decomps_per_field,
                 decompose_bitlen,
                 T::K,
-            );
-            let x1 = GCUtils::garbled_circuits_error(x1)?;
+            )?;
             let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
             if x1.is_some() {
                 eyre::bail!("Unexpected output received");
@@ -1374,8 +1356,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                 let mut evaluator = rep3::yao::evaluator::Rep3Evaluator::new($net, $state);
                 evaluator.receive_circuit()?;
 
-                let x1 = $circuit(&mut evaluator, &x01, &x2,&y01, &y2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut evaluator, &x01, &x2,&y01, &y2, &x23, $($args),*)?;
                 let x1 = evaluator.output_to_id0_and_id1(x1.wires())?; //here
                 // Compose the bits
                 for (res, x1) in izip!(res.iter_mut(), x1.chunks(<$t>::K)) {
@@ -1394,8 +1375,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                 let mut garbler =
                     rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler,  &x01, &x2,&y01, &y2, &x23, $($args),*);
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler,  &x01, &x2,&y01, &y2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 let x1 = x1.ok_or_else(|| eyre::eyre!("No output received"))?;
 
@@ -1422,9 +1402,7 @@ macro_rules! decompose_circuit_compose_blueprint_2 {
                 let mut garbler =
                    rep3::yao::garbler::Rep3Garbler::new_with_delta($net, $state, delta.expect("Delta not provided"));
 
-                let x1 = $circuit(&mut garbler, &x01, &x2,&y01, &y2, &x23, $($args),*);
-
-                let x1 = yao::GCUtils::garbled_circuits_error(x1)?;
+                let x1 = $circuit(&mut garbler, &x01, &x2,&y01, &y2, &x23, $($args),*)?;
                 let x1 = garbler.output_to_id0_and_id1(x1.wires())?;
                 if x1.is_some() {
                     eyre::bail!("Unexpected output received");

@@ -1,9 +1,14 @@
+// Parts of this file are adapted from swanky (https://github.com/GaloisInc/swanky),
+// rev 5ff648457218b74da9d8323b7ca47166ff5be4b3. Copyright © 2019-2022 Galois, Inc.
+// Licensed under the MIT license, see THIRD_PARTY_NOTICES in the mpc-core crate root.
+
 //! Streaming Garbler
 //!
 //! This module contains the implementation of the garbler for the replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf). Thereby, the garbled gates are sent out as soon as they are prepared.
 //!
-//! This implementation is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/dev/fancy-garbling/src/garble/garbler.rs)
+//! This implementation is heavily inspired by [fancy-garbling](https://github.com/GaloisInc/swanky/blob/5ff648457218b74da9d8323b7ca47166ff5be4b3/fancy-garbling/src/garble/garbler.rs)
 
+use super::fancy::{BinaryBundle, Block, Fancy, FancyBinary, GcError, WireMod2, output_tweak};
 use super::{GCInputs, GCUtils, circuits::FancyBinaryConstant};
 use crate::uint::FieldUint;
 use crate::{
@@ -11,12 +16,8 @@ use crate::{
     protocols::rep3::{Rep3State, id::PartyID, network::Rep3NetworkExt},
 };
 use core::panic;
-use fancy_garbling::{
-    BinaryBundle, Fancy, FancyBinary, WireLabel, WireMod2, errors::GarblerError, util::output_tweak,
-};
 use mpc_net::Network;
 use rand::SeedableRng;
-use scuttlebutt::Block;
 use sha3::{Digest, Sha3_256};
 
 /// This struct implements the garbler for replicated 3-party garbled circuits as described in [ABY3](https://eprint.iacr.org/2018/403.pdf).
@@ -85,7 +86,7 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
 
     /// Outputs the values to the evaluator.
     fn output_evaluator(&mut self, x: &[WireMod2]) -> eyre::Result<()> {
-        self.outputs(x).map_err(|_| eyre::eyre!("Output failed",))?;
+        self.outputs(x)?;
         Ok(())
     }
 
@@ -97,7 +98,7 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
         for (block, zero) in blocks.into_iter().zip(x.iter()) {
             if block == zero.as_block() {
                 result.push(false);
-            } else if block == zero.plus(&self.delta).as_block() {
+            } else if block == (*zero ^ self.delta).as_block() {
                 result.push(true);
             } else {
                 eyre::bail!("Invalid block received");
@@ -198,64 +199,59 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
     /// Used internally as a subroutine to implement 'and' gates for `FancyBinary`.
     fn garble_and_gate(&mut self, a: &WireMod2, b: &WireMod2) -> (Block, Block, WireMod2) {
         let gate_num = self.current_gate();
-        GCUtils::garble_and_gate(gate_num, a, b, &self.delta)
+        super::fancy::garble_and_gate(gate_num, a, b, &self.delta)
     }
 }
 
 impl<N: Network> Fancy for StreamingRep3Garbler<'_, N> {
     type Item = WireMod2;
-    type Error = GarblerError;
 
-    fn constant(&mut self, x: u16, q: u16) -> Result<WireMod2, GarblerError> {
-        let zero = WireMod2::rand(&mut self.rng, q);
-        let wire = zero.plus(&self.delta.cmul(x));
-        self.send_wire(&wire)
-            .map_err(|err| GarblerError::CommunicationError(err.to_string()))?;
+    fn constant(&mut self, x: u16) -> Result<WireMod2, GcError> {
+        let zero = WireMod2::rand(&mut self.rng);
+        let wire = zero ^ self.delta.cmul(x);
+        self.send_wire(&wire)?;
         Ok(zero)
     }
 
-    fn output(&mut self, x: &WireMod2) -> Result<Option<u16>, GarblerError> {
+    fn output(&mut self, x: &WireMod2) -> Result<Option<u16>, GcError> {
         let i = self.current_output();
         let d = self.delta;
         for k in 0..2 {
-            let block = x.plus(&d.cmul(k)).hash(output_tweak(i, k));
-            self.send_block(&block)
-                .map_err(|err| GarblerError::CommunicationError(err.to_string()))?;
+            let block = (*x ^ d.cmul(k)).hash(output_tweak(i, k));
+            self.send_block(&block)?;
         }
         Ok(None)
     }
 }
 
 impl<N: Network> FancyBinary for StreamingRep3Garbler<'_, N> {
-    fn and(&mut self, a: &Self::Item, b: &Self::Item) -> Result<Self::Item, Self::Error> {
+    fn and(&mut self, a: &Self::Item, b: &Self::Item) -> Result<Self::Item, GcError> {
         let (gate0, gate1, c) = self.garble_and_gate(a, b);
-        self.send_block(&gate0)
-            .map_err(|err| GarblerError::CommunicationError(err.to_string()))?;
-        self.send_block(&gate1)
-            .map_err(|err| GarblerError::CommunicationError(err.to_string()))?;
+        self.send_block(&gate0)?;
+        self.send_block(&gate1)?;
         Ok(c)
     }
 
-    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, Self::Error> {
-        Ok(x.plus(y))
+    fn xor(&mut self, x: &Self::Item, y: &Self::Item) -> Result<Self::Item, GcError> {
+        Ok(*x ^ *y)
     }
 
     /// We can negate by having garbler xor wire with Delta
     ///
     /// Since we treat all garbler wires as zero,
     /// xoring with delta conceptually negates the value of the wire
-    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, Self::Error> {
+    fn negate(&mut self, x: &Self::Item) -> Result<Self::Item, GcError> {
         let delta = self.delta;
         self.xor(&delta, x)
     }
 }
 
 impl<N: Network> FancyBinaryConstant for StreamingRep3Garbler<'_, N> {
-    fn const_zero(&mut self) -> Result<Self::Item, Self::Error> {
+    fn const_zero(&mut self) -> Result<Self::Item, GcError> {
         let zero = match self.const_zero {
             Some(zero) => zero,
             None => {
-                let zero = self.constant(0, 2)?;
+                let zero = self.constant(0)?;
                 self.const_zero = Some(zero);
                 zero
             }
@@ -263,12 +259,12 @@ impl<N: Network> FancyBinaryConstant for StreamingRep3Garbler<'_, N> {
         Ok(zero)
     }
 
-    fn const_one(&mut self) -> Result<Self::Item, Self::Error> {
+    fn const_one(&mut self) -> Result<Self::Item, GcError> {
         // We cannot use the const_zero wire since it would leak the delta
         let zero = match self.const_one {
             Some(zero) => zero,
             None => {
-                let zero = self.constant(1, 2)?;
+                let zero = self.constant(1)?;
                 self.const_one = Some(zero); // The garbler stores the 0 wire
                 zero
             }

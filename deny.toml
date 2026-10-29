@@ -26,8 +26,6 @@ ignore = [
     { id = "RUSTSEC-2024-0388", reason = "ignore drivative unmaintained, dependency of circom" },
     { id = "RUSTSEC-2024-0436", reason = "ignore paste unmaintained" },
     { id = "RUSTSEC-2025-0141", reason = "ignore bincode unmaintained" },
-    { id = "RUSTSEC-2026-0194", reason = "ignore vulnerability in quick-xml, locked by swanky/ocelot, not used at runtime" },
-    { id = "RUSTSEC-2026-0195", reason = "ignore vulnerability in quick-xml, locked by swanky/ocelot, not used at runtime" },
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -291,8 +289,6 @@ allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 # List of URLs for allowed Git repositories
 allow-git = [
     "https://github.com/noir-lang/noir",
-    "https://github.com/GaloisInc/swanky",
-    "https://github.com/GaloisInc/ff",
 ]
 
 [sources.allow-org]

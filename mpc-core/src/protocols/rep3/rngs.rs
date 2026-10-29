@@ -2,12 +2,12 @@
 //!
 //! This module contains implementations of rep3 rngs
 
+use super::yao::fancy::WireMod2;
 use super::{id::PartyID, yao::GCUtils};
 use crate::RngType;
 use crate::uint::UintBackend;
 use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
-use fancy_garbling::WireMod2;
 use rand::{
     Rng, RngCore, SeedableRng, distributions::Standard, prelude::Distribution, seq::SliceRandom,
 };
