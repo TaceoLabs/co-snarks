@@ -160,6 +160,41 @@ impl<
         }
     }
 
+    /// Populates the inverse helper w4 = 1 / (rom_logup_gamma + w1 + eta * w2 + eta^2 * q_c) at every ROM-LogUp row,
+    /// where q_c holds the ROM array id.
+    fn add_rom_logup_inverses_to_wire_4(
+        &mut self,
+        proving_key: &ProvingKey<T, C>,
+    ) -> HonkProofResult<()> {
+        tracing::trace!("add_rom_logup_inverses_to_wire_4");
+        if proving_key.rom_logup_records.is_empty() {
+            return Ok(());
+        }
+        let id = self.state.id();
+        let challenges = &self.memory.challenges;
+        let mut denominators = proving_key
+            .rom_logup_records
+            .iter()
+            .map(|&gate_idx| {
+                let gate_idx = gate_idx as usize;
+                let public = challenges.rom_logup_gamma
+                    + proving_key.polynomials.precomputed.q_c()[gate_idx] * challenges.eta_2;
+                let value = T::mul_with_public(
+                    challenges.eta_1,
+                    proving_key.polynomials.witness.w_r()[gate_idx],
+                );
+                let denom = T::add(proving_key.polynomials.witness.w_l()[gate_idx], value);
+                T::add_with_public(public, denom, id)
+            })
+            .collect::<Vec<_>>();
+        // The denominators are nonzero with overwhelming probability over the choice of rom_logup_gamma
+        T::inv_many_in_place(&mut denominators, self.net, self.state)?;
+        for (&gate_idx, inverse) in proving_key.rom_logup_records.iter().zip(denominators) {
+            self.memory.w_4[gate_idx as usize] = inverse;
+        }
+        Ok(())
+    }
+
     fn compute_lookup_term(
         &mut self,
         proving_key: &ProvingKey<T, C>,
@@ -615,12 +650,16 @@ impl<
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
-        let eta = transcript.get_challenge::<C>("eta".to_string());
+        let challs =
+            transcript.get_challenges::<C>(&["eta".to_string(), "rom_logup_gamma".to_string()]);
+        let eta = challs[0];
         self.memory.challenges.eta_1 = eta;
         self.memory.challenges.eta_2 = eta * eta;
         self.memory.challenges.eta_3 = eta * eta * eta;
+        self.memory.challenges.rom_logup_gamma = challs[1];
 
         self.add_ram_rom_memory_records_to_wire_4(proving_key);
+        self.add_rom_logup_inverses_to_wire_4(proving_key)?;
 
         // Mask the polynomial when proving in zero-knowledge
         if self.has_zk == ZeroKnowledge::Yes {

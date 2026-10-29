@@ -798,6 +798,21 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         )
     }
 
+    fn read_lut_with_ohv_by_shared_index(
+        &mut self,
+        index: Self::ArithmeticShare,
+        lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
+    ) -> eyre::Result<(Self::AcvmType, Vec<Self::ArithmeticShare>)> {
+        let (value, ohv) =
+            mpc_core::protocols::rep3_ring::lut_field::Rep3FieldLookupTable::<F>::get_from_lut_with_ohv(
+                index,
+                lut,
+                self.net,
+                &mut self.state,
+            )?;
+        Ok((Self::AcvmType::from(value), ohv))
+    }
+
     fn write_to_shared_lut_from_ohv(
         &mut self,
         ohv: &[Self::ArithmeticShare],

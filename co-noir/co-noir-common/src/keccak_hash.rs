@@ -68,19 +68,6 @@ impl<F: PrimeField> TranscriptHasher<F> for Keccak256 {
         P::BaseField::from_be_bytes_mod_order(&bytes)
     }
 
-    fn split_challenge(challenge: Self::DataType) -> [Self::DataType; 2] {
-        // Match barretenberg field_conversion::split_challenge:
-        // split a 254-bit challenge into two 127-bit limbs.
-        const TOTAL_BITS: u64 = 254;
-        const LO_BITS: u64 = TOTAL_BITS / 2;
-        const HI_BITS: u64 = TOTAL_BITS - LO_BITS;
-
-        let lo = challenge.slice(0, LO_BITS);
-        let hi = challenge.slice(LO_BITS, LO_BITS + HI_BITS);
-
-        [lo, hi]
-    }
-
     fn convert_challenge_into<P: crate::honk_curve::HonkCurve<F>>(challenge: &F) -> Self::DataType {
         U256::convert_field_into(challenge)
     }

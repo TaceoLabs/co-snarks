@@ -13,6 +13,8 @@ pub(crate) struct MemoryRelationAcc<F: PrimeField> {
     pub(crate) r3: Univariate<F, 6>,
     pub(crate) r4: Univariate<F, 6>,
     pub(crate) r5: Univariate<F, 6>,
+    pub(crate) r6: Univariate<F, 6>,
+    pub(crate) r7: Univariate<F, 6>,
 }
 
 impl<F: PrimeField> MemoryRelationAcc<F> {
@@ -24,6 +26,8 @@ impl<F: PrimeField> MemoryRelationAcc<F> {
         self.r3 *= elements[3];
         self.r4 *= elements[4];
         self.r5 *= elements[5];
+        self.r6 *= elements[6];
+        self.r7 *= elements[7];
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -73,6 +77,21 @@ impl<F: PrimeField> MemoryRelationAcc<F> {
             partial_evaluation_result,
             true,
         );
+
+        self.r6.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+
+        // The ROM-LogUp sum identity is linearly dependent
+        self.r7.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
     }
 }
 
@@ -84,6 +103,8 @@ pub(crate) struct MemoryRelationEvals<F: PrimeField> {
     pub(crate) r3: F,
     pub(crate) r4: F,
     pub(crate) r5: F,
+    pub(crate) r6: F,
+    pub(crate) r7: F,
 }
 
 impl<F: PrimeField> MemoryRelationEvals<F> {
@@ -96,13 +117,15 @@ impl<F: PrimeField> MemoryRelationEvals<F> {
         *result += self.r3 * running_challenge[3];
         *result += self.r4 * running_challenge[4];
         *result += self.r5 * running_challenge[5];
+        *result += self.r6 * running_challenge[6];
+        *result += self.r7 * running_challenge[7];
     }
 }
 
 pub(crate) struct MemoryRelation {}
 
 impl MemoryRelation {
-    pub(crate) const NUM_RELATIONS: usize = 6;
+    pub(crate) const NUM_RELATIONS: usize = 8;
 }
 
 impl<F: PrimeField> Relation<F> for MemoryRelation {
@@ -131,11 +154,17 @@ impl<F: PrimeField> Relation<F> for MemoryRelation {
      * | RAM timestamp check          | 1     | 1   | 0   | 0   | 1   | 0   | --- |
      * | ROM consistency check        | 1     | 1   | 1   | 0   | 0   | 0   | --- |
      * | RAM consistency check        | 1     | 0   | 0   | 1   | 0   | 0   | 0   |
+     * | ROM LogUp table entry        | 1     | 0   | 1   | 0   | 0   | 0   | id  |
+     * | ROM LogUp read access        | 1     | 0   | 0   | 0   | 1   | 0   | id  |
      *
      * N.B. The RAM consistency check identity is degree 3. To keep the overall quotient degree at <=5, only 2 selectors
      * can be used to select it.
      *
      * N.B.2 The q_c selector is used to store circuit-specific values in the RAM/ROM access gate
+     *
+     * Single-value ROM tables use a LogUp scheme (subrelations 6 and 7), where the wires of the table entries and read
+     * accesses are (w_l, w_r, w_o, w_4) = (index, value, multiplicity (table rows) or zero (read rows), inverse) and
+     * q_c holds the ROM array id.
      *
      * @param evals transformed to `evals + C(in(X)...)*scaling_factor`
      * @param in an std::array containing the Totally extended Univariate edges.
@@ -355,6 +384,38 @@ impl<F: PrimeField> Relation<F> for MemoryRelation {
         for i in 0..univariate_accumulator.r0.evaluations.len() {
             univariate_accumulator.r0.evaluations[i] += memory_identity.evaluations[i];
         } // deg 5
+
+        /*
+         * ROM LogUp Sub-Relations (single-value tables)
+         *
+         * q_logup_table = q_2 * (1 - q_1) (table entry: w_o = m_i, the read count)
+         * q_logup_read  = q_4 * (1 - q_1) (read access: w_o = 0)
+         * denom = rom_logup_gamma + w_l + eta * w_r + eta_two * q_c
+         *
+         * Subrelation 6 (per-row): q_memory * (q_logup_table + q_logup_read) * (w_4 * denom - 1) = 0
+         * Subrelation 7 (linearly dependent): sum_rows q_memory * (q_logup_read - q_logup_table * w_o) * w_4 = 0
+         */
+        let rom_logup_gamma = &relation_parameters.rom_logup_gamma;
+        let one_minus_q_1 = q_1.to_owned() * (-F::one()) + &F::one(); // deg 1
+        let q_logup_table = q_2.to_owned() * &one_minus_q_1; // deg 2
+        let q_logup_read = q_4.to_owned() * &one_minus_q_1; // deg 2
+        let q_logup_any = q_logup_table.to_owned() + &q_logup_read;
+
+        let mut denom = w_2.to_owned() * eta; // deg 1
+        denom += w_1;
+        denom += &(q_c.to_owned() * eta_two);
+        denom += rom_logup_gamma;
+
+        let tmp = q_memory_by_scaling * &q_logup_any * &(w_4.to_owned() * &denom + &(-F::one())); // deg 5
+        for i in 0..univariate_accumulator.r6.evaluations.len() {
+            univariate_accumulator.r6.evaluations[i] += tmp.evaluations[i];
+        }
+
+        // Linearly dependent, hence no scaling factor
+        let tmp = (q_logup_read - &(q_logup_table * w_3)) * w_4 * q_memory; // deg 5
+        for i in 0..univariate_accumulator.r7.evaluations.len() {
+            univariate_accumulator.r7.evaluations[i] += tmp.evaluations[i];
+        }
     }
 
     fn verify_accumulate(
@@ -558,5 +619,19 @@ impl<F: PrimeField> Relation<F> for MemoryRelation {
         memory_identity += ram_consistency_check_identity; // deg 5 ( = deg 5 + (deg 3 or deg 5))
 
         univariate_accumulator.r0 += memory_identity; // deg 5
+
+        // ROM LogUp Sub-Relations (single-value tables), see `accumulate`
+        let rom_logup_gamma = &relation_parameters.rom_logup_gamma;
+        let one_minus_q_1 = F::one() - q_1;
+        let q_logup_table = one_minus_q_1 * q_2;
+        let q_logup_read = one_minus_q_1 * q_4;
+        let q_logup_any = q_logup_table + q_logup_read;
+
+        let denom = *rom_logup_gamma + w_1 + *w_2 * eta + *q_c * eta_two;
+
+        univariate_accumulator.r6 += q_memory_by_scaling * q_logup_any * (*w_4 * denom - F::one());
+
+        // Linearly dependent, hence no scaling factor
+        univariate_accumulator.r7 += (q_logup_read - q_logup_table * w_3) * w_4 * q_memory;
     }
 }

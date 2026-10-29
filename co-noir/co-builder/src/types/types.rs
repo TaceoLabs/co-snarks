@@ -589,7 +589,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             driver,
         )?;
         let recursion_separator =
-            transcript.get_challenge("recursion_separator".to_string(), builder, driver)?;
+            transcript.get_short_challenge("recursion_separator".to_string(), builder, driver)?;
         // Save gates using short scalars. We don't apply `bn254_endo_batch_mul` to the vector {1,
         // recursion_separator} directly to avoid edge cases.
         let mut point_to_aggregate =
@@ -623,6 +623,8 @@ pub(crate) enum MemorySelectors {
     RomRead,
     RamRead,
     RamWrite,
+    RomLogupTable,
+    RomLogupRead,
 }
 
 #[derive(PartialEq, Eq, Debug)]

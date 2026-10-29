@@ -121,6 +121,10 @@ fn populate_memory_records<
             .push(index + ram_rom_offset);
     }
 
+    for &index in builder.rom_logup_records.iter() {
+        proving_key.rom_logup_records.push(index + ram_rom_offset);
+    }
+
     // We have to add the shared memory records to the proving key as well
     for (k, el) in builder.memory_records_shared.iter() {
         let val = if U::is_shared(el) {

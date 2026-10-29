@@ -2912,6 +2912,17 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         driver.field_shares_to_pointshare::<P::CycleGroup>(x, y, is_infinity)
     }
 
+    /// Unchecked additions are sound only when no known discrete-log relation connects the bases to the offset
+    /// generators. The generator and the fixed-base table points (and their negations) satisfy that assumption;
+    /// arbitrary constants need checks.
+    fn is_trusted_constant_point(point: P::CycleGroup) -> bool {
+        let generator = P::CycleGroup::generator();
+        [point, -point].into_iter().any(|candidate| {
+            candidate == generator
+                || Plookup::lookup_table_exists_for_point::<P>(candidate.into_affine())
+        })
+    }
+
     pub(crate) fn batch_mul(
         base_points: Vec<Self>,
         scalars: Vec<CycleScalarCT<P::ScalarField>>,
@@ -2936,10 +2947,11 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
         let num_bits_not_full_field_size = num_bits != CycleScalarCT::<P::ScalarField>::NUM_BITS;
 
-        // When calling `_variable_base_batch_mul_internal`, we can unconditionally add iff all of the input points
-        // are fixed-base points
-        // (i.e. we are ULTRA Builder and we are doing fixed-base mul over points not present in our plookup tables)
+        // The variable-base Straus loop and its merge with the fixed-base accumulator may skip x-coordinate collision
+        // checks iff every variable-base point is a trusted constant (see `is_trusted_constant_point`). The final offset
+        // removal also involves the constant term, so it additionally needs every constant-scalar point to be trusted.
         let mut can_unconditional_add = true;
+        let mut can_unconditional_remove_offset = true;
         let mut has_non_constant_component = false;
 
         let mut constant_acc = P::CycleGroup::zero();
@@ -2953,6 +2965,12 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
 
                 let point_val = T::get_public_point(&point_val).expect("Constants are public");
                 constant_acc += point_val * scalar_val;
+                if !point_val.is_zero()
+                    && !scalar_val.is_zero()
+                    && !Self::is_trusted_constant_point(point_val)
+                {
+                    can_unconditional_remove_offset = false;
+                }
             } else if !scalar_constant && point_constant {
                 let point_val = point.get_value(builder, driver)?;
                 let point_val = T::get_public_point(&point_val).expect("Constants are public");
@@ -2989,6 +3007,9 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                     // womp womp. We have lookup tables at home. ROM tables.
                     variable_base_scalars.push(scalar.to_owned());
                     variable_base_points.push(point.to_owned());
+                    if !Self::is_trusted_constant_point(point_val) {
+                        can_unconditional_add = false;
+                    }
                 }
                 has_non_constant_component = true;
             } else {
@@ -2999,6 +3020,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
                 // variable base
             }
         }
+
+        can_unconditional_remove_offset &= can_unconditional_add;
 
         // If all inputs are constant, return the computed constant component and call it a day.
         if !has_non_constant_component {
@@ -3070,7 +3093,8 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         // i.e. the output will not be the point at infinity. We also know under case 1, we won't trigger the
         // doubling formula either, as every point is lienarly independent of every other point (including offset
         // generators).
-        if !constant_acc.is_zero() && can_unconditional_add {
+        // An untrusted constant term can collide with the accumulator even when all variable terms have trusted bases.
+        if !constant_acc.is_zero() && can_unconditional_remove_offset {
             result = result.unconditional_add(
                 &CycleGroupCT::from_group_element(-offset_accumulator),
                 None,

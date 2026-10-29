@@ -95,8 +95,15 @@ impl OinkRecursiveVerifier {
         *commitments.w_o_mut() =
             transcript.receive_point_from_prover("w_o".to_owned(), builder, driver)?;
 
-        // Get eta challenge and derive eta, eta² and eta³ used in memory and lookup arguments.
-        let eta = transcript.get_challenge("eta".to_string(), builder, driver)?;
+        // Get the eta and ROM-LogUp challenges and derive eta, eta² and eta³ used in memory and lookup arguments.
+        let [eta, rom_logup_gamma] = transcript
+            .get_challenges(
+                &["eta".to_owned(), "rom_logup_gamma".to_owned()],
+                builder,
+                driver,
+            )?
+            .try_into()
+            .unwrap();
         let eta_1 = eta.clone();
         let eta_2 = eta.multiply(&eta, builder, driver)?;
         let eta_3 = eta_2.multiply(&eta, builder, driver)?;
@@ -147,6 +154,7 @@ impl OinkRecursiveVerifier {
             eta_1,
             eta_2,
             eta_3,
+            rom_logup_gamma,
             public_input_delta,
         };
         verification_key.witness_commitments = commitments;

@@ -9,7 +9,7 @@ use co_noir_common::{
     honk_proof::{HonkProofResult, TranscriptFieldType},
     mpc::NoirUltraHonkProver,
 };
-use itertools::Itertools as _;
+use itertools::{Itertools as _, izip};
 use mpc_core::MpcState as _;
 use mpc_net::Network;
 use ultrahonk::prelude::Univariate;
@@ -22,6 +22,8 @@ pub(crate) struct MemoryRelationAcc<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub(crate) r3: SharedUnivariate<T, P, 6>,
     pub(crate) r4: SharedUnivariate<T, P, 6>,
     pub(crate) r5: SharedUnivariate<T, P, 6>,
+    pub(crate) r6: SharedUnivariate<T, P, 6>,
+    pub(crate) r7: SharedUnivariate<T, P, 6>,
 }
 
 impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for MemoryRelationAcc<T, P> {
@@ -33,6 +35,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> Default for MemoryRelationAcc<T, 
             r3: Default::default(),
             r4: Default::default(),
             r5: Default::default(),
+            r6: Default::default(),
+            r7: Default::default(),
         }
     }
 }
@@ -46,6 +50,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> MemoryRelationAcc<T, P> {
         self.r3.scale_inplace(elements[3]);
         self.r4.scale_inplace(elements[4]);
         self.r5.scale_inplace(elements[5]);
+        self.r6.scale_inplace(elements[6]);
+        self.r7.scale_inplace(elements[7]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(
@@ -95,14 +101,29 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> MemoryRelationAcc<T, P> {
             partial_evaluation_result,
             true,
         );
+
+        self.r6.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            true,
+        );
+
+        // The ROM-LogUp sum identity is linearly dependent
+        self.r7.extend_and_batch_univariates(
+            result,
+            extended_random_poly,
+            partial_evaluation_result,
+            false,
+        );
     }
 }
 
 pub(crate) struct MemoryRelation {}
 
 impl MemoryRelation {
-    pub(crate) const NUM_RELATIONS: usize = 6;
-    pub(crate) const CRAND_PAIRS_FACTOR: usize = 7;
+    pub(crate) const NUM_RELATIONS: usize = 8;
+    pub(crate) const CRAND_PAIRS_FACTOR: usize = 9;
 }
 
 impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P>
@@ -152,6 +173,8 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
      * | RAM timestamp check          | 1     | 1   | 0   | 0   | 1   | 0   | --- |
      * | ROM consistency check        | 1     | 1   | 1   | 0   | 0   | 0   | --- |
      * | RAM consistency check        | 1     | 0   | 0   | 1   | 0   | 0   | 0   |
+     * | ROM LogUp table entry        | 1     | 0   | 1   | 0   | 0   | 0   | id  |
+     * | ROM LogUp read access        | 1     | 0   | 0   | 0   | 1   | 0   | id  |
      *
      * N.B. The RAM consistency check identity is degree 3. To keep the overall quotient degree at <=5, only 2 selectors
      * can be used to select it.
@@ -266,7 +289,7 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         let index_delta_is_zero = T::add_scalar(&neg_index_delta, P::ScalarField::one(), id); // deg 1
         let record_delta = T::sub_many(w_4_shift, w_4);
 
-        let capacity = neg_index_delta.len() * 6;
+        let capacity = neg_index_delta.len() * 8;
         let mut lhs = Vec::with_capacity(capacity);
         let mut rhs = Vec::with_capacity(capacity);
         lhs.extend(neg_index_delta.clone());
@@ -356,9 +379,26 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         lhs.extend(index_delta_is_zero);
         rhs.extend(timestamp_delta);
 
+        /*
+         * ROM LogUp (single-value tables)
+         *
+         * denom = rom_logup_gamma + w_l + eta * w_r + eta_two * q_c, where q_c holds the ROM array id
+         */
+        let mut denom = T::scale_many(w_2, eta);
+        T::add_assign_many(&mut denom, w_1);
+        let denom_public = q_c
+            .iter()
+            .map(|q_c| relation_parameters.rom_logup_gamma + *q_c * eta_two)
+            .collect::<Vec<_>>();
+        T::add_assign_public_many(&mut denom, &denom_public, id);
+        lhs.extend(w_4.to_owned());
+        rhs.extend(denom);
+        lhs.extend(w_3.to_owned());
+        rhs.extend(w_4.to_owned());
+
         let mul = T::mul_many(&lhs, &rhs, net, state)?;
-        let mul = mul.chunks_exact(mul.len() / 6).collect_vec();
-        debug_assert_eq!(mul.len(), 6);
+        let mul = mul.chunks_exact(mul.len() / 8).collect_vec();
+        debug_assert_eq!(mul.len(), 8);
 
         let neg_index_delta_sqr = mul[0];
         let adjacent_values_match_if_adjacent_indices_match = mul[1]; // index_delta_is_zero * record_delta 
@@ -453,6 +493,56 @@ impl<T: NoirUltraHonkProver<P>, P: HonkCurve<TranscriptFieldType>> Relation<T, P
         T::add_assign_many(&mut memory_identity, &ram_consistency_check_identity); // deg 5 ( = deg 5 + (deg 3 or deg 5))
 
         fold_accumulator!(univariate_accumulator.r0, memory_identity); // deg 5
+
+        /*
+         * ROM LogUp Sub-Relations (single-value tables)
+         *
+         * q_logup_table = q_2 * (1 - q_1) (table entry: w_o = m_i, the read count)
+         * q_logup_read  = q_4 * (1 - q_1) (read access: w_o = 0)
+         *
+         * Subrelation 6 (per-row): q_memory * (q_logup_table + q_logup_read) * (w_4 * denom - 1) = 0
+         * Subrelation 7 (linearly dependent): sum_rows q_memory * (q_logup_read - q_logup_table * w_o) * w_4 = 0
+         */
+        let w_4_by_denom = mul[6];
+        let w_3_by_w_4 = mul[7];
+        let (q_logup_table, q_logup_read): (Vec<_>, Vec<_>) =
+            izip!(q_1.iter(), q_2.iter(), q_4.iter())
+                .map(|(q_1, q_2, q_4)| {
+                    let one_minus_q_1 = P::ScalarField::one() - q_1;
+                    (*q_2 * one_minus_q_1, *q_4 * one_minus_q_1)
+                })
+                .unzip();
+
+        let q_logup_any_by_memory_by_scaling = izip!(
+            q_logup_table.iter(),
+            q_logup_read.iter(),
+            q_memory_by_scaling.iter()
+        )
+        .map(|(table, read, q_memory_by_scaling)| (*table + read) * q_memory_by_scaling)
+        .collect::<Vec<_>>();
+        let tmp = T::mul_with_public_many(
+            &q_logup_any_by_memory_by_scaling,
+            &T::add_scalar(w_4_by_denom, -P::ScalarField::one(), id),
+        ); // deg 5
+        fold_accumulator!(univariate_accumulator.r6, tmp);
+
+        // Linearly dependent, hence no scaling factor
+        let q_logup_read_by_memory = q_logup_read
+            .iter()
+            .zip_eq(q_memory.iter())
+            .map(|(a, b)| *a * b)
+            .collect::<Vec<_>>();
+        let q_logup_table_by_memory = q_logup_table
+            .iter()
+            .zip_eq(q_memory.iter())
+            .map(|(a, b)| *a * b)
+            .collect::<Vec<_>>();
+        let mut tmp = T::mul_with_public_many(&q_logup_read_by_memory, w_4);
+        T::sub_assign_many(
+            &mut tmp,
+            &T::mul_with_public_many(&q_logup_table_by_memory, w_3_by_w_4),
+        ); // deg 5
+        fold_accumulator!(univariate_accumulator.r7, tmp);
         Ok(())
     }
 }

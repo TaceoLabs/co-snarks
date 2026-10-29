@@ -14,6 +14,7 @@ pub struct PlainProvingKey<P: CurveGroup> {
     pub polynomials: Polynomials<P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
+    pub rom_logup_records: Vec<u32>,
     pub final_active_wire_idx: usize,
     pub active_region_data: ActiveRegionData,
 }
