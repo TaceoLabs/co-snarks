@@ -16,7 +16,7 @@ use tracing::instrument;
 
 // Round 2 of https://eprint.iacr.org/2019/953.pdf (page 28)
 pub(super) struct Round2<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
-    pub(super) nets: &'a [N; 8],
+    pub(super) net: &'a N,
     pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<P, T>,
@@ -94,7 +94,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     #[instrument(level = "debug", name = "compute z", skip_all)]
     fn compute_z(
-        nets: &[N; 8],
+        net: &N,
         state: &mut T::State,
         zkey: &Zkey<P>,
         domains: &Domains<P::ScalarField>,
@@ -157,17 +157,20 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
         num_den_span.exit();
 
         let batched_mul_span = tracing::debug_span!("buffer z network round").entered();
-        // TODO check and explain numbers
-        let mut state0 = state.fork(zkey.domain_size * 6 + 2)?;
-        let mut state1 = state.fork(zkey.domain_size * 7 + 2)?;
-        let (num, den) = mpc_net::join(
-            || T::array_prod_mul(false, &n1, &n2, &n3, &nets[0], &mut state0),
-            || T::array_prod_mul(true, &d1, &d2, &d3, &nets[1], &mut state1),
-        );
-        let num = num?;
-        let den = den?;
+        // prefix products of num and den in one batch, then z = num / den
+        let n = zkey.domain_size;
+        let num_den = T::array_prod_mul(
+            &[n1, d1].concat(),
+            &[n2, d2].concat(),
+            &[n3, d3].concat(),
+            n,
+            net,
+            state,
+        )?;
+        let (num, den) = num_den.split_at(n);
+        let den = T::inv_vec(den, net, state)?;
 
-        let mut buffer_z = T::mul_vec(&num, &den, &nets[0], state)?;
+        let mut buffer_z = T::mul_vec(num, &den, net, state)?;
         buffer_z.rotate_right(1); // Required by SNARKJs/Plonk
         batched_mul_span.exit();
 
@@ -196,7 +199,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
     #[instrument(level = "debug", name = "Plonk - Round 2", skip_all)]
     pub(super) fn round2(self) -> PlonkProofResult<Round3<'a, P, T, N>> {
         let Self {
-            nets,
+            net,
             state,
             data,
             proof,
@@ -230,16 +233,16 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round2<'a, P
         let gamma = transcript.get_challenge();
         tracing::debug!("beta: {beta}, gamma: {gamma}");
         let challenges = Round2Challenges::new(challenges, beta, gamma);
-        let z = Self::compute_z(nets, state, zkey, &domains, &challenges, &polys)?;
+        let z = Self::compute_z(net, state, zkey, &domains, &challenges, &polys)?;
         // STEP 2.3 - Compute permutation [z]_1
 
         tracing::debug!("committing to poly z (MSMs)");
         let commit_z = T::msm_public_points_g1(&zkey.p_tau[..z.poly.len()], &z.poly);
-        let commit_z = T::open_point_g1(commit_z, &nets[0], state)?;
+        let commit_z = T::open_point_g1(commit_z, net, state)?;
         let proof = Round2Proof::new(proof, commit_z);
         tracing::debug!("round2 result: {proof}");
         Ok(Round3 {
-            nets,
+            net,
             state,
             domains,
             challenges,
@@ -294,7 +297,7 @@ pub mod tests {
 
             let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
             let mut state = ();
-            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
+            let mut round1 = Round1::init_round(&(), &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             let round3 = round2.round2().unwrap();

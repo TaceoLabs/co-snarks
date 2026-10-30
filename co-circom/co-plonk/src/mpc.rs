@@ -173,12 +173,14 @@ pub trait CircomPlonkProver<P: Pairing> {
         point: P::ScalarField,
     ) -> (Self::ArithmeticShare, Vec<Self::ArithmeticShare>);
 
-    /// Perform elementwise multiplication of the three vectors of shares and then perform the array_prod_mul protocol
+    /// Elementwise product of the three vectors, followed by the prefix product
+    /// `out[i] = prod_{j <= i} arr[j]` within each consecutive chunk of `chunk_size`
+    /// elements, in a constant number of rounds (array_prod_mul protocol).
     fn array_prod_mul<N: Network>(
-        inv: bool,
         arr1: &[Self::ArithmeticShare],
         arr2: &[Self::ArithmeticShare],
         arr3: &[Self::ArithmeticShare],
+        chunk_size: usize,
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;

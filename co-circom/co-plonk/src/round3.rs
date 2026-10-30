@@ -1,7 +1,7 @@
 use crate::{
     PlonkProofResult,
     mpc::CircomPlonkProver,
-    plonk_utils::rayon_join3,
+    plonk_utils::{self, rayon_join3},
     round2::{Round2Challenges, Round2Polys, Round2Proof},
     round4::Round4,
     types::{Domains, Keccak256Transcript, PlonkData, PolyEval},
@@ -17,72 +17,111 @@ use num_traits::One;
 use num_traits::Zero;
 use tracing::instrument;
 
-macro_rules! mul4vec {
-    ($nets: expr, $state: expr, $a: expr,$b: expr,$c: expr,$d: expr,$ap: expr,$bp: expr,$cp: expr,$dp: expr, $len: expr) => {{
-        let mut state0 = $state.fork($len)?;
-        let mut state1 = $state.fork($len)?;
-        let mut state2 = $state.fork($len)?;
-        let mut state3 = $state.fork($len)?;
-        let mut state4 = $state.fork($len)?;
-        let mut state5 = $state.fork($len)?;
-        let mut state6 = $state.fork($len)?;
-        let mut state7 = $state.fork($len)?;
-
-        let (a_b, a_bp, ap_b, ap_bp, c_d, c_dp, cp_d, cp_dp) = mpc_net::join8(
-            || T::mul_vec($a, $b, &$nets[0], &mut state0),
-            || T::mul_vec($a, $bp, &$nets[1], &mut state1),
-            || T::mul_vec($ap, $b, &$nets[2], &mut state2),
-            || T::mul_vec($ap, $bp, &$nets[3], &mut state3),
-            || T::mul_vec($c, $d, &$nets[4], &mut state4),
-            || T::mul_vec($c, $dp, &$nets[5], &mut state5),
-            || T::mul_vec($cp, $d, &$nets[6], &mut state6),
-            || T::mul_vec($cp, $dp, &$nets[7], &mut state7),
-        );
-        let a_b = a_b?;
-        let a_bp = a_bp?;
-        let ap_b = ap_b?;
-        let ap_bp = ap_bp?;
-        let c_d = c_d?;
-        let c_dp = c_dp?;
-        let cp_d = cp_d?;
-        let cp_dp = cp_dp?;
-
-        let mut state0 = $state.fork($len)?;
-        let mut state1 = $state.fork($len * 4)?;
-        let mut state2 = $state.fork($len * 6)?;
-        let mut state3 = $state.fork($len * 4)?;
-        let mut state4 = $state.fork($len)?;
-
-        let (r, a0, a1, a2, a3) = mpc_net::join5(
-            || T::mul_vec(&a_b, &c_d, &$nets[0], &mut state0),
-            || {
-                let mut a0 = T::mul_vec(&ap_b, &c_d, &$nets[1], &mut state1)?;
-                a0 = T::add_mul_vec(&a0, &a_bp, &c_d, &$nets[1], &mut state1)?;
-                a0 = T::add_mul_vec(&a0, &a_b, &cp_d, &$nets[1], &mut state1)?;
-                a0 = T::add_mul_vec(&a0, &a_b, &c_dp, &$nets[1], &mut state1)?;
-                eyre::Ok(a0)
+/// Coefficients in `Z` of `(a + a'·Z)(b + b'·Z)(c + c'·Z)(d + d'·Z)` for two quadruples
+/// `(a, b, c, d, a', b', c', d')`, computed elementwise in two network rounds with
+/// Karatsuba on both levels (12 products per round for both quadruples together).
+/// Returns `[Z^0, Z^1, Z^2, Z^3, Z^4]` for each quadruple.
+#[allow(clippy::type_complexity)]
+fn mul4vec<P: Pairing, T: CircomPlonkProver<P>, N: Network>(
+    net: &N,
+    state: &mut T::State,
+    quads: [[&[T::ArithmeticShare]; 8]; 2],
+) -> eyre::Result<[[Vec<T::ArithmeticShare>; 5]; 2]> {
+    // round 1: X = (a + a'Z)(b + b'Z) and Y = (c + c'Z)(d + d'Z) as polynomials in Z
+    let mut xy = Vec::with_capacity(2);
+    for [a, b, c, d, ap, bp, cp, dp] in quads {
+        xy.push([
+            [add::<P, T>(a, ap), add::<P, T>(b, bp)],
+            [add::<P, T>(c, cp), add::<P, T>(d, dp)],
+        ]);
+    }
+    let pairs = quads
+        .iter()
+        .zip(&xy)
+        .flat_map(
+            |([a, b, c, d, ap, bp, cp, dp], [[a_ap, b_bp], [c_cp, d_dp]])| {
+                [
+                    (*a, *b),
+                    (a_ap.as_slice(), b_bp.as_slice()),
+                    (*ap, *bp),
+                    (*c, *d),
+                    (c_cp.as_slice(), d_dp.as_slice()),
+                    (*cp, *dp),
+                ]
             },
-            || {
-                let mut a1 = T::mul_vec(&ap_bp, &c_d, &$nets[2], &mut state2)?;
-                a1 = T::add_mul_vec(&a1, &ap_b, &cp_d, &$nets[2], &mut state2)?;
-                a1 = T::add_mul_vec(&a1, &ap_b, &c_dp, &$nets[2], &mut state2)?;
-                a1 = T::add_mul_vec(&a1, &a_bp, &cp_d, &$nets[2], &mut state2)?;
-                a1 = T::add_mul_vec(&a1, &a_bp, &c_dp, &$nets[2], &mut state2)?;
-                a1 = T::add_mul_vec(&a1, &a_b, &cp_dp, &$nets[2], &mut state2)?;
-                eyre::Ok(a1)
-            },
-            || {
-                let mut a2 = T::mul_vec(&a_bp, &cp_dp, &$nets[3], &mut state3)?;
-                a2 = T::add_mul_vec(&a2, &ap_b, &cp_dp, &$nets[3], &mut state3)?;
-                a2 = T::add_mul_vec(&a2, &ap_bp, &c_dp, &$nets[3], &mut state3)?;
-                a2 = T::add_mul_vec(&a2, &ap_bp, &cp_d, &$nets[3], &mut state3)?;
-                eyre::Ok(a2)
-            },
-            || T::mul_vec(&ap_bp, &cp_dp, &$nets[4], &mut state4),
-        );
+        )
+        .collect::<Vec<_>>();
+    let mut products = plonk_utils::mul_vec_batched::<P, T, N>(&pairs, net, state)?;
+    let mut xy = Vec::with_capacity(2);
+    for _ in 0..2 {
+        let [x0, x01, x2, y0, y01, y2] =
+            plonk_utils::into_array::<_, 6>(products.drain(..6).collect());
+        xy.push((
+            poly2_from_karatsuba::<P, T>(x0, x01, x2),
+            poly2_from_karatsuba::<P, T>(y0, y01, y2),
+        ));
+    }
+    // round 2: X·Y with 6 products: X_i·Y_i and (X_i + X_j)·(Y_i + Y_j) for i < j
+    let sums = xy
+        .iter()
+        .map(|(x, y)| {
+            [
+                (add::<P, T>(&x[0], &x[1]), add::<P, T>(&y[0], &y[1])),
+                (add::<P, T>(&x[1], &x[2]), add::<P, T>(&y[1], &y[2])),
+                (add::<P, T>(&x[0], &x[2]), add::<P, T>(&y[0], &y[2])),
+            ]
+        })
+        .collect::<Vec<_>>();
+    let pairs = xy
+        .iter()
+        .zip(&sums)
+        .flat_map(|((x, y), s)| {
+            [
+                (x[0].as_slice(), y[0].as_slice()),
+                (x[1].as_slice(), y[1].as_slice()),
+                (x[2].as_slice(), y[2].as_slice()),
+                (s[0].0.as_slice(), s[0].1.as_slice()),
+                (s[1].0.as_slice(), s[1].1.as_slice()),
+                (s[2].0.as_slice(), s[2].1.as_slice()),
+            ]
+        })
+        .collect::<Vec<_>>();
+    let mut products = plonk_utils::mul_vec_batched::<P, T, N>(&pairs, net, state)?;
+    let mut out = Vec::with_capacity(2);
+    for _ in 0..2 {
+        let [d0, d1, d2, d01, d12, d02] =
+            plonk_utils::into_array::<_, 6>(products.drain(..6).collect());
+        let c1 = sub::<P, T>(&sub::<P, T>(&d01, &d0), &d1);
+        let c2 = add::<P, T>(&sub::<P, T>(&sub::<P, T>(&d02, &d0), &d2), &d1);
+        let c3 = sub::<P, T>(&sub::<P, T>(&d12, &d1), &d2);
+        out.push([d0, c1, c2, c3, d2]);
+    }
+    Ok(plonk_utils::into_array(out))
+}
 
-        eyre::Ok([r?, a0?, a1?, a2?, a3?])
-    }};
+fn add<P: Pairing, T: CircomPlonkProver<P>>(
+    x: &[T::ArithmeticShare],
+    y: &[T::ArithmeticShare],
+) -> Vec<T::ArithmeticShare> {
+    izip!(x, y).map(|(x, y)| T::add(*x, *y)).collect()
+}
+
+fn sub<P: Pairing, T: CircomPlonkProver<P>>(
+    x: &[T::ArithmeticShare],
+    y: &[T::ArithmeticShare],
+) -> Vec<T::ArithmeticShare> {
+    izip!(x, y).map(|(x, y)| T::sub(*x, *y)).collect()
+}
+
+/// `(u + u'Z)(v + v'Z) = p0 + (p01 - p0 - p2) Z + p2 Z²` from the Karatsuba products
+/// `p0 = u·v`, `p01 = (u + u')(v + v')`, `p2 = u'·v'`.
+fn poly2_from_karatsuba<P: Pairing, T: CircomPlonkProver<P>>(
+    p0: Vec<T::ArithmeticShare>,
+    p01: Vec<T::ArithmeticShare>,
+    p2: Vec<T::ArithmeticShare>,
+) -> [Vec<T::ArithmeticShare>; 3] {
+    let p1 = sub::<P, T>(&sub::<P, T>(&p01, &p0), &p2);
+    [p0, p1, p2]
 }
 
 macro_rules! mul4vec_post {
@@ -106,7 +145,7 @@ macro_rules! mul4vec_post {
 
 // Round 3 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round3<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
-    pub(super) nets: &'a [N; 8],
+    pub(super) net: &'a N,
     pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round2Challenges<P, T>,
@@ -244,7 +283,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
     // Compute the quotient polynomial T(X) (see https://eprint.iacr.org/2019/953.pdf)
     // It is implemented with a constant number of communication rounds in MPC
     fn compute_t(
-        nets: &[N; 8],
+        net: &N,
         state: &mut T::State,
         domains: &Domains<P::ScalarField>,
         challenges: &Round3Challenges<P, T>,
@@ -274,29 +313,18 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         });
         w_product_span.exit();
 
-        let ab_span = tracing::debug_span!("a_b, a_bp, ap_b, ap_bp").entered();
-        // TODO check and explain numbers
-        let mut state0 = state.fork(len)?;
-        let mut state1 = state.fork(len)?;
-        let mut state2 = state.fork(len)?;
-        let mut state3 = state.fork(len)?;
-        let (a_b, a_bp, ap_b, ap_bp) = mpc_net::join4(
-            || {
-                T::mul_vec(
-                    &polys.poly_eval_a.eval,
-                    &polys.poly_eval_b.eval,
-                    &nets[0],
-                    &mut state0,
-                )
-            },
-            || T::mul_vec(&polys.poly_eval_a.eval, &bp, &nets[1], &mut state1),
-            || T::mul_vec(&polys.poly_eval_b.eval, &ap, &nets[2], &mut state2),
-            || T::mul_vec(&ap, &bp, &nets[3], &mut state3),
-        );
-        let a_b = a_b?;
-        let a_bp = a_bp?;
-        let ap_b = ap_b?;
-        let ap_bp = ap_bp?;
+        let ab_span = tracing::debug_span!("a_b, a_bp + ap_b, ap_bp").entered();
+        let a = polys.poly_eval_a.eval.as_slice();
+        let b = polys.poly_eval_b.eval.as_slice();
+        let (a_ap, b_bp) = (add::<P, T>(a, &ap), add::<P, T>(b, &bp));
+        let [a_b, a_ab, ap_bp] =
+            plonk_utils::into_array::<_, 3>(plonk_utils::mul_vec_batched::<P, T, N>(
+                &[(a, b), (&a_ap, &b_bp), (&ap, &bp)],
+                net,
+                state,
+            )?);
+        // a_bp_ap_b is the coefficient of Z in (a + a'Z)(b + b'Z), i.e. a·b' + a'·b
+        let [a_b, a_bp_ap_b, ap_bp] = poly2_from_karatsuba::<P, T>(a_b, a_ab, ap_bp);
         ab_span.exit();
 
         let w_product_span = tracing::debug_span!("second w product").entered();
@@ -330,9 +358,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
             let s1 = zkey.s1_poly.evaluations[i];
             let s2 = zkey.s2_poly.evaluations[i];
             let s3 = zkey.s3_poly.evaluations[i];
-            let a_bp = &a_bp[i];
             let a_b = &a_b[i];
-            let ap_b = &ap_b[i];
             let ap = &ap[i];
             let bp = &bp[i];
 
@@ -352,7 +378,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
             let zwp_ = T::add(challenges.b[8], zwp_);
             zwp.push(zwp_);
 
-            let mut a0 = T::add(*a_bp, *ap_b);
+            let mut a0 = a_bp_ap_b[i];
             let mod_i = i % 4;
             if mod_i != 0 {
                 let z1 = z1[mod_i];
@@ -420,11 +446,16 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         w_product_span.exit();
 
         let mul4vec_span = tracing::debug_span!("mul4 vec").entered();
-        let [e2, e2z_0, e2z_1, e2z_2, e2z_3] =
-            mul4vec!(nets, state, &e2a, &e2b, &e2c, &e2d, &ap, &bp, &cp, &zp, len)?;
-
-        let [e3, e3z_0, e3z_1, e3z_2, e3z_3] = mul4vec!(
-            nets, state, &e3a, &e3b, &e3c, &e3d, &ap, &bp, &cp, &zwp, len
+        let [
+            [e2, e2z_0, e2z_1, e2z_2, e2z_3],
+            [e3, e3z_0, e3z_1, e3z_2, e3z_3],
+        ] = mul4vec::<P, T, N>(
+            net,
+            state,
+            [
+                [&e2a, &e2b, &e2c, &e2d, &ap, &bp, &cp, &zp],
+                [&e3a, &e3b, &e3c, &e3d, &ap, &bp, &cp, &zwp],
+            ],
         )?;
         mul4vec_span.exit();
 
@@ -505,7 +536,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
     #[instrument(level = "debug", name = "Plonk - Round 3", skip_all)]
     pub(super) fn round3(self) -> PlonkProofResult<Round4<'a, P, T, N>> {
         let Self {
-            nets,
+            net,
             state,
             domains,
             challenges,
@@ -526,7 +557,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         let challenges = Round3Challenges::new(challenges, alpha, alpha2);
 
         let t_span = tracing::debug_span!("compute t").entered();
-        let [t1, t2, t3] = Self::compute_t(nets, state, &domains, &challenges, data.zkey, &polys)?;
+        let [t1, t2, t3] = Self::compute_t(net, state, &domains, &challenges, data.zkey, &polys)?;
         t_span.exit();
 
         tracing::debug!("committing to poly t (MSMs)");
@@ -539,13 +570,13 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round3<'a, P
         );
         commit_t_span.exit();
 
-        let opened = T::open_point_vec_g1(&[commit_t1, commit_t2, commit_t3], &nets[0], state)?;
+        let opened = T::open_point_vec_g1(&[commit_t1, commit_t2, commit_t3], net, state)?;
 
         let polys = FinalPolys::new(polys, t1, t2, t3);
         let proof = Round3Proof::new(proof, opened[0], opened[1], opened[2]);
         tracing::debug!("round3 result: {proof}");
         Ok(Round4 {
-            nets,
+            net,
             state,
             domains,
             challenges,
@@ -603,7 +634,7 @@ pub mod tests {
 
             let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
             let mut state = ();
-            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
+            let mut round1 = Round1::init_round(&(), &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             let round3 = round2.round2().unwrap();

@@ -18,7 +18,7 @@ use tracing::instrument;
 
 // Round 5 of https://eprint.iacr.org/2019/953.pdf (page 30)
 pub(super) struct Round5<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
-    pub(super) nets: &'a [N; 8],
+    pub(super) net: &'a N,
     pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round4Challenges<P>,
@@ -281,7 +281,7 @@ where
     #[instrument(level = "debug", name = "Plonk - Round 5", skip_all)]
     pub(super) fn round5(self) -> PlonkProofResult<PlonkProof<P>> {
         let Self {
-            nets,
+            net,
             state,
             domains,
             challenges,
@@ -326,7 +326,7 @@ where
         let commit_wxi = T::msm_public_points_g1(&p_tau[..wxi.len()], &wxi);
         let commit_wxiw = T::msm_public_points_g1(&p_tau[..wxiw.len()], &wxiw);
 
-        let opened = T::open_point_vec_g1(&[commit_wxi, commit_wxiw], &nets[0], state)?;
+        let opened = T::open_point_vec_g1(&[commit_wxi, commit_wxiw], net, state)?;
 
         let commit_wxi: P::G1 = opened[0];
         let commit_wxiw: P::G1 = opened[1];
@@ -383,7 +383,7 @@ pub mod tests {
 
             let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
             let mut state = ();
-            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
+            let mut round1 = Round1::init_round(&(), &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             let round3 = round2.round2().unwrap();

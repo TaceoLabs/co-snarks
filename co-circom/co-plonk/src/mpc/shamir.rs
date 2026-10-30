@@ -191,10 +191,10 @@ where
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     // TODO parallelize these? With a different network structure this might not be needed though
     fn array_prod_mul<N: Network>(
-        inv: bool,
         arr1: &[Self::ArithmeticShare],
         arr2: &[Self::ArithmeticShare],
         arr3: &[Self::ArithmeticShare],
+        chunk_size: usize,
         net: &N,
         state: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
@@ -202,29 +202,31 @@ where
         let arr = arithmetic::mul_vec(&arr, arr3, net, state)?;
         // Do the multiplications of inp[i] * inp[i-1] in constant rounds
         let len = arr.len();
+        debug_assert_eq!(len % chunk_size, 0);
 
         let mut r = Vec::with_capacity(len + 1);
         for _ in 0..=len {
             r.push(state.rand(net)?);
         }
         let r_inv = arithmetic::inv_vec(&r, net, state)?;
-        let r_inv0 = vec![r_inv[0]; len];
+        // each chunk is unblinded with the inverse of its own first mask
+        let r_inv0 = (0..len)
+            .map(|i| r_inv[i - i % chunk_size])
+            .collect::<Vec<_>>();
         let mut unblind = arithmetic::mul_vec(&r_inv0, &r[1..], net, state)?;
 
         let mul = arithmetic::mul_vec(&r[..len], &arr, net, state)?;
         let mut open = arithmetic::mul_open_vec(&mul, &r_inv[1..], net, state)?;
 
         for i in 1..open.len() {
-            open[i] = open[i] * open[i - 1];
+            if i % chunk_size != 0 {
+                open[i] = open[i] * open[i - 1];
+            }
         }
 
         for (unblind, open) in unblind.iter_mut().zip(open) {
             *unblind = arithmetic::mul_public(*unblind, open);
         }
-        if inv {
-            Ok(arithmetic::inv_vec(&unblind, net, state)?)
-        } else {
-            Ok(unblind)
-        }
+        Ok(unblind)
     }
 }
