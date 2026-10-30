@@ -948,6 +948,57 @@ mod field_share {
         assert_eq!(is_result, x);
     }
 
+    /// Binary ops like XOR/OR of two valid field elements can yield x in [p, 2^254);
+    /// the `_mod_p` conversions must still produce x mod p.
+    fn rep3_b2a_noncanonical_impl(
+        f: fn(
+            &rep3::Rep3UintShare<ark_bn254::Fr>,
+            &LocalNetwork,
+            &mut Rep3State,
+        ) -> eyre::Result<rep3::Rep3PrimeFieldShare<ark_bn254::Fr>>,
+    ) {
+        let mut rng = thread_rng();
+        let bits = ark_bn254::Fr::MODULUS_BIT_SIZE as usize;
+        let x = U256::mask(bits); // 2^254 - 1 >= p
+        let should = ark_bn254::Fr::from_uint_reduced(&x);
+        for _ in 0..16 {
+            let a = U256::random_bits(&mut rng, bits);
+            let b = U256::random_bits(&mut rng, bits);
+            let c = x ^ a ^ b;
+            let x_shares = [
+                rep3::Rep3UintShare::new(a, c),
+                rep3::Rep3UintShare::new(b, a),
+                rep3::Rep3UintShare::new(c, b),
+            ];
+            let nets = LocalNetwork::new_3_parties();
+            let (tx1, rx1) = mpsc::channel();
+            let (tx2, rx2) = mpsc::channel();
+            let (tx3, rx3) = mpsc::channel();
+            for ((net, tx), x) in nets.into_iter().zip([tx1, tx2, tx3]).zip(x_shares) {
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    tx.send(f(&x, &net, &mut state).unwrap())
+                });
+            }
+            let is_result = rep3::combine_field_element(
+                rx1.recv().unwrap(),
+                rx2.recv().unwrap(),
+                rx3.recv().unwrap(),
+            );
+            assert_eq!(is_result, should);
+        }
+    }
+
+    #[test]
+    fn rep3_b2a_mod_p() {
+        rep3_b2a_noncanonical_impl(conversion::b2a_mod_p);
+    }
+
+    #[test]
+    fn rep3_b2y2a_mod_p() {
+        rep3_b2a_noncanonical_impl(conversion::b2y2a_mod_p);
+    }
+
     #[test]
     fn rep3_gc() {
         let nets = LocalNetwork::new_3_parties();

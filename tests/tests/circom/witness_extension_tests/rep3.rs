@@ -256,3 +256,54 @@ witness_extension_test_rep3!(winner);
 witness_extension_test_rep3!(bitonic_sort);
 witness_extension_test_rep3!(num2bits_accelerator);
 witness_extension_test_rep3!(reclaim_addbits_accelerator);
+
+/// XOR/OR of valid field elements can exceed p before reduction (e.g. p-1 ^ (2^254-p) = 2^254-1),
+/// so run the KATs with both b2a implementations.
+#[test]
+fn bitwise_field() {
+    use mpc_core::protocols::rep3::conversion::A2BType;
+
+    let inp = from_test_name("bitwise_field");
+    let file = "../test_vectors/WitnessExtension/tests/bitwise_field.circom";
+    let compiler_config = CompilerConfig {
+        simplification: circom_mpc_compiler::SimplificationLevel::O2(usize::MAX),
+        ..CompilerConfig::default()
+    };
+    for a2b_type in [A2BType::Yao, A2BType::Direct] {
+        for (input, witness) in izip!(&inp.inputs, &inp.witnesses) {
+            let mut rng = thread_rng();
+            let inputs = rep3::share_field_elements(input, &mut rng);
+            let nets = LocalNetwork::new_3_parties();
+            let threads = izip!(nets, inputs)
+                .map(|(net, input)| {
+                    let compiler_config = compiler_config.clone();
+                    std::thread::spawn(move || {
+                        let circuit =
+                            CoCircomCompiler::<Bn254>::parse(file.to_owned(), compiler_config)
+                                .unwrap();
+                        let config = VMConfig {
+                            a2b_type,
+                            ..VMConfig::default()
+                        };
+                        Rep3WitnessExtension::new(&net, &circuit, config)
+                            .unwrap()
+                            .run_with_flat(
+                                input.into_iter().map(Rep3VmType::Arithmetic).collect(),
+                                0,
+                            )
+                            .unwrap()
+                            .into_shared_witness()
+                    })
+                })
+                .collect::<Vec<_>>();
+            let [r1, r2, r3]: [_; 3] = threads
+                .into_iter()
+                .map(|t| t.join().unwrap())
+                .collect::<Vec<_>>()
+                .try_into()
+                .unwrap();
+            let is_witness = tests::test_utils::combine_field_elements_for_vm(r1, r2, r3);
+            assert_eq!(is_witness, witness.values, "{a2b_type:?}");
+        }
+    }
+}
