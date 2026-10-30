@@ -195,6 +195,22 @@ pub trait NoirWitnessExtensionProtocol<F: PrimeField> {
         len: usize,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
+    /// Reads from a LUT at a shared index and additionally returns the shared one-hot-encoded vector of the index
+    /// (with at least the length of the LUT), such that it can be reused without recomputing it.
+    ///
+    /// The default implementation computes the one-hot-encoded vector and the read separately. Implementations should
+    /// override it if the read can be derived from the one-hot-encoded vector, to avoid doing the work twice.
+    fn read_lut_with_ohv_by_shared_index(
+        &mut self,
+        index: Self::ArithmeticShare,
+        lut: &<Self::Lookup as LookupTableProvider<F>>::LutType,
+    ) -> eyre::Result<(Self::AcvmType, Vec<Self::ArithmeticShare>)> {
+        let ohv =
+            self.one_hot_vector_from_shared_index(index.clone(), Self::get_length_of_lut(lut))?;
+        let value = self.read_lut_by_acvm_type(index.into(), lut)?;
+        Ok((value, ohv))
+    }
+
     /// Writes to a shared LUT from a given shared one-hot-encoded vector.
     fn write_to_shared_lut_from_ohv(
         &mut self,

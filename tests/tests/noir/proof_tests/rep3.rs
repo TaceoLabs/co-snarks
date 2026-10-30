@@ -243,6 +243,26 @@ fn add3u64_proof_test_keccak256() {
 }
 
 #[test]
+fn random_access_witness_and_proof_test_poseidon2sponge() {
+    witness_and_proof_test::<Poseidon2Sponge>("random_access", ZeroKnowledge::Yes, "");
+}
+
+#[test]
+fn random_access_proof_test_poseidon2sponge() {
+    proof_test::<Poseidon2Sponge>("random_access", ZeroKnowledge::Yes, "");
+}
+
+#[test]
+fn rom_shared_witness_and_proof_test_poseidon2sponge() {
+    witness_and_proof_test::<Poseidon2Sponge>("rom_shared", ZeroKnowledge::Yes, "");
+}
+
+#[test]
+fn rom_shared_proof_test_poseidon2sponge() {
+    proof_test::<Poseidon2Sponge>("rom_shared", ZeroKnowledge::Yes, "");
+}
+
+#[test]
 #[ignore = "REP3 methods on shared values are not yet implemented"]
 fn recursion_witness_and_proof_test_poseidon2sponge() {
     witness_and_proof_test::<Poseidon2Sponge>("recursion", ZeroKnowledge::No, "");

@@ -118,13 +118,13 @@ impl<F: PrimeField> AllRelationEvaluations<F> {
         self.r_elliptic
             .scale_and_batch_elements(&elements[11..13], &mut output);
         self.r_memory
-            .scale_and_batch_elements(&elements[13..19], &mut output);
+            .scale_and_batch_elements(&elements[13..21], &mut output);
         self.r_nnf
-            .scale_and_batch_elements(&elements[19..20], &mut output);
+            .scale_and_batch_elements(&elements[21..22], &mut output);
         self.r_pos_ext
-            .scale_and_batch_elements(&elements[20..24], &mut output);
+            .scale_and_batch_elements(&elements[22..26], &mut output);
         self.r_pos_int
-            .scale_and_batch_elements(&elements[24..], &mut output);
+            .scale_and_batch_elements(&elements[26..], &mut output);
 
         output
     }
@@ -138,10 +138,10 @@ impl<F: PrimeField> AllRelationAcc<F> {
         self.r_arith.scale(&elements[5..7]);
         self.r_delta.scale(&elements[7..11]);
         self.r_elliptic.scale(&elements[11..13]);
-        self.r_memory.scale(&elements[13..19]);
-        self.r_nnf.scale(&elements[19..20]);
-        self.r_pos_ext.scale(&elements[20..24]);
-        self.r_pos_int.scale(&elements[24..]);
+        self.r_memory.scale(&elements[13..21]);
+        self.r_nnf.scale(&elements[21..22]);
+        self.r_pos_ext.scale(&elements[22..26]);
+        self.r_pos_int.scale(&elements[26..]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(

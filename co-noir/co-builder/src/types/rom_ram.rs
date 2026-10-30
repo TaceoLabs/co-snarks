@@ -286,6 +286,8 @@ pub(crate) struct RomRecord<F: Clone> {
     pub(crate) value_column1_witness: u32,
     pub(crate) value_column2_witness: u32,
     pub(crate) index: F,
+    // Whether this row is a read access (as opposed to a table entry written at initialization)
+    pub(crate) is_read: bool,
     pub(crate) record_witness: u32,
     pub(crate) gate_index: usize,
 }
@@ -300,6 +302,7 @@ impl<F: PrimeField> RomRecord<F> {
             && self.value_column1_witness == other.value_column1_witness
             && self.value_column2_witness == other.value_column2_witness
             && self.index == other.index
+            && self.is_read == other.is_read
             && self.record_witness == other.record_witness
             && self.gate_index == other.gate_index
     }
@@ -341,6 +344,11 @@ pub(crate) struct RomTranscript<F: Clone> {
     // + The value in the memory slot
     // + The actual index value
     pub(crate) records: Vec<RomRecord<F>>,
+    // Whether this ROM array uses the LogUp scheme (single-value tables) or the sorted-trace scheme (value-pair
+    // tables). Set on the first set/read call; once set, the array commits to that scheme.
+    pub(crate) use_logup: bool,
+    // LogUp read count of each index, accumulated during the reads (allocated when the array switches to LogUp)
+    pub(crate) read_counts: Vec<F>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Default)]

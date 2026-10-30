@@ -143,6 +143,25 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
                 + proving_key.polynomials.witness.w_o()[gate_idx] * self.memory.challenges.eta_3
                 + C::ScalarField::one();
         }
+
+        // Compute the ROM-LogUp inverse helpers w4 = 1 / (rom_logup_gamma + w1 + eta * w2 + eta^2 * q_c), where
+        // q_c holds the ROM array id
+        let mut denominators = proving_key
+            .rom_logup_records
+            .iter()
+            .map(|&gate_idx| {
+                let gate_idx = gate_idx as usize;
+                self.memory.challenges.rom_logup_gamma
+                    + proving_key.polynomials.witness.w_l()[gate_idx]
+                    + proving_key.polynomials.witness.w_r()[gate_idx] * self.memory.challenges.eta_1
+                    + proving_key.polynomials.precomputed.q_c()[gate_idx]
+                        * self.memory.challenges.eta_2
+            })
+            .collect::<Vec<_>>();
+        ark_ff::batch_inversion(&mut denominators);
+        for (&gate_idx, inverse) in proving_key.rom_logup_records.iter().zip(denominators) {
+            self.memory.w_4[gate_idx as usize] = inverse;
+        }
     }
 
     fn compute_read_term(&self, proving_key: &PlainProvingKey<C>, i: usize) -> C::ScalarField {
@@ -503,10 +522,13 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkProofResult<()> {
         tracing::trace!("executing sorted list accumulator round");
 
-        let eta = transcript.get_challenge::<C>("eta".to_string());
+        let challs =
+            transcript.get_challenges::<C>(&["eta".to_string(), "rom_logup_gamma".to_string()]);
+        let eta = challs[0];
         self.memory.challenges.eta_1 = eta;
         self.memory.challenges.eta_2 = eta * eta;
         self.memory.challenges.eta_3 = eta * eta * eta;
+        self.memory.challenges.rom_logup_gamma = challs[1];
         self.compute_w4(proving_key);
 
         // Commit to lookup argument polynomials and the finalized (i.e. with memory records) fourth wire polynomial

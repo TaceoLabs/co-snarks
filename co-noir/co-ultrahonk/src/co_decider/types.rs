@@ -41,6 +41,7 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> ProverMemory<T, P> {
             eta_1: prover_memory.challenges.eta_1,
             eta_2: prover_memory.challenges.eta_2,
             eta_3: prover_memory.challenges.eta_3,
+            rom_logup_gamma: prover_memory.challenges.rom_logup_gamma,
             beta: prover_memory.challenges.beta,
             beta_sqr: prover_memory.challenges.beta_sqr,
             beta_cube: prover_memory.challenges.beta_cube,

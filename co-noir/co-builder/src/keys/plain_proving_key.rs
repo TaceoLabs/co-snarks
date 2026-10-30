@@ -98,6 +98,10 @@ fn populate_memory_records<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::Sca
             .memory_write_records
             .push(index + ram_rom_offset);
     }
+
+    for &index in builder.rom_logup_records.iter() {
+        proving_key.rom_logup_records.push(index + ram_rom_offset);
+    }
 }
 
 fn populate_trace<P: CurveGroup>(

@@ -201,10 +201,10 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup> AllRelationAcc<T, P> {
         self.r_arith.scale(&elements[5..7]);
         self.r_delta.scale(&elements[7..11]);
         self.r_elliptic.scale(&elements[11..13]);
-        self.r_memory.scale(&elements[13..19]);
-        self.r_nnf.scale(&elements[19..20]);
-        self.r_pos_ext.scale(&elements[20..24]);
-        self.r_pos_int.scale(&elements[24..]);
+        self.r_memory.scale(&elements[13..21]);
+        self.r_nnf.scale(&elements[21..22]);
+        self.r_pos_ext.scale(&elements[22..26]);
+        self.r_pos_int.scale(&elements[26..]);
     }
 
     pub(crate) fn extend_and_batch_univariates<const SIZE: usize>(

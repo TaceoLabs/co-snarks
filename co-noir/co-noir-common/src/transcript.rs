@@ -4,10 +4,9 @@ use crate::{
     sponge_hasher::{FieldHash, FieldSponge},
 };
 use ark_ec::AffineRepr;
-use ark_ff::{One, PrimeField, Zero};
+use ark_ff::{PrimeField, Zero};
 use mpc_core::gadgets::poseidon2::Poseidon2;
 use noir_types::{HonkProof, SerializeF};
-use num_bigint::BigUint;
 use std::{collections::BTreeMap, ops::Index};
 
 pub type Poseidon2Sponge =
@@ -31,7 +30,6 @@ pub trait TranscriptHasher<F: PrimeField> {
     fn convert_point<P: HonkCurve<F>>(element: &P::Affine) -> Vec<Self::DataType>;
     fn convert_scalarfield_back<P: HonkCurve<F>>(elements: &[Self::DataType]) -> P::ScalarField;
     fn convert_basefield_back<P: HonkCurve<F>>(elements: &[Self::DataType]) -> P::BaseField;
-    fn split_challenge(challenge: Self::DataType) -> [Self::DataType; 2];
     fn convert_challenge_into<P: HonkCurve<F>>(challenge: &F) -> Self::DataType;
     fn convert_destinationfield_to_scalarfield<P: HonkCurve<F>>(
         element: &Self::DataType,
@@ -74,25 +72,6 @@ impl<F: PrimeField, const T: usize, const R: usize, H: FieldHash<F, T> + Default
 
     fn convert_basefield_back<P: HonkCurve<F>>(elements: &[Self::DataType]) -> P::BaseField {
         P::convert_basefield_back(elements)
-    }
-
-    fn split_challenge(challenge: Self::DataType) -> [Self::DataType; 2] {
-        // Match barretenberg field_conversion::split_challenge:
-        // split a 254-bit challenge into two 127-bit limbs.
-        let total_bits = F::MODULUS_BIT_SIZE as usize;
-        let lo_bits = total_bits / 2;
-        let hi_bits = total_bits - lo_bits;
-        let biguint: BigUint = challenge.into();
-
-        let lower_mask = (BigUint::one() << lo_bits) - BigUint::one();
-        let lo = &biguint & lower_mask;
-        let upper_mask = (BigUint::one() << hi_bits) - BigUint::one();
-        let hi = (biguint >> lo_bits) & upper_mask;
-
-        let lo = F::from(lo);
-        let hi = F::from(hi);
-
-        [lo, hi]
     }
 
     fn convert_challenge_into<P: HonkCurve<F>>(challenge: &F) -> Self::DataType {
@@ -357,12 +336,8 @@ where
         Ok(res)
     }
 
-    fn get_next_duplex_challenge_buffer<C: HonkCurve<F>>(
-        &mut self,
-        num_challenges: usize,
-    ) -> [H::DataType; 2] {
-        // challenges need at least 110 bits in them to match the presumed security parameter of the BN254 curve.
-        assert!(num_challenges <= 2);
+    /// Computes the next challenge c_next = H(c_prev || round_buffer) and sets it as the previous challenge.
+    fn get_next_challenge_hash<C: HonkCurve<F>>(&mut self) -> H::DataType {
         // Prevent challenge generation if this is the first challenge we're generating,
         // AND nothing was sent by the prover.
         if self.is_first_challenge {
@@ -394,41 +369,28 @@ where
             H::convert_destinationfield_to_scalarfield::<C>(&new_challenge);
         let new_challenge = H::convert_scalarfield_into::<C>(&new_challenge_as_field)[0];
 
-        let new_challenges = H::split_challenge(new_challenge);
-
         self.previous_challenge = new_challenge;
-        new_challenges
+        new_challenge
     }
 
+    /// Generates a single full-width challenge.
     pub fn get_challenge<P: HonkCurve<F>>(&mut self, label: String) -> P::ScalarField {
         self.manifest.add_challenge(self.round_number, &[label]);
-        let challenge = self.get_next_duplex_challenge_buffer::<P>(1)[0];
+        let challenge = self.get_next_challenge_hash::<P>();
         let res = H::convert_destinationfield_to_scalarfield::<P>(&challenge);
         self.round_number += 1;
         res
     }
 
+    /// Generates full-width challenges, one transcript hash per challenge.
     pub fn get_challenges<P: HonkCurve<F>>(&mut self, labels: &[String]) -> Vec<P::ScalarField> {
-        let num_challenges = labels.len();
         self.manifest.add_challenge(self.round_number, labels);
-
-        let mut res = Vec::with_capacity(num_challenges);
-        for _ in 0..num_challenges >> 1 {
-            let challenge_buffer = self.get_next_duplex_challenge_buffer::<P>(2);
-            res.push(H::convert_destinationfield_to_scalarfield::<P>(
-                &challenge_buffer[0],
-            ));
-            res.push(H::convert_destinationfield_to_scalarfield::<P>(
-                &challenge_buffer[1],
-            ));
-        }
-        if num_challenges & 1 == 1 {
-            let challenge_buffer = self.get_next_duplex_challenge_buffer::<P>(1);
-            res.push(H::convert_destinationfield_to_scalarfield::<P>(
-                &challenge_buffer[0],
-            ));
-        }
-
+        let res = (0..labels.len())
+            .map(|_| {
+                let challenge = self.get_next_challenge_hash::<P>();
+                H::convert_destinationfield_to_scalarfield::<P>(&challenge)
+            })
+            .collect();
         self.round_number += 1;
         res
     }

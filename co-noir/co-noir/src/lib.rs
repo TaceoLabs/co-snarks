@@ -160,6 +160,7 @@ where
         pub_inputs_offset: proving_key.pub_inputs_offset,
         memory_read_records: proving_key.memory_read_records,
         memory_write_records: proving_key.memory_write_records,
+        rom_logup_records: proving_key.rom_logup_records,
         memory_records_shared: BTreeMap::new(),
         final_active_wire_idx: proving_key.final_active_wire_idx,
         phantom: std::marker::PhantomData,

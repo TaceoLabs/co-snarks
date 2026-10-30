@@ -232,14 +232,12 @@ where
         challenge.split_unique(lo, builder, driver)
     }
 
-    fn get_next_duplex_challenge_buffer<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
+    /// Computes the next challenge c_next = H(c_prev || round_buffer) and sets it as the previous challenge.
+    fn get_next_challenge_hash<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
         &mut self,
-        num_challenges: usize,
         builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
-    ) -> eyre::Result<[FieldCT<C::ScalarField>; 2]> {
-        // challenges need at least 110 bits in them to match the presumed security parameter of the BN254 curve.
-        assert!(num_challenges <= 2);
+    ) -> eyre::Result<FieldCT<C::ScalarField>> {
         // Prevent challenge generation if this is the first challenge we're generating,
         // AND nothing was sent by the prover.
         if self.is_first_challenge {
@@ -265,13 +263,13 @@ where
         // oracle, removing the need to pre-hash to compress and then hash with a random oracle, as we previously did
         // with Pedersen and Blake3s.
         let new_challenge = H::hash(full_buffer, builder, driver)?;
-        let new_challenges = Self::split_challenge(&new_challenge, builder, driver)?;
 
         // update previous challenge buffer for next time we call this function
-        self.previous_challenge = new_challenge;
-        Ok(new_challenges)
+        self.previous_challenge = new_challenge.clone();
+        Ok(new_challenge)
     }
 
+    /// Generates a single full-width challenge.
     pub fn get_challenge<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
         &mut self,
         label: String,
@@ -280,31 +278,37 @@ where
     ) -> eyre::Result<FieldCT<C::ScalarField>> {
         self.manifest.add_challenge(self.round_number, &[label]);
         self.round_number += 1;
-        Ok(self.get_next_duplex_challenge_buffer(1, builder, driver)?[0].clone())
+        self.get_next_challenge_hash(builder, driver)
     }
 
+    /// Generates full-width challenges, one transcript hash per challenge.
     pub fn get_challenges<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
         &mut self,
         labels: &[String],
         builder: &mut GenericUltraCircuitBuilder<C, WT>,
         driver: &mut WT,
     ) -> eyre::Result<Vec<FieldCT<C::ScalarField>>> {
-        let num_challenges = labels.len();
         self.manifest.add_challenge(self.round_number, labels);
-
-        let mut res = Vec::with_capacity(num_challenges);
-        for _ in 0..num_challenges >> 1 {
-            let challenge_buffer = self.get_next_duplex_challenge_buffer(2, builder, driver)?;
-            res.push(challenge_buffer[0].clone()); // We don't need to convert here as we are in a fr-builder setting
-            res.push(challenge_buffer[1].clone());
-        }
-        if num_challenges & 1 == 1 {
-            let challenge_buffer = self.get_next_duplex_challenge_buffer(1, builder, driver)?;
-            res.push(challenge_buffer[0].clone());
-        }
-
+        // We don't need to convert here as we are in a fr-builder setting
+        let res = (0..labels.len())
+            .map(|_| self.get_next_challenge_hash(builder, driver))
+            .collect::<eyre::Result<Vec<_>>>()?;
         self.round_number += 1;
-        Ok(res.to_owned())
+        Ok(res)
+    }
+
+    /// Generates a single short challenge, i.e., the lower 127-bit limb of the transcript hash.
+    pub fn get_short_challenge<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(
+        &mut self,
+        label: String,
+        builder: &mut GenericUltraCircuitBuilder<C, WT>,
+        driver: &mut WT,
+    ) -> eyre::Result<FieldCT<C::ScalarField>> {
+        self.manifest.add_challenge(self.round_number, &[label]);
+        self.round_number += 1;
+        let challenge = self.get_next_challenge_hash(builder, driver)?;
+        let [lo, _] = Self::split_challenge(&challenge, builder, driver)?;
+        Ok(lo)
     }
 
     pub fn hash_independent_buffer<WT: NoirWitnessExtensionProtocol<C::ScalarField>>(

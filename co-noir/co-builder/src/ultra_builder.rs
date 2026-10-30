@@ -193,6 +193,7 @@ pub struct GenericUltraCircuitBuilder<
         Vec<CachedPartialNonNativeFieldMultiplication>,
     // Stores gate index of ROM and RAM reads (required by proving key)
     pub(crate) memory_read_records: Vec<u32>,
+    pub(crate) rom_logup_records: Vec<u32>,
     // Stores gate index of RAM writes (required by proving key)
     pub(crate) memory_write_records: Vec<u32>,
     // Stores gate index where Read/Write type is shared
@@ -1234,6 +1235,17 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         value_witness: u32,
     ) {
         assert!(self.rom_arrays.len() > rom_id);
+        // The first single-value op commits this array to the LogUp scheme. The two schemes coexist across arrays,
+        // not within one.
+        assert!(
+            self.rom_arrays[rom_id].records.is_empty() || self.rom_arrays[rom_id].use_logup,
+            "ROM array: single-value op issued on an array already using pair gates"
+        );
+        if !self.rom_arrays[rom_id].use_logup {
+            self.rom_arrays[rom_id].use_logup = true;
+            let len = self.rom_arrays[rom_id].state.len();
+            self.rom_arrays[rom_id].read_counts = vec![T::public_zero(); len];
+        }
         let index_witness = if index_value == 0 {
             self.zero_idx
         } else {
@@ -1241,6 +1253,8 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         };
 
         assert!(self.rom_arrays[rom_id].state.len() > index_value);
+        // Each index must be initialized exactly once: the LogUp argument relies on at most one table row per
+        // (array, index) key.
         assert!(self.rom_arrays[rom_id].state[index_value][0] == Self::UNINITIALIZED_MEMORY_RECORD);
         // /**
         // * The structure MemoryRecord contains the following members in this order:
@@ -1257,15 +1271,17 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         let mut new_record = RomRecord::<T::AcvmType> {
             index_witness,
             value_column1_witness: value_witness,
+            // multiplicity placeholder; replaced at finalize
             value_column2_witness: self.zero_idx,
             index: P::ScalarField::from(index_value as u64).into(),
+            is_read: false,
             record_witness: 0,
             gate_index: 0,
         };
 
         self.rom_arrays[rom_id].state[index_value][0] = value_witness;
         self.rom_arrays[rom_id].state[index_value][1] = self.zero_idx;
-        self.create_rom_gate(&mut new_record);
+        self.create_rom_logup_gate(&mut new_record, rom_id, false);
         self.rom_arrays[rom_id].records.push(new_record);
     }
 
@@ -1276,6 +1292,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         value_witnesses: [u32; 2],
     ) {
         assert!(self.rom_arrays.len() > rom_id);
+        assert!(
+            !self.rom_arrays[rom_id].use_logup,
+            "ROM array: pair op issued on an array already using LogUp single-value gates"
+        );
         let index_witness = self.put_constant_variable(P::ScalarField::from(index_value as u64));
 
         assert!(self.rom_arrays[rom_id].state.len() > index_value);
@@ -1286,6 +1306,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             value_column1_witness: value_witnesses[0],
             value_column2_witness: value_witnesses[1],
             index: P::ScalarField::from(index_value as u32).into(),
+            is_read: false,
             record_witness: 0,
             gate_index: 0,
         };
@@ -1362,6 +1383,42 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         self.num_gates += 1;
     }
 
+    /// Emits a ROM-LogUp gate (table entry or read access). The wires are (index, value, multiplicity, inverse),
+    /// where the multiplicity of a table entry is filled in during finalization and is zero for reads. The inverse is a
+    /// placeholder filled in by the prover once the challenges are known. The row is tagged with the ROM array id via
+    /// q_c, so that reads are bound to the array they were issued against.
+    fn create_rom_logup_gate(
+        &mut self,
+        record: &mut RomRecord<T::AcvmType>,
+        rom_id: usize,
+        is_read: bool,
+    ) {
+        // Inverse helper (w_4), filled by the prover once the challenges are known
+        record.record_witness = self.add_variable(T::public_zero());
+        self.apply_memory_selectors(if is_read {
+            MemorySelectors::RomLogupRead
+        } else {
+            MemorySelectors::RomLogupTable
+        });
+        *self
+            .blocks
+            .memory
+            .q_c()
+            .last_mut()
+            .expect("A selector was just pushed") = P::ScalarField::from(rom_id as u64);
+        self.blocks.memory.populate_wires(
+            record.index_witness,
+            record.value_column1_witness,
+            record.value_column2_witness,
+            record.record_witness,
+        );
+
+        // Note: record the index into the block that contains the RAM/ROM gates
+        record.gate_index = self.blocks.memory.len() - 1;
+        self.rom_logup_records.push(record.gate_index as u32);
+        self.num_gates += 1;
+    }
+
     fn create_ram_gate<U: Clone>(&mut self, record: &mut RamRecord<U>) {
         // Record wire value can't yet be computed (uses randomnes generated during proof construction).
         // However it needs a distinct witness index,
@@ -1392,26 +1449,54 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         driver: &mut T,
     ) -> eyre::Result<u32> {
         assert!(self.rom_arrays.len() > rom_id);
+        assert!(
+            !self.rom_arrays[rom_id].state.is_empty(),
+            "ROM array: read from an empty array"
+        );
+        assert!(
+            self.rom_arrays[rom_id].use_logup,
+            "ROM array: single-value read issued before any set_rom_element, or on an array using pair gates"
+        );
         let val = self.get_variable(index_witness as usize);
 
-        if !T::is_shared(&val) {
+        // Read the value and update the LogUp read counts alongside the read
+        let known_index = if let Some(index) = T::get_public(&val) {
+            let index: BigUint = index.into();
+            let index = usize::try_from(index).expect("ROM index fits into usize");
             // Sanity check only doable in plain
-            let val: BigUint = T::get_public(&val)
-                .expect("Already checked it is public")
-                .into();
-            let index: usize = val.try_into().unwrap();
             assert!(self.rom_arrays[rom_id].state.len() > index);
-            assert!(self.rom_arrays[rom_id].state[index][0] != Self::UNINITIALIZED_MEMORY_RECORD);
-        }
+            Some(index)
+        } else if self.rom_arrays[rom_id].state.len() == 1 {
+            // A single-cell array has only one valid index, so there is nothing to look up. An invalid shared
+            // index is rejected by the LogUp relation, which binds the read's index wire to the index of the table entry.
+            Some(0)
+        } else {
+            None
+        };
 
-        let fields = self.rom_arrays[rom_id]
-            .state
-            .iter()
-            .map(|x| self.get_variable(x[0] as usize))
-            .collect();
-
-        let lut = T::init_lut_by_acvm_type(driver, fields);
-        let value = T::read_lut_by_acvm_type(driver, val.to_owned(), &lut)?;
+        let value = if let Some(index) = known_index {
+            let value_witness = self.rom_arrays[rom_id].state[index][0];
+            assert!(value_witness != Self::UNINITIALIZED_MEMORY_RECORD);
+            driver.add_assign_with_public(
+                P::ScalarField::one(),
+                &mut self.rom_arrays[rom_id].read_counts[index],
+            );
+            self.get_variable(value_witness as usize)
+        } else {
+            let index = T::get_shared(&val).expect("Not public, so it is shared");
+            let fields = self.rom_arrays[rom_id]
+                .state
+                .iter()
+                .map(|x| self.get_variable(x[0] as usize))
+                .collect();
+            let lut = T::init_lut_by_acvm_type(driver, fields);
+            // We reuse the one-hot encoding of the index from the read for the read counts
+            let (value, one_hot) = driver.read_lut_with_ohv_by_shared_index(index, &lut)?;
+            for (count, bit) in self.rom_arrays[rom_id].read_counts.iter_mut().zip(one_hot) {
+                driver.add_assign(count, bit.into());
+            }
+            value
+        };
 
         let value_witness = self.add_variable(value);
 
@@ -1420,10 +1505,11 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             value_column1_witness: value_witness,
             value_column2_witness: self.zero_idx,
             index: val,
+            is_read: true,
             record_witness: 0,
             gate_index: 0,
         };
-        self.create_rom_gate(&mut new_record);
+        self.create_rom_logup_gate(&mut new_record, rom_id, true);
         self.rom_arrays[rom_id].records.push(new_record);
 
         // create_read_gate
@@ -1437,6 +1523,10 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
         driver: &mut T,
     ) -> eyre::Result<[u32; 2]> {
         assert!(self.rom_arrays.len() > rom_id);
+        assert!(
+            !self.rom_arrays[rom_id].use_logup,
+            "ROM array: pair read issued on an array already using LogUp single-value gates"
+        );
         let val = self.get_variable(index_witness as usize);
 
         if !T::is_shared(&val) {
@@ -1475,6 +1565,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
             value_column1_witness: value_witness1,
             value_column2_witness: value_witness2,
             index: val,
+            is_read: true,
             record_witness: 0,
             gate_index: 0,
         };
@@ -1727,6 +1818,32 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 block.q_c().push(P::ScalarField::one()); // read/write flag stored in q_c
                 self.check_selector_length_consistency();
             }
+            MemorySelectors::RomLogupTable => {
+                // Single-value ROM table entry under the LogUp scheme. The row holds
+                // (index, value, multiplicity, inverse) and contributes -m_i * inv to the LogUp sum.
+                // Pattern: q_2 = 1 alone (combined with q_1 = 0) uniquely identifies this gate within
+                // the q_memory-gated context (ROM_CONSISTENCY_CHECK shares q_2 but also sets q_1).
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::one());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::zero());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
+            MemorySelectors::RomLogupRead => {
+                // Single-value ROM read access under the LogUp scheme. The row holds
+                // (index, value, 0, inverse) and contributes +inv to the LogUp sum.
+                // Pattern: q_4 = 1 alone (combined with q_1 = 0) uniquely identifies this gate within
+                // the q_memory-gated context (RAM_TIMESTAMP_CHECK shares q_4 but also sets q_1).
+                block.q_1().push(P::ScalarField::zero());
+                block.q_2().push(P::ScalarField::zero());
+                block.q_3().push(P::ScalarField::zero());
+                block.q_4().push(P::ScalarField::one());
+                block.q_m().push(P::ScalarField::zero());
+                block.q_c().push(P::ScalarField::zero());
+                self.check_selector_length_consistency();
+            }
             _ => {
                 block.q_1().push(P::ScalarField::zero());
                 block.q_2().push(P::ScalarField::zero());
@@ -1905,9 +2022,44 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
 
     fn process_rom_arrays(&mut self, driver: &mut T) -> eyre::Result<()> {
         for i in 0..self.rom_arrays.len() {
-            self.process_rom_array(i, driver)?;
+            if self.rom_arrays[i].use_logup {
+                self.process_rom_logup_array(i);
+            } else {
+                self.process_rom_array(i, driver)?;
+            }
         }
         Ok(())
+    }
+
+    /// Finalizes a LogUp-style ROM array. Emits no gates, but points the w_o wire of each table row at a fresh
+    /// witness holding the read count of that row. The read counts are accumulated during the reads.
+    fn process_rom_logup_array(&mut self, rom_id: usize) {
+        let rom_array = &mut self.rom_arrays[rom_id];
+        assert!(rom_array.use_logup);
+        // Every cell must have been initialized.
+        assert!(
+            rom_array
+                .state
+                .iter()
+                .all(|cell| cell[0] != Self::UNINITIALIZED_MEMORY_RECORD)
+        );
+
+        let len = rom_array.state.len();
+        let mut table_row_gate_indices = vec![0; len];
+        // Table entries are initialized at public indices
+        for record in rom_array.records.iter().filter(|record| !record.is_read) {
+            let index: BigUint = T::get_public(&record.index)
+                .expect("ROM table indices are public")
+                .into();
+            let index = usize::try_from(index).expect("ROM index fits into usize");
+            table_row_gate_indices[index] = record.gate_index;
+        }
+        let read_counts = std::mem::take(&mut rom_array.read_counts);
+
+        for (gate_index, count) in table_row_gate_indices.into_iter().zip(read_counts) {
+            let count_witness = self.add_variable(count);
+            self.blocks.memory.w_o()[gate_index] = count_witness;
+        }
     }
 
     fn process_ram_arrays(&mut self, driver: &mut T) -> eyre::Result<()> {
@@ -1949,6 +2101,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 value_column1_witness: x.value_column1_witness,
                 value_column2_witness: x.value_column2_witness,
                 index: T::get_public(&x.index).expect("Already checked it is public"),
+                is_read: x.is_read,
                 record_witness: x.record_witness,
                 gate_index: x.gate_index,
             })
@@ -1969,6 +2122,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 value_column1_witness: value1_witness,
                 value_column2_witness: value2_witness,
                 index: index.into(),
+                is_read: record.is_read,
                 record_witness: 0,
                 gate_index: 0,
             };
@@ -2036,6 +2190,7 @@ impl<P: CurveGroup, T: NoirWitnessExtensionProtocol<P::ScalarField>>
                 value_column1_witness: value1_witness,
                 value_column2_witness: value2_witness,
                 index: index.clone().into(),
+                is_read: record.is_read,
                 record_witness: 0,
                 gate_index: 0,
             };
@@ -4055,6 +4210,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             range_lists: BTreeMap::new(),
             cached_partial_non_native_field_multiplications: Vec::new(),
             memory_read_records: Vec::new(),
+            rom_logup_records: Vec::new(),
             memory_write_records: Vec::new(),
             memory_records_shared: BTreeMap::new(),
             current_tag: 0,

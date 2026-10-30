@@ -35,6 +35,7 @@ pub struct ProvingKey<T: NoirUltraHonkProver<P>, P: CurveGroup> {
     pub polynomials: Polynomials<T::ArithmeticShare, P::ScalarField>,
     pub memory_read_records: Vec<u32>,
     pub memory_write_records: Vec<u32>,
+    pub rom_logup_records: Vec<u32>,
     #[serde(
         serialize_with = "mpc_core::serde_compat::ark_se",
         deserialize_with = "mpc_core::serde_compat::ark_de"
@@ -55,6 +56,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> Default for ProvingKey<T, C> {
             polynomials: Polynomials::default(),
             memory_read_records: Vec::new(),
             memory_write_records: Vec::new(),
+            rom_logup_records: Vec::new(),
             memory_records_shared: BTreeMap::new(),
             final_active_wire_idx: 0,
             active_region_data: ActiveRegionData::default(),
@@ -79,6 +81,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
         let pub_inputs_offset = plain_key.pub_inputs_offset;
         let memory_read_records = plain_key.memory_read_records.to_owned();
         let memory_write_records = plain_key.memory_write_records.to_owned();
+        let rom_logup_records = plain_key.rom_logup_records.to_owned();
         let final_active_wire_idx = plain_key.final_active_wire_idx;
         let active_region_data = plain_key.active_region_data.to_owned();
 
@@ -110,6 +113,7 @@ impl<T: NoirUltraHonkProver<C>, C: CurveGroup> ProvingKey<T, C> {
             polynomials,
             memory_read_records,
             memory_write_records,
+            rom_logup_records,
             final_active_wire_idx,
             phantom: PhantomData,
             memory_records_shared: BTreeMap::new(),

@@ -19,6 +19,7 @@ pub struct RelationParameters<F: Default> {
     pub eta_1: F,
     pub eta_2: F,
     pub eta_3: F,
+    pub rom_logup_gamma: F,
     pub beta: F,
     pub beta_sqr: F,
     pub beta_cube: F,

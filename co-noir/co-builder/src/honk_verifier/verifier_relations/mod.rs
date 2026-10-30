@@ -269,10 +269,10 @@ macro_rules! scale_and_batch_all {
         process_relation!(r_arith, &$challenges[5..7]);
         process_relation!(r_delta, &$challenges[7..11]);
         process_relation!(r_elliptic, &$challenges[11..13]);
-        process_relation!(r_memory, &$challenges[13..19]);
-        process_relation!(r_nnf, &$challenges[19..20]);
-        process_relation!(r_pos_ext, &$challenges[20..24]);
-        process_relation!(r_pos_int, &$challenges[24..]);
+        process_relation!(r_memory, &$challenges[13..21]);
+        process_relation!(r_nnf, &$challenges[21..22]);
+        process_relation!(r_pos_ext, &$challenges[22..26]);
+        process_relation!(r_pos_int, &$challenges[26..]);
 
         scale_by_challenge_and_accumulate(
             $output,

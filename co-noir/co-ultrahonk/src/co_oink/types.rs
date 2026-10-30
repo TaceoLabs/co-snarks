@@ -18,6 +18,7 @@ pub(crate) struct Challenges<F: PrimeField> {
     pub(crate) eta_1: F,
     pub(crate) eta_2: F,
     pub(crate) eta_3: F,
+    pub(crate) rom_logup_gamma: F,
     pub(crate) gamma: F,
     pub(crate) alphas: [F; NUM_ALPHAS],
     pub(crate) beta: F,

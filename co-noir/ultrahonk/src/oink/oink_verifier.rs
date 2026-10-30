@@ -96,10 +96,13 @@ impl<C: HonkCurve<TranscriptFieldType>, H: TranscriptHasher<TranscriptFieldType>
     ) -> HonkVerifyResult<()> {
         tracing::trace!("executing (verifying) lookup counts and w4 commitments round");
 
-        let eta = transcript.get_challenge::<C>("eta".to_string());
+        let challs =
+            transcript.get_challenges::<C>(&["eta".to_string(), "rom_logup_gamma".to_string()]);
+        let eta = challs[0];
         self.memory.challenges.eta_1 = eta;
         self.memory.challenges.eta_2 = eta * eta;
         self.memory.challenges.eta_3 = eta * eta * eta;
+        self.memory.challenges.rom_logup_gamma = challs[1];
 
         *self.memory.witness_commitments.lookup_read_counts_mut() =
             transcript.receive_point_from_prover::<C>("lookup_read_counts".to_string())?;

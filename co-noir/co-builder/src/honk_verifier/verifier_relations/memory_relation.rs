@@ -21,13 +21,15 @@ pub(crate) struct MemoryRelationEvals<F: PrimeField> {
     pub(crate) r3: FieldCT<F>,
     pub(crate) r4: FieldCT<F>,
     pub(crate) r5: FieldCT<F>,
+    pub(crate) r6: FieldCT<F>,
+    pub(crate) r7: FieldCT<F>,
 }
 
-impl_relation_evals!(MemoryRelationEvals, r0, r1, r2, r3, r4, r5);
+impl_relation_evals!(MemoryRelationEvals, r0, r1, r2, r3, r4, r5, r6, r7);
 pub(crate) struct MemoryRelation;
 
 impl MemoryRelation {
-    pub(crate) const NUM_RELATIONS: usize = 6;
+    pub(crate) const NUM_RELATIONS: usize = 8;
 }
 
 impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
@@ -293,6 +295,45 @@ impl<C: HonkCurve<TranscriptFieldType>> Relation<C> for MemoryRelation {
         memory_identity = memory_identity.add(&ram_consistency_check_identity, builder, driver);
 
         accumulator.r0 = accumulator.r0.add(&memory_identity, builder, driver);
+
+        /*
+         * ROM LogUp Sub-Relations (single-value tables)
+         *
+         * q_logup_table = q_2 * (1 - q_1) (table entry: w_o = m_i, the read count)
+         * q_logup_read  = q_4 * (1 - q_1) (read access: w_o = 0)
+         * denom = rom_logup_gamma + w_l + eta * w_r + eta_two * q_c, where q_c holds the ROM array id
+         *
+         * Subrelation 6 (per-row): q_memory * (q_logup_table + q_logup_read) * (w_4 * denom - 1) = 0
+         * Subrelation 7 (linearly dependent): sum_rows q_memory * (q_logup_read - q_logup_table * w_o) * w_4 = 0
+         */
+        let one_minus_q_1 = one.sub(q_1, builder, driver);
+        let q_logup_table = q_2.multiply(&one_minus_q_1, builder, driver)?;
+        let q_logup_read = q_4.multiply(&one_minus_q_1, builder, driver)?;
+        let q_logup_any = q_logup_table.add(&q_logup_read, builder, driver);
+
+        let denom = w_1
+            .add(&w_2.multiply(eta, builder, driver)?, builder, driver)
+            .add(&q_c.multiply(eta_two, builder, driver)?, builder, driver)
+            .add(&relation_parameters.rom_logup_gamma, builder, driver);
+
+        let q_logup_any_by_memory_by_scaling =
+            q_memory_by_scaling.multiply(&q_logup_any, builder, driver)?;
+        let inverse_check = w_4
+            .multiply(&denom, builder, driver)?
+            .sub(&one, builder, driver);
+        let tmp = q_logup_any_by_memory_by_scaling.multiply(&inverse_check, builder, driver)?;
+        accumulator.r6 = accumulator.r6.add(&tmp, builder, driver);
+
+        // Linearly dependent, hence no scaling factor
+        let tmp = q_logup_read
+            .sub(
+                &q_logup_table.multiply(w_3, builder, driver)?,
+                builder,
+                driver,
+            )
+            .multiply(w_4, builder, driver)?
+            .multiply(q_memory, builder, driver)?;
+        accumulator.r7 = accumulator.r7.add(&tmp, builder, driver);
 
         Ok(())
     }

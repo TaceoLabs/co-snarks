@@ -252,6 +252,36 @@ impl<F: FieldUint> Rep3FieldLookupTable<F> {
         conversion::bit_inject_from_bits_to_field_many::<F, _>(&e, net, state)
     }
 
+    /// Reads from a LUT at a shared index and additionally returns the shared one-hot-encoded vector of the index (see [`Self::ohv_from_index`]),
+    /// such that callers can reuse it without recomputing it. Reading from a public LUT is local given the one-hot-encoded vector,
+    /// reading from a shared LUT requires one resharing.
+    pub fn get_from_lut_with_ohv<N: Network>(
+        index: Rep3PrimeFieldShare<F>,
+        lut: &PublicPrivateLut<F>,
+        net: &N,
+        state: &mut Rep3State,
+    ) -> eyre::Result<(Rep3PrimeFieldShare<F>, Vec<Rep3PrimeFieldShare<F>>)> {
+        let ohv = Self::ohv_from_index(index, lut.len(), net, state)?;
+        let value = match lut {
+            PublicPrivateLut::Public(vec) => vec
+                .iter()
+                .zip(ohv.iter())
+                .fold(Rep3PrimeFieldShare::zero_share(), |acc, (l, e)| {
+                    acc + e * *l
+                }),
+            PublicPrivateLut::Shared(vec) => {
+                // Start the result with a random mask for the resharing
+                let mut t = state.rngs.rand.masking_field_element::<F>();
+                for (l, e) in vec.iter().zip(ohv.iter()) {
+                    t += e * l;
+                }
+                let t_b = net.reshare(t)?;
+                Rep3PrimeFieldShare::new(t, t_b)
+            }
+        };
+        Ok((value, ohv))
+    }
+
     /// Writes to a shared lookup table with the index already being transformed into the shared one-hot-encoded vector
     pub fn write_to_shared_lut_from_ohv<N: Network>(
         ohv: &[Rep3PrimeFieldShare<F>],
