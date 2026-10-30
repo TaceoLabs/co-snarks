@@ -193,56 +193,23 @@ where
     }
 
     fn array_prod_mul<N: Network>(
-        inv: bool,
         arr1: &[Self::ArithmeticShare],
         arr2: &[Self::ArithmeticShare],
         arr3: &[Self::ArithmeticShare],
+        chunk_size: usize,
         _: &N,
         _: &mut Self::State,
     ) -> eyre::Result<Vec<Self::ArithmeticShare>> {
-        let inv_vec = |a: &[Self::ArithmeticShare]| {
-            let mut res = Vec::with_capacity(a.len());
-            for a in a {
-                if a.is_zero() {
-                    eyre::bail!("Cannot invert zero");
-                }
-                res.push(a.inverse().unwrap());
-            }
-            Ok(res)
-        };
-
-        let arr = izip!(arr1, arr2, arr3)
+        debug_assert_eq!(arr1.len() % chunk_size, 0);
+        let mut res = izip!(arr1, arr2, arr3)
             .map(|(a, b, c)| *a * *b * *c)
             .collect::<Vec<_>>();
-        // Do the multiplications of inp[i] * inp[i-1] in constant rounds
-        let len = arr.len();
-
-        let mut rng = thread_rng();
-        let mut r = Vec::with_capacity(len + 1);
-        for _ in 0..=len {
-            r.push(Self::ArithmeticShare::rand(&mut rng));
+        for i in 1..res.len() {
+            if i % chunk_size != 0 {
+                let prev = res[i - 1];
+                res[i] *= prev;
+            }
         }
-
-        let r_inv = inv_vec(&r).unwrap();
-        let r_inv0 = vec![r_inv[0]; len];
-
-        let mut unblind = izip!(&r_inv0, &r[1..])
-            .map(|(a, b)| *a * *b)
-            .collect::<Vec<Self::ArithmeticShare>>();
-        let mul = izip!(&r[..len], &arr)
-            .map(|(a, b)| *a * *b)
-            .collect::<Vec<Self::ArithmeticShare>>();
-        let mut open = izip!(&mul, &r_inv[1..])
-            .map(|(a, b)| *a * *b)
-            .collect::<Vec<P::ScalarField>>();
-
-        for i in 1..open.len() {
-            open[i] = open[i] * open[i - 1];
-        }
-
-        for (unblind, open) in unblind.iter_mut().zip(open) {
-            *unblind *= open;
-        }
-        if inv { inv_vec(&unblind) } else { Ok(unblind) }
+        Ok(res)
     }
 }

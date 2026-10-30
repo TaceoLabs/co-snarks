@@ -17,7 +17,7 @@ use crate::{
 
 // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
 pub(super) struct Round1<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
-    pub(super) nets: &'a [N; 8],
+    pub(super) net: &'a N,
     pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round1Challenges<P, T>,
@@ -225,16 +225,16 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
 
     #[instrument(level = "debug", name = "Plonk - Round Init", skip_all)]
     pub(super) fn init_round(
-        nets: &'a [N; 8],
+        net: &'a N,
         state: &'a mut T::State,
         zkey: &'a Zkey<P>,
         private_witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
     ) -> PlonkProofResult<Self> {
         let plonk_witness = Self::calculate_additions(state.id(), private_witness, zkey)?;
-        let challenges = Round1Challenges::random(&nets[0], state)?;
+        let challenges = Round1Challenges::random(net, state)?;
         let domains = Domains::new(zkey.domain_size)?;
         Ok(Self {
-            nets,
+            net,
             state,
             challenges,
             domains,
@@ -249,7 +249,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
     // Round 1 of https://eprint.iacr.org/2019/953.pdf (page 28)
     pub(super) fn round1(self) -> PlonkProofResult<Round2<'a, P, T, N>> {
         let Self {
-            nets,
+            net,
             state,
             domains,
             challenges,
@@ -274,7 +274,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
 
         // network round
         let opening_span = tracing::debug_span!("opening commits").entered();
-        let opened = T::open_point_vec_g1(&[commit_a, commit_b, commit_c], &nets[0], state)?;
+        let opened = T::open_point_vec_g1(&[commit_a, commit_b, commit_c], net, state)?;
         opening_span.exit();
         let proof = Round1Proof::<P> {
             commit_a: opened[0],
@@ -283,7 +283,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round1<'a, P
         };
         tracing::debug!("round1 result: {proof}");
         Ok(Round2 {
-            nets,
+            net,
             state,
             domains,
             challenges,
@@ -345,7 +345,7 @@ pub mod tests {
 
             let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
             let mut state = ();
-            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
+            let mut round1 = Round1::init_round(&(), &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             assert_eq!(
@@ -391,7 +391,7 @@ pub mod tests {
 
             let challenges = Round1Challenges::<Bls12_381, PlainPlonkDriver>::deterministic();
             let mut state = ();
-            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
+            let mut round1 = Round1::init_round(&(), &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             assert_eq!(

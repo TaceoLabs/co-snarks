@@ -1063,8 +1063,7 @@ where
             public_input
         }
         ProofSystem::Plonk => {
-            let nets =
-                TcpNetwork::networks::<8>(network_config).context("while connecting to network")?;
+            let net = TcpNetwork::new(network_config).context("while connecting to network")?;
             let zkey = Arc::new(
                 PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
             );
@@ -1077,12 +1076,11 @@ where
 
                     let witness_share: CompressedRep3SharedWitness<P::ScalarField> =
                         bincode::deserialize_from(witness_file)?;
-                    let witness_share =
-                        co_circom::uncompress_shared_witness(witness_share, &nets[0])?;
+                    let witness_share = co_circom::uncompress_shared_witness(witness_share, &net)?;
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let proof = Rep3CoPlonk::prove(&nets, zkey, witness_share)?;
+                    let proof = Rep3CoPlonk::prove(&net, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)
@@ -1093,7 +1091,7 @@ where
                     let public_input = witness_share.public_inputs.clone();
 
                     let start = Instant::now();
-                    let proof = ShamirCoPlonk::prove(&nets, n, t, zkey, witness_share)?;
+                    let proof = ShamirCoPlonk::prove(&net, n, t, zkey, witness_share)?;
                     let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
                     tracing::info!("Generate proof took {duration_ms} ms");
                     (proof, public_input)

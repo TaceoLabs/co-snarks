@@ -176,21 +176,15 @@ macro_rules! add_test_impl_plonk {
                 let mut rng = thread_rng();
                 let [witness_share1, witness_share2, witness_share3] =
                     SharedWitness::share_rep3(witness, r1cs.num_inputs, &mut rng);
-                let mut nets = vec![Vec::with_capacity(8), Vec::with_capacity(8), Vec::with_capacity(8)];
-                for _ in 0..8 {
-                    let [n0, n1, n2] = LocalNetwork::new_3_parties();
-                    nets[0].push(n0);
-                    nets[1].push(n1);
-                    nets[2].push(n2);
-                }
+                let nets = LocalNetwork::new_3_parties();
                 let mut threads = vec![];
-                for (nets, x, zkey) in izip!(
+                for (net, x, zkey) in izip!(
                     nets,
                     [witness_share1, witness_share2, witness_share3].into_iter(),
                     [zkey1, zkey2, zkey3].into_iter()
                 ) {
                     threads.push(std::thread::spawn(move || {
-                        Rep3CoPlonk::<$curve>::prove(&nets.try_into().unwrap(), zkey, x).unwrap()
+                        Rep3CoPlonk::<$curve>::prove(&net, zkey, x).unwrap()
                     }));
                 }
                 let result3 = threads.pop().unwrap().join().unwrap();

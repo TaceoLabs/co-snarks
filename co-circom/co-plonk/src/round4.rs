@@ -11,7 +11,7 @@ use tracing::instrument;
 
 // Round 4 of https://eprint.iacr.org/2019/953.pdf (page 29)
 pub(super) struct Round4<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network> {
-    pub(super) nets: &'a [N; 8],
+    pub(super) net: &'a N,
     pub(super) state: &'a mut T::State,
     pub(super) domains: Domains<P::ScalarField>,
     pub(super) challenges: Round3Challenges<P, T>,
@@ -99,7 +99,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round4<'a, P
     #[instrument(level = "debug", name = "Plonk - Round 4", skip_all)]
     pub(super) fn round4(self) -> PlonkProofResult<Round5<'a, P, T, N>> {
         let Self {
-            nets,
+            net,
             state,
             domains,
             challenges,
@@ -135,7 +135,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round4<'a, P
         polys.c.poly = poly_c;
         polys.z.poly = poly_z;
 
-        let opened = T::open_vec(&[eval_a, eval_b, eval_c, eval_z], &nets[0], state)?;
+        let opened = T::open_vec(&[eval_a, eval_b, eval_c, eval_z], net, state)?;
 
         let eval_a = opened[0];
         let eval_b = opened[1];
@@ -148,7 +148,7 @@ impl<'a, P: Pairing, T: CircomPlonkProver<P>, N: Network + 'static> Round4<'a, P
         tracing::debug!("round4 result: {proof}");
 
         Ok(Round5 {
-            nets,
+            net,
             state,
             domains,
             challenges,
@@ -195,7 +195,7 @@ pub mod tests {
 
             let challenges = Round1Challenges::<Bn254, PlainPlonkDriver>::deterministic();
             let mut state = ();
-            let mut round1 = Round1::init_round(&[(); 8], &mut state, &zkey, witness).unwrap();
+            let mut round1 = Round1::init_round(&(), &mut state, &zkey, witness).unwrap();
             round1.challenges = challenges;
             let round2 = round1.round1().unwrap();
             let round3 = round2.round2().unwrap();

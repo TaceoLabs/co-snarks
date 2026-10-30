@@ -80,7 +80,7 @@ where
 {
     /// Execute the PLONK prover using the internal MPC driver.
     fn prove_inner<N: Network + 'static>(
-        nets: &[N; 8],
+        net: &N,
         state: &mut T::State,
         zkey: Arc<Zkey<P>>,
         witness: SharedWitness<P::ScalarField, T::ArithmeticShare>,
@@ -97,7 +97,7 @@ where
             zkey.n_vars,
             zkey.n_public
         );
-        let state = Round1::<P, T, N>::init_round(nets, state, zkey.as_ref(), witness)?;
+        let state = Round1::<P, T, N>::init_round(net, state, zkey.as_ref(), witness)?;
         tracing::debug!("init round done..");
         let state = state.round1()?;
         tracing::debug!("round 1 done..");
@@ -123,6 +123,7 @@ mod plonk_utils {
     use crate::types::{Domains, PlonkWitness};
     use crate::{PlonkProofError, PlonkProofResult};
     use ark_ff::Field;
+    use mpc_net::Network;
     use num_traits::One;
     use num_traits::Zero;
 
@@ -134,6 +135,43 @@ mod plonk_utils {
     }
 
     pub(crate) use rayon_join3;
+
+    /// Elementwise products of several independent pairs of vectors in a single network round.
+    #[allow(clippy::type_complexity)]
+    pub(crate) fn mul_vec_batched<P: Pairing, T: CircomPlonkProver<P>, N: Network>(
+        pairs: &[(&[T::ArithmeticShare], &[T::ArithmeticShare])],
+        net: &N,
+        state: &mut T::State,
+    ) -> eyre::Result<Vec<Vec<T::ArithmeticShare>>> {
+        let lens = pairs
+            .iter()
+            .map(|(a, b)| {
+                debug_assert_eq!(a.len(), b.len());
+                a.len()
+            })
+            .collect::<Vec<_>>();
+        let a = pairs
+            .iter()
+            .flat_map(|(a, _)| a.iter().copied())
+            .collect::<Vec<_>>();
+        let b = pairs
+            .iter()
+            .flat_map(|(_, b)| b.iter().copied())
+            .collect::<Vec<_>>();
+        let local = T::local_mul_vec(&a, &b, state);
+        let mut res = T::io_round_mul_vec(local, net, state)?;
+        let mut out = Vec::with_capacity(lens.len());
+        for len in lens.iter().rev() {
+            out.push(res.split_off(res.len() - len));
+        }
+        out.reverse();
+        Ok(out)
+    }
+
+    /// Converts a `Vec` of known length into an array.
+    pub(crate) fn into_array<T, const K: usize>(v: Vec<T>) -> [T; K] {
+        v.try_into().ok().expect("exactly K elements")
+    }
 
     pub(crate) fn get_witness<P: Pairing, T: CircomPlonkProver<P>>(
         id: <T::State as MpcState>::PartyID,
@@ -221,16 +259,16 @@ where
 {
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
-        nets: &[N; 8],
+        net: &N,
         zkey: Arc<Zkey<P>>,
         witness: Rep3SharedWitness<P::ScalarField>,
     ) -> eyre::Result<PlonkProof<P>>
     where
         P: Pairing + CircomArkworksPairingBridge,
     {
-        let mut state = Rep3State::new(&nets[0], A2BType::default())?;
+        let mut state = Rep3State::new(net, A2BType::default())?;
         // execute prover in MPC
-        Self::prove_inner(nets, &mut state, zkey, witness).context("while prove inner")
+        Self::prove_inner(net, &mut state, zkey, witness).context("while prove inner")
     }
 }
 
@@ -241,7 +279,7 @@ where
 {
     /// Create a [`PlonkProof`]
     pub fn prove<N: Network + 'static>(
-        nets: &[N; 8],
+        net: &N,
         num_parties: usize,
         threshold: usize,
         zkey: Arc<Zkey<P>>,
@@ -251,12 +289,13 @@ where
         P: Pairing + CircomArkworksPairingBridge,
     {
         let domain_size = zkey.domain_size;
-        // TODO check and explain numbers
-        let num_pairs = domain_size * 222 + 15;
-        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, &nets[0])?;
+        // measured consumption of the prover (random shares + degree reductions);
+        // running out only triggers an on-demand refill
+        let num_pairs = domain_size * 166 + 12;
+        let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)?;
         let mut state = ShamirState::from(preprocessing);
         // execute prover in MPC
-        Self::prove_inner(nets, &mut state, zkey, witness).context("while prove inner")
+        Self::prove_inner(net, &mut state, zkey, witness).context("while prove inner")
     }
 }
 
@@ -273,7 +312,7 @@ where
         zkey: Arc<Zkey<P>>,
         private_witness: SharedWitness<P::ScalarField, P::ScalarField>,
     ) -> eyre::Result<PlonkProof<P>> {
-        Self::prove_inner(&[(); 8], &mut (), zkey, private_witness).context("while prove inner")
+        Self::prove_inner(&(), &mut (), zkey, private_witness).context("while prove inner")
     }
 }
 
