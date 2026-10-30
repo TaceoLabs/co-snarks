@@ -7,10 +7,8 @@ use super::{id::PartyID, yao::GCUtils};
 use crate::RngType;
 use crate::uint::UintBackend;
 use ark_ec::CurveGroup;
-use ark_ff::PrimeField;
-use rand::{
-    Rng, RngCore, SeedableRng, distributions::Standard, prelude::Distribution, seq::SliceRandom,
-};
+use ark_ff::{BigInteger, PrimeField};
+use rand::{Rng, SeedableRng, distributions::Standard, prelude::Distribution, seq::SliceRandom};
 use rayon::prelude::*;
 
 #[derive(Debug)]
@@ -135,24 +133,41 @@ impl Rep3Rand {
     // TODO do not collect the values
     /// Generate a vector of masking field elements
     pub fn masking_field_elements_vec<F: PrimeField>(&mut self, len: usize) -> Vec<F> {
-        let field_size = usize::try_from(F::MODULUS_BIT_SIZE)
-            .expect("u32 fits into usize")
-            .div_ceil(8);
-        let mut a = vec![0_u8; field_size * len];
-        let mut b = vec![0_u8; field_size * len];
-        rayon::join(
-            || {
-                self.rng1.fill_bytes(&mut a);
-            },
-            || {
-                self.rng2.fill_bytes(&mut b);
-            },
-        );
-        a.par_chunks(field_size)
-            .zip_eq(b.par_chunks(field_size))
-            .with_min_len(512)
-            .map(|(a, b)| F::from_be_bytes_mod_order(a) - F::from_be_bytes_mod_order(b))
-            .collect()
+        // Chunk c samples from clones of both streams seeked to word position
+        // `base + c * budget` (ChaCha streams are seekable), so the result is a deterministic
+        // function of the rng state and the party sharing a stream obtains the same values.
+        // arkworks samples field elements by rejection after masking to the modulus bit
+        // length, consuming 2 * NUM_LIMBS words per attempt with success probability >= 1/2;
+        // with a budget of 8 attempts per element, exhausting a chunk's region has
+        // probability < 2^-1000 and is asserted (identically on both parties), since
+        // continuing would overlap the next chunk's region and reuse masks.
+        const CHUNK: usize = 1024;
+        let budget = 2 * <F::BigInt as BigInteger>::NUM_LIMBS as u128 * CHUNK as u128 * 8;
+        let (base1, base2) = (self.rng1.get_word_pos(), self.rng2.get_word_pos());
+        let n_chunks = len.div_ceil(CHUNK);
+        let (rng1, rng2) = (&self.rng1, &self.rng2);
+        let res = (0..n_chunks)
+            .into_par_iter()
+            .map(|c| {
+                let (mut r1, mut r2) = (rng1.clone(), rng2.clone());
+                r1.set_word_pos(base1 + c as u128 * budget);
+                r2.set_word_pos(base2 + c as u128 * budget);
+                let take = CHUNK.min(len - c * CHUNK);
+                let v = (0..take)
+                    .map(|_| F::rand(&mut r1) - F::rand(&mut r2))
+                    .collect::<Vec<_>>();
+                assert!(
+                    r1.get_word_pos() <= base1 + (c as u128 + 1) * budget
+                        && r2.get_word_pos() <= base2 + (c as u128 + 1) * budget,
+                    "rng chunk budget exhausted"
+                );
+                v
+            })
+            .flatten()
+            .collect();
+        self.rng1.set_word_pos(base1 + n_chunks as u128 * budget);
+        self.rng2.set_word_pos(base2 + n_chunks as u128 * budget);
+        res
     }
 
     // TODO do not collect the values
