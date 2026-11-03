@@ -1,13 +1,16 @@
 [package]
 name = "mpc-core"
 version = "0.10.0"
+description = "MPC protocols used in co-snarks"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-publish.workspace = true
+publish = true
+readme = "README.md"
+keywords = ["mpc", "secret-sharing", "zero-knowledge", "cryptography"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
