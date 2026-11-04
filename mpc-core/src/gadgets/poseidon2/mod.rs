@@ -10,18 +10,23 @@ pub(crate) mod poseidon2_bn254_t8;
 pub(crate) mod poseidon2_circom_accelerator;
 pub(crate) mod poseidon2_params;
 pub(crate) mod poseidon2_permutation;
+#[cfg(feature = "shamir")]
 pub(crate) mod poseidon2_shamir_circom_accelerator;
+#[cfg(feature = "rep3")]
 pub(crate) mod rep3;
+#[cfg(feature = "shamir")]
 pub(crate) mod shamir;
 pub use poseidon2_bn254_t2::POSEIDON2_BN254_T2_PARAMS;
 pub use poseidon2_bn254_t3::POSEIDON2_BN254_T3_PARAMS;
 pub use poseidon2_bn254_t4::POSEIDON2_BN254_T4_PARAMS;
 pub use poseidon2_bn254_t8::POSEIDON2_BN254_T8_PARAMS;
 pub use poseidon2_bn254_t16::POSEIDON2_BN254_T16_PARAMS;
+#[cfg(feature = "rep3")]
 pub use poseidon2_circom_accelerator::CircomTraceBatchedHasher;
 pub use poseidon2_circom_accelerator::CircomTracePlainHasher;
 pub use poseidon2_params::Poseidon2Params;
 pub use poseidon2_permutation::Poseidon2;
+#[cfg(feature = "shamir")]
 pub use poseidon2_shamir_circom_accelerator::CircomTraceShamirHasher;
 
 /// A struct holding data required for preprocessing the Sbox of the Poseidon2 permutation.

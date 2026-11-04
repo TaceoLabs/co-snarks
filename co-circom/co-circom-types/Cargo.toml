@@ -16,7 +16,7 @@ ark-ff = { workspace = true }
 ark-serialize = { workspace = true }
 circom-types.workspace = true
 eyre = { workspace = true }
-mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["rep3", "shamir"] }
 num-traits = { workspace = true }
 num-bigint = { workspace = true }
 rand = { workspace = true }

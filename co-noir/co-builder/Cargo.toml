@@ -19,7 +19,7 @@ ark-poly.workspace = true
 blake3.workspace = true
 co-acvm = { version = "0.7.0", path = "../co-acvm" }
 noir-types = { version = "0.1.1", path = "../noir-types" }
-mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2", "rep3"] }
 co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
 co-ultrahonk = { version = "0.6.0", path = "../co-ultrahonk" }
 eyre.workspace = true

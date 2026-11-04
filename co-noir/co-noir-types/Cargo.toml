@@ -14,7 +14,7 @@ rust-version.workspace = true
 [dependencies]
 ark-ff = { workspace = true }
 eyre.workspace = true
-mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["rep3", "shamir"] }
 rand = { workspace = true }
 serde = { workspace = true }
 

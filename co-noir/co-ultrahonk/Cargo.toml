@@ -16,7 +16,7 @@ ark-poly.workspace = true
 noir-types = { version = "0.1.1", path = "../noir-types" }
 eyre.workspace = true
 itertools.workspace = true
-mpc-core = { version = "0.10.0", path = "../../mpc-core" }
+mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2", "rep3", "shamir"] }
 mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 num-bigint.workspace = true
 tracing.workspace = true
