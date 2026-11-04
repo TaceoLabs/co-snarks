@@ -2,7 +2,7 @@
 
 [![X (formerly Twitter) Follow](https://img.shields.io/badge/X-%23000000.svg?style=for-the-badge&logo=X&logoColor=white)](https://twitter.com/TACEO_IO)
 [![Telegram](https://img.shields.io/badge/Telegram-2CA5E0?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/collaborativeSNARK)
-[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/gWZW2TANpk)
+[![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=for-the-badge&logo=discord&logoColor=white)](https://discord.com/invite/sgasCRPRUd)
 
 [![docs.io](https://img.shields.io/badge/coCircom-docs-green)](https://docs.taceo.io/)
 
