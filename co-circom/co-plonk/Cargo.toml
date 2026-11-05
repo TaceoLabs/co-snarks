@@ -33,6 +33,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 ark-bls12-381 = { workspace = true }
 ark-bn254 = { workspace = true }
+circom-types = { workspace = true, features = ["bls12-381"] }
 num-traits = { workspace = true }
 serde_json = { workspace = true }
 

@@ -13,6 +13,9 @@ publish = true
 readme = "README.md"
 keywords = ["mpc", "networking", "tls", "quic"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [package.metadata.cargo-machete]
 ignored = ["humantime-serde"]
 
@@ -57,7 +60,7 @@ tokio = { version = "1.48.0", features = [
 ], optional = true }
 tokio-rustls = { version = "0.26", optional = true }
 tokio-util = { version = "0.7.17", features = ["codec"], optional = true }
-tracing = { workspace = true }
+tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
 toml.workspace = true
@@ -73,10 +76,10 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 default = []
 config = ["dep:humantime-serde", "dep:rustls", "dep:serde"]
 local = ["dep:crossbeam-channel", "dep:intmap"]
-quic = ["config", "dep:futures", "dep:parking_lot", "dep:quinn", "dep:tokio", "dep:tokio-util"]
-tcp = ["config", "dep:byteorder", "dep:crossbeam-channel", "dep:intmap", "dep:itertools", "dep:socket2"]
-tcp-session = ["config", "dep:futures", "dep:parking_lot", "dep:tokio", "dep:tokio-util"]
-tcp-session-blocking = ["config", "dep:byteorder", "dep:crossbeam-channel", "dep:intmap"]
-tls = ["config", "dep:byteorder", "dep:crossbeam-channel", "dep:intmap", "dep:itertools", "dep:socket2"]
-tls-session = ["config", "dep:futures", "dep:parking_lot", "dep:tokio", "dep:tokio-rustls", "dep:tokio-util"]
-tls-session-blocking = ["config", "dep:byteorder", "dep:crossbeam-channel", "dep:intmap"]
+quic = ["config", "dep:futures", "dep:parking_lot", "dep:quinn", "dep:tokio", "dep:tokio-util", "dep:tracing"]
+tcp = ["config", "dep:byteorder", "dep:crossbeam-channel", "dep:intmap", "dep:itertools", "dep:socket2", "dep:tracing"]
+tcp-session = ["config", "dep:futures", "dep:parking_lot", "dep:tokio", "dep:tokio-util", "dep:tracing"]
+tcp-session-blocking = ["config", "dep:byteorder", "dep:crossbeam-channel", "dep:intmap", "dep:tracing"]
+tls = ["config", "dep:byteorder", "dep:crossbeam-channel", "dep:intmap", "dep:itertools", "dep:socket2", "dep:tracing"]
+tls-session = ["config", "dep:futures", "dep:parking_lot", "dep:tokio", "dep:tokio-rustls", "dep:tokio-util", "dep:tracing"]
+tls-session-blocking = ["config", "dep:byteorder", "dep:crossbeam-channel", "dep:intmap", "dep:tracing"]
