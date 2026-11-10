@@ -8,6 +8,12 @@ pub mod gadgets;
 pub mod lut;
 pub mod protocols;
 pub mod serde_compat;
+#[cfg(any(
+    feature = "sqlx-postgres",
+    feature = "sqlx-mysql",
+    feature = "sqlx-sqlite"
+))]
+pub mod sqlx;
 pub mod uint;
 
 pub(crate) type RngType = rand_chacha::ChaCha12Rng;
