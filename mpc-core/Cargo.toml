@@ -41,6 +41,7 @@ rayon = { workspace = true }
 ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"] }
 serde = { workspace = true }
 sha3 = { workspace = true }
+sqlx = { workspace = true, optional = true }
 subtle = { workspace = true }
 taceo-ark-algebra = { workspace = true }
 thiserror = { workspace = true }
@@ -54,4 +55,6 @@ paste.workspace = true
 
 [features]
 default = []
-dangerous = []
+sqlx-mysql = ["dep:sqlx", "sqlx/mysql"]
+sqlx-postgres = ["dep:sqlx", "sqlx/postgres"]
+sqlx-sqlite = ["dep:sqlx", "sqlx/sqlite"]
