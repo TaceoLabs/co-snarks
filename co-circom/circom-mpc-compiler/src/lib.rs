@@ -429,11 +429,17 @@ where
     }
 
     fn handle_create_cmp_bucket(&mut self, create_cmp_bucket: &CreateCmpBucket) {
+        // the index of the (first) created component in the sub component array
+        self.handle_instruction(&create_cmp_bucket.sub_cmp_id);
         self.emit_opcode(MpcOpCode::PushIndex(create_cmp_bucket.signal_offset));
         self.emit_opcode(MpcOpCode::PushIndex(create_cmp_bucket.signal_offset_jump));
         self.emit_opcode(MpcOpCode::CreateCmp(
             create_cmp_bucket.symbol.clone(),
-            create_cmp_bucket.number_of_cmp,
+            create_cmp_bucket
+                .defined_positions
+                .iter()
+                .map(|(position, _)| *position)
+                .collect(),
         ));
     }
 
@@ -901,6 +907,28 @@ mod tests {
             finalized_witness
                 .get_output("SomeThingThatIsNotAnOutput")
                 .is_none()
+        );
+    }
+
+    // Expected outputs are the witness values produced by circom 2.2.3.
+    #[test]
+    fn test_sub_component_array_with_skipped_index() {
+        let parsed = CoCircomCompiler::<Bn254>::parse(
+            "../../test_vectors/WitnessExtension/tests/subcomponent_sparse_array.circom".to_owned(),
+            CompilerConfig::default(),
+        )
+        .unwrap();
+        let finalized_witness = parsed
+            .to_plain_vm(VMConfig::default())
+            .run_with_flat(to_field_vec!(vec!["10"]), 0)
+            .unwrap();
+        assert_eq!(
+            finalized_witness.get_output("y1").unwrap(),
+            to_field_vec!(vec!["16"])
+        );
+        assert_eq!(
+            finalized_witness.get_output("y2").unwrap(),
+            to_field_vec!(vec!["17"])
         );
     }
 }
