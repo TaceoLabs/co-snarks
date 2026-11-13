@@ -386,6 +386,7 @@ impl SumcheckRound {
         let current_column = &zk_sumcheck_data.libra_univariates[round_idx];
         // the evaluation of Libra round univariate at k=0...D are equal to \f$\texttt{libra_univariates}_{i}(k)\f$
         // corrected by the Libra running sum
+        #[allow(clippy::needless_range_loop)]
         for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
             let eval = T::eval_poly(
                 &current_column.coefficients,

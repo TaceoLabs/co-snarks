@@ -34,8 +34,8 @@ impl<T: NoirUltraHonkProver<P>, P: CurveGroup, const SIZE: usize> SharedUnivaria
         result
     }
     pub(crate) fn scale_inplace(&mut self, rhs: P::ScalarField) {
-        for i in 0..SIZE {
-            self.evaluations[i] = T::mul_with_public(rhs, self.evaluations[i]);
+        for e in self.evaluations.iter_mut() {
+            *e = T::mul_with_public(rhs, *e);
         }
     }
 
