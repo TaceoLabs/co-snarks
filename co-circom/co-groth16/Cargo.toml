@@ -25,8 +25,8 @@ taceo-groth16 = { package = "taceo-groth16", version = "0.2.0" }
 ark-serialize = { workspace = true }
 co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
 eyre = { workspace = true }
-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["rep3", "shamir"] }
-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
+taceo-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["rep3", "shamir"] }
+taceo-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 num-traits = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }

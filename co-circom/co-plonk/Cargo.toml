@@ -20,13 +20,13 @@ circom-types = { workspace = true, features = ["plonk", "zkey", "verification-ke
 co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
 eyre = { workspace = true }
 itertools = { workspace = true }
-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["rep3", "shamir"] }
 num-traits = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
 sha3 = { workspace = true }
 taceo-ark-algebra = { workspace = true }
+taceo-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["rep3", "shamir"] }
+taceo-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 

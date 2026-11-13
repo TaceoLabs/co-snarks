@@ -14,7 +14,7 @@ ark-ec.workspace = true
 ark-ff.workspace = true
 co-noir-common = { version = "0.2.0", path = "../co-noir-common" }
 noir-types = { version = "0.1.1", path = "../noir-types" }
-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2"] }
+taceo-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2"] }
 ark-poly.workspace = true
 eyre.workspace = true
 itertools.workspace = true

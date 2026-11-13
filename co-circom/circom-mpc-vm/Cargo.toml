@@ -17,8 +17,8 @@ bincode.workspace = true
 co-circom-types = { version = "0.6.0", path = "../co-circom-types" }
 eyre.workspace = true
 itertools.workspace = true
-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2", "rep3", "shamir"] }
-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 serde.workspace = true
+taceo-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2", "rep3", "shamir"] }
+taceo-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 tracing.workspace = true
 

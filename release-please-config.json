@@ -129,6 +129,7 @@
             "prerelease": false
         },
         "mpc-core": {
+            "component": "mpc-core",
             "changelog-path": "CHANGELOG.md",
             "release-type": "rust",
             "bump-minor-pre-major": true,
@@ -137,6 +138,7 @@
             "prerelease": false
         },
         "mpc-net": {
+            "component": "mpc-net",
             "changelog-path": "CHANGELOG.md",
             "release-type": "rust",
             "bump-minor-pre-major": true,

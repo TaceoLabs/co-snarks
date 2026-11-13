@@ -11,8 +11,8 @@ publish.workspace = true
 readme.workspace = true
 
 [dependencies]
-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2", "rep3", "shamir"] }
-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
+taceo-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2", "rep3", "shamir"] }
+taceo-mpc-net = { version = "0.5.0", path = "../../mpc-net" }
 noir-types = { version = "0.1.1", path = "../noir-types" }
 rayon.workspace = true
 ark-serialize.workspace = true
@@ -34,4 +34,4 @@ thiserror.workspace = true
 serde.workspace = true
 
 [dev-dependencies]
-mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }
+taceo-mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["local"] }
