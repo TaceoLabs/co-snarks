@@ -13,6 +13,11 @@ test-examples:
 
 check-pr: lint test-all test-examples
 
+# check that every feature combination of mpc-core and mpc-net compiles on its own (requires `cargo install cargo-all-features`)
+check-features:
+  cd mpc-core && cargo all-features check -q
+  cd mpc-net && cargo all-features check -q
+
 test-circom:
   cargo test --release --all-features --package tests --test circom
 

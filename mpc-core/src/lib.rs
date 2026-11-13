@@ -14,11 +14,15 @@ pub mod serde_compat;
     feature = "sqlx-sqlite"
 ))]
 pub mod sqlx;
+#[cfg(feature = "rep3")]
 pub mod uint;
 
+#[cfg(any(feature = "rep3", feature = "shamir"))]
 pub(crate) type RngType = rand_chacha::ChaCha12Rng;
+#[cfg(any(feature = "rep3", feature = "shamir"))]
 pub(crate) const SEED_SIZE: usize = std::mem::size_of::<<RngType as rand::SeedableRng>::Seed>();
 
+#[cfg(feature = "rep3")]
 fn downcast<A: 'static, B: 'static>(a: &A) -> Option<&B> {
     (a as &dyn std::any::Any).downcast_ref::<B>()
 }

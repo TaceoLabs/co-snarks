@@ -2,7 +2,9 @@
 //!
 //! This module contains some commonly used gadgets.
 
+#[cfg(feature = "poseidon2")]
 pub mod merkle_tree;
+#[cfg(feature = "poseidon2")]
 pub mod poseidon2;
 
 use ark_ff::PrimeField;

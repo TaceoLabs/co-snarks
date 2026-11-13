@@ -811,6 +811,7 @@ impl GarbledCircuits {
     }
 
     /// Decomposes a field element (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition ring elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
+    #[cfg(feature = "rep3-ring")]
     fn decompose_field_element_to_rings<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -878,6 +879,7 @@ impl GarbledCircuits {
     }
 
     /// Decomposes a vector of field elements (represented as two bitdecompositions wires_a, wires_b which need to be added first) into a vector of num_decomposition ring elements of size decompose_bitlen. For the bitcomposition, wires_c are used.
+    #[cfg(feature = "rep3-ring")]
     pub(crate) fn decompose_field_element_to_rings_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -1289,6 +1291,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a field_sharing (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing of a ring. The ring share is composed using wires_c.
+    #[cfg(feature = "rep3-ring")]
     fn field_to_ring<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -1308,6 +1311,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a vector of field_sharings (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing vector of rings. The ring shares are composed using wires_c.
+    #[cfg(feature = "rep3-ring")]
     pub(crate) fn field_to_ring_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -1340,6 +1344,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a ring_sharing (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing of a field. The field share is composed using wires_c.
+    #[cfg(feature = "rep3-ring")]
     fn ring_to_field<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -1357,6 +1362,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a vector of ring_sharings (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing vector of fields. The field shares are composed using wires_c.
+    #[cfg(feature = "rep3-ring")]
     pub(crate) fn ring_to_field_many<G: FancyBinary, F: FieldUint>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -1389,6 +1395,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a ring_sharing (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing of another ring. The output ring share is composed using wires_c.
+    #[cfg(feature = "rep3-ring")]
     fn ring_to_ring_upcast<G: FancyBinary>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -1433,6 +1440,7 @@ impl GarbledCircuits {
     }
 
     /// Transforms a vector of ring_sharings (represented as two bitdecompositions wires_a, wires_b which need to be added first) to a sharing vector of another ring. The output ring shares are composed using wires_c.
+    #[cfg(feature = "rep3-ring")]
     pub(crate) fn ring_to_ring_upcast_many<G: FancyBinary>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,
@@ -1465,6 +1473,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b.
+    #[cfg(feature = "rep3-ring")]
     fn ring_div_power_2<G: FancyBinary>(
         g: &mut G,
         wires_a: &[G::Item],
@@ -1735,6 +1744,7 @@ impl GarbledCircuits {
     }
 
     /// Divides a ring element by a power of 2. The ring element is represented as two bitdecompositions wires_a, wires_b which need to be added first. The output is composed using wires_c, whereas wires_c are the same size as wires_a and wires_b.
+    #[cfg(feature = "rep3-ring")]
     pub(crate) fn ring_div_power_2_many<G: FancyBinary>(
         g: &mut G,
         wires_a: &BinaryBundle<G::Item>,

@@ -151,6 +151,7 @@ fn populate_wires_and_selectors_and_compute_copy_cycles<P: CurveGroup>(
         // Update wire polynomials and copy cycles.
         // NB: The order of row/column loops is arbitrary but needs to be row/column
         // to match old copy_cycle code.
+        #[allow(clippy::needless_range_loop)]
         for block_row_idx in 0..block_size {
             for (wire_idx, wire) in wires.iter_mut().enumerate() {
                 // an index into the variables array

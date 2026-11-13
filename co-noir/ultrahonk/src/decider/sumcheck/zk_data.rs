@@ -176,6 +176,7 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         let mut coeffs_lagrange_subgroup = vec![P::ScalarField::zero(); P::SUBGROUP_SIZE];
         coeffs_lagrange_subgroup[0] = self.constant_term;
 
+        #[allow(clippy::needless_range_loop)]
         for poly_idx in 0..self.log_circuit_size {
             for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
                 let idx_to_populate = 1 + poly_idx * P::LIBRA_UNIVARIATES_LENGTH + idx;

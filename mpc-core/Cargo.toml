@@ -1,60 +1,101 @@
 [package]
-name = "mpc-core"
+name = "taceo-mpc-core"
 version = "0.10.0"
+description = "MPC protocols used in co-snarks"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 homepage.workspace = true
 repository.workspace = true
 license.workspace = true
-publish.workspace = true
+publish = true
+readme = "README.md"
+keywords = ["mpc", "secret-sharing", "zero-knowledge", "cryptography"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "mpc_core"
 
 [[bench]]
 harness = false
 name = "local_mul_vec"
+required-features = ["rep3"]
 
 [[bench]]
 harness = false
 name = "rep3_to_shamir"
+required-features = ["rep3", "shamir"]
 
 [dependencies]
-aes = { workspace = true }
-ark-bls12-377 = { workspace = true }
-ark-bls12-381 = { workspace = true }
-ark-bn254 = { workspace = true }
+aes = { workspace = true, optional = true }
+ark-bls12-377 = { workspace = true, optional = true }
+ark-bls12-381 = { workspace = true, optional = true }
+ark-bn254 = { workspace = true, optional = true }
 ark-ec = { workspace = true }
 ark-ff = { workspace = true }
-ark-grumpkin = { workspace = true }
+ark-grumpkin = { workspace = true, optional = true }
 ark-serialize = { workspace = true }
-bytes = { workspace = true }
+bytes = { workspace = true, optional = true }
 eyre = { workspace = true }
-itertools = { workspace = true }
-mpc-net = { path = "../mpc-net", version = "0.5.0", default-features = false }
-nom = { workspace = true }
+itertools = { workspace = true, optional = true }
+nom = { workspace = true, optional = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, optional = true }
 rand_chacha = { workspace = true }
-rayon = { workspace = true }
-ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"] }
+rayon = { workspace = true, optional = true }
+ruint = { workspace = true, features = ["ark-ff-06", "num-bigint"], optional = true }
 serde = { workspace = true }
-sha3 = { workspace = true }
+sha3 = { workspace = true, optional = true }
 sqlx = { workspace = true, optional = true }
-subtle = { workspace = true }
-taceo-ark-algebra = { workspace = true }
-thiserror = { workspace = true }
-tracing.workspace = true
+subtle = { workspace = true, optional = true }
+taceo-ark-algebra = { workspace = true, optional = true }
+taceo-mpc-net = { path = "../mpc-net", version = "0.5.0", default-features = false }
+thiserror = { workspace = true, optional = true }
+tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
+ark-bn254 = { workspace = true }
 bincode = { workspace = true }
 criterion.workspace = true
-mpc-net = { path = "../mpc-net", version = "0.5.0", features = ["local"] }
 paste.workspace = true
+rand = { workspace = true }
+taceo-mpc-net = { path = "../mpc-net", version = "0.5.0", features = ["local"] }
 
 [features]
 default = []
-sqlx-mysql = ["dep:sqlx", "sqlx/mysql"]
-sqlx-postgres = ["dep:sqlx", "sqlx/postgres"]
-sqlx-sqlite = ["dep:sqlx", "sqlx/sqlite"]
+poseidon2 = ["dep:ark-bn254"]
+rep3 = [
+    "dep:aes",
+    "dep:ark-bls12-377",
+    "dep:ark-bls12-381",
+    "dep:ark-bn254",
+    "dep:ark-grumpkin",
+    "dep:bytes",
+    "dep:itertools",
+    "dep:nom",
+    "dep:rand",
+    "dep:rayon",
+    "dep:ruint",
+    "dep:sha3",
+    "dep:subtle",
+    "dep:taceo-ark-algebra",
+    "dep:thiserror",
+    "dep:tracing",
+]
+rep3-ring = ["rep3"]
+shamir = [
+    "dep:bytes",
+    "dep:itertools",
+    "dep:rand",
+    "dep:rayon",
+    "dep:taceo-ark-algebra",
+    "dep:tracing",
+]
+sqlx-mysql = ["dep:sqlx", "sqlx/mysql", "rep3-ring", "shamir"]
+sqlx-postgres = ["dep:sqlx", "sqlx/postgres", "rep3-ring", "shamir"]
+sqlx-sqlite = ["dep:sqlx", "sqlx/sqlite", "rep3-ring", "shamir"]

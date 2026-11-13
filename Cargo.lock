@@ -1134,9 +1134,9 @@ dependencies = [
  "co-circom-types",
  "eyre",
  "itertools 0.15.0",
- "mpc-core",
- "mpc-net",
  "serde",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "tracing",
 ]
 
@@ -1223,8 +1223,6 @@ dependencies = [
  "intmap",
  "itertools 0.15.0",
  "libaes",
- "mpc-core",
- "mpc-net",
  "noir-types",
  "noirc_abi",
  "noirc_artifacts",
@@ -1233,6 +1231,8 @@ dependencies = [
  "rayon",
  "serde",
  "sha2 0.11.0",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "thiserror 2.0.21",
  "tracing",
 ]
@@ -1247,11 +1247,11 @@ dependencies = [
  "brillig",
  "eyre",
  "itertools 0.15.0",
- "mpc-core",
- "mpc-net",
  "num-bigint 0.4.8",
  "num-traits",
  "rand 0.8.8",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "tracing",
 ]
 
@@ -1271,14 +1271,14 @@ dependencies = [
  "co-ultrahonk",
  "eyre",
  "itertools 0.15.0",
- "mpc-core",
- "mpc-net",
  "noir-types",
  "num-bigint 0.4.8",
  "num-traits",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
  "serde_json",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "tracing",
 ]
 
@@ -1300,14 +1300,14 @@ dependencies = [
  "color-eyre",
  "criterion",
  "figment",
- "mpc-core",
- "mpc-net",
  "num-traits",
  "rand 0.8.8",
  "rustls",
  "serde",
  "serde_json",
  "taceo-circom-types",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1319,13 +1319,13 @@ dependencies = [
  "ark-ff 0.6.0",
  "ark-serialize 0.6.0",
  "eyre",
- "mpc-core",
  "num-bigint 0.4.8",
  "num-traits",
  "rand 0.8.8",
  "serde",
  "serde_json",
  "taceo-circom-types",
+ "taceo-mpc-core",
  "tracing",
 ]
 
@@ -1344,8 +1344,6 @@ dependencies = [
  "ark-serialize 0.6.0",
  "co-circom-types",
  "eyre",
- "mpc-core",
- "mpc-net",
  "num-traits",
  "rand 0.8.8",
  "rayon",
@@ -1353,6 +1351,8 @@ dependencies = [
  "taceo-ark-algebra",
  "taceo-circom-types",
  "taceo-groth16",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "tracing",
 ]
 
@@ -1373,8 +1373,6 @@ dependencies = [
  "co-ultrahonk",
  "color-eyre",
  "figment",
- "mpc-core",
- "mpc-net",
  "noir-types",
  "noirc_abi",
  "noirc_artifacts",
@@ -1383,6 +1381,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha3",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "thiserror 2.0.21",
  "tracing",
  "tracing-subscriber",
@@ -1400,8 +1400,6 @@ dependencies = [
  "ark-serialize 0.6.0",
  "eyre",
  "itertools 0.15.0",
- "mpc-core",
- "mpc-net",
  "noir-types",
  "num-bigint 0.4.8",
  "num-traits",
@@ -1411,6 +1409,8 @@ dependencies = [
  "serde",
  "sha3",
  "taceo-ark-algebra",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "thiserror 2.0.21",
  "tracing",
 ]
@@ -1421,9 +1421,9 @@ version = "0.1.1"
 dependencies = [
  "ark-ff 0.6.0",
  "eyre",
- "mpc-core",
  "rand 0.8.8",
  "serde",
+ "taceo-mpc-core",
 ]
 
 [[package]]
@@ -1439,8 +1439,6 @@ dependencies = [
  "co-circom-types",
  "eyre",
  "itertools 0.15.0",
- "mpc-core",
- "mpc-net",
  "num-traits",
  "rand 0.8.8",
  "rayon",
@@ -1448,6 +1446,8 @@ dependencies = [
  "sha3",
  "taceo-ark-algebra",
  "taceo-circom-types",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "thiserror 2.0.21",
  "tracing",
 ]
@@ -1464,12 +1464,12 @@ dependencies = [
  "criterion",
  "eyre",
  "itertools 0.15.0",
- "mpc-core",
- "mpc-net",
  "noir-types",
  "num-bigint 0.4.8",
  "rand 0.8.8",
  "rayon",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "tracing",
  "ultrahonk",
 ]
@@ -3231,70 +3231,6 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "mpc-core"
-version = "0.10.0"
-dependencies = [
- "aes",
- "ark-bls12-377",
- "ark-bls12-381",
- "ark-bn254",
- "ark-ec",
- "ark-ff 0.6.0",
- "ark-grumpkin",
- "ark-serialize 0.6.0",
- "bincode",
- "bytes",
- "criterion",
- "eyre",
- "itertools 0.15.0",
- "mpc-net",
- "nom 8.0.0",
- "num-bigint 0.4.8",
- "num-traits",
- "paste",
- "rand 0.8.8",
- "rand_chacha 0.3.1",
- "rayon",
- "ruint",
- "serde",
- "sha3",
- "sqlx",
- "subtle",
- "taceo-ark-algebra",
- "thiserror 2.0.21",
- "tracing",
-]
-
-[[package]]
-name = "mpc-net"
-version = "0.5.0"
-dependencies = [
- "byteorder",
- "bytes",
- "clap",
- "color-eyre",
- "crossbeam-channel",
- "eyre",
- "futures",
- "humantime-serde",
- "intmap",
- "itertools 0.15.0",
- "parking_lot",
- "quinn",
- "rcgen",
- "reserve-port",
- "rustls",
- "serde",
- "socket2",
- "tokio",
- "tokio-rustls",
- "tokio-util",
- "toml 1.1.6+spec-1.1.0",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -5239,6 +5175,70 @@ dependencies = [
 ]
 
 [[package]]
+name = "taceo-mpc-core"
+version = "0.10.0"
+dependencies = [
+ "aes",
+ "ark-bls12-377",
+ "ark-bls12-381",
+ "ark-bn254",
+ "ark-ec",
+ "ark-ff 0.6.0",
+ "ark-grumpkin",
+ "ark-serialize 0.6.0",
+ "bincode",
+ "bytes",
+ "criterion",
+ "eyre",
+ "itertools 0.15.0",
+ "nom 8.0.0",
+ "num-bigint 0.4.8",
+ "num-traits",
+ "paste",
+ "rand 0.8.8",
+ "rand_chacha 0.3.1",
+ "rayon",
+ "ruint",
+ "serde",
+ "sha3",
+ "sqlx",
+ "subtle",
+ "taceo-ark-algebra",
+ "taceo-mpc-net",
+ "thiserror 2.0.21",
+ "tracing",
+]
+
+[[package]]
+name = "taceo-mpc-net"
+version = "0.5.0"
+dependencies = [
+ "byteorder",
+ "bytes",
+ "clap",
+ "color-eyre",
+ "crossbeam-channel",
+ "eyre",
+ "futures",
+ "humantime-serde",
+ "intmap",
+ "itertools 0.15.0",
+ "parking_lot",
+ "quinn",
+ "rcgen",
+ "reserve-port",
+ "rustls",
+ "serde",
+ "socket2",
+ "tokio",
+ "tokio-rustls",
+ "tokio-util",
+ "toml 1.1.6+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "tap"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5291,8 +5291,6 @@ dependencies = [
  "eyre",
  "itertools 0.15.0",
  "libaes",
- "mpc-core",
- "mpc-net",
  "noir-types",
  "noirc_artifacts",
  "num-bigint 0.4.8",
@@ -5304,6 +5302,8 @@ dependencies = [
  "sha2 0.11.0",
  "sha3",
  "taceo-circom-types",
+ "taceo-mpc-core",
+ "taceo-mpc-net",
  "tracing",
  "tracing-subscriber",
 ]
@@ -5689,11 +5689,11 @@ dependencies = [
  "co-noir-common",
  "eyre",
  "itertools 0.15.0",
- "mpc-core",
  "noir-types",
  "num-bigint 0.4.8",
  "rand 0.8.8",
  "rand_chacha 0.3.1",
+ "taceo-mpc-core",
  "tracing",
 ]
 

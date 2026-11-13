@@ -16,6 +16,7 @@ mod async_net;
     feature = "tls-session-blocking"
 ))]
 mod blocking;
+#[cfg(feature = "config")]
 pub mod config;
 #[cfg(feature = "local")]
 pub mod local;

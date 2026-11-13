@@ -1,4 +1,5 @@
 //! Tests for `mpc_net::config`.
+#![cfg(feature = "config")]
 
 use std::str::FromStr;
 

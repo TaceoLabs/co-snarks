@@ -29,8 +29,8 @@ co-groth16 = { version = "0.10.0", path = "../co-groth16", features = [
 co-plonk = { version = "0.7.0", path = "../co-plonk" }
 color-eyre.workspace = true
 figment.workspace = true
-mpc-core = { version = "0.10.0", path = "../../mpc-core" }
-mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["tcp"] }
+taceo-mpc-core = { version = "0.10.0", path = "../../mpc-core", features = ["poseidon2", "rep3", "shamir"] }
+taceo-mpc-net = { version = "0.5.0", path = "../../mpc-net", features = ["tcp"] }
 num-traits.workspace = true
 rand.workspace = true
 serde_json.workspace = true

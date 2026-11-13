@@ -19,8 +19,8 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
     }
 
     pub(crate) fn double_in_place(&mut self) {
-        for i in 0..SIZE {
-            self.evaluations[i].double_in_place();
+        for e in self.evaluations.iter_mut() {
+            e.double_in_place();
         }
     }
 
@@ -31,8 +31,8 @@ impl<F: PrimeField, const SIZE: usize> Univariate<F, SIZE> {
     }
 
     pub(crate) fn square_in_place(&mut self) {
-        for i in 0..SIZE {
-            self.evaluations[i].square_in_place();
+        for e in self.evaluations.iter_mut() {
+            e.square_in_place();
         }
     }
 
@@ -291,8 +291,8 @@ impl<F: PrimeField, const SIZE: usize> AddAssign<&Self> for Univariate<F, SIZE> 
 
 impl<F: PrimeField, const SIZE: usize> AddAssign<&F> for Univariate<F, SIZE> {
     fn add_assign(&mut self, rhs: &F) {
-        for i in 0..SIZE {
-            self.evaluations[i] += rhs;
+        for e in self.evaluations.iter_mut() {
+            *e += rhs;
         }
     }
 }
@@ -341,16 +341,16 @@ impl<F: PrimeField, const SIZE: usize> Sub<&Self> for Univariate<F, SIZE> {
 
 impl<F: PrimeField, const SIZE: usize> SubAssign<&F> for Univariate<F, SIZE> {
     fn sub_assign(&mut self, rhs: &F) {
-        for i in 0..SIZE {
-            self.evaluations[i] -= rhs;
+        for e in self.evaluations.iter_mut() {
+            *e -= rhs;
         }
     }
 }
 
 impl<F: PrimeField, const SIZE: usize> SubAssign<F> for Univariate<F, SIZE> {
     fn sub_assign(&mut self, rhs: F) {
-        for i in 0..SIZE {
-            self.evaluations[i] -= rhs;
+        for e in self.evaluations.iter_mut() {
+            *e -= rhs;
         }
     }
 }
@@ -429,16 +429,16 @@ impl<F: PrimeField, const SIZE: usize> MulAssign<&Self> for Univariate<F, SIZE> 
 
 impl<F: PrimeField, const SIZE: usize> MulAssign<F> for Univariate<F, SIZE> {
     fn mul_assign(&mut self, rhs: F) {
-        for i in 0..SIZE {
-            self.evaluations[i] *= rhs;
+        for e in self.evaluations.iter_mut() {
+            *e *= rhs;
         }
     }
 }
 
 impl<F: PrimeField, const SIZE: usize> MulAssign<&F> for Univariate<F, SIZE> {
     fn mul_assign(&mut self, rhs: &F) {
-        for i in 0..SIZE {
-            self.evaluations[i] *= rhs;
+        for e in self.evaluations.iter_mut() {
+            *e *= rhs;
         }
     }
 }
@@ -463,8 +463,8 @@ impl<F: PrimeField, const SIZE: usize> Neg for Univariate<F, SIZE> {
 
     fn neg(self) -> Self::Output {
         let mut result = self;
-        for i in 0..SIZE {
-            result.evaluations[i] = -result.evaluations[i];
+        for e in result.evaluations.iter_mut() {
+            *e = -*e;
         }
         result
     }

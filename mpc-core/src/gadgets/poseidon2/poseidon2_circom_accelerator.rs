@@ -1,19 +1,24 @@
+#[cfg(feature = "rep3")]
 use std::array;
 
-use super::{Poseidon2, Poseidon2Precomputations};
-use crate::{
-    gadgets::poseidon2::{
-        poseidon2_bn254_t2::{WITNESS_INDICES_SIZE_T2, WITNESS_INDICES_T2},
-        poseidon2_bn254_t3::{WITNESS_INDICES_SIZE_T3, WITNESS_INDICES_T3},
-        poseidon2_bn254_t4::{WITNESS_INDICES_SIZE_T4, WITNESS_INDICES_T4},
-        poseidon2_bn254_t16::{WITNESS_INDICES_SIZE_T16, WITNESS_INDICES_T16},
-    },
-    protocols::rep3::{self, Rep3PrimeFieldShare, arithmetic, id::PartyID},
+use super::Poseidon2;
+#[cfg(feature = "rep3")]
+use super::Poseidon2Precomputations;
+use crate::gadgets::poseidon2::{
+    poseidon2_bn254_t2::{WITNESS_INDICES_SIZE_T2, WITNESS_INDICES_T2},
+    poseidon2_bn254_t3::{WITNESS_INDICES_SIZE_T3, WITNESS_INDICES_T3},
+    poseidon2_bn254_t4::{WITNESS_INDICES_SIZE_T4, WITNESS_INDICES_T4},
+    poseidon2_bn254_t16::{WITNESS_INDICES_SIZE_T16, WITNESS_INDICES_T16},
 };
+#[cfg(feature = "rep3")]
+use crate::protocols::rep3::{self, Rep3PrimeFieldShare, arithmetic, id::PartyID};
 use ark_ff::PrimeField;
+#[cfg(feature = "rep3")]
 use itertools::izip;
+#[cfg(feature = "rep3")]
 use mpc_net::Network;
 
+#[cfg(feature = "rep3")]
 impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     /// The matrix multiplication in the external rounds of the Poseidon2 permutation. Implemented for the Rep3 MPC protocol.
     pub fn matmul_external_rep3_intermediate_t16(
@@ -1156,6 +1161,7 @@ impl<F: PrimeField, const T: usize> CircomTracePlainHasher<F, T> for Poseidon2<F
 }
 
 /// A trait for computing the trace of a Circom hash component in a batched MPC setting.
+#[cfg(feature = "rep3")]
 pub trait CircomTraceBatchedHasher<F: PrimeField, const T: usize> {
     /// The type holding data required for preprocessing the Sbox of the permutation.
     type Precomputation;
@@ -1189,6 +1195,7 @@ pub trait CircomTraceBatchedHasher<F: PrimeField, const T: usize> {
     )>;
 }
 
+#[cfg(feature = "rep3")]
 impl<F: PrimeField, const T: usize> CircomTraceBatchedHasher<F, T> for Poseidon2<F, T, 5> {
     type Precomputation = Poseidon2Precomputations<Rep3PrimeFieldShare<F>>;
 

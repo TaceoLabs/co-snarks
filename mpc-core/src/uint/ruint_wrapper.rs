@@ -1,5 +1,6 @@
 //! A stack-allocated fixed-width unsigned integer wrapping [`ruint::Uint`].
 
+#[cfg(feature = "rep3-ring")]
 use crate::protocols::rep3_ring::ring::bit::Bit;
 use ark_serialize::{
     CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
@@ -339,6 +340,7 @@ macro_rules! impl_as_primitive_down {
 }
 impl_as_primitive_down!(u8, u16, u32, u64);
 
+#[cfg(feature = "rep3-ring")]
 impl<const BITS: usize, const LIMBS: usize> AsPrimitive<Bit> for RUint<BITS, LIMBS> {
     fn as_(self) -> Bit {
         // LSB truncation — must commute with XOR when applied to share components
@@ -357,6 +359,7 @@ macro_rules! impl_as_primitive_up {
 }
 impl_as_primitive_up!(u8, u16, u32, u64, u128);
 
+#[cfg(feature = "rep3-ring")]
 impl<const BITS: usize, const LIMBS: usize> AsPrimitive<RUint<BITS, LIMBS>> for Bit {
     fn as_(self) -> RUint<BITS, LIMBS> {
         RUint(Uint::from(self.convert() as u64))
