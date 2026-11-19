@@ -32,17 +32,29 @@ pub struct SessionConfigFile {
     pub tls: Option<TlsConfigFile>,
     /// The `init_session` timeout for the network. If not set, the `init_session` will be unbounded.
     /// Also bounds the handshake + header read of each incoming connection.
-    #[serde(with = "humantime_serde", default)]
+    #[serde(
+        with = "jiff::fmt::serde::unsigned_duration::friendly::compact::optional",
+        default
+    )]
     pub init_session_timeout: Option<Duration>,
     /// The send/recv timeout
-    #[serde(with = "humantime_serde", default)]
+    #[serde(
+        with = "jiff::fmt::serde::unsigned_duration::friendly::compact::optional",
+        default
+    )]
     pub timeout: Option<Duration>,
     /// The flush timeout for the network. If not set, the flush will be unbounded.
-    #[serde(with = "humantime_serde", default)]
+    #[serde(
+        with = "jiff::fmt::serde::unsigned_duration::friendly::compact::optional",
+        default
+    )]
     pub flush_timeout: Option<Duration>,
     /// The time to idle for incoming connections that were not picked up because, e.g.
     /// `init_session` for that session id was never called. Defaults to 30 seconds.
-    #[serde(with = "humantime_serde", default = "default_time_to_idle")]
+    #[serde(
+        with = "jiff::fmt::serde::unsigned_duration::friendly::compact::required",
+        default = "default_time_to_idle"
+    )]
     pub time_to_idle: Duration,
     /// The max length (in bytes) of a single frame
     #[serde(default = "default_max_frame_length")]
