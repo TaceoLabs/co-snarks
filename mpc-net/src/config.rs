@@ -213,15 +213,15 @@ pub struct NetworkConfigFile {
     pub tls: Option<TlsConfigFile>,
     /// The send/recv timeout
     #[serde(default)]
-    #[serde(with = "humantime_serde")]
+    #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::optional")]
     pub timeout: Option<Duration>,
     /// The connection establish timeout
     #[serde(default)]
-    #[serde(with = "humantime_serde")]
+    #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::optional")]
     pub connect_timeout: Option<Duration>,
     /// The flush timeout for the network. If not set, the flush will be unbounded.
     #[serde(default)]
-    #[serde(with = "humantime_serde")]
+    #[serde(with = "jiff::fmt::serde::unsigned_duration::friendly::compact::optional")]
     pub flush_timeout: Option<Duration>,
     /// The max length (in bytes) of a single frame
     #[serde(default)]
