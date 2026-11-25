@@ -162,8 +162,7 @@ pub fn inv_vec<F: PrimeField, N: Network>(
     net: &N,
     state: &mut ShamirState<F>,
 ) -> eyre::Result<Vec<ShamirShare<F>>> {
-    let (r, _) = state.get_pairs(net, a.len())?;
-    let r = ShamirShare::convert_vec_rev(r);
+    let r = state.rand_vec(net, a.len())?;
     let y = mul_open_vec(a, &r, net, state)?;
     if y.iter().any(|y| y.is_zero()) {
         eyre::bail!("Cannot compute inverse of zero");
@@ -294,11 +293,10 @@ pub fn mul_open_vec<F: PrimeField, N: Network>(
     }
     // The product shares must be masked with degree-2t sharings of zero, otherwise the
     // opened shares reveal the product of the two sharing polynomials and thus the inputs.
-    let mul = a
-        .iter()
-        .zip(b.iter())
-        .map(|(a, b)| Ok(a.a * b.a + state.zero_share_2t(net)?))
-        .collect::<eyre::Result<Vec<F>>>()?;
+    let zeros = state.zero_shares_2t(net, a.len())?;
+    let mul = izip!(a, b, zeros)
+        .map(|(a, b, zero)| a.a * b.a + zero)
+        .collect::<Vec<F>>();
 
     let rcv = net.broadcast_next(state.num_parties, 2 * state.threshold + 1, mul)?;
 

@@ -48,35 +48,44 @@ pub(super) fn serialize_field_elements<F: PrimeField>(
     Ok(Bytes::from(data))
 }
 
-/// Deserializes a received `Vec<F>` and calls `f` with each element together with the
-/// corresponding `stride` elements of `out`, using multiple threads if there are enough elements.
-/// Fails if `data` does not contain exactly one field element per `stride` elements of `out`.
+/// Deserializes the received `Vec<F>`s and calls `f` with each element, the index of its
+/// message and the corresponding `stride` elements of `out`. All messages are processed in a
+/// single pass over `out`, using multiple threads if there are enough elements.
+/// Fails if a message does not contain exactly one field element per `stride` elements of `out`.
 pub(super) fn for_each_received<F: PrimeField, T: Send>(
-    data: &[u8],
+    messages: &[Bytes],
     out: &mut [T],
     stride: usize,
-    f: impl Fn(&mut [T], F) + Sync,
+    f: impl Fn(&mut [T], usize, F) + Sync,
 ) -> eyre::Result<()> {
     debug_assert_eq!(out.len() % stride, 0);
     let len = out.len() / stride;
     let elem_size = F::zero().uncompressed_size();
-    let valid = data.len() == LEN_PREFIX + len * elem_size
-        && data[..LEN_PREFIX] == (len as u64).to_le_bytes();
-    if !valid {
+    let valid = |data: &Bytes| {
+        data.len() == LEN_PREFIX + len * elem_size
+            && data[..LEN_PREFIX] == (len as u64).to_le_bytes()
+    };
+    if !messages.iter().all(valid) {
         eyre::bail!("Invalid number of elements received");
     }
-    let payload = &data[LEN_PREFIX..];
+    if messages.is_empty() {
+        return Ok(());
+    }
 
-    let process = |(out, elem): (&mut [T], &[u8])| {
-        F::deserialize_uncompressed_unchecked(elem).map(|elem| f(out, elem))
+    let process = |(i, out): (usize, &mut [T])| {
+        let start = LEN_PREFIX + i * elem_size;
+        messages.iter().enumerate().try_for_each(|(msg, data)| {
+            F::deserialize_uncompressed_unchecked(&data[start..start + elem_size])
+                .map(|elem| f(out, msg, elem))
+        })
     };
     if len < MIN_PAR_LEN {
         out.chunks_exact_mut(stride)
-            .zip(payload.chunks_exact(elem_size))
+            .enumerate()
             .try_for_each(process)?;
     } else {
         out.par_chunks_exact_mut(stride)
-            .zip(payload.par_chunks_exact(elem_size))
+            .enumerate()
             .with_min_len(MIN_PAR_LEN)
             .try_for_each(process)?;
     }
@@ -232,7 +241,7 @@ pub trait ShamirNetworkExt: Network {
         &self,
 
         state: &mut ShamirState<F>,
-        mut inputs: Vec<F>,
+        inputs: Vec<F>,
     ) -> eyre::Result<Vec<ShamirPrimeFieldShare<F>>>
     where
         Self: Sized,
@@ -241,29 +250,31 @@ pub trait ShamirNetworkExt: Network {
 
         let len = inputs.len();
         let (mut my_shares, r_2ts) = state.get_pairs(self, len)?;
-        for_each_indexed(&mut inputs, |i, inp| *inp += r_2ts[i]);
-        drop(r_2ts);
 
         // my_shares holds r_t at this point, which is subtracted from the fresh shares
         let my_id = self.id();
         if my_id == KING_ID {
-            // Accumulate the result
+            // Accumulate the result, starting with my own share
             let mut acc = inputs;
-            let lagrange = state.mul_lagrange_2t[KING_ID];
-            for_each_indexed(&mut acc, |_, acc| *acc *= lagrange);
-            for (other_id, lagrange) in state.mul_lagrange_2t.iter().enumerate() {
-                if other_id == KING_ID {
-                    continue;
-                }
-                let data = self.recv(other_id)?;
-                for_each_received(&data, &mut acc, 1, |acc, mul: F| acc[0] += mul * lagrange)?;
-            }
+            let lagrange = &state.mul_lagrange_2t;
+            for_each_indexed(&mut acc, |i, acc| {
+                *acc = (*acc + r_2ts[i]) * lagrange[KING_ID]
+            });
+            drop(r_2ts);
+            debug_assert_eq!(lagrange.len(), 2 * state.threshold + 1);
+            let received = (1..lagrange.len())
+                .map(|other_id| self.recv(other_id))
+                .collect::<eyre::Result<Vec<_>>>()?;
+            for_each_received(&received, &mut acc, 1, |acc, msg, mul: F| {
+                acc[0] += mul * lagrange[msg + 1]
+            })?;
+            drop(received);
             // So far parties who do not require sending, do not send, so no receive here
 
             // Send fresh shares
             // Since <acc> does not have to be private, we share it as a known polynomial, such that t parties know their share is 0. Consequently we can reduce the amount of communication.
             // The polynomial is acc times a fixed polynomial, thus each share is acc times a precomputed coefficient.
-            // Note: When expanding t+1 double shares to n double shares (Atlas) we cannot do this anymore, since <acc> needs to stay private. Atlas also requires rotating the King server.
+            // Note: When expanding the n-t double shares to n double shares (Atlas) we cannot do this anymore, since <acc> needs to stay private. Atlas also requires rotating the King server.
             for (id, coeff) in state.mul_king_share_coeffs.iter().enumerate() {
                 debug_assert!(id < num_non_zero);
                 if id != KING_ID {
@@ -276,13 +287,13 @@ pub trait ShamirNetworkExt: Network {
         } else {
             if my_id <= state.threshold * 2 {
                 // Only send if my items are required
-                let data = serialize_field_elements(len, |i| inputs[i])?;
+                let data = serialize_field_elements(len, |i| inputs[i] + r_2ts[i])?;
                 self.send(KING_ID, data)?;
             }
-            drop(inputs);
+            drop((inputs, r_2ts));
             if my_id < num_non_zero {
                 let data = self.recv(KING_ID)?;
-                for_each_received(&data, &mut my_shares, 1, |share, fresh: F| {
+                for_each_received(&[data], &mut my_shares, 1, |share, _, fresh: F| {
                     share[0] = fresh - share[0]
                 })?;
             } else {
@@ -329,7 +340,7 @@ pub trait ShamirNetworkExt: Network {
 
             // Send fresh shares
             // Since <acc> does not have to be private, we share it as a known polynomial, such that t parties know their share is 0. Consequently we can reduce the amount of communication.
-            // Note: When expanding t+1 double shares to n double shares (Atlas) we cannot do this anymore, since <acc> needs to stay private. Atlas also requires rotating the King server.
+            // Note: When expanding the n-t double shares to n double shares (Atlas) we cannot do this anymore, since <acc> needs to stay private. Atlas also requires rotating the King server.
 
             // The polynomial is acc times a fixed polynomial, thus each share is acc times a precomputed coefficient.
             let mut my_share = C::default();

@@ -11,7 +11,7 @@ use super::network::{ShamirNetworkExt, for_each_received, serialize_field_elemen
 
 type SeedType = [u8; crate::SEED_SIZE];
 
-/// The number of batches (of t+1 double shares each) that are generated per unit of parallel work.
+/// The number of batches (of n-t double shares each) that are generated per unit of parallel work.
 const BATCHES_PER_CHUNK: usize = 256;
 
 /// Everything that is needed to deal and combine the double sharings, precomputed once.
@@ -31,13 +31,15 @@ struct DoubleShareTables<F> {
     two_t_mine: Vec<F>,
     /// Same as `t_send`, but for the degree-2t sharing. One row of 2t+1 elements per party.
     two_t_send: Vec<F>,
-    /// The (t+1 x n) Vandermonde matrix used by DN07, stored column by column:
+    /// The (n-t x n) Vandermonde matrix used by DN07, stored column by column:
     /// [1, 1  , 1  , 1  , ..., 1  ]
     /// [1, 2  , 3  , 4  , ..., n  ]
     /// [1, 2^2, 3^2, 4^2, ..., n^2]
     /// ...
-    /// [1, 2^t, 3^t, 4^t, ..., n^t]
+    /// [1, 2^(n-t-1), 3^(n-t-1), 4^(n-t-1), ..., n^(n-t-1)]
     vandermonde: Vec<F>,
+    /// The number of rows of the Vandermonde matrix, i.e., n-t
+    rows: usize,
 }
 
 impl<F: PrimeField> DoubleShareTables<F> {
@@ -58,11 +60,12 @@ impl<F: PrimeField> DoubleShareTables<F> {
             .flat_map(|offset| lagrange_basis_at(&points_2t, x_of(offset)))
             .collect();
 
-        let mut vandermonde = Vec::with_capacity(num_parties * (threshold + 1));
+        let rows = num_parties - threshold;
+        let mut vandermonde = Vec::with_capacity(num_parties * rows);
         for col in 1..=num_parties as u64 {
             let x = F::from(col);
             let mut pow = F::one();
-            for _ in 0..=threshold {
+            for _ in 0..rows {
                 vandermonde.push(pow);
                 pow *= x;
             }
@@ -75,12 +78,13 @@ impl<F: PrimeField> DoubleShareTables<F> {
             two_t_mine: lagrange_basis_at(&points_2t, id + 1),
             two_t_send,
             vandermonde,
+            rows,
         }
     }
 
     /// The column of the Vandermonde matrix which belongs to the sharing dealt by `party`.
-    fn vandermonde_col(&self, party: usize, threshold: usize) -> &[F] {
-        &self.vandermonde[party * (threshold + 1)..(party + 1) * (threshold + 1)]
+    fn vandermonde_col(&self, party: usize) -> &[F] {
+        &self.vandermonde[party * self.rows..(party + 1) * self.rows]
     }
 }
 
@@ -162,8 +166,10 @@ impl<F: PrimeField> ShamirRng<F> {
 
         let shared_rngs = Self::get_shared_rngs(net, num_parties, &mut rng)?;
 
-        // We use the DN07 Vandermonde matrix to create t+1 random double shares at once.
-        // We do not use Atlas to create n shares at once, since only t+1 out of n shares would be uniformly random, thus the King server during multiplication would have to be rotated.
+        // We use the DN07 Vandermonde matrix to create n-t random double shares at once.
+        // Each party deals one sharing with a uniformly random secret. Since the matrix has n-t rows and any n-t of its columns are
+        // linearly independent, the n-t outputs are uniformly random as long as n-t dealers are honest, i.e., for up to t corrupted parties.
+        // We do not use Atlas to create n shares at once, since only n-t out of n shares would be uniformly random, thus the King server during multiplication would have to be rotated.
         let id = net.id();
         let tables = Arc::new(DoubleShareTables::new(id, num_parties, threshold));
 
@@ -179,9 +185,9 @@ impl<F: PrimeField> ShamirRng<F> {
         })
     }
 
-    // For DN07 we generate t+1 double shares at once, for Atlas it is n
+    // For DN07 we generate n-t double shares at once, for Atlas it is n
     pub fn get_size_per_batch(&self) -> usize {
-        self.threshold + 1
+        self.num_parties - self.threshold
     }
 
     /// Create a forked [`ShamirRng`] that consumes `amount` number of corr rand pairs from its parent
@@ -260,8 +266,8 @@ impl<F: PrimeField> ShamirRng<F> {
 
     /// Generates `amount` batches of t+1 random double shares each and appends them to the buffers.
     ///
-    /// We use DN07 to generate t+1 double shares from the randomness of the n parties.
-    /// With Atlas we would be able to expand this to n double shares, but only t+1 of them would be uniformly random.
+    /// We use DN07 to generate n-t double shares from the randomness of the n parties.
+    /// With Atlas we would be able to expand this to n double shares, but only n-t of them would be uniformly random.
     /// Thus, with Atlas we would have to rotate the King server during multiplication.
     pub(super) fn buffer_triples<N: Network>(
         &mut self,
@@ -283,7 +289,7 @@ impl<F: PrimeField> ShamirRng<F> {
     }
 
     /// Every party deals `amount` random double sharings (a degree-t and a degree-2t sharing of
-    /// the same random secret), which are then combined to `amount` * (t+1) double sharings with
+    /// the same random secret), which are then combined to `amount` * (n-t) double sharings with
     /// the Vandermonde matrix.
     ///
     /// In the degree-t sharing of a dealer the shares of the next t+1 parties are derived from
@@ -294,7 +300,10 @@ impl<F: PrimeField> ShamirRng<F> {
         let id = self.id;
         let n = self.num_parties;
         let t = self.threshold;
-        let size = t + 1;
+        // The number of double shares per batch
+        let size = n - t;
+        // The number of seeded shares in a degree-t sharing
+        let num_seeded_t = t + 1;
         // The number of parties to which I need to send shares / from which I receive shares
         let num_sent_t = n - t - 2;
         let num_sent_2t = n - 2 * t - 1;
@@ -320,65 +329,66 @@ impl<F: PrimeField> ShamirRng<F> {
 
         // Deals my sharings for one chunk of batches and already accumulates all shares I know
         // without communication (my own and the seeded ones) into the result.
-        let deal_chunk =
-            |chunk: usize, r_t: &mut [F], r_2t: &mut [F], send_t: &mut [F], send_2t: &mut [F]| {
-                let streams = |offsets: std::ops::RangeInclusive<usize>, double_degree: bool| {
-                    let dealt = offsets
-                        .clone()
-                        .map(|i| {
-                            let receiver = (id + i) % n;
-                            share_stream(&keys[receiver], id, receiver, double_degree, chunk)
-                        })
-                        .collect::<Vec<_>>();
-                    let received = offsets
-                        .map(|i| {
-                            let dealer = (id + n - i) % n;
-                            let rng = share_stream(&keys[dealer], dealer, id, double_degree, chunk);
-                            (rng, tables.vandermonde_col(dealer, t))
-                        })
-                        .collect::<Vec<_>>();
-                    (dealt, received)
-                };
-                let (mut dealt_t, mut received_t) = streams(1..=t + 1, false);
-                let (mut dealt_2t, mut received_2t) = streams(1..=2 * t, true);
-                let my_col = tables.vandermonde_col(id, t);
-
-                let mut send_t = send_t.iter_mut();
-                let mut send_2t = send_2t.iter_mut();
-                let mut points = vec![F::zero(); 2 * t + 1];
-                for (r_t, r_2t) in r_t.chunks_exact_mut(size).zip(r_2t.chunks_exact_mut(size)) {
-                    // The degree-t sharing
-                    let seeded = &mut points[..size];
-                    for (share, rng) in seeded.iter_mut().zip(dealt_t.iter_mut()) {
-                        *share = F::rand(rng);
-                    }
-                    let secret = dot(&tables.t_secret, seeded);
-                    add_scaled_col(r_t, my_col, dot(&tables.t_mine, seeded));
-                    // The coefficients must be the first iterator, otherwise an exhausted zip
-                    // would consume a share of the next batch
-                    for (coeffs, share) in tables.t_send.chunks_exact(size).zip(&mut send_t) {
-                        *share = dot(coeffs, seeded);
-                    }
-                    for (rng, col) in received_t.iter_mut() {
-                        add_scaled_col(r_t, col, F::rand(rng));
-                    }
-
-                    // The degree-2t sharing of the same secret
-                    points[0] = secret;
-                    for (share, rng) in points[1..].iter_mut().zip(dealt_2t.iter_mut()) {
-                        *share = F::rand(rng);
-                    }
-                    add_scaled_col(r_2t, my_col, dot(&tables.two_t_mine, &points));
-                    for (coeffs, share) in
-                        tables.two_t_send.chunks_exact(2 * t + 1).zip(&mut send_2t)
-                    {
-                        *share = dot(coeffs, &points);
-                    }
-                    for (rng, col) in received_2t.iter_mut() {
-                        add_scaled_col(r_2t, col, F::rand(rng));
-                    }
-                }
+        let deal_chunk = |chunk: usize,
+                          r_t: &mut [F],
+                          r_2t: &mut [F],
+                          send_t: &mut [F],
+                          send_2t: &mut [F]| {
+            let streams = |offsets: std::ops::RangeInclusive<usize>, double_degree: bool| {
+                let dealt = offsets
+                    .clone()
+                    .map(|i| {
+                        let receiver = (id + i) % n;
+                        share_stream(&keys[receiver], id, receiver, double_degree, chunk)
+                    })
+                    .collect::<Vec<_>>();
+                let received = offsets
+                    .map(|i| {
+                        let dealer = (id + n - i) % n;
+                        let rng = share_stream(&keys[dealer], dealer, id, double_degree, chunk);
+                        (rng, tables.vandermonde_col(dealer))
+                    })
+                    .collect::<Vec<_>>();
+                (dealt, received)
             };
+            let (mut dealt_t, mut received_t) = streams(1..=t + 1, false);
+            let (mut dealt_2t, mut received_2t) = streams(1..=2 * t, true);
+            let my_col = tables.vandermonde_col(id);
+
+            let mut send_t = send_t.iter_mut();
+            let mut send_2t = send_2t.iter_mut();
+            let mut points = vec![F::zero(); 2 * t + 1];
+            for (r_t, r_2t) in r_t.chunks_exact_mut(size).zip(r_2t.chunks_exact_mut(size)) {
+                // The degree-t sharing
+                let seeded = &mut points[..num_seeded_t];
+                for (share, rng) in seeded.iter_mut().zip(dealt_t.iter_mut()) {
+                    *share = F::rand(rng);
+                }
+                let secret = dot(&tables.t_secret, seeded);
+                add_scaled_col(r_t, my_col, dot(&tables.t_mine, seeded));
+                // The coefficients must be the first iterator, otherwise an exhausted zip
+                // would consume a share of the next batch
+                for (coeffs, share) in tables.t_send.chunks_exact(num_seeded_t).zip(&mut send_t) {
+                    *share = dot(coeffs, seeded);
+                }
+                for (rng, col) in received_t.iter_mut() {
+                    add_scaled_col(r_t, col, F::rand(rng));
+                }
+
+                // The degree-2t sharing of the same secret
+                points[0] = secret;
+                for (share, rng) in points[1..].iter_mut().zip(dealt_2t.iter_mut()) {
+                    *share = F::rand(rng);
+                }
+                add_scaled_col(r_2t, my_col, dot(&tables.two_t_mine, &points));
+                for (coeffs, share) in tables.two_t_send.chunks_exact(2 * t + 1).zip(&mut send_2t) {
+                    *share = dot(coeffs, &points);
+                }
+                for (rng, col) in received_2t.iter_mut() {
+                    add_scaled_col(r_2t, col, F::rand(rng));
+                }
+            }
+        };
 
         // Split the buffers into the chunks, which are independent of each other
         let num_chunks = amount.div_ceil(BATCHES_PER_CHUNK);
@@ -417,23 +427,21 @@ impl<F: PrimeField> ShamirRng<F> {
         }
         drop((send_t, send_2t));
 
-        // Receive the remaining shares and accumulate them
-        for i in 0..num_sent_t {
-            let dealer = (id + n - (t + 2 + i)) % n;
-            let col = tables.vandermonde_col(dealer, t);
-            let data = net.recv(dealer)?;
-            for_each_received(&data, r_t, size, |acc, share| {
-                add_scaled_col(acc, col, share)
-            })?;
-        }
-        for i in 0..num_sent_2t {
-            let dealer = (id + n - (2 * t + 1 + i)) % n;
-            let col = tables.vandermonde_col(dealer, t);
-            let data = net.recv(dealer)?;
-            for_each_received(&data, r_2t, size, |acc, share| {
-                add_scaled_col(acc, col, share)
-            })?;
-        }
+        // Receive the remaining shares and accumulate them, all dealers of a degree in one pass
+        let receive = |seeded: usize, num_received: usize, acc: &mut [F]| -> eyre::Result<()> {
+            let dealers = (0..num_received)
+                .map(|i| (id + n - (seeded + 1 + i)) % n)
+                .collect::<Vec<_>>();
+            let received = dealers
+                .iter()
+                .map(|dealer| net.recv(*dealer))
+                .collect::<eyre::Result<Vec<_>>>()?;
+            for_each_received(&received, acc, size, |acc, msg, share| {
+                add_scaled_col(acc, tables.vandermonde_col(dealers[msg]), share)
+            })
+        };
+        receive(t + 1, num_sent_t, r_t)?;
+        receive(2 * t, num_sent_2t, r_2t)?;
 
         Ok(())
     }

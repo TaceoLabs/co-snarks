@@ -204,10 +204,7 @@ where
         let len = arr.len();
         debug_assert_eq!(len % chunk_size, 0);
 
-        let mut r = Vec::with_capacity(len + 1);
-        for _ in 0..=len {
-            r.push(state.rand(net)?);
-        }
+        let r = state.rand_vec(net, len + 1)?;
         let r_inv = arithmetic::inv_vec(&r, net, state)?;
         // each chunk is unblinded with the inverse of its own first mask
         let r_inv0 = (0..len)
