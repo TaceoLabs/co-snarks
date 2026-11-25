@@ -6,15 +6,96 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
-use itertools::izip;
 use mpc_net::Network;
+use rayon::prelude::*;
 
-use super::{
-    ShamirPointShare, ShamirPrimeFieldShare, ShamirState, evaluate_poly, evaluate_poly_point,
-    poly_with_zeros_from_precomputed, poly_with_zeros_from_precomputed_point,
-};
+use super::{ShamirPointShare, ShamirPrimeFieldShare, ShamirState};
 
 const KING_ID: usize = 0;
+
+/// Vectors with fewer elements are processed on the calling thread, and larger vectors are
+/// split into pieces of at least this size. The work per element is only a few field
+/// operations, so smaller pieces are not worth the coordination with the thread pool.
+pub(super) const MIN_PAR_LEN: usize = 4096;
+
+/// The number of bytes used to encode the length of a serialized vector.
+const LEN_PREFIX: usize = std::mem::size_of::<u64>();
+
+/// Serializes the `len` field elements produced by `element`, using multiple threads if there
+/// are enough elements. The result is the uncompressed serialization of a `Vec<F>`.
+pub(super) fn serialize_field_elements<F: PrimeField>(
+    len: usize,
+    element: impl Fn(usize) -> F + Sync,
+) -> eyre::Result<Bytes> {
+    let elem_size = F::zero().uncompressed_size();
+    let mut data = vec![0u8; LEN_PREFIX + len * elem_size];
+    let (prefix, payload) = data.split_at_mut(LEN_PREFIX);
+    prefix.copy_from_slice(&(len as u64).to_le_bytes());
+
+    let serialize = |(i, chunk): (usize, &mut [u8])| element(i).serialize_uncompressed(chunk);
+    if len < MIN_PAR_LEN {
+        payload
+            .chunks_exact_mut(elem_size)
+            .enumerate()
+            .try_for_each(serialize)?;
+    } else {
+        payload
+            .par_chunks_exact_mut(elem_size)
+            .enumerate()
+            .with_min_len(MIN_PAR_LEN)
+            .try_for_each(serialize)?;
+    }
+    Ok(Bytes::from(data))
+}
+
+/// Deserializes a received `Vec<F>` and calls `f` with each element together with the
+/// corresponding `stride` elements of `out`, using multiple threads if there are enough elements.
+/// Fails if `data` does not contain exactly one field element per `stride` elements of `out`.
+pub(super) fn for_each_received<F: PrimeField, T: Send>(
+    data: &[u8],
+    out: &mut [T],
+    stride: usize,
+    f: impl Fn(&mut [T], F) + Sync,
+) -> eyre::Result<()> {
+    debug_assert_eq!(out.len() % stride, 0);
+    let len = out.len() / stride;
+    let elem_size = F::zero().uncompressed_size();
+    let valid = data.len() == LEN_PREFIX + len * elem_size
+        && data[..LEN_PREFIX] == (len as u64).to_le_bytes();
+    if !valid {
+        eyre::bail!("Invalid number of elements received");
+    }
+    let payload = &data[LEN_PREFIX..];
+
+    let process = |(out, elem): (&mut [T], &[u8])| {
+        F::deserialize_uncompressed_unchecked(elem).map(|elem| f(out, elem))
+    };
+    if len < MIN_PAR_LEN {
+        out.chunks_exact_mut(stride)
+            .zip(payload.chunks_exact(elem_size))
+            .try_for_each(process)?;
+    } else {
+        out.par_chunks_exact_mut(stride)
+            .zip(payload.par_chunks_exact(elem_size))
+            .with_min_len(MIN_PAR_LEN)
+            .try_for_each(process)?;
+    }
+    Ok(())
+}
+
+/// Calls `f` for each element of `values` together with its index, using multiple threads if
+/// there are enough elements.
+pub(super) fn for_each_indexed<T: Send>(values: &mut [T], f: impl Fn(usize, &mut T) + Sync) {
+    if values.len() < MIN_PAR_LEN {
+        values.iter_mut().enumerate().for_each(|(i, v)| f(i, v));
+    } else {
+        values
+            .par_iter_mut()
+            .enumerate()
+            .with_min_len(MIN_PAR_LEN)
+            .for_each(|(i, v)| f(i, v));
+    }
+}
 
 /// A extension trait that Shamir specific methods to [`Network`].
 pub trait ShamirNetworkExt: Network {
@@ -66,7 +147,7 @@ pub trait ShamirNetworkExt: Network {
         // Serialize
         let size = data.serialized_size(ark_serialize::Compress::No);
         let mut ser_data = Vec::with_capacity(size);
-        data.to_owned().serialize_uncompressed(&mut ser_data)?;
+        data.serialize_uncompressed(&mut ser_data)?;
 
         // Send (convert once; `clone` on `Bytes` is a refcount bump, not a copy)
         let ser_data = Bytes::from(ser_data);
@@ -103,7 +184,7 @@ pub trait ShamirNetworkExt: Network {
         // Serialize
         let size = data.serialized_size(ark_serialize::Compress::No);
         let mut ser_data = Vec::with_capacity(size);
-        data.to_owned().serialize_uncompressed(&mut ser_data)?;
+        data.serialize_uncompressed(&mut ser_data)?;
 
         // Send (convert once; `clone` on `Bytes` is a refcount bump, not a copy)
         let ser_data = Bytes::from(ser_data);
@@ -159,85 +240,56 @@ pub trait ShamirNetworkExt: Network {
         let num_non_zero = state.num_parties - state.threshold;
 
         let len = inputs.len();
-        let mut r_ts = Vec::with_capacity(len);
+        let (mut my_shares, r_2ts) = state.get_pairs(self, len)?;
+        for_each_indexed(&mut inputs, |i, inp| *inp += r_2ts[i]);
+        drop(r_2ts);
 
-        for inp in inputs.iter_mut() {
-            let (r_t, r_2t) = state.get_pair(self)?;
-            *inp += r_2t;
-            r_ts.push(r_t);
-        }
-
+        // my_shares holds r_t at this point, which is subtracted from the fresh shares
         let my_id = self.id();
-        let mut my_shares = if my_id == KING_ID {
+        if my_id == KING_ID {
             // Accumulate the result
-            let mut acc = vec![F::zero(); len];
+            let mut acc = inputs;
+            let lagrange = state.mul_lagrange_2t[KING_ID];
+            for_each_indexed(&mut acc, |_, acc| *acc *= lagrange);
             for (other_id, lagrange) in state.mul_lagrange_2t.iter().enumerate() {
                 if other_id == KING_ID {
-                    for (acc, muls) in izip!(&mut acc, &inputs) {
-                        *acc += *muls * lagrange;
-                    }
-                } else {
-                    let r = self.recv_many::<F>(other_id)?;
-                    if r.len() != len {
-                        eyre::bail!(
-                            "During execution of degree_reduce_vec in MPC: Invalid number of elements received"
-                        );
-                    }
-                    for (acc, muls) in izip!(&mut acc, r) {
-                        *acc += muls * lagrange;
-                    }
+                    continue;
                 }
+                let data = self.recv(other_id)?;
+                for_each_received(&data, &mut acc, 1, |acc, mul: F| acc[0] += mul * lagrange)?;
             }
             // So far parties who do not require sending, do not send, so no receive here
 
             // Send fresh shares
             // Since <acc> does not have to be private, we share it as a known polynomial, such that t parties know their share is 0. Consequently we can reduce the amount of communication.
+            // The polynomial is acc times a fixed polynomial, thus each share is acc times a precomputed coefficient.
             // Note: When expanding t+1 double shares to n double shares (Atlas) we cannot do this anymore, since <acc> needs to stay private. Atlas also requires rotating the King server.
-
-            let mut polys = Vec::with_capacity(acc.len());
-            for acc in acc {
-                let poly = poly_with_zeros_from_precomputed(
-                    &acc,
-                    state.mul_reconstruct_with_zeros.to_owned(),
-                );
-                polys.push(poly);
-            }
-
-            let mut my_share = Vec::new();
-            for id in 0..num_non_zero {
-                let id_f = F::from(id as u64 + 1);
-                let vals = polys
-                    .iter()
-                    .map(|poly| evaluate_poly(poly, id_f))
-                    .collect::<Vec<_>>();
-                if id == my_id {
-                    my_share = vals;
-                } else {
-                    self.send_many(id, &vals)?;
+            for (id, coeff) in state.mul_king_share_coeffs.iter().enumerate() {
+                debug_assert!(id < num_non_zero);
+                if id != KING_ID {
+                    let data = serialize_field_elements(len, |i| acc[i] * coeff)?;
+                    self.send(id, data)?;
                 }
             }
-            my_share
+            let coeff = state.mul_king_share_coeffs[KING_ID];
+            for_each_indexed(&mut my_shares, |i, share| *share = acc[i] * coeff - *share);
         } else {
             if my_id <= state.threshold * 2 {
                 // Only send if my items are required
-                self.send_many(KING_ID, &inputs)?;
+                let data = serialize_field_elements(len, |i| inputs[i])?;
+                self.send(KING_ID, data)?;
             }
+            drop(inputs);
             if my_id < num_non_zero {
-                let r = self.recv_many::<F>(KING_ID)?;
-                if r.len() != len {
-                    eyre::bail!(
-                        "During execution of degree_reduce_vec in MPC: Invalid number of elements received"
-                    );
-                }
-                r
+                let data = self.recv(KING_ID)?;
+                for_each_received(&data, &mut my_shares, 1, |share, fresh: F| {
+                    share[0] = fresh - share[0]
+                })?;
             } else {
-                vec![F::zero(); len]
+                for_each_indexed(&mut my_shares, |_, share| *share = -*share);
             }
-        };
-
-        for (share, r) in izip!(&mut my_shares, r_ts) {
-            *share -= r;
         }
+
         Ok(ShamirPrimeFieldShare::convert_vec_rev(my_shares))
     }
 
@@ -279,12 +331,11 @@ pub trait ShamirNetworkExt: Network {
             // Since <acc> does not have to be private, we share it as a known polynomial, such that t parties know their share is 0. Consequently we can reduce the amount of communication.
             // Note: When expanding t+1 double shares to n double shares (Atlas) we cannot do this anymore, since <acc> needs to stay private. Atlas also requires rotating the King server.
 
-            let poly =
-                poly_with_zeros_from_precomputed_point(&acc, &state.mul_reconstruct_with_zeros);
-
+            // The polynomial is acc times a fixed polynomial, thus each share is acc times a precomputed coefficient.
             let mut my_share = C::default();
-            for id in 0..num_non_zero {
-                let val = evaluate_poly_point(&poly, C::ScalarField::from(id as u64 + 1));
+            for (id, coeff) in state.mul_king_share_coeffs.iter().enumerate() {
+                debug_assert!(id < num_non_zero);
+                let val = acc * coeff;
                 if id == my_id {
                     my_share = val;
                 } else {

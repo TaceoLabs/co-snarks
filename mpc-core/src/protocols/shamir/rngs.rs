@@ -1,23 +1,149 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, sync::Arc};
 
 use ark_ff::PrimeField;
-use itertools::{Itertools, izip};
 use mpc_net::Network;
+use rayon::prelude::*;
 
-use crate::{RngType, protocols::shamir::interpolate_poly_from_precomputed};
+use crate::RngType;
 use rand::{Rng, SeedableRng};
 
-use super::{evaluate_poly, network::ShamirNetworkExt, precompute_interpolation_polys};
+use super::network::{ShamirNetworkExt, for_each_received, serialize_field_elements};
+
+type SeedType = [u8; crate::SEED_SIZE];
+
+/// The number of batches (of t+1 double shares each) that are generated per unit of parallel work.
+const BATCHES_PER_CHUNK: usize = 256;
+
+/// Everything that is needed to deal and combine the double sharings, precomputed once.
+///
+/// As a dealer, a party never interpolates its sharing polynomials. The shares of the other
+/// parties, which are not derived from a shared seed, are linear combinations of the seeded
+/// shares, so we precompute the corresponding Lagrange basis evaluations.
+struct DoubleShareTables<F> {
+    /// Maps the t+1 seeded shares of a degree-t sharing to its secret.
+    t_secret: Vec<F>,
+    /// Maps the t+1 seeded shares of a degree-t sharing to my own share.
+    t_mine: Vec<F>,
+    /// Maps the t+1 seeded shares of a degree-t sharing to the shares of the parties which
+    /// do not share a seeded share with me. One row of t+1 elements per such party.
+    t_send: Vec<F>,
+    /// Maps the secret and the 2t seeded shares of a degree-2t sharing to my own share.
+    two_t_mine: Vec<F>,
+    /// Same as `t_send`, but for the degree-2t sharing. One row of 2t+1 elements per party.
+    two_t_send: Vec<F>,
+    /// The (t+1 x n) Vandermonde matrix used by DN07, stored column by column:
+    /// [1, 1  , 1  , 1  , ..., 1  ]
+    /// [1, 2  , 3  , 4  , ..., n  ]
+    /// [1, 2^2, 3^2, 4^2, ..., n^2]
+    /// ...
+    /// [1, 2^t, 3^t, 4^t, ..., n^t]
+    vandermonde: Vec<F>,
+}
+
+impl<F: PrimeField> DoubleShareTables<F> {
+    fn new(id: usize, num_parties: usize, threshold: usize) -> Self {
+        let x_of = |offset: usize| (id + offset) % num_parties + 1;
+
+        // In the degree-t sharing the shares of the next t+1 parties are seeded
+        let points_t = (1..=threshold + 1).map(x_of).collect::<Vec<_>>();
+        // In the degree-2t sharing the secret is fixed and the shares of the next 2t parties are seeded
+        let points_2t = std::iter::once(0)
+            .chain((1..=2 * threshold).map(x_of))
+            .collect::<Vec<_>>();
+
+        let t_send = (threshold + 2..num_parties)
+            .flat_map(|offset| lagrange_basis_at(&points_t, x_of(offset)))
+            .collect();
+        let two_t_send = (2 * threshold + 1..num_parties)
+            .flat_map(|offset| lagrange_basis_at(&points_2t, x_of(offset)))
+            .collect();
+
+        let mut vandermonde = Vec::with_capacity(num_parties * (threshold + 1));
+        for col in 1..=num_parties as u64 {
+            let x = F::from(col);
+            let mut pow = F::one();
+            for _ in 0..=threshold {
+                vandermonde.push(pow);
+                pow *= x;
+            }
+        }
+
+        Self {
+            t_secret: lagrange_basis_at(&points_t, 0),
+            t_mine: lagrange_basis_at(&points_t, id + 1),
+            t_send,
+            two_t_mine: lagrange_basis_at(&points_2t, id + 1),
+            two_t_send,
+            vandermonde,
+        }
+    }
+
+    /// The column of the Vandermonde matrix which belongs to the sharing dealt by `party`.
+    fn vandermonde_col(&self, party: usize, threshold: usize) -> &[F] {
+        &self.vandermonde[party * (threshold + 1)..(party + 1) * (threshold + 1)]
+    }
+}
+
+/// Evaluates the Lagrange basis polynomials for the interpolation points `points` at `x`.
+fn lagrange_basis_at<F: PrimeField>(points: &[usize], x: usize) -> Vec<F> {
+    let x = F::from(x as u64);
+    points
+        .iter()
+        .map(|i| {
+            let i_f = F::from(*i as u64);
+            let mut num = F::one();
+            let mut den = F::one();
+            for j in points.iter().filter(|j| *j != i) {
+                let j_f = F::from(*j as u64);
+                num *= x - j_f;
+                den *= i_f - j_f;
+            }
+            num * den.inverse().expect("Interpolation points are distinct")
+        })
+        .collect()
+}
+
+#[inline(always)]
+fn dot<F: PrimeField>(a: &[F], b: &[F]) -> F {
+    debug_assert_eq!(a.len(), b.len());
+    a.iter().zip(b.iter()).map(|(a, b)| *a * b).sum()
+}
+
+/// Adds `val` times the Vandermonde column `col` to `acc`.
+#[inline(always)]
+fn add_scaled_col<F: PrimeField>(acc: &mut [F], col: &[F], val: F) {
+    debug_assert_eq!(acc.len(), col.len());
+    // The first row of the Vandermonde matrix is all ones
+    acc[0] += val;
+    for (acc, cell) in acc[1..].iter_mut().zip(col[1..].iter()) {
+        *acc += val * cell;
+    }
+}
+
+/// The randomness stream for the shares which `dealer` deals to `receiver`, restricted to the
+/// given chunk of batches. All streams derived from one key are independent, which allows
+/// both involved parties to generate them in any order and in parallel.
+fn share_stream(
+    key: &SeedType,
+    dealer: usize,
+    receiver: usize,
+    double_degree: bool,
+    chunk: usize,
+) -> RngType {
+    let direction = u64::from(dealer > receiver);
+    let domain = (u64::from(double_degree) << 1) | direction;
+    let mut rng = RngType::from_seed(*key);
+    rng.set_stream((domain << 62) | chunk as u64);
+    rng
+}
 
 pub(super) struct ShamirRng<F> {
     pub(super) id: usize,
     pub(super) rng: RngType,
     pub(super) threshold: usize,
     pub(super) num_parties: usize,
-    precomputed_interpolation_r_t: Vec<Vec<F>>,
-    precomputed_interpolation_r_2t: Vec<Vec<F>>,
+    tables: Arc<DoubleShareTables<F>>,
     pub(super) shared_rngs: Vec<RngType>,
-    pub(super) matrix: Vec<Vec<F>>,
     pub(super) r_t: Vec<F>,
     pub(super) r_2t: Vec<F>,
 }
@@ -29,27 +155,17 @@ impl<F: PrimeField> ShamirRng<F> {
         threshold: usize,
         net: &N,
     ) -> eyre::Result<Self> {
+        if num_parties < threshold + 2 {
+            eyre::bail!("Too few parties for the given threshold")
+        }
         let mut rng = RngType::from_seed(seed);
 
         let shared_rngs = Self::get_shared_rngs(net, num_parties, &mut rng)?;
 
         // We use the DN07 Vandermonde matrix to create t+1 random double shares at once.
         // We do not use Atlas to create n shares at once, since only t+1 out of n shares would be uniformly random, thus the King server during multiplication would have to be rotated.
-
-        // let atlas_dn_matrix = Self::generate_atlas_dn_matrix(num_parties, threshold);
-        let matrix = Self::create_vandermonde_matrix(num_parties, threshold);
-
         let id = net.id();
-        let mut ids = Vec::with_capacity(threshold + 1);
-        for i in 1..=threshold + 1 {
-            let id_ = (id + i) % num_parties + 1;
-            ids.push(id_);
-        }
-        let precomputed_interpolation_r_t = precompute_interpolation_polys::<F>(&ids);
-
-        // let p_r_t = Self::precompute_interpolation_polys(id, threshold + 1, num_parties);
-        let precomputed_interpolation_r_2t =
-            Self::precompute_interpolation_polys(id, threshold * 2, num_parties);
+        let tables = Arc::new(DoubleShareTables::new(id, num_parties, threshold));
 
         Ok(Self {
             id,
@@ -57,9 +173,7 @@ impl<F: PrimeField> ShamirRng<F> {
             threshold,
             num_parties,
             shared_rngs,
-            precomputed_interpolation_r_t,
-            precomputed_interpolation_r_2t,
-            matrix,
+            tables,
             r_t: Vec::new(),
             r_2t: Vec::new(),
         })
@@ -67,7 +181,7 @@ impl<F: PrimeField> ShamirRng<F> {
 
     // For DN07 we generate t+1 double shares at once, for Atlas it is n
     pub fn get_size_per_batch(&self) -> usize {
-        self.matrix.len()
+        self.threshold + 1
     }
 
     /// Create a forked [`ShamirRng`] that consumes `amount` number of corr rand pairs from its parent
@@ -86,10 +200,8 @@ impl<F: PrimeField> ShamirRng<F> {
             rng,
             threshold: self.threshold,
             num_parties: self.num_parties,
-            precomputed_interpolation_r_t: self.precomputed_interpolation_r_t.clone(),
-            precomputed_interpolation_r_2t: self.precomputed_interpolation_r_2t.clone(),
+            tables: Arc::clone(&self.tables),
             shared_rngs,
-            matrix: self.matrix.clone(),
             r_t: self.r_t.drain(..amount).collect(),
             r_2t: self.r_2t.drain(..amount).collect(),
         }
@@ -100,7 +212,6 @@ impl<F: PrimeField> ShamirRng<F> {
         num_parties: usize,
         rng: &mut RngType,
     ) -> eyre::Result<Vec<RngType>> {
-        type SeedType = [u8; crate::SEED_SIZE];
         let id = net.id();
 
         let mut rngs = Vec::with_capacity(num_parties - 1);
@@ -138,69 +249,6 @@ impl<F: PrimeField> ShamirRng<F> {
         Ok(rngs)
     }
 
-    // We use the following (t+1 x n) Vandermonde matrix for DN07:
-    // [1, 1  , 1  , 1  , ..., 1  ]
-    // [1, 2  , 3  , 4  , ..., n  ]
-    // [1, 2^2, 3^2, 4^2, ..., n^2]
-    // ...
-    // [1, 2^t, 3^t, 4^t, ..., n^t]
-    fn create_vandermonde_matrix(num_parties: usize, threshold: usize) -> Vec<Vec<F>> {
-        let mut result = Vec::with_capacity(threshold + 1);
-        let first_row = vec![F::one(); num_parties];
-        result.push(first_row);
-        for row in 1..=threshold {
-            let tmp = (1..=num_parties as u64)
-                .map(|col| F::from(col).pow([row as u64]))
-                .collect::<Vec<_>>();
-            result.push(tmp);
-        }
-        result
-    }
-
-    // We use the following (t+1 x n) Vandermonde matrix for DN07:
-    // [1, 1  , 1  , 1  , ..., 1  ]
-    // [1, 2  , 3  , 4  , ..., n  ]
-    // [1, 2^2, 3^2, 4^2, ..., n^2]
-    // ...
-    // [1, 2^t, 3^t, 4^t, ..., n^t]
-
-    // We use the following (n x t+1) Vandermonde matrix for Atlas:
-    // [1, 1  , 1  , 1  , ..., 1  ]
-    // [1, 2  , 3  , 4  , ..., t  ]
-    // [1, 2^2, 3^2, 4^2, ..., t^2]
-    // ...
-    // [1, 2^n, 3^n, 4^n, ..., t^n]
-
-    // This gives the resulting (n x n) matrix = Atlas x DN07: Each cell (row, col) has the value: sum_{i=0}^{t} (i + 1) ^ row * (col + 1) ^ i
-    #[expect(dead_code)]
-    fn generate_atlas_dn_matrix(num_parties: usize, threshold: usize) -> Vec<Vec<F>> {
-        let mut result = Vec::with_capacity(num_parties);
-        for row in 0..num_parties {
-            let mut row_result = Vec::with_capacity(num_parties);
-            for col in 0..num_parties {
-                let mut val = F::zero();
-                for i in 0..=threshold {
-                    val += F::from(i as u64 + 1).pow([row as u64])
-                        * F::from(col as u64 + 1).pow([i as u64]);
-                }
-                row_result.push(val);
-            }
-            result.push(row_result);
-        }
-
-        result
-    }
-
-    fn matmul(mat: &[Vec<F>], inp: &[F], outp: &mut [F]) {
-        debug_assert_eq!(outp.len(), mat.len());
-        for (res, row) in outp.iter_mut().zip(mat.iter()) {
-            debug_assert_eq!(row.len(), inp.len());
-            for (v, cell) in inp.iter().cloned().zip(row.iter()) {
-                *res += v * cell;
-            }
-        }
-    }
-
     // get shared_rng_mut
     fn get_rng_mut(&mut self, other_id: usize) -> &mut RngType {
         match other_id.cmp(&self.id) {
@@ -210,219 +258,182 @@ impl<F: PrimeField> ShamirRng<F> {
         }
     }
 
-    fn receive_seeded_prev(&mut self, degree: usize, output: &mut [Vec<F>]) {
-        for i in 1..=degree {
-            let send_id = (self.id + self.num_parties - i) % self.num_parties;
-            if send_id > self.id {
-                continue;
-            }
-            let rng = self.get_rng_mut(send_id);
-            for r in output.iter_mut() {
-                r[send_id] = F::rand(rng);
-            }
-        }
-    }
-
-    fn receive_seeded_next(&mut self, degree: usize, output: &mut [Vec<F>]) {
-        for i in 1..=degree {
-            let send_id = (self.id + self.num_parties - i) % self.num_parties;
-            if send_id < self.id {
-                continue;
-            }
-            let rng = self.get_rng_mut(send_id);
-            for r in output.iter_mut() {
-                r[send_id] = F::rand(rng);
-            }
-        }
-    }
-
-    fn precompute_interpolation_polys(id: usize, degree: usize, num_parties: usize) -> Vec<Vec<F>> {
-        let mut ids = Vec::with_capacity(degree + 1);
-        ids.push(0); // my randomness acts as the secret
-        for i in 1..=degree {
-            let rcv_id = (id + i) % num_parties;
-            ids.push(rcv_id + 1);
-        }
-        precompute_interpolation_polys::<F>(&ids)
-    }
-
-    fn get_interpolation_polys_from_precomputed<const T: bool>(
-        &mut self,
-        my_rands: &[F],
-        degree: usize,
-    ) -> Vec<Vec<F>> {
-        let amount = my_rands.len();
-        let mut shares = (0..amount)
-            .map(|_| Vec::with_capacity(degree + 1))
-            .collect_vec();
-        // Put secret to first place of shares
-        for (s, r) in shares.iter_mut().zip(my_rands.iter()) {
-            s.push(*r);
-        }
-        for i in 1..=degree {
-            let rcv_id = (self.id + i) % self.num_parties;
-            let rng = self.get_rng_mut(rcv_id);
-            for s in shares.iter_mut() {
-                s.push(F::rand(rng));
-            }
-        }
-
-        let precomputed = if T {
-            &self.precomputed_interpolation_r_t
-        } else {
-            &self.precomputed_interpolation_r_2t
-        };
-        debug_assert_eq!(precomputed.len(), degree + 1);
-
-        // Interpolate polys
-        shares
-            .into_iter()
-            .map(|s| interpolate_poly_from_precomputed::<F>(&s, precomputed))
-            .collect_vec()
-    }
-
-    fn set_my_share(&self, output: &mut [Vec<F>], polys: &[Vec<F>]) {
-        let id_f = F::from(self.id as u64 + 1);
-        for (r, p) in output.iter_mut().zip(polys.iter()) {
-            r[self.id] = evaluate_poly(p, id_f);
-        }
-    }
-
-    fn send_share_of_randomness<N: Network>(
-        &self,
-        seeded: usize,
-        polys: &[Vec<F>],
-        net: &N,
-    ) -> eyre::Result<()> {
-        let sending = self.num_parties - seeded - 1;
-        if sending == 0 {
-            return Ok(());
-        }
-        let mut to_send = vec![F::zero(); polys.len()]; // Allocate buffer only once
-        for i in 1..=sending {
-            let rcv_id = (self.id + i + seeded) % self.num_parties;
-            let rcv_id_f = F::from(rcv_id as u64 + 1);
-            for (des, p) in to_send.iter_mut().zip(polys.iter()) {
-                *des = evaluate_poly(p, rcv_id_f);
-            }
-            net.send_many(rcv_id, &to_send)?;
-        }
-        Ok(())
-    }
-
-    fn receive_share_of_randomness<N: Network>(
-        &self,
-        seeded: usize,
-        output: &mut [Vec<F>],
-        net: &N,
-    ) -> eyre::Result<()> {
-        let receiving = self.num_parties - seeded - 1;
-        if receiving == 0 {
-            return Ok(());
-        }
-        for i in 1..=receiving {
-            let send_id = (self.id + self.num_parties - seeded - i) % self.num_parties;
-            let shares = net.recv_many(send_id)?;
-            for (r, s) in output.iter_mut().zip(shares.iter()) {
-                r[send_id] = *s;
-            }
-        }
-        Ok(())
-    }
-
-    #[expect(clippy::type_complexity)]
-    fn random_double_share<N: Network>(
-        &mut self,
-        amount: usize,
-        net: &N,
-    ) -> eyre::Result<(Vec<Vec<F>>, Vec<Vec<F>>)> {
-        let mut rcv_t = vec![vec![F::default(); self.num_parties]; amount];
-        let mut rcv_2t = vec![vec![F::default(); self.num_parties]; amount];
-
-        // These are the parties for which I act as a receiver using the seeds
-        // Be careful about the order of calling the rngs
-        self.receive_seeded_next(self.threshold + 1, &mut rcv_t);
-
-        // Generate the seeds
-        let mut shares = (0..amount)
-            .map(|_| vec![F::zero(); self.threshold + 1])
-            .collect_vec();
-        for i in 1..=self.threshold + 1 {
-            let rcv_id = (self.id + i) % self.num_parties;
-            let rng = self.get_rng_mut(rcv_id);
-            for s in shares.iter_mut() {
-                s[i - 1] = F::rand(rng);
-            }
-        }
-
-        // Receive the remaining now to clock rngs in the correct order
-        self.receive_seeded_prev(self.threshold + 1, &mut rcv_t);
-
-        // Interpolate polys
-        let polys_t = shares
-            .into_iter()
-            .map(|s| {
-                interpolate_poly_from_precomputed::<F>(&s, &self.precomputed_interpolation_r_t)
-            })
-            .collect_vec();
-
-        // Set my rand on the polynomial and calculate the share
-        let mut rands = Vec::with_capacity(amount);
-        for (r, p) in rcv_t.iter_mut().zip(polys_t.iter()) {
-            r[self.id] = evaluate_poly(p, F::from(self.id as u64 + 1));
-            rands.push(p[0]);
-        }
-
-        // Do the same for rcv_2t (do afterwards due to seeds being used here)
-        // Be careful about the order of calling the rngs
-        self.receive_seeded_next(self.threshold * 2, &mut rcv_2t);
-        let polys_2t =
-            self.get_interpolation_polys_from_precomputed::<false>(&rands, self.threshold * 2);
-        self.receive_seeded_prev(self.threshold * 2, &mut rcv_2t);
-
-        // Set my share
-        self.set_my_share(&mut rcv_2t, &polys_2t);
-
-        // Send the share of my randomness
-        self.send_share_of_randomness(self.threshold + 1, &polys_t, net)?;
-        self.send_share_of_randomness(self.threshold * 2, &polys_2t, net)?;
-
-        // Receive the remaining shares
-        self.receive_share_of_randomness(self.threshold + 1, &mut rcv_t, net)?;
-        self.receive_share_of_randomness(self.threshold * 2, &mut rcv_2t, net)?;
-
-        Ok((rcv_t, rcv_2t))
-    }
-
-    // Generates amount * matrix.len() random double shares
-    // We use DN07 to generate t+1 double shares from the randomness of the n parties.
-    // With Atlas we would be able to expand this to n double shares, but only t+1 of them would be uniformly random.
-    // Thus, with Atlas we would have to rotate the King server during multiplication.
+    /// Generates `amount` batches of t+1 random double shares each and appends them to the buffers.
+    ///
+    /// We use DN07 to generate t+1 double shares from the randomness of the n parties.
+    /// With Atlas we would be able to expand this to n double shares, but only t+1 of them would be uniformly random.
+    /// Thus, with Atlas we would have to rotate the King server during multiplication.
     pub(super) fn buffer_triples<N: Network>(
         &mut self,
         net: &N,
         amount: usize,
     ) -> eyre::Result<()> {
-        let (rcv_rt, rcv_r2t) = self.random_double_share(amount, net)?;
-
-        // reserve buffer
-        let size = self.matrix.len();
-        let mut r_t = vec![F::default(); amount * size];
-        let mut r_2t = vec![F::default(); amount * size];
-
-        // Now make the matrix multiplication
-        let r_t_chunks = r_t.chunks_exact_mut(size);
-        let r_2t_chunks = r_2t.chunks_exact_mut(size);
-
-        for (des, src) in izip!(r_t_chunks, rcv_rt) {
-            Self::matmul(&self.matrix, &src, des);
+        if amount == 0 {
+            return Ok(());
         }
-        for (des, src) in izip!(r_2t_chunks, rcv_r2t) {
-            Self::matmul(&self.matrix, &src, des);
+        let present = self.r_t.len();
+        debug_assert_eq!(self.r_2t.len(), present);
+        let res = self.random_double_shares(net, amount);
+        if res.is_err() {
+            // Do not keep partially computed double shares
+            self.r_t.truncate(present);
+            self.r_2t.truncate(present);
+        }
+        res
+    }
+
+    /// Every party deals `amount` random double sharings (a degree-t and a degree-2t sharing of
+    /// the same random secret), which are then combined to `amount` * (t+1) double sharings with
+    /// the Vandermonde matrix.
+    ///
+    /// In the degree-t sharing of a dealer the shares of the next t+1 parties are derived from
+    /// seeds shared with these parties, which defines the secret and the remaining shares. In
+    /// the degree-2t sharing the shares of the next 2t parties are derived from the seeds.
+    /// Only the remaining shares need to be sent.
+    fn random_double_shares<N: Network>(&mut self, net: &N, amount: usize) -> eyre::Result<()> {
+        let id = self.id;
+        let n = self.num_parties;
+        let t = self.threshold;
+        let size = t + 1;
+        // The number of parties to which I need to send shares / from which I receive shares
+        let num_sent_t = n - t - 2;
+        let num_sent_2t = n - 2 * t - 1;
+
+        // Derive a fresh key from each shared rng. All values of this call are derived from
+        // these keys, each (dealer, receiver, degree, chunk) combination with its own stream.
+        let keys = (0..n)
+            .map(|other| match other == id {
+                true => SeedType::default(), // Never used
+                false => self.get_rng_mut(other).r#gen(),
+            })
+            .collect::<Vec<SeedType>>();
+        let tables = Arc::clone(&self.tables);
+
+        let present = self.r_t.len();
+        self.r_t.resize(present + amount * size, F::zero());
+        self.r_2t.resize(present + amount * size, F::zero());
+        let r_t = &mut self.r_t[present..];
+        let r_2t = &mut self.r_2t[present..];
+        // Stored batch by batch
+        let mut send_t = vec![F::zero(); amount * num_sent_t];
+        let mut send_2t = vec![F::zero(); amount * num_sent_2t];
+
+        // Deals my sharings for one chunk of batches and already accumulates all shares I know
+        // without communication (my own and the seeded ones) into the result.
+        let deal_chunk =
+            |chunk: usize, r_t: &mut [F], r_2t: &mut [F], send_t: &mut [F], send_2t: &mut [F]| {
+                let streams = |offsets: std::ops::RangeInclusive<usize>, double_degree: bool| {
+                    let dealt = offsets
+                        .clone()
+                        .map(|i| {
+                            let receiver = (id + i) % n;
+                            share_stream(&keys[receiver], id, receiver, double_degree, chunk)
+                        })
+                        .collect::<Vec<_>>();
+                    let received = offsets
+                        .map(|i| {
+                            let dealer = (id + n - i) % n;
+                            let rng = share_stream(&keys[dealer], dealer, id, double_degree, chunk);
+                            (rng, tables.vandermonde_col(dealer, t))
+                        })
+                        .collect::<Vec<_>>();
+                    (dealt, received)
+                };
+                let (mut dealt_t, mut received_t) = streams(1..=t + 1, false);
+                let (mut dealt_2t, mut received_2t) = streams(1..=2 * t, true);
+                let my_col = tables.vandermonde_col(id, t);
+
+                let mut send_t = send_t.iter_mut();
+                let mut send_2t = send_2t.iter_mut();
+                let mut points = vec![F::zero(); 2 * t + 1];
+                for (r_t, r_2t) in r_t.chunks_exact_mut(size).zip(r_2t.chunks_exact_mut(size)) {
+                    // The degree-t sharing
+                    let seeded = &mut points[..size];
+                    for (share, rng) in seeded.iter_mut().zip(dealt_t.iter_mut()) {
+                        *share = F::rand(rng);
+                    }
+                    let secret = dot(&tables.t_secret, seeded);
+                    add_scaled_col(r_t, my_col, dot(&tables.t_mine, seeded));
+                    // The coefficients must be the first iterator, otherwise an exhausted zip
+                    // would consume a share of the next batch
+                    for (coeffs, share) in tables.t_send.chunks_exact(size).zip(&mut send_t) {
+                        *share = dot(coeffs, seeded);
+                    }
+                    for (rng, col) in received_t.iter_mut() {
+                        add_scaled_col(r_t, col, F::rand(rng));
+                    }
+
+                    // The degree-2t sharing of the same secret
+                    points[0] = secret;
+                    for (share, rng) in points[1..].iter_mut().zip(dealt_2t.iter_mut()) {
+                        *share = F::rand(rng);
+                    }
+                    add_scaled_col(r_2t, my_col, dot(&tables.two_t_mine, &points));
+                    for (coeffs, share) in
+                        tables.two_t_send.chunks_exact(2 * t + 1).zip(&mut send_2t)
+                    {
+                        *share = dot(coeffs, &points);
+                    }
+                    for (rng, col) in received_2t.iter_mut() {
+                        add_scaled_col(r_2t, col, F::rand(rng));
+                    }
+                }
+            };
+
+        // Split the buffers into the chunks, which are independent of each other
+        let num_chunks = amount.div_ceil(BATCHES_PER_CHUNK);
+        let mut chunks = Vec::with_capacity(num_chunks);
+        let mut rest = (&mut *r_t, &mut *r_2t, &mut send_t[..], &mut send_2t[..]);
+        for chunk in 0..num_chunks {
+            let batches = BATCHES_PER_CHUNK.min(amount - chunk * BATCHES_PER_CHUNK);
+            let (r_t, rest_r_t) = std::mem::take(&mut rest.0).split_at_mut(batches * size);
+            let (r_2t, rest_r_2t) = std::mem::take(&mut rest.1).split_at_mut(batches * size);
+            let (s_t, rest_s_t) = std::mem::take(&mut rest.2).split_at_mut(batches * num_sent_t);
+            let (s_2t, rest_s_2t) = std::mem::take(&mut rest.3).split_at_mut(batches * num_sent_2t);
+            chunks.push((chunk, r_t, r_2t, s_t, s_2t));
+            rest = (rest_r_t, rest_r_2t, rest_s_t, rest_s_2t);
+        }
+        if num_chunks == 1 {
+            // Not worth involving the thread pool
+            for (chunk, r_t, r_2t, s_t, s_2t) in chunks {
+                deal_chunk(chunk, r_t, r_2t, s_t, s_2t);
+            }
+        } else {
+            chunks
+                .into_par_iter()
+                .for_each(|(chunk, r_t, r_2t, s_t, s_2t)| deal_chunk(chunk, r_t, r_2t, s_t, s_2t));
         }
 
-        self.r_t.extend(r_t);
-        self.r_2t.extend(r_2t);
+        // Send the shares of my sharings which are not seeded
+        for i in 0..num_sent_t {
+            let receiver = (id + t + 2 + i) % n;
+            let data = serialize_field_elements(amount, |b| send_t[b * num_sent_t + i])?;
+            net.send(receiver, data)?;
+        }
+        for i in 0..num_sent_2t {
+            let receiver = (id + 2 * t + 1 + i) % n;
+            let data = serialize_field_elements(amount, |b| send_2t[b * num_sent_2t + i])?;
+            net.send(receiver, data)?;
+        }
+        drop((send_t, send_2t));
+
+        // Receive the remaining shares and accumulate them
+        for i in 0..num_sent_t {
+            let dealer = (id + n - (t + 2 + i)) % n;
+            let col = tables.vandermonde_col(dealer, t);
+            let data = net.recv(dealer)?;
+            for_each_received(&data, r_t, size, |acc, share| {
+                add_scaled_col(acc, col, share)
+            })?;
+        }
+        for i in 0..num_sent_2t {
+            let dealer = (id + n - (2 * t + 1 + i)) % n;
+            let col = tables.vandermonde_col(dealer, t);
+            let data = net.recv(dealer)?;
+            for_each_received(&data, r_2t, size, |acc, share| {
+                add_scaled_col(acc, col, share)
+            })?;
+        }
 
         Ok(())
     }
