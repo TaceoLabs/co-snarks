@@ -201,6 +201,26 @@ impl<F: PrimeField> ShamirState<F> {
         self.get_pair(net).map(|(r_t, r_2t)| r_2t - r_t)
     }
 
+    /// Returns this party's shares of `amount` fresh, uniformly random degree-2t sharings of
+    /// zero at once. See [`Self::zero_share_2t`].
+    pub fn zero_shares_2t<N: Network>(&mut self, net: &N, amount: usize) -> eyre::Result<Vec<F>> {
+        let (mut r_t, r_2t) = self.get_pairs(net, amount)?;
+        for (r_t, r_2t) in r_t.iter_mut().zip(r_2t) {
+            *r_t = r_2t - *r_t;
+        }
+        Ok(r_t)
+    }
+
+    /// Generates `amount` random field elements at once and returns them as shares.
+    pub fn rand_vec<N: Network>(
+        &mut self,
+        net: &N,
+        amount: usize,
+    ) -> eyre::Result<Vec<ShamirPrimeFieldShare<F>>> {
+        self.get_pairs(net, amount)
+            .map(|(r, _)| ShamirPrimeFieldShare::convert_vec_rev(r))
+    }
+
     /// Generates a random field element and returns it as a share.
     pub fn rand<N: Network>(&mut self, net: &N) -> eyre::Result<ShamirPrimeFieldShare<F>> {
         self.get_pair(net)

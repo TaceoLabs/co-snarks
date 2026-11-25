@@ -41,10 +41,7 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
         assert_eq!(D, 5);
         let num_sbox = self.num_sbox() * num_poseidon;
 
-        let mut r = Vec::with_capacity(num_sbox);
-        for _ in 0..num_sbox {
-            r.push(state.rand(net)?);
-        }
+        let r = state.rand_vec(net, num_sbox)?;
         let r2 = arithmetic::mul_vec(&r, &r, net, state)?;
         let r4 = arithmetic::mul_vec(&r2, &r2, net, state)?;
 
