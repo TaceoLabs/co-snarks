@@ -416,8 +416,9 @@ where
         matrices: &ConstraintMatrices<P::ScalarField>,
         witness: ShamirSharedWitness<P::ScalarField>,
     ) -> eyre::Result<Proof<P>> {
-        // we need 2 corr rand pairs for the two rand calls
-        let num_pairs = 2;
+        // we need 2 corr rand pairs for the two rand calls and 4 for masking the two
+        // openings of two degree-2t points each
+        let num_pairs = 6;
         let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)?;
         let mut state = ShamirState::from(preprocessing);
         // execute prover in MPC
