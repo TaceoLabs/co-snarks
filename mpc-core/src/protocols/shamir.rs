@@ -86,7 +86,11 @@ impl<F: PrimeField> From<ShamirPreprocessing<F>> for ShamirState<F> {
         // precompute the poly for interpolating a secret with known zero shares
         let num_non_zero = value.num_parties - value.threshold;
         let zero_points = (num_non_zero + 1..=value.num_parties).collect::<Vec<_>>();
-        let mul_reconstruct_with_zeros = interpolation_poly_from_zero_points(&zero_points);
+        let mul_reconstruct_with_zeros = interpolation_poly_from_zero_points::<F>(&zero_points);
+        // The king shares a value v as the polynomial v * mul_reconstruct_with_zeros, so the share of each party is v times a constant
+        let mul_king_share_coeffs = (1..=num_non_zero)
+            .map(|x| evaluate_poly(&mul_reconstruct_with_zeros, F::from(x as u64)))
+            .collect();
 
         ShamirState {
             id,
@@ -95,7 +99,7 @@ impl<F: PrimeField> From<ShamirPreprocessing<F>> for ShamirState<F> {
             open_lagrange_t,
             open_lagrange_2t,
             mul_lagrange_2t,
-            mul_reconstruct_with_zeros,
+            mul_king_share_coeffs,
             rng_buffer: value.rng_buffer,
             generation_amount: Self::DEFAULT_PAIR_GEN_AMOUNT,
         }
@@ -114,7 +118,8 @@ pub struct ShamirState<F: PrimeField> {
     /// The open lagrange coeffs for threshold * 2
     pub open_lagrange_2t: Vec<F>,
     mul_lagrange_2t: Vec<F>,
-    mul_reconstruct_with_zeros: Vec<F>,
+    /// The factors which map a value shared by the king to the shares of the first n-t parties (the shares of the others are 0)
+    mul_king_share_coeffs: Vec<F>,
     rng_buffer: ShamirRng<F>,
     generation_amount: usize,
 }
@@ -139,6 +144,32 @@ impl<F: PrimeField> ShamirState<F> {
         Ok((
             self.rng_buffer.r_t.pop().unwrap(),
             self.rng_buffer.r_2t.pop().unwrap(),
+        ))
+    }
+
+    /// Get `amount` correlated randomness pairs at once. Returns the degree-t shares and the degree-2t shares.
+    pub fn get_pairs<N: Network>(
+        &mut self,
+        net: &N,
+        amount: usize,
+    ) -> eyre::Result<(Vec<F>, Vec<F>)> {
+        let present = self.rng_buffer.r_t.len();
+        debug_assert_eq!(self.rng_buffer.r_2t.len(), present);
+        if present < amount {
+            if self.rng_buffer.num_parties != 3 {
+                // In the 3-party case no communication is required, so we do not print a warning
+                tracing::warn!("Precomputed randomness buffer empty, refilling...");
+            }
+            let missing = (amount - present).div_ceil(self.rng_buffer.get_size_per_batch());
+            self.rng_buffer
+                .buffer_triples(net, missing.max(self.generation_amount))?;
+            self.generation_amount *= 2; // We increase the amount for preprocessing exponentially
+        }
+
+        let remaining = self.rng_buffer.r_t.len() - amount;
+        Ok((
+            self.rng_buffer.r_t.split_off(remaining),
+            self.rng_buffer.r_2t.split_off(remaining),
         ))
     }
 
@@ -192,7 +223,7 @@ impl<F: PrimeField> MpcState for ShamirState<F> {
             open_lagrange_t: self.open_lagrange_t.clone(),
             open_lagrange_2t: self.open_lagrange_2t.clone(),
             mul_lagrange_2t: self.mul_lagrange_2t.clone(),
-            mul_reconstruct_with_zeros: self.mul_reconstruct_with_zeros.clone(),
+            mul_king_share_coeffs: self.mul_king_share_coeffs.clone(),
             rng_buffer: self.rng_buffer.fork_with_pairs(n),
             generation_amount: self.generation_amount,
         })

@@ -7,7 +7,10 @@ use itertools::izip;
 use mpc_net::Network;
 use rayon::prelude::*;
 
-use super::{ShamirPrimeFieldShare, ShamirState, network::ShamirNetworkExt};
+use super::{
+    ShamirPrimeFieldShare, ShamirState,
+    network::{MIN_PAR_LEN, ShamirNetworkExt},
+};
 
 mod ops;
 pub(super) mod types;
@@ -159,9 +162,8 @@ pub fn inv_vec<F: PrimeField, N: Network>(
     net: &N,
     state: &mut ShamirState<F>,
 ) -> eyre::Result<Vec<ShamirShare<F>>> {
-    let r = (0..a.len())
-        .map(|_| state.rand(net))
-        .collect::<eyre::Result<Vec<_>>>()?;
+    let (r, _) = state.get_pairs(net, a.len())?;
+    let r = ShamirShare::convert_vec_rev(r);
     let y = mul_open_vec(a, &r, net, state)?;
     if y.iter().any(|y| y.is_zero()) {
         eyre::bail!("Cannot compute inverse of zero");
@@ -196,19 +198,35 @@ pub fn open_vec<F: PrimeField, N: Network>(
     let a_a = ShamirShare::convert_slice(a);
 
     let rcv = net.broadcast_next(state.num_parties, state.threshold + 1, a_a.to_owned())?;
+    reconstruct_vec(a.len(), &rcv, &state.open_lagrange_t)
+}
 
-    let mut transposed = vec![vec![F::zero(); state.threshold + 1]; a.len()];
-
-    for (j, r) in rcv.into_iter().enumerate() {
-        for (i, val) in r.into_iter().enumerate() {
-            transposed[i][j] = val;
-        }
+/// Reconstructs `len` values, where `shares[j]` are all shares which belong to `lagrange[j]`.
+fn reconstruct_vec<F: PrimeField>(
+    len: usize,
+    shares: &[Vec<F>],
+    lagrange: &[F],
+) -> eyre::Result<Vec<F>> {
+    debug_assert_eq!(shares.len(), lagrange.len());
+    if shares.iter().any(|s| s.len() != len) {
+        eyre::bail!("During execution of open in MPC: Invalid number of elements received");
     }
-
-    let res = transposed
-        .into_iter()
-        .map(|r| super::reconstruct(&r, &state.open_lagrange_t))
-        .collect();
+    let reconstruct = |i: usize| {
+        shares
+            .iter()
+            .zip(lagrange.iter())
+            .map(|(s, l)| s[i] * l)
+            .sum::<F>()
+    };
+    let res = if len < MIN_PAR_LEN {
+        (0..len).map(reconstruct).collect()
+    } else {
+        (0..len)
+            .into_par_iter()
+            .with_min_len(MIN_PAR_LEN)
+            .map(reconstruct)
+            .collect()
+    };
     Ok(res)
 }
 
@@ -284,17 +302,5 @@ pub fn mul_open_vec<F: PrimeField, N: Network>(
 
     let rcv = net.broadcast_next(state.num_parties, 2 * state.threshold + 1, mul)?;
 
-    let mut transposed = vec![vec![F::zero(); 2 * state.threshold + 1]; a.len()];
-
-    for (j, r) in rcv.into_iter().enumerate() {
-        for (i, val) in r.into_iter().enumerate() {
-            transposed[i][j] = val;
-        }
-    }
-
-    let res = transposed
-        .into_iter()
-        .map(|r| super::reconstruct(&r, &state.open_lagrange_2t))
-        .collect();
-    Ok(res)
+    reconstruct_vec(a.len(), &rcv, &state.open_lagrange_2t)
 }

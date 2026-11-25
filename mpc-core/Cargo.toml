@@ -19,6 +19,10 @@ name = "local_mul_vec"
 harness = false
 name = "rep3_to_shamir"
 
+[[bench]]
+harness = false
+name = "shamir_mul"
+
 [dependencies]
 aes = { workspace = true }
 ark-bls12-377 = { workspace = true }
