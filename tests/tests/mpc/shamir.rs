@@ -229,71 +229,26 @@ mod field_share {
         shamir_mul_vec_bn_inner(10, 4);
     }
 
-    fn shamir_mul_vec_inner(num_parties: usize, threshold: usize) {
-        let nets = LocalNetwork::new(num_parties);
-        let mut rng = thread_rng();
-        let x = (0..1)
-            .map(|_| ark_bn254::Fr::from_str("2").unwrap())
-            .collect::<Vec<_>>();
-        let y = (0..x.len())
-            .map(|_| ark_bn254::Fr::from_str("3").unwrap())
-            .collect::<Vec<_>>();
-
-        let mut should_result = Vec::with_capacity(x.len());
-        for (x, y) in x.iter().zip(y.iter()) {
-            should_result.push((x * y) * y);
-        }
-
-        let x_shares = shamir::share_field_elements(&x, threshold, num_parties, &mut rng);
-        let y_shares = shamir::share_field_elements(&y, threshold, num_parties, &mut rng);
-
-        let mut tx = Vec::with_capacity(num_parties);
-        let mut rx = Vec::with_capacity(num_parties);
-        for _ in 0..num_parties {
-            let (t, r) = mpsc::channel();
-            tx.push(t);
-            rx.push(r);
-        }
-
-        for (net, tx, x, y) in izip!(nets, tx, x_shares, y_shares) {
-            std::thread::spawn(move || {
-                let mut state = ShamirPreprocessing::new(num_parties, threshold, x.len() * 2, &net)
-                    .unwrap()
-                    .into();
-                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
-                tx.send(mul)
-            });
-        }
-
-        let mut results = Vec::with_capacity(num_parties);
-        for r in rx {
-            results.push(r.recv().unwrap());
-        }
-
-        let is_result =
-            shamir::combine_field_elements(&results, &(1..=num_parties).collect_vec(), threshold)
-                .unwrap();
-
-        assert_eq!(is_result, should_result);
+    /// Runs `f` for all parties and returns their results.
+    fn run_parties<I: Send + 'static, O: Send + 'static>(
+        inputs: Vec<I>,
+        f: impl Fn(I, &LocalNetwork) -> O + Send + Sync + Copy + 'static,
+    ) -> Vec<O> {
+        let nets = LocalNetwork::new(inputs.len());
+        let handles = izip!(nets, inputs)
+            .map(|(net, input)| std::thread::spawn(move || f(input, &net)))
+            .collect_vec();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
     }
 
-    #[test]
-    fn shamir_mul_vec() {
-        shamir_mul_vec_inner(3, 1);
-        shamir_mul_vec_inner(10, 4);
-    }
-
-    // Large enough to generate the double shares and to reduce the degree with multiple threads.
-    // Only half of the required double shares are preprocessed to also test refilling the buffer.
-    fn shamir_mul_vec_large_inner(num_parties: usize, threshold: usize) {
-        const LEN: usize = 5000;
-        let nets = LocalNetwork::new(num_parties);
+    // Only half of the required pairs are preprocessed to also test refilling the buffer.
+    // With len >= 4096 the double shares are generated and the degree is reduced with multiple threads.
+    fn shamir_mul_vec_inner(num_parties: usize, threshold: usize, len: usize) {
         let mut rng = thread_rng();
-        let x = (0..LEN)
+        let x = (0..len)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
             .collect::<Vec<_>>();
-        let y = (0..LEN)
+        let y = (0..len)
             .map(|_| ark_bn254::Fr::rand(&mut rng))
             .collect::<Vec<_>>();
         let should_result = izip!(&x, &y).map(|(x, y)| (x * y) * y).collect::<Vec<_>>();
@@ -301,29 +256,13 @@ mod field_share {
         let x_shares = shamir::share_field_elements(&x, threshold, num_parties, &mut rng);
         let y_shares = shamir::share_field_elements(&y, threshold, num_parties, &mut rng);
 
-        let mut tx = Vec::with_capacity(num_parties);
-        let mut rx = Vec::with_capacity(num_parties);
-        for _ in 0..num_parties {
-            let (t, r) = mpsc::channel();
-            tx.push(t);
-            rx.push(r);
-        }
-
-        for (net, tx, x, y) in izip!(nets, tx, x_shares, y_shares) {
-            std::thread::spawn(move || {
-                let mut state = ShamirPreprocessing::new(num_parties, threshold, LEN, &net)
-                    .unwrap()
-                    .into();
-                let mul = arithmetic::mul_vec(&x, &y, &net, &mut state).unwrap();
-                let mul = arithmetic::mul_vec(&mul, &y, &net, &mut state).unwrap();
-                tx.send(mul)
-            });
-        }
-
-        let mut results = Vec::with_capacity(num_parties);
-        for r in rx {
-            results.push(r.recv().unwrap());
-        }
+        let results = run_parties(izip!(x_shares, y_shares).collect(), move |(x, y), net| {
+            let mut state = ShamirPreprocessing::new(num_parties, threshold, len, net)
+                .unwrap()
+                .into();
+            let mul = arithmetic::mul_vec(&x, &y, net, &mut state).unwrap();
+            arithmetic::mul_vec(&mul, &y, net, &mut state).unwrap()
+        });
 
         // The result must be a sharing of degree `threshold`, so any threshold + 1 parties can reconstruct
         for first in 0..num_parties - threshold {
@@ -339,12 +278,41 @@ mod field_share {
     }
 
     #[test]
+    fn shamir_mul_vec() {
+        shamir_mul_vec_inner(3, 1, 1);
+        shamir_mul_vec_inner(10, 4, 1);
+    }
+
+    #[test]
     fn shamir_mul_vec_large() {
-        shamir_mul_vec_large_inner(3, 1);
-        shamir_mul_vec_large_inner(4, 1);
-        shamir_mul_vec_large_inner(5, 2);
-        shamir_mul_vec_large_inner(10, 4);
-        shamir_mul_vec_large_inner(10, 2);
+        for (n, t) in [(3, 1), (4, 1), (5, 2), (10, 4), (10, 2)] {
+            shamir_mul_vec_inner(n, t, 5000);
+        }
+    }
+
+    // Large enough to open with multiple threads (mul_open_vec and open_vec)
+    #[test]
+    fn shamir_inv_vec_open_large() {
+        const LEN: usize = 5000;
+        for (num_parties, threshold) in [(3, 1), (5, 2)] {
+            let mut rng = thread_rng();
+            let x = (0..LEN)
+                .map(|_| ark_bn254::Fr::rand(&mut rng))
+                .collect::<Vec<_>>();
+            let should_result = x.iter().map(|x| x.inverse().unwrap()).collect::<Vec<_>>();
+            let x_shares = shamir::share_field_elements(&x, threshold, num_parties, &mut rng);
+
+            let results = run_parties(x_shares, move |x, net| {
+                let mut state = ShamirPreprocessing::new(num_parties, threshold, LEN, net)
+                    .unwrap()
+                    .into();
+                let inv = arithmetic::inv_vec(&x, net, &mut state).unwrap();
+                arithmetic::open_vec(&inv, net, &mut state).unwrap()
+            });
+            for is_result in results {
+                assert_eq!(is_result, should_result);
+            }
+        }
     }
 
     fn shamir_neg_inner(num_parties: usize, threshold: usize) {

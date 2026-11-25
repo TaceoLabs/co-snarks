@@ -1,6 +1,7 @@
 use std::{cmp::Ordering, sync::Arc};
 
 use ark_ff::PrimeField;
+use eyre::WrapErr;
 use mpc_net::Network;
 use rayon::prelude::*;
 
@@ -159,8 +160,9 @@ impl<F: PrimeField> ShamirRng<F> {
         threshold: usize,
         net: &N,
     ) -> eyre::Result<Self> {
-        if num_parties < threshold + 2 {
-            eyre::bail!("Too few parties for the given threshold")
+        // A single party (n=1, t=0) is not supported
+        if num_parties < (2 * threshold + 1).max(2) {
+            eyre::bail!("Shamir requires at least max(2, 2t+1) parties")
         }
         let mut rng = RngType::from_seed(seed);
 
@@ -264,7 +266,7 @@ impl<F: PrimeField> ShamirRng<F> {
         }
     }
 
-    /// Generates `amount` batches of t+1 random double shares each and appends them to the buffers.
+    /// Generates `amount` batches of n-t random double shares each and appends them to the buffers.
     ///
     /// We use DN07 to generate n-t double shares from the randomness of the n parties.
     /// With Atlas we would be able to expand this to n double shares, but only n-t of them would be uniformly random.
@@ -439,6 +441,7 @@ impl<F: PrimeField> ShamirRng<F> {
             for_each_received(&received, acc, size, |acc, msg, share| {
                 add_scaled_col(acc, tables.vandermonde_col(dealers[msg]), share)
             })
+            .wrap_err("During double-share generation in Shamir preprocessing")
         };
         receive(t + 1, num_sent_t, r_t)?;
         receive(2 * t, num_sent_2t, r_2t)?;
