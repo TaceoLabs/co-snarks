@@ -6,6 +6,7 @@ use ark_ec::CurveGroup;
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use bytes::Bytes;
+use eyre::WrapErr;
 use mpc_net::Network;
 use rayon::prelude::*;
 
@@ -267,7 +268,8 @@ pub trait ShamirNetworkExt: Network {
                 .collect::<eyre::Result<Vec<_>>>()?;
             for_each_received(&received, &mut acc, 1, |acc, msg, mul: F| {
                 acc[0] += mul * lagrange[msg + 1]
-            })?;
+            })
+            .wrap_err("During degree_reduce_many (king) in MPC")?;
             drop(received);
             // So far parties who do not require sending, do not send, so no receive here
 
@@ -295,7 +297,8 @@ pub trait ShamirNetworkExt: Network {
                 let data = self.recv(KING_ID)?;
                 for_each_received(&[data], &mut my_shares, 1, |share, _, fresh: F| {
                     share[0] = fresh - share[0]
-                })?;
+                })
+                .wrap_err("During degree_reduce_many in MPC")?;
             } else {
                 for_each_indexed(&mut my_shares, |_, share| *share = -*share);
             }

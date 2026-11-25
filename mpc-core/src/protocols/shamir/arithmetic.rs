@@ -88,9 +88,6 @@ pub fn mul_vec<F: PrimeField, N: Network>(
     net: &N,
     state: &mut ShamirState<F>,
 ) -> eyre::Result<Vec<ShamirShare<F>>> {
-    //do not use local_mul_vec as it uses rayon and this method runs on
-    //the tokio runtime. This method is for smaller vecs, local_mul_vec and then
-    //degree_reduce for larger vecs.
     let mul = a
         .iter()
         .zip(b.iter())
