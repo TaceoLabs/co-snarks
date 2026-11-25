@@ -176,11 +176,16 @@ impl<P: HonkCurve<TranscriptFieldType>> ZKSumcheckData<P> {
         let mut coeffs_lagrange_subgroup = vec![P::ScalarField::zero(); P::SUBGROUP_SIZE];
         coeffs_lagrange_subgroup[0] = self.constant_term;
 
-        for poly_idx in 0..self.log_circuit_size {
-            for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
+        for (poly_idx, poly) in self.libra_univariates[..self.log_circuit_size]
+            .iter()
+            .enumerate()
+        {
+            for (idx, coefficient) in poly.coefficients[..P::LIBRA_UNIVARIATES_LENGTH]
+                .iter()
+                .enumerate()
+            {
                 let idx_to_populate = 1 + poly_idx * P::LIBRA_UNIVARIATES_LENGTH + idx;
-                coeffs_lagrange_subgroup[idx_to_populate] =
-                    self.libra_univariates[poly_idx].coefficients[idx];
+                coeffs_lagrange_subgroup[idx_to_populate] = *coefficient;
             }
         }
 
