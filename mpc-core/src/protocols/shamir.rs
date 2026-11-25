@@ -156,6 +156,20 @@ impl<F: PrimeField> ShamirState<F> {
         )
     }
 
+    /// Returns this party's share of a fresh, uniformly random degree-2t sharing of zero.
+    ///
+    /// A degree-2t sharing must be randomized with such a share before it is opened. The
+    /// local product of two degree-t shares lies on the product of the two sharing
+    /// polynomials, which is *not* a random degree-2t polynomial, so opening it directly
+    /// leaks the inputs.
+    ///
+    /// Consumes one correlated randomness pair: `r_2t - r_t` shares zero, and since the
+    /// two polynomials only have the constant term in common, all its other coefficients
+    /// are uniformly random.
+    pub fn zero_share_2t<N: Network>(&mut self, net: &N) -> eyre::Result<F> {
+        self.get_pair(net).map(|(r_t, r_2t)| r_2t - r_t)
+    }
+
     /// Generates a random field element and returns it as a share.
     pub fn rand<N: Network>(&mut self, net: &N) -> eyre::Result<ShamirPrimeFieldShare<F>> {
         self.get_pair(net)

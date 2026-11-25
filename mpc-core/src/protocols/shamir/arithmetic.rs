@@ -247,30 +247,40 @@ fn clone_from_slice(
 */
 
 /// This function performs a multiplication directly followed by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
+///
+/// Consumes one correlated randomness pair to randomize the degree-2t sharing before it is opened.
 fn mul_open<F: PrimeField, N: Network>(
     a: ShamirShare<F>,
     b: ShamirShare<F>,
     net: &N,
     state: &mut ShamirState<F>,
 ) -> eyre::Result<F> {
-    let mul = a * b;
-    let rcv = net.broadcast_next(state.num_parties, 2 * state.threshold + 1, mul.a)?;
+    // The product share must be masked with a degree-2t sharing of zero, otherwise the
+    // opened shares reveal the product of the two sharing polynomials and thus the inputs.
+    let mul = (a * b).a + state.zero_share_2t(net)?;
+    let rcv = net.broadcast_next(state.num_parties, 2 * state.threshold + 1, mul)?;
     Ok(super::reconstruct(&rcv, &state.open_lagrange_2t))
 }
 
 /// This function performs a multiplication directly followed, by an opening. This is preferred over Open(Mul(\[x\], \[y\])), since Mul performs resharing of the result for degree reduction. Thus, mul_open(\[x\], \[y\]) requires less communication in fewer rounds compared to Open(Mul(\[x\], \[y\])).
+///
+/// Consumes one correlated randomness pair per element to randomize the degree-2t sharings before they are opened.
 pub fn mul_open_vec<F: PrimeField, N: Network>(
     a: &[ShamirShare<F>],
     b: &[ShamirShare<F>],
     net: &N,
     state: &mut ShamirState<F>,
 ) -> eyre::Result<Vec<F>> {
+    if a.len() != b.len() {
+        eyre::bail!("mul_open_vec: length mismatch ({} != {})", a.len(), b.len());
+    }
+    // The product shares must be masked with degree-2t sharings of zero, otherwise the
+    // opened shares reveal the product of the two sharing polynomials and thus the inputs.
     let mul = a
         .iter()
         .zip(b.iter())
-        .map(|(a, b)| a * b)
-        .collect::<Vec<_>>();
-    let mul = ShamirShare::convert_vec(mul);
+        .map(|(a, b)| Ok(a.a * b.a + state.zero_share_2t(net)?))
+        .collect::<eyre::Result<Vec<F>>>()?;
 
     let rcv = net.broadcast_next(state.num_parties, 2 * state.threshold + 1, mul)?;
 

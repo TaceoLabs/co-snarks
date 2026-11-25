@@ -289,9 +289,18 @@ where
         P: Pairing + CircomArkworksPairingBridge,
     {
         let domain_size = zkey.domain_size;
-        // measured consumption of the prover (random shares + degree reductions);
-        // running out only triggers an on-demand refill
-        let num_pairs = domain_size * 166 + 12;
+        // measured consumption of the prover (random shares, degree reductions and masks
+        // for opening degree-2t sharings); running out only triggers an on-demand refill.
+        // With n = domain_size:
+        //   round 1: 11 (blinding randomness)
+        //   round 2: 19 * n + 3
+        //      array_prod_mul over 2 * n elements:  16 * n + 3
+        //      inv_vec(den):                         2 * n
+        //      mul_vec(num, den):                        n
+        //   round 3: 108 * n
+        //      a_b, a_ab, ap_bp:                 3 * 4 * n
+        //      mul4vec (2 rounds):          2 * 12 * 4 * n
+        let num_pairs = domain_size * 127 + 14;
         let preprocessing = ShamirPreprocessing::new(num_parties, threshold, num_pairs, net)?;
         let mut state = ShamirState::from(preprocessing);
         // execute prover in MPC

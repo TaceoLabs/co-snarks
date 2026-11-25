@@ -98,18 +98,26 @@ pub fn scalar_mul_local<C: CurveGroup>(a: &PointShare<C>, b: FieldShare<C::Scala
     (b * a).a
 }
 
-/// Performs opening of a point share.
+/// Performs opening of a degree-2t point share.
+///
+/// The share is randomized with a degree-2t sharing of zero before it is sent, since a
+/// degree-2t sharing stemming from local multiplications is not uniformly random and would
+/// leak information about the inputs. Consumes one correlated randomness pair.
 pub fn open_half_point<C: CurveGroup, N: Network>(
     a: C,
     net: &N,
     state: &mut ShamirState<C::ScalarField>,
 ) -> eyre::Result<C> {
+    let a = a + C::generator() * state.zero_share_2t(net)?;
     let rcv = net.broadcast_next(state.num_parties, state.threshold * 2 + 1, a)?;
     let res = reconstruct_point(&rcv, &state.open_lagrange_2t);
     Ok(res)
 }
 
-/// Performs opening of two point shares (potentially on different curves) in a single communication round.
+/// Performs opening of two degree-2t point shares (potentially on different curves) in a single communication round.
+///
+/// Both shares are randomized with independent degree-2t sharings of zero before they are
+/// sent, see [`open_half_point`]. Consumes two correlated randomness pairs.
 pub fn open_two_half_points<C1, C2, N: Network>(
     a: C1,
     b: C2,
@@ -120,6 +128,8 @@ where
     C1: CurveGroup,
     C2: CurveGroup<ScalarField = C1::ScalarField>,
 {
+    let a = a + C1::generator() * state.zero_share_2t(net)?;
+    let b = b + C2::generator() * state.zero_share_2t(net)?;
     let rcv = net.broadcast_next(state.num_parties, state.threshold * 2 + 1, (a, b))?;
     let (rcv_a, rcv_b): (Vec<_>, Vec<_>) = rcv.into_iter().unzip();
     Ok((
