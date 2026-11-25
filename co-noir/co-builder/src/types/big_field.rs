@@ -518,8 +518,8 @@ impl<F: PrimeField> BigField<F> {
     pub(crate) fn get_maximum_value(&self) -> BigUint {
         let mut result = BigUint::zero();
         let mut shift = BigUint::one();
-        for i in 0..NUM_LIMBS {
-            result += &self.binary_basis_limbs[i].maximum_value * &shift;
+        for limb in &self.binary_basis_limbs {
+            result += &limb.maximum_value * &shift;
             shift <<= Self::NUM_LIMB_BITS;
         }
         result
@@ -1069,8 +1069,8 @@ impl<F: PrimeField> BigField<F> {
             quotient_limb.clone(),
             (BigUint::one() << maximum_quotient_bits) - BigUint::one(),
         );
-        for i in 1..NUM_LIMBS {
-            quotient.binary_basis_limbs[i] = Limb::new(
+        for limb in quotient.binary_basis_limbs.iter_mut().skip(1) {
+            *limb = Limb::new(
                 FieldCT::from_witness_index(builder.zero_idx),
                 BigUint::zero(),
             );
@@ -1245,12 +1245,9 @@ impl<F: PrimeField> BigField<F> {
         product.binary_basis_limbs[0]
             .element
             .assert_equal(&result, builder, driver);
-        for i in 1..NUM_LIMBS {
-            product.binary_basis_limbs[i].element.assert_equal(
-                &FieldCT::from(F::zero()),
-                builder,
-                driver,
-            );
+        for limb in product.binary_basis_limbs.iter().skip(1) {
+            limb.element
+                .assert_equal(&FieldCT::from(F::zero()), builder, driver);
         }
 
         Ok(is_equal)

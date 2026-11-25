@@ -27,7 +27,6 @@ use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
 use std::{
     path::PathBuf,
-    process::ExitCode,
     thread::sleep,
     time::{Duration, Instant},
 };
@@ -120,7 +119,7 @@ impl Config {
     }
 }
 
-fn main() -> color_eyre::Result<ExitCode> {
+fn main() -> color_eyre::Result<()> {
     install_tracing();
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()
@@ -146,7 +145,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         }
     }
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 fn benches<
@@ -157,7 +156,7 @@ fn benches<
     const COMPRESSION_MODE: bool,
 >(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -172,13 +171,13 @@ where
         poseidon2_mt_benches::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
     }
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
 fn poseidon2_benches<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -191,13 +190,13 @@ where
     // poseidon2_shamir::<F, T, D>(config)?;
     poseidon2_shamir_with_precomp::<F, T, D>(config)?;
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
 fn poseidon2_packed_benches<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -207,7 +206,7 @@ where
     }
     poseidon2_shamir_with_precomp_packed::<F, T, D>(config)?;
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -219,7 +218,7 @@ fn poseidon2_mt_benches<
     const COMPRESSION_MODE: bool,
 >(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -229,7 +228,7 @@ where
     }
     poseidon2_mt_shamir::<F, T, D, ARITY, COMPRESSION_MODE>(config)?;
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -255,7 +254,7 @@ fn print_runtimes(times: Vec<f64>, id: usize, s: &str) {
 #[allow(dead_code)]
 fn poseidon2_plain<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -277,13 +276,13 @@ where
     print_runtimes(times, config.network.my_id, "Poseidon2 plain");
     sleep(SLEEP);
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
 fn poseidon2_plain_packed<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -313,7 +312,7 @@ where
     );
     sleep(SLEEP);
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 fn next_power_of_n(size: usize, n: usize) -> usize {
@@ -334,7 +333,7 @@ fn poseidon2_mt_plain<
     const COMPRESSION_MODE: bool,
 >(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -365,7 +364,7 @@ where
     );
     sleep(SLEEP);
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -403,7 +402,7 @@ fn share_random_input_rep3<
 #[allow(dead_code)]
 fn poseidon2_rep3<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -438,13 +437,13 @@ where
     sleep(SLEEP);
     print_runtimes(times, config.network.my_id, "Poseidon2 rep3");
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
 fn poseidon2_rep3_with_precomp<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -480,13 +479,13 @@ where
     sleep(SLEEP);
     print_runtimes(times, config.network.my_id, "Poseidon2 rep3 with precomp");
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
 fn poseidon2_rep3_with_precomp_additive<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -527,13 +526,13 @@ where
         "Poseidon2 rep3 with precomp (additive)",
     );
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
 fn poseidon2_rep3_with_precomp_packed<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -574,7 +573,7 @@ where
         format!("Poseidon2 rep3 with precomp packed n={}", config.batch_size).as_str(),
     );
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -586,7 +585,7 @@ fn poseidon2_mt_rep3<
     const COMPRESSION_MODE: bool,
 >(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -626,7 +625,7 @@ where
         format!("Poseidon2 rep3 MT ({}:1, n={})", ARITY, config.merkle_size).as_str(),
     );
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -660,7 +659,7 @@ fn share_random_input_shamir<
 #[allow(dead_code)]
 fn poseidon2_shamir<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -712,13 +711,13 @@ where
     );
     print_runtimes(times, config.network.my_id, "Poseidon2 shamir -- online");
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
 fn poseidon2_shamir_with_precomp<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -776,13 +775,13 @@ where
         "Poseidon2 shamir with precomp -- online",
     );
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
 fn poseidon2_shamir_with_precomp_packed<F: PrimeField, const T: usize, const D: u64>(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -848,7 +847,7 @@ where
         .as_str(),
     );
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }
 
 #[allow(dead_code)]
@@ -860,7 +859,7 @@ fn poseidon2_mt_shamir<
     const COMPRESSION_MODE: bool,
 >(
     config: &Config,
-) -> color_eyre::Result<ExitCode>
+) -> color_eyre::Result<()>
 where
     Poseidon2<F, T, D>: Default,
 {
@@ -926,5 +925,5 @@ where
         .as_str(),
     );
 
-    Ok(ExitCode::SUCCESS)
+    Ok(())
 }

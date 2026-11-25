@@ -21,13 +21,9 @@ circom-types = { workspace = true, features = ["full"] }
 co-acvm = { version = "0.7.0", path = "../co-noir/co-acvm" }
 co-circom-types = { version = "0.6.0", path = "../co-circom/co-circom-types" }
 co-builder = { version = "0.5.0", path = "../co-noir/co-builder" }
-co-groth16 = { version = "0.10.0", path = "../co-circom/co-groth16", features = [
-    "verifier",
-] }
 co-noir = { version = "0.7.0", path = "../co-noir/co-noir" }
 co-noir-types = { version = "0.1.1", path = "../co-noir/co-noir-types" }
 noir-types = { version = "0.1.1", path = "../co-noir/noir-types" }
-co-plonk = { version = "0.7.0", path = "../co-circom/co-plonk" }
 co-ultrahonk = { version = "0.6.0", path = "../co-noir/co-ultrahonk" }
 co-noir-common = { version = "0.2.0", path = "../co-noir/co-noir-common" }
 eyre.workspace = true
@@ -50,6 +46,10 @@ tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 
 [dev-dependencies]
+co-groth16 = { version = "0.10.0", path = "../co-circom/co-groth16", features = [
+    "verifier",
+] }
+co-plonk = { version = "0.7.0", path = "../co-circom/co-plonk" }
 paste.workspace = true
 sha3.workspace = true
 rustls = { workspace = true }

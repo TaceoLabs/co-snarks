@@ -386,13 +386,17 @@ impl SumcheckRound {
         let current_column = &zk_sumcheck_data.libra_univariates[round_idx];
         // the evaluation of Libra round univariate at k=0...D are equal to \f$\texttt{libra_univariates}_{i}(k)\f$
         // corrected by the Libra running sum
-        for idx in 0..P::LIBRA_UNIVARIATES_LENGTH {
+        for (idx, evaluation) in libra_round_univariate
+            .evaluations
+            .iter_mut()
+            .take(P::LIBRA_UNIVARIATES_LENGTH)
+            .enumerate()
+        {
             let eval = T::eval_poly(
                 &current_column.coefficients,
                 P::ScalarField::from(idx as u64),
             );
-            libra_round_univariate.evaluations[idx] =
-                T::add(eval, zk_sumcheck_data.libra_running_sum);
+            *evaluation = T::add(eval, zk_sumcheck_data.libra_running_sum);
         }
 
         if BATCHED_RELATION_PARTIAL_LENGTH_ZK == P::LIBRA_UNIVARIATES_LENGTH {
