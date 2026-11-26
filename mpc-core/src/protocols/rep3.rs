@@ -58,7 +58,7 @@ impl Rep3State {
         let mut rng = rand_chacha::ChaCha12Rng::from_entropy();
         let mut rand = Self::setup_prf(net, &mut rng)?;
         let bitcomps = Self::setup_bitcomp(net, &mut rand)?;
-        let rngs = Rep3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1);
+        let rngs = Rep3CorrelatedRng::new(rand, bitcomps.0, bitcomps.1, id);
 
         Ok(Rep3State {
             id,

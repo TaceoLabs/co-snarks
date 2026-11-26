@@ -879,7 +879,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     }
 
     fn common_rng_seed(&mut self) -> eyre::Result<[u8; 32]> {
-        Ok(self.state.rngs.generate_shared(self.id))
+        Ok(self.state.rngs.generate_shared())
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
