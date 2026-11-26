@@ -5,7 +5,7 @@
 
 //! # Garbling primitives
 //!
-//! The small subset of [swanky](https://github.com/GaloisInc/swanky) (`fancy-garbling` and `scuttlebutt`, rev `5ff6484`) used by our garbled circuits. Wire labels, the fixed-key AES hash and the [`Fancy`]/[`FancyBinary`] traits are bit-compatible with that revision.
+//! The small subset of [swanky](https://github.com/GaloisInc/swanky) (`fancy-garbling` and `scuttlebutt`, rev `5ff6484`) used by our garbled circuits. Wire labels, the fixed-key AES hash and the [`Fancy`]/[`FancyBinary`] traits are bit-compatible with that revision. The garbled gates and outputs are not: swanky hashes both half-gates of an 'and' gate with the same tweak, which leaks delta to the evaluator for gates whose inputs carry the same label pair, and its output tweaks overlap with the gate tweaks. We use distinct tweaks for all of them.
 
 use aes::{
     Aes128,
@@ -104,18 +104,19 @@ static AES: LazyLock<Aes128> = LazyLock::new(|| Aes128::new(&FIXED_KEY.into()));
 
 /// Tweakable circular correlation robust hash function (cf. <https://eprint.iacr.org/2019/074>, §7.4) for `Q` inputs at once.
 ///
-/// Computes `π(π(x) ⊕ i) ⊕ π(x)` for every `x` in `xs`.
-fn tccr_hash_many<const Q: usize>(tweak: Block, xs: [Block; Q]) -> [Block; Q] {
+/// Computes `π(π(x) ⊕ i) ⊕ π(x)` for every `x` in `xs` with its tweak `i` in `tweaks`.
+fn tccr_hash_many<const Q: usize>(tweaks: [Block; Q], xs: [Block; Q]) -> [Block; Q] {
     let mut y = xs.map(|x| aes::Block::from(x.0));
     AES.encrypt_blocks(&mut y);
-    let mut z = y.map(|y| aes::Block::from((Block(y.into()) ^ tweak).0));
+    let mut z: [aes::Block; Q] =
+        std::array::from_fn(|i| aes::Block::from((Block(y[i].into()) ^ tweaks[i]).0));
     AES.encrypt_blocks(&mut z);
     std::array::from_fn(|i| Block(y[i].into()) ^ Block(z[i].into()))
 }
 
-/// Hashes `Q` wires with the same tweak.
-fn hash_wires<const Q: usize>(wires: [&WireMod2; Q], tweak: Block) -> [Block; Q] {
-    tccr_hash_many(tweak, wires.map(WireMod2::as_block))
+/// Hashes `Q` wires, each with its own tweak.
+fn hash_wires<const Q: usize>(wires: [&WireMod2; Q], tweaks: [Block; Q]) -> [Block; Q] {
+    tccr_hash_many(tweaks, wires.map(WireMod2::as_block))
 }
 
 /// Tweak function for two items.
@@ -123,9 +124,18 @@ fn tweak2(i: u64, j: u64) -> Block {
     Block::from((u128::from(i) << 64) | u128::from(j))
 }
 
-/// Compute the output tweak for a garbled gate where `i` is the gate id and `k` is the value.
+/// The tweaks of the two half-gates of the 'and' gate `gate_num`: the first is for the garbler's half-gate (hashes of the labels of `a`), the second for the evaluator's half-gate (hashes of the labels of `b`).
+///
+/// The half-gates construction (<https://eprint.iacr.org/2014/756>, Fig. 2) requires two distinct hash indices per gate. With a single one, the hashes of an 'and' gate whose inputs carry the same label pair (e.g., `x & x` or `x & !x`) cancel and the evaluator learns delta from the two gate rows.
+fn and_gate_tweaks(gate_num: usize) -> [Block; 2] {
+    [tweak2(gate_num as u64, 0), tweak2(gate_num as u64, 1)]
+}
+
+/// Compute the output tweak for the output wire with index `i` and the value `k`.
+///
+/// The low word starts at 2 to keep the output tweaks disjoint from those of the 'and' gates.
 pub fn output_tweak(i: usize, k: u16) -> Block {
-    Block::from(((i as u128) << 64) | u128::from(k))
+    tweak2(i as u64, 2 + u64::from(k))
 }
 
 /// A `mod-2` wire label. Its color is the least significant bit.
@@ -192,7 +202,7 @@ impl WireMod2 {
 
     /// Hash the wire with fixed-key AES.
     pub fn hash(&self, tweak: Block) -> Block {
-        let [h] = tccr_hash_many(tweak, [self.val]);
+        let [h] = tccr_hash_many([tweak], [self.val]);
         h
     }
 }
@@ -209,9 +219,9 @@ pub(crate) fn evaluate_and_gate(
     gate0: &Block,
     gate1: &Block,
 ) -> WireMod2 {
-    let g = tweak2(gate_num as u64, 0);
+    let [g_a, g_b] = and_gate_tweaks(gate_num);
 
-    let [hash_a, hash_b] = hash_wires([a, b], g);
+    let [hash_a, hash_b] = hash_wires([a, b], [g_a, g_b]);
 
     // garbler's half gate
     let l = WireMod2::from_block(Block::conditional_select(
@@ -246,7 +256,7 @@ pub(crate) fn garble_and_gate(
 
     let r = b.color(); // secret value known only to the garbler (ev knows r+b)
 
-    let g = tweak2(gate_num as u64, 0);
+    let [g_a, g_b] = and_gate_tweaks(gate_num);
 
     // X = H(A+aD) + arD such that a + A.color == 0
     let alpha = a.color(); // alpha = -A.color
@@ -267,7 +277,8 @@ pub(crate) fn garble_and_gate(
     let new_a = WireMod2::conditional_select(&ad, a, a_selector);
     let idx = u8::conditional_select(&(r as u8), &0u8, a_selector);
 
-    let [hash_a, hash_b, hash_x, hash_y] = hash_wires([&new_a, &b, &x1, &y1], g);
+    // The labels of `a` are hashed with the first tweak, those of `b` with the second
+    let [hash_a, hash_b, hash_x, hash_y] = hash_wires([&new_a, &b, &x1, &y1], [g_a, g_b, g_a, g_b]);
 
     let x = WireMod2::from_block(hash_x) ^ d.cmul(alpha & r);
     let y = WireMod2::from_block(hash_y);
@@ -417,16 +428,59 @@ mod test {
         }
     }
 
-    // Reference values computed with swanky rev 5ff648457218b74da9d8323b7ca47166ff5be4b3
+    // An 'and' gate whose inputs carry the same label pair (`x & x`, `c & c` on a cached
+    // constant, or `x & !x`) must not let the evaluator combine the two gate rows with its
+    // active label into delta. This requires distinct hash tweaks for the two half-gates.
+    #[test]
+    fn degenerate_and_gates_do_not_leak_delta() {
+        let mut rng = thread_rng();
+        for trial in 0..2000 {
+            let delta = WireMod2::rand_delta(&mut rng);
+            let x_zero = WireMod2::rand(&mut rng);
+            // Second input: the same wire, or its negation
+            for negated in [false, true] {
+                let y_zero = x_zero ^ delta.cmul(negated as u16);
+                let (gate0, gate1, z_zero) = garble_and_gate(trial, &x_zero, &y_zero, &delta);
+                for x in [false, true] {
+                    let y = x ^ negated;
+                    let x_active = x_zero ^ delta.cmul(x as u16);
+                    let y_active = y_zero ^ delta.cmul(y as u16);
+                    assert_eq!(x_active, y_active);
+
+                    let evaluated = evaluate_and_gate(trial, &x_active, &y_active, &gate0, &gate1);
+                    assert_eq!(evaluated, z_zero ^ delta.cmul((x & y) as u16));
+
+                    let combined = gate0 ^ gate1 ^ x_active.as_block();
+                    assert_ne!(combined, Block::default());
+                    assert_ne!(combined, delta.as_block());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn gate_and_output_tweaks_are_disjoint() {
+        for i in [0, 1, 7, usize::MAX] {
+            let gate_tweaks = and_gate_tweaks(i);
+            assert_ne!(gate_tweaks[0], gate_tweaks[1]);
+            for k in 0..2 {
+                assert!(!gate_tweaks.contains(&output_tweak(i, k)));
+            }
+            assert_ne!(output_tweak(i, 0), output_tweak(i, 1));
+        }
+    }
+
+    // Reference values computed with swanky rev 5ff648457218b74da9d8323b7ca47166ff5be4b3.
+    // Only the hash function is compared, the tweaks of the gates and outputs differ from swanky.
     #[test]
     fn matches_swanky() {
         let a = WireMod2::from_block(Block::from(0x0011_2233_4455_6677_8899_aabb_ccdd_eeff));
         let b = WireMod2::from_block(Block::from(0xfedc_ba98_7654_3210_0f1e_2d3c_4b5a_6978));
         assert_eq!(
-            a.hash(output_tweak(7, 1)).to_u128(),
+            a.hash(tweak2(7, 1)).to_u128(),
             0x45512f1e9836e2054f39c276916d3da9
         );
-        let [x, y] = hash_wires([&a, &b], tweak2(42, 1));
+        let [x, y] = hash_wires([&a, &b], [tweak2(42, 1); 2]);
         assert_eq!(x.to_u128(), 0x71d46645056383be70cbdccd4687ade3);
         assert_eq!(y.to_u128(), 0x8de2e5cb2b93c6b427596aac70400568);
     }
