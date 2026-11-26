@@ -22,6 +22,7 @@ dns_name = "127.0.0.1:10001"
 id = 2
 dns_name = "127.0.0.1:10002"
 
+# The MPC network uses mutual TLS. These example keys are public and for local testing only, never use them in a deployment (see ../data/README.md).
 [network.tls]
 key = "../data/key2.der"
 certs = ["../data/cert0.der", "../data/cert1.der", "../data/cert2.der"]
