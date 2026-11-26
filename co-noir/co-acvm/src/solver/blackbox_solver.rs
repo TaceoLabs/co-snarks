@@ -11,6 +11,19 @@ use ark_ff::PrimeField;
 
 use mpc_core::gadgets::poseidon2::Poseidon2;
 
+/// The y-coordinate of the generator (1, y) of the embedded curve (Grumpkin)
+const GRUMPKIN_GENERATOR_Y: &str = "17631683881184975370165255887551781615748388533673675138860";
+
+/// The predicate of an embedded curve operation
+enum CurveOpPredicate<T> {
+    /// The operation is executed
+    Enabled,
+    /// The operation is skipped and its result is (0, 0)
+    Disabled,
+    /// Whether the operation is enabled is secret shared
+    Shared(T),
+}
+
 impl<T, F> CoSolver<T, F>
 where
     T: NoirWitnessExtensionProtocol<F>,
@@ -268,14 +281,60 @@ where
         Ok(driver.mul_many(x_is_zero, y_is_zero)?)
     }
 
+    /// Reads the predicate of an embedded curve operation.
+    ///
+    /// As in the ACVM, a public predicate enables the operation iff it is one. A shared predicate is expected to be 0 or 1, which is enforced by the circuit.
+    fn curve_op_predicate(
+        initial_witness: &WitnessMap<T::AcvmType>,
+        predicate: FunctionInput<GenericFieldElement<F>>,
+    ) -> CoAcvmResult<CurveOpPredicate<T::AcvmType>> {
+        let predicate = Self::input_to_value(initial_witness, predicate)?;
+        Ok(match T::get_public(&predicate) {
+            Some(public) if public.is_one() => CurveOpPredicate::Enabled,
+            Some(_) => CurveOpPredicate::Disabled,
+            None => CurveOpPredicate::Shared(predicate),
+        })
+    }
+
+    /// Replaces the points by the generator of the embedded curve if the shared `predicate` is zero.
+    ///
+    /// A disabled operation must not depend on its inputs, which may be arbitrary values in this case, in particular points that are not on the curve. As the predicate is shared, we cannot skip the operation, so we execute it on valid points instead.
+    #[expect(clippy::type_complexity)]
+    fn points_or_generator(
+        driver: &mut T,
+        predicate: &T::AcvmType,
+        xs: &[T::AcvmType],
+        ys: &[T::AcvmType],
+    ) -> CoAcvmResult<(Vec<T::AcvmType>, Vec<T::AcvmType>)> {
+        debug_assert_eq!(xs.len(), ys.len());
+        let generator_y = F::from_str(GRUMPKIN_GENERATOR_Y)
+            .map_err(|_| eyre::eyre!("cannot parse the y-coordinate of the generator"))?;
+        let coords: Vec<_> = xs.iter().chain(ys.iter()).cloned().collect();
+        let mut generator = vec![T::AcvmType::from(F::one()); xs.len()];
+        generator.resize(coords.len(), T::AcvmType::from(generator_y));
+        let conds = vec![predicate.to_owned(); coords.len()];
+        let mut xs = driver.cmux_many(&conds, &coords, &generator)?;
+        let ys = xs.split_off(ys.len());
+        Ok((xs, ys))
+    }
+
     pub(super) fn multi_scalar_mul(
         driver: &mut T,
         initial_witness: &mut WitnessMap<T::AcvmType>,
         points: &[FunctionInput<GenericFieldElement<F>>],
         scalars: &[FunctionInput<GenericFieldElement<F>>],
+        predicate: FunctionInput<GenericFieldElement<F>>,
         outputs: &(Witness, Witness),
         pedantic_solving: bool,
     ) -> CoAcvmResult<()> {
+        let predicate = Self::curve_op_predicate(initial_witness, predicate)?;
+        if matches!(predicate, CurveOpPredicate::Disabled) {
+            // As the ACVM, we do not look at the inputs in this case
+            Self::insert_value(&outputs.0, T::public_zero(), initial_witness)?;
+            Self::insert_value(&outputs.1, T::public_zero(), initial_witness)?;
+            return Ok(());
+        }
+
         let points: Result<Vec<_>, _> = points
             .iter()
             .map(|input| Self::input_to_value(initial_witness, *input))
@@ -293,6 +352,9 @@ where
             };
             xs.push(x.to_owned());
             ys.push(y.to_owned());
+        }
+        if let CurveOpPredicate::Shared(predicate) = &predicate {
+            (xs, ys) = Self::points_or_generator(driver, predicate, &xs, &ys)?;
         }
         let is_infinity = Self::point_is_infinity_many(driver, &xs, &ys)?;
 
@@ -325,6 +387,8 @@ where
             pedantic_solving,
         )?;
 
+        let (res_x, res_y) = Self::apply_shared_predicate(driver, &predicate, res_x, res_y)?;
+
         // Insert the resulting point into the witness map. The backend already returns (0, 0)
         // for the point at infinity, so the is_infinity component can be dropped.
         Self::insert_value(&outputs.0, res_x, initial_witness)?;
@@ -332,17 +396,54 @@ where
         Ok(())
     }
 
+    /// Sets the result of an embedded curve operation to (0, 0) if its shared predicate is zero.
+    fn apply_shared_predicate(
+        driver: &mut T,
+        predicate: &CurveOpPredicate<T::AcvmType>,
+        res_x: T::AcvmType,
+        res_y: T::AcvmType,
+    ) -> CoAcvmResult<(T::AcvmType, T::AcvmType)> {
+        let CurveOpPredicate::Shared(predicate) = predicate else {
+            return Ok((res_x, res_y));
+        };
+        let mut res = driver.mul_many(
+            &[res_x, res_y],
+            &[predicate.to_owned(), predicate.to_owned()],
+        )?;
+        let res_y = res.pop().expect("has 2 elements");
+        let res_x = res.pop().expect("has 2 elements");
+        Ok((res_x, res_y))
+    }
+
     pub(super) fn embedded_curve_add(
         driver: &mut T,
         initial_witness: &mut WitnessMap<T::AcvmType>,
         input1: &[FunctionInput<GenericFieldElement<F>>; 2],
         input2: &[FunctionInput<GenericFieldElement<F>>; 2],
+        predicate: FunctionInput<GenericFieldElement<F>>,
         outputs: &(Witness, Witness),
     ) -> CoAcvmResult<()> {
-        let input1_x = Self::input_to_value(initial_witness, input1[0])?;
-        let input1_y = Self::input_to_value(initial_witness, input1[1])?;
-        let input2_x = Self::input_to_value(initial_witness, input2[0])?;
-        let input2_y = Self::input_to_value(initial_witness, input2[1])?;
+        let predicate = Self::curve_op_predicate(initial_witness, predicate)?;
+        if matches!(predicate, CurveOpPredicate::Disabled) {
+            // As the ACVM, we do not look at the inputs in this case
+            Self::insert_value(&outputs.0, T::public_zero(), initial_witness)?;
+            Self::insert_value(&outputs.1, T::public_zero(), initial_witness)?;
+            return Ok(());
+        }
+
+        let mut xs = vec![
+            Self::input_to_value(initial_witness, input1[0])?,
+            Self::input_to_value(initial_witness, input2[0])?,
+        ];
+        let mut ys = vec![
+            Self::input_to_value(initial_witness, input1[1])?,
+            Self::input_to_value(initial_witness, input2[1])?,
+        ];
+        if let CurveOpPredicate::Shared(predicate) = &predicate {
+            (xs, ys) = Self::points_or_generator(driver, predicate, &xs, &ys)?;
+        }
+        let [input1_x, input2_x]: [T::AcvmType; 2] = xs.try_into().expect("has 2 elements");
+        let [input1_y, input2_y]: [T::AcvmType; 2] = ys.try_into().expect("has 2 elements");
 
         let mut is_infinite = Self::point_is_infinity_many(
             driver,
@@ -361,6 +462,7 @@ where
             input2_y,
             input2_infinite,
         )?;
+        let (res_x, res_y) = Self::apply_shared_predicate(driver, &predicate, res_x, res_y)?;
 
         Self::insert_value(&outputs.0, res_x, initial_witness)?;
         Self::insert_value(&outputs.1, res_y, initial_witness)?;
@@ -521,24 +623,30 @@ where
             BlackBoxFuncCall::MultiScalarMul {
                 points,
                 scalars,
+                predicate,
                 outputs,
-                ..
             } => Self::multi_scalar_mul(
                 &mut self.driver,
                 initial_witness,
                 points,
                 scalars,
+                *predicate,
                 outputs,
                 pedantic_solving,
             )?,
             BlackBoxFuncCall::EmbeddedCurveAdd {
                 input1,
                 input2,
+                predicate,
                 outputs,
-                ..
-            } => {
-                Self::embedded_curve_add(&mut self.driver, initial_witness, input1, input2, outputs)
-            }?,
+            } => Self::embedded_curve_add(
+                &mut self.driver,
+                initial_witness,
+                input1,
+                input2,
+                *predicate,
+                outputs,
+            )?,
             BlackBoxFuncCall::Sha256Compression {
                 inputs,
                 hash_values,
@@ -604,5 +712,167 @@ where
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mpc::rep3::{Rep3AcvmSolver, Rep3AcvmType};
+    use ark_bn254::Fr;
+    use ark_ec::{AffineRepr, CurveGroup};
+    use ark_ff::{AdditiveGroup, One, Zero};
+    use mpc_core::protocols::rep3::{self, conversion::A2BType};
+    use mpc_net::local::LocalNetwork;
+    use std::str::FromStr;
+
+    type Solver<'a> = CoSolver<Rep3AcvmSolver<'a, Fr, LocalNetwork>, Fr>;
+
+    #[derive(Clone, Copy)]
+    enum Value {
+        Public(Fr),
+        Shared(Fr),
+    }
+
+    #[derive(Clone, Copy)]
+    enum Op {
+        /// Witnesses 1 to 4 are the coordinates of the two points
+        Add,
+        /// Witnesses 1 and 2 are the coordinates of the point, 3 and 4 the low and high limb of the scalar
+        Msm,
+    }
+
+    /// Executes the operation with three parties, where the inputs are witnesses 1 to 4 and the predicate is witness 5, and returns the opened result.
+    fn run(op: Op, inputs: [Value; 4], predicate: Value) -> (Fr, Fr) {
+        let mut rng = rand::thread_rng();
+        let mut witnesses = [vec![], vec![], vec![]];
+        for value in inputs.into_iter().chain([predicate]) {
+            let shares = match value {
+                Value::Public(value) => std::array::from_fn(|_| Rep3AcvmType::Public(value)),
+                Value::Shared(value) => {
+                    rep3::share_field_element(value, &mut rng).map(Rep3AcvmType::Shared)
+                }
+            };
+            for (witness, share) in witnesses.iter_mut().zip(shares) {
+                witness.push(share);
+            }
+        }
+
+        let threads = LocalNetwork::new_3_parties()
+            .into_iter()
+            .zip(witnesses)
+            .map(|(net, witness)| {
+                std::thread::spawn(move || {
+                    let mut driver =
+                        Rep3AcvmSolver::<Fr, _>::new(&net, A2BType::default()).unwrap();
+                    let mut witness_map = WitnessMap::new();
+                    for (i, value) in witness.into_iter().enumerate() {
+                        witness_map.insert(Witness(i as u32 + 1), value);
+                    }
+                    let input = |i| FunctionInput::Witness(Witness(i));
+                    let outputs = (Witness(6), Witness(7));
+                    let result = match op {
+                        Op::Add => Solver::embedded_curve_add(
+                            &mut driver,
+                            &mut witness_map,
+                            &[input(1), input(2)],
+                            &[input(3), input(4)],
+                            input(5),
+                            &outputs,
+                        ),
+                        Op::Msm => Solver::multi_scalar_mul(
+                            &mut driver,
+                            &mut witness_map,
+                            &[input(1), input(2)],
+                            &[input(3), input(4)],
+                            input(5),
+                            &outputs,
+                            false,
+                        ),
+                    };
+                    assert!(result.is_ok(), "the operation failed");
+                    [
+                        witness_map[&outputs.0].clone(),
+                        witness_map[&outputs.1].clone(),
+                    ]
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = threads
+            .into_iter()
+            .map(|thread| thread.join().expect("a party panicked"))
+            .collect::<Vec<_>>();
+
+        let open = |i: usize| match (&results[0][i], &results[1][i], &results[2][i]) {
+            (Rep3AcvmType::Public(a), Rep3AcvmType::Public(b), Rep3AcvmType::Public(c)) => {
+                assert!(a == b && b == c);
+                *a
+            }
+            (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b), Rep3AcvmType::Shared(c)) => {
+                rep3::combine_field_element(*a, *b, *c)
+            }
+            _ => panic!("the parties have different types"),
+        };
+        (open(0), open(1))
+    }
+
+    fn coords(point: ark_grumpkin::Projective) -> (Fr, Fr) {
+        point.into_affine().xy().unwrap()
+    }
+
+    fn generator() -> ark_grumpkin::Projective {
+        ark_grumpkin::Affine::generator().into_group()
+    }
+
+    #[test]
+    fn generator_matches_grumpkin() {
+        let (x, y) = coords(generator());
+        assert_eq!(x, Fr::one());
+        assert_eq!(y, Fr::from_str(GRUMPKIN_GENERATOR_Y).unwrap());
+    }
+
+    // (5, 7) is not on the curve. With a false predicate the inputs must not matter.
+    fn off_curve() -> (Fr, Fr) {
+        let (x, y) = (Fr::from(5u64), Fr::from(7u64));
+        assert!(!ark_grumpkin::Affine::new_unchecked(x, y).is_on_curve());
+        (x, y)
+    }
+
+    #[test]
+    fn embedded_curve_add_with_predicate() {
+        let (g_x, g_y) = coords(generator());
+        let (g2_x, g2_y) = coords(generator().double());
+        let valid = [g_x, g_y, g2_x, g2_y].map(Value::Shared);
+        let expected = coords(generator() + generator().double());
+        let (bad_x, bad_y) = off_curve();
+        let invalid = [bad_x, bad_y, g2_x, g2_y].map(Value::Shared);
+        let zero = (Fr::zero(), Fr::zero());
+
+        // enabled
+        assert_eq!(run(Op::Add, valid, Value::Public(Fr::one())), expected);
+        assert_eq!(run(Op::Add, valid, Value::Shared(Fr::one())), expected);
+        // disabled
+        assert_eq!(run(Op::Add, valid, Value::Shared(Fr::zero())), zero);
+        assert_eq!(run(Op::Add, invalid, Value::Shared(Fr::zero())), zero);
+        assert_eq!(run(Op::Add, invalid, Value::Public(Fr::zero())), zero);
+    }
+
+    #[test]
+    fn multi_scalar_mul_with_predicate() {
+        let (g_x, g_y) = coords(generator());
+        let scalar = Fr::from(5u64);
+        let valid = [g_x, g_y, scalar, Fr::zero()].map(Value::Shared);
+        let expected = coords(generator() * ark_grumpkin::Fr::from(5u64));
+        let (bad_x, bad_y) = off_curve();
+        let invalid = [bad_x, bad_y, scalar, Fr::zero()].map(Value::Shared);
+        let zero = (Fr::zero(), Fr::zero());
+
+        // enabled
+        assert_eq!(run(Op::Msm, valid, Value::Public(Fr::one())), expected);
+        assert_eq!(run(Op::Msm, valid, Value::Shared(Fr::one())), expected);
+        // disabled
+        assert_eq!(run(Op::Msm, valid, Value::Shared(Fr::zero())), zero);
+        assert_eq!(run(Op::Msm, invalid, Value::Shared(Fr::zero())), zero);
+        assert_eq!(run(Op::Msm, invalid, Value::Public(Fr::zero())), zero);
     }
 }
