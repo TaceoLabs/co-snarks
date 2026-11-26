@@ -46,7 +46,6 @@ fn main() -> eyre::Result<()> {
 
     let public_inputs =
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
-    let num_public_inputs = parsed.public_inputs().len();
 
     let nets = LocalNetwork::new_3_parties();
 
@@ -74,7 +73,7 @@ fn main() -> eyre::Result<()> {
     let should_plain_witness = parsed
         .clone()
         .to_plain_vm(VMConfig::default())
-        .run(plain_input, num_public_inputs)?
+        .run(plain_input)?
         .into_shared_witness();
 
     let mut should_witness = vec![];
@@ -99,7 +98,7 @@ fn main() -> eyre::Result<()> {
                 })
                 .collect();
             witness_extension
-                .run(input, num_public_inputs)
+                .run(input)
                 .unwrap()
                 .into_shared_witness()
                 .unbatch()

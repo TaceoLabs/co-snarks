@@ -23,7 +23,6 @@ fn batched_multiplier2(batch_size: usize) -> eyre::Result<()> {
     let mut compiler_config = CompilerConfig::new();
     compiler_config.simplification = circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
     let parsed = CoCircomCompiler::<Bn254>::parse(&add_circuit, compiler_config)?;
-    let num_public_inputs = parsed.public_inputs().len();
 
     let mut rng = thread_rng();
     let mut batch: BTreeMap<String, Vec<ark_bn254::Fr>> = BTreeMap::default();
@@ -42,14 +41,14 @@ fn batched_multiplier2(batch_size: usize) -> eyre::Result<()> {
         let parsed = parsed.clone();
         let current_wtns = parsed
             .to_plain_vm(VMConfig::default())
-            .run(plain_input, num_public_inputs)?
+            .run(plain_input)?
             .into_shared_witness();
         should_witness.push(current_wtns);
     }
 
     let is_wts = parsed
         .to_batched_plain_vm(VMConfig::default(), batch_size)
-        .run(batch, num_public_inputs)?
+        .run(batch)?
         .into_shared_witness()
         .unbatch();
     assert_eq!(is_wts, should_witness);
@@ -76,8 +75,6 @@ fn batched_chacha20(batch_size: usize) -> eyre::Result<()> {
     compiler_config.simplification = circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
     let parsed = CoCircomCompiler::<Bn254>::parse(&chacha_circuit, compiler_config.clone())?;
 
-    let num_public_inputs = parsed.public_inputs().len();
-
     let input_file = BufReader::new(File::open(input)?);
     let input: serde_json::Map<String, serde_json::Value> =
         serde_json::from_reader(input_file).unwrap();
@@ -93,12 +90,12 @@ fn batched_chacha20(batch_size: usize) -> eyre::Result<()> {
     let should_witness = parsed
         .clone()
         .to_plain_vm(VMConfig::default())
-        .run(plain_input, num_public_inputs)?
+        .run(plain_input)?
         .into_shared_witness();
 
     let is_wts = parsed
         .to_batched_plain_vm(VMConfig::default(), batch_size)
-        .run(batch, num_public_inputs)?
+        .run(batch)?
         .into_shared_witness()
         .unbatch();
     assert!(is_wts.into_iter().all(|is| is == should_witness));

@@ -55,6 +55,8 @@ pub struct WitnessExtension<F: PrimeField, C: VmCircomWitnessExtension<F>> {
     signal_to_witness: Vec<usize>,
     main_inputs: usize,
     main_outputs: usize,
+    /// The number of public input signals as declared by the circuit
+    main_public_inputs: usize,
     main_input_list: InputList,
     output_mapping: OutputMapping,
     driver: C,
@@ -909,15 +911,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
 }
 
 impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
-    fn post_processing(
-        &mut self,
-        amount_public_inputs: usize,
-    ) -> Result<FinalizedWitnessExtension<F, C>> {
-        let total_public_amount = self.main_outputs + amount_public_inputs + 1;
+    fn post_processing(&mut self) -> Result<FinalizedWitnessExtension<F, C>> {
+        // The witness starts with the constant 1, the outputs and the public inputs of the main component, which are opened. The number of opened signals must only depend on the circuit and never on the provided inputs, as otherwise an input provider could cause private signals to be opened.
+        let total_public_amount = self.main_outputs + self.main_public_inputs + 1;
         let mut public_inputs = Vec::with_capacity(total_public_amount);
         let mut witness = Vec::with_capacity(self.signal_to_witness.len() - total_public_amount);
         for (count, idx) in self.signal_to_witness.iter().enumerate() {
-            // the +1 here is for the constant 1 which always is at position 0.
             if count < total_public_amount {
                 public_inputs.push(self.driver.open(self.ctx.signals[*idx].clone())?);
             } else {
@@ -972,6 +971,13 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
                     self.ctx.signals[*offset + i] = signal;
                 }
             }
+        }
+        // All inputs of the circuit are set, so the remaining ones are unknown to it
+        if !input_signals.is_empty() {
+            eyre::bail!(
+                "The provided input contains signals that are not inputs of the circuit: {}",
+                input_signals.keys().join(", ")
+            );
         }
         Ok(())
     }
@@ -1030,12 +1036,11 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     pub fn run(
         mut self,
         input_signals: BTreeMap<String, C::VmType>,
-        amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.driver.compare_vm_config(&self.config)?;
         self.set_input_signals(input_signals)?;
         self.call_main_component()?;
-        self.post_processing(amount_public_inputs)
+        self.post_processing()
     }
 
     /// Starts the execution of the MPC-VM with the provided input signals and consumes `self`.
@@ -1049,7 +1054,6 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     /// # Arguments
     ///
     /// * `input_signals` - A `Vec` of [`VmCircomWitnessExtension::VmType`].
-    /// * `amount_public_inputs` - The amount of public inputs, necessary for later building the [`SharedWitness`].
     ///
     /// # Returns
     ///
@@ -1062,11 +1066,10 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     pub fn run_with_flat(
         mut self,
         input_signals: Vec<C::VmType>,
-        amount_public_inputs: usize,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.set_flat_input_signals(input_signals);
         self.call_main_component()?;
-        self.post_processing(amount_public_inputs)
+        self.post_processing()
     }
 
     /// Same as [`run()`](WitnessExtension::run) but with the possibility to use precomputed traces.
@@ -1081,13 +1084,12 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> WitnessExtension<F, C> {
     pub fn run_with_helper_trace(
         mut self,
         input_signals: BTreeMap<String, C::VmType>,
-        amount_public_inputs: usize,
         traces: &mut Option<Vec<ComponentAcceleratorOutput<C::VmType>>>,
     ) -> Result<FinalizedWitnessExtension<F, C>> {
         self.driver.compare_vm_config(&self.config)?;
         self.set_input_signals(input_signals)?;
         self.call_main_component_with_helper_trace(traces)?;
-        self.post_processing(amount_public_inputs)
+        self.post_processing()
     }
 }
 
@@ -1164,6 +1166,7 @@ impl<F: PrimeField + FieldUint> PlainWitnessExtension<F> {
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
+            main_public_inputs: parser.num_public_input_signals(),
             main_input_list: parser.main_input_list.clone(),
             output_mapping: parser.output_mapping.clone(),
             config,
@@ -1198,6 +1201,7 @@ impl<F: PrimeField + FieldUint> BatchedPlainWitnessExtension<F> {
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
+            main_public_inputs: parser.num_public_input_signals(),
             main_input_list: parser.main_input_list.clone(),
             output_mapping: parser.output_mapping.clone(),
             config,
@@ -1235,6 +1239,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> Rep3WitnessExtension<'a, F, N> {
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
+            main_public_inputs: parser.num_public_input_signals(),
             main_input_list: parser.main_input_list.clone(),
             output_mapping: parser.output_mapping.clone(),
             config,
@@ -1275,6 +1280,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> BatchedRep3WitnessExtension<'a, 
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
+            main_public_inputs: parser.num_public_input_signals(),
             main_input_list: parser.main_input_list.clone(),
             output_mapping: parser.output_mapping.clone(),
             config,
@@ -1315,6 +1321,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> ShamirWitnessExtension<'a, F, N>
             ),
             main_inputs: parser.main_inputs,
             main_outputs: parser.main_outputs,
+            main_public_inputs: parser.num_public_input_signals(),
             main_input_list: parser.main_input_list.clone(),
             output_mapping: parser.output_mapping.clone(),
             config,

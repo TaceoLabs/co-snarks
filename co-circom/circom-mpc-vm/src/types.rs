@@ -215,6 +215,17 @@ impl<F: PrimeField> CoCircomCompilerParsed<F> {
         &self.public_inputs
     }
 
+    /// The number of public input signals, i.e., the sum of the sizes of all public inputs.
+    ///
+    /// This differs from the number of public input names if a public input is an array.
+    pub fn num_public_input_signals(&self) -> usize {
+        self.main_input_list
+            .iter()
+            .filter(|(name, _, _)| self.public_inputs.contains(name))
+            .map(|(_, _, size)| size)
+            .sum()
+    }
+
     /// Get all function declarations.
     pub fn fun_decls(&self) -> &HashMap<String, FunDecl> {
         &self.fun_decls

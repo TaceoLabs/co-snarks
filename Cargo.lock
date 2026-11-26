@@ -1299,6 +1299,7 @@ dependencies = [
  "co-plonk",
  "color-eyre",
  "criterion",
+ "eyre",
  "figment",
  "mpc-core",
  "mpc-net",

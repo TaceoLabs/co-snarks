@@ -874,13 +874,10 @@ mod tests {
 
         let plain_vm = parsed.to_plain_vm(VMConfig::default());
         let finalized_witness = plain_vm
-            .run_with_flat(
-                to_field_vec!(vec![
-                    "883", "521", "889", "768", "948", "35", "647", "221", "248", "427", "338",
-                    "189", "462", "748", "135", "159", "530", "787", "389", "594",
-                ]),
-                0,
-            )
+            .run_with_flat(to_field_vec!(vec![
+                "883", "521", "889", "768", "948", "35", "647", "221", "248", "427", "338", "189",
+                "462", "748", "135", "159", "530", "787", "389", "594",
+            ]))
             .unwrap();
 
         let out = finalized_witness.get_output("out").unwrap();

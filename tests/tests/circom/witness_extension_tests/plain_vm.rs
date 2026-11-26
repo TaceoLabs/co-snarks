@@ -52,7 +52,7 @@ macro_rules! witness_extension_test_plain {
 
                     let is_witness = parsed
                         .to_plain_vm(VMConfig::default())
-                        .run_with_flat(inp.inputs[i].to_owned(), 0)
+                        .run_with_flat(inp.inputs[i].to_owned())
                         .unwrap()
                         .into_shared_witness();
 

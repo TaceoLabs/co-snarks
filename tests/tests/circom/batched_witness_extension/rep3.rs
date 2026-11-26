@@ -30,7 +30,6 @@ fn batched_multiplier2(batch_size: usize) -> eyre::Result<()> {
     let mut compiler_config = CompilerConfig::new();
     compiler_config.simplification = circom_mpc_compiler::SimplificationLevel::O2(usize::MAX);
     let parsed = CoCircomCompiler::<Bn254>::parse(&add_circuit, compiler_config)?;
-    let num_public_inputs = parsed.public_inputs().len();
 
     let nets = LocalNetwork::new_3_parties();
 
@@ -57,7 +56,7 @@ fn batched_multiplier2(batch_size: usize) -> eyre::Result<()> {
         let parsed = parsed.clone();
         let current_wtns = parsed
             .to_plain_vm(VMConfig::default())
-            .run(plain_input, num_public_inputs)?
+            .run(plain_input)?
             .into_shared_witness();
         should_witness.push(current_wtns);
     }
@@ -80,7 +79,7 @@ fn batched_multiplier2(batch_size: usize) -> eyre::Result<()> {
                 })
                 .collect();
             witness_extension
-                .run(input, num_public_inputs)
+                .run(input)
                 .unwrap()
                 .into_shared_witness()
                 .unbatch()
@@ -128,7 +127,6 @@ fn batched_chacha20(batch_size: usize) -> eyre::Result<()> {
 
     let public_inputs =
         CoCircomCompiler::<Bn254>::get_public_inputs(&chacha_circuit, compiler_config).unwrap();
-    let num_public_inputs = parsed.public_inputs().len();
 
     let nets = LocalNetwork::new_3_parties();
 
@@ -156,7 +154,7 @@ fn batched_chacha20(batch_size: usize) -> eyre::Result<()> {
     let should_plain_witness = parsed
         .clone()
         .to_plain_vm(VMConfig::default())
-        .run(plain_input, num_public_inputs)?
+        .run(plain_input)?
         .into_shared_witness();
 
     let mut should_witness = vec![];
@@ -181,7 +179,7 @@ fn batched_chacha20(batch_size: usize) -> eyre::Result<()> {
                 })
                 .collect();
             witness_extension
-                .run(input, num_public_inputs)
+                .run(input)
                 .unwrap()
                 .into_shared_witness()
                 .unbatch()
