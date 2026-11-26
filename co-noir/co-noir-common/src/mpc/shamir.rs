@@ -225,28 +225,6 @@ impl<P: HonkCurve<TranscriptFieldType>> NoirUltraHonkProver<P> for ShamirUltraHo
         Ok(())
     }
 
-    fn inv_many_in_place_leaking_zeros<N: Network>(
-        a: &mut [Self::ArithmeticShare],
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<()> {
-        let r = (0..a.len())
-            .map(|_| <Self as NoirUltraHonkProver<P>>::rand(net, state))
-            .collect::<Result<Vec<_>, _>>()?;
-        let y: Vec<P::ScalarField> =
-            <Self as NoirUltraHonkProver<P>>::mul_open_many(a, &r, net, state)?;
-
-        for (a, r, y) in izip!(a.iter_mut(), r, y) {
-            if y.is_zero() {
-                *a = Self::ArithmeticShare::default();
-            } else {
-                *a = r * y.inverse().unwrap();
-            }
-        }
-
-        Ok(())
-    }
-
     fn msm_public_points(
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],

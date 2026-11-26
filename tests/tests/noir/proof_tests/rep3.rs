@@ -97,7 +97,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
     }
 
     let vk = results[0].2.clone();
-    if has_zk == ZeroKnowledge::No && name != "recursion" && name != "recursion_zk" {
+    if has_zk == ZeroKnowledge::No && !proof_file.is_empty() {
         let proof_u8 = H::to_buffer(proof.inner_as_ref());
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
         assert_eq!(proof_u8, read_proof_u8);
@@ -173,7 +173,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         assert_eq!(public_input, p);
     }
 
-    if has_zk == ZeroKnowledge::No && name != "recursion" && name != "recursion_zk" {
+    if has_zk == ZeroKnowledge::No && !proof_file.is_empty() {
         let proof_u8 = H::to_buffer(proof.inner_as_ref());
         let read_proof_u8 = std::fs::read(proof_file).unwrap();
         assert_eq!(proof_u8, read_proof_u8);
@@ -250,6 +250,13 @@ fn random_access_witness_and_proof_test_poseidon2sponge() {
 #[test]
 fn random_access_proof_test_poseidon2sponge() {
     proof_test::<Poseidon2Sponge>("random_access", ZeroKnowledge::Yes, "");
+}
+
+// The xor of two shared values is proven with lookups with shared operands, so the lookup read tags are shared
+#[test]
+fn blackbox_xor_witness_and_proof_test_poseidon2sponge() {
+    witness_and_proof_test::<Poseidon2Sponge>("blackbox_xor", ZeroKnowledge::No, "");
+    witness_and_proof_test::<Poseidon2Sponge>("blackbox_xor", ZeroKnowledge::Yes, "");
 }
 
 #[test]
