@@ -197,10 +197,12 @@ pub struct SplitProvingKeyCli {
     pub num_parties: usize,
     /// Generate a recursive proof
     #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
     pub recursive: bool,
-    /// Prove with or without the zero knowledge property
+    /// Prove without the zero knowledge property. The proof and the messages exchanged while proving then reveal information about the witness to the other parties and to everyone who sees the proof, so only use this if the witness does not need to stay hidden.
     #[arg(long)]
-    pub zk: bool,
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub disable_zk: bool,
 }
 
 /// Config for `split_proving_key`
@@ -221,9 +223,11 @@ pub struct SplitProvingKeyConfig {
     /// The number of parties
     pub num_parties: usize,
     /// Generate a recursive proof
+    #[serde(default)]
     pub recursive: bool,
-    /// Prove with or without the zero knowledge property
-    pub zk: bool,
+    /// Prove without the zero knowledge property
+    #[serde(default)]
+    pub disable_zk: bool,
 }
 
 /// Cli arguments for `merge_input_shares`
@@ -480,16 +484,19 @@ pub struct GenerateProofCli {
     pub threshold: usize,
     /// Generate a recursive friendly proof
     #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
     pub recursive: bool,
     /// The path to the prover crs file
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub crs: Option<PathBuf>,
-    /// Prove with or without the zero knowledge property
+    /// Prove without the zero knowledge property. The proof and the messages exchanged while proving then reveal information about the witness to the other parties and to everyone who sees the proof, so only use this if the witness does not need to stay hidden.
     #[arg(long)]
-    pub zk: bool,
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub disable_zk: bool,
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
     #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
     pub fields_as_json: bool,
     /// The path to the verification key file
     #[arg(long)]
@@ -520,9 +527,11 @@ pub struct GenerateProofConfig {
     pub network: NetworkConfigFile,
     /// The path to the prover crs file
     pub crs: PathBuf,
-    /// Prove with or without the zero knowledge property
-    pub zk: bool,
+    /// Prove without the zero knowledge property
+    #[serde(default)]
+    pub disable_zk: bool,
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
+    #[serde(default)]
     pub fields_as_json: bool,
     /// The path to the verification key file
     pub vk: PathBuf,
@@ -569,11 +578,13 @@ pub struct BuildAndGenerateProofCli {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
-    /// Prove with or without the zero knowledge property
+    /// Prove without the zero knowledge property. The proof and the messages exchanged while proving then reveal information about the witness to the other parties and to everyone who sees the proof, so only use this if the witness does not need to stay hidden.
     #[arg(long)]
-    pub zk: bool,
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub disable_zk: bool,
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
     #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
     pub fields_as_json: bool,
     /// The path to the verification key file
     #[arg(long)]
@@ -606,9 +617,11 @@ pub struct BuildAndGenerateProofConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfigFile,
-    /// Prove with or without the zero knowledge property
-    pub zk: bool,
+    /// Prove without the zero knowledge property
+    #[serde(default)]
+    pub disable_zk: bool,
     /// Write the outputs as fields to json. If not passed, they will only be written as bytes to a file consistent with Barretenberg (if 'out'/'public_input' is specified).
+    #[serde(default)]
     pub fields_as_json: bool,
     /// The path to the verification key file
     pub vk: PathBuf,
@@ -642,6 +655,7 @@ pub struct CreateVKCli {
     pub vk: Option<PathBuf>,
     /// Write the vk as fields to json. If not passed, the vk will only be written as bytes to a file consistent with Barretenberg.
     #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
     pub fields_as_json: bool,
 }
 
@@ -657,6 +671,7 @@ pub struct CreateVKConfig {
     /// The path to the verification key file
     pub vk: PathBuf,
     /// Write the vk as fields to json. If not passed, the vk will only be written as bytes to a file consistent with Barretenberg.
+    #[serde(default)]
     pub fields_as_json: bool,
 }
 
@@ -687,9 +702,10 @@ pub struct VerifyCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub crs: Option<PathBuf>,
-    /// Verify a proof with or without the zero knowledge property
+    /// Verify a proof that was generated without the zero knowledge property (i.e., with `--disable-zk`)
     #[arg(long)]
-    pub has_zk: bool,
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub disable_zk: bool,
 }
 
 /// Config for `verify`
@@ -705,8 +721,9 @@ pub struct VerifyConfig {
     pub vk: PathBuf,
     /// The path to the verifier crs file
     pub crs: PathBuf,
-    /// Verify a proof with or without the zero knowledge property
-    pub has_zk: bool,
+    /// Verify a proof that was generated without the zero knowledge property
+    #[serde(default)]
+    pub disable_zk: bool,
 }
 
 /// Cli arguments for `download-crs`
@@ -1035,7 +1052,7 @@ fn run_split_proving_key(config: SplitProvingKeyConfig) -> color_eyre::Result<Ex
     let out_dir = config.out_dir;
     let t = config.threshold;
     let n = config.num_parties;
-    let has_zk = ZeroKnowledge::from(config.zk);
+    let has_zk = ZeroKnowledge::from(!config.disable_zk);
 
     // parse constraint system
     let constraint_system = co_noir::constraint_system_from_reader(&File::open(&circuit_path)?)
@@ -1388,6 +1405,15 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
     Ok(ExitCode::SUCCESS)
 }
 
+/// Warns that the proof and the proving protocol reveal information about the witness without the zero knowledge property.
+fn warn_if_not_zk(has_zk: ZeroKnowledge) {
+    if has_zk == ZeroKnowledge::No {
+        tracing::warn!(
+            "Proving without the zero knowledge property: the proof and the messages exchanged while proving reveal information about the witness to the other parties and to everyone who sees the proof"
+        );
+    }
+}
+
 #[instrument(level = "debug", skip(config))]
 fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCode> {
     let proving_key = config.proving_key;
@@ -1400,7 +1426,8 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let t = config.threshold;
     let crs_path = config.crs;
     let fields_as_json = config.fields_as_json;
-    let has_zk = ZeroKnowledge::from(config.zk);
+    let has_zk = ZeroKnowledge::from(!config.disable_zk);
+    warn_if_not_zk(has_zk);
     let network_config = NetworkConfig::try_from(config.network)?;
 
     // connect to network
@@ -1594,7 +1621,8 @@ fn run_build_and_generate_proof(
     let n = config.network.parties.len();
     let t = config.threshold;
     let fields_as_json = config.fields_as_json;
-    let has_zk = ZeroKnowledge::from(config.zk);
+    let has_zk = ZeroKnowledge::from(!config.disable_zk);
+    warn_if_not_zk(has_zk);
     let network_config = NetworkConfig::try_from(config.network)?;
 
     // parse witness shares
@@ -1864,7 +1892,7 @@ fn run_verify(config: VerifyConfig) -> color_eyre::Result<ExitCode> {
     let vk_path: PathBuf = config.vk;
     let crs_path = config.crs;
     let hasher = config.hasher;
-    let has_zk = ZeroKnowledge::from(config.has_zk);
+    let has_zk = ZeroKnowledge::from(!config.disable_zk);
 
     // parse proof file
     let proof_u8 = std::fs::read(&proof).context("while reading proof file")?;

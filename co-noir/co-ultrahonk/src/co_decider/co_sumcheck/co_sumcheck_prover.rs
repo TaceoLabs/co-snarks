@@ -20,7 +20,7 @@ use co_noir_common::{
 use mpc_net::Network;
 use ultrahonk::{Utils, prelude::GateSeparatorPolynomial};
 
-// Keep in mind, the UltraHonk protocol (UltraFlavor) does not per default have ZK
+// The ZK-specific steps are only executed if the caller requests ZK (ZeroKnowledge::Yes), which is the default of the co-noir binary
 impl<
     T: NoirUltraHonkProver<P>,
     P: HonkCurve<TranscriptFieldType>,
