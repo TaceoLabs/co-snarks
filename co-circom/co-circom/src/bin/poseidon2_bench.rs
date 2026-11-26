@@ -21,7 +21,6 @@ use mpc_core::{
 use mpc_net::{
     Network,
     config::{NetworkConfig, NetworkConfigFile},
-    tcp::TcpNetwork,
 };
 use rand::{CryptoRng, Rng};
 use serde::{Deserialize, Serialize};
@@ -31,6 +30,9 @@ use std::{
     time::{Duration, Instant},
 };
 use tracing_subscriber::fmt::format::FmtSpan;
+
+mod network;
+use network::MpcNetwork;
 
 const SLEEP: Duration = Duration::from_millis(200);
 
@@ -79,6 +81,10 @@ pub struct Cli {
     /// Statesize for the hash function
     #[arg(short, long, default_value_t = 3)]
     pub statesize: usize,
+    /// Use plain TCP instead of TLS for the MPC network. The traffic is then not encrypted and the other parties are not authenticated, so only use this in a trusted, isolated network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub insecure_tcp: bool,
 }
 
 /// Config
@@ -96,6 +102,9 @@ pub struct Config {
     pub statesize: usize,
     /// Network config
     pub network: NetworkConfigFile,
+    /// Use plain TCP instead of TLS for the MPC network
+    #[serde(default)]
+    pub insecure_tcp: bool,
 }
 
 /// Prefix for config env variables
@@ -416,7 +425,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -457,7 +466,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -499,7 +508,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -546,7 +555,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -600,7 +609,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
     let mut state = Rep3State::new(&net, A2BType::default())?;
 
     for _ in 0..config.runs {
@@ -671,7 +680,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -729,7 +738,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -793,7 +802,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     for _ in 0..config.runs {
         let mut share = share_random_input_shamir::<F, T, _, _>(
@@ -873,7 +882,7 @@ where
 
     // connect to network
     let network_config = NetworkConfig::try_from(config.network.clone())?;
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     for _ in 0..config.runs {
         let share = share_random_input_shamir::<F, T, _, _>(

@@ -16,10 +16,7 @@ use figment::{
     providers::{Env, Format, Serialized, Toml},
 };
 use mpc_core::uint::FieldUint;
-use mpc_net::{
-    config::{NetworkConfig, NetworkConfigFile},
-    tcp::TcpNetwork,
-};
+use mpc_net::config::{NetworkConfig, NetworkConfigFile};
 use num_traits::Zero;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -31,6 +28,9 @@ use std::{
     time::Instant,
 };
 use tracing::instrument;
+
+mod network;
+use network::MpcNetwork;
 
 /// An enum representing the ZK proof system to use.
 #[derive(Debug, Clone, ValueEnum, Serialize, Deserialize)]
@@ -298,6 +298,10 @@ pub struct GenerateWitnessCli {
     /// The number of parties (Shamir only)
     #[arg(short, long, default_value_t = 3)]
     pub num_parties: usize,
+    /// Use plain TCP instead of TLS for the MPC network. The traffic is then not encrypted and the other parties are not authenticated, so only use this in a trusted, isolated network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub insecure_tcp: bool,
 }
 
 /// Config for `generate_witness`
@@ -327,6 +331,9 @@ pub struct GenerateWitnessConfig {
     /// The number of parties (Shamir only)
     #[serde(default = "default_num_parties")]
     pub num_parties: usize,
+    /// Use plain TCP instead of TLS for the MPC network
+    #[serde(default)]
+    pub insecure_tcp: bool,
 }
 
 fn default_threshold() -> usize {
@@ -364,6 +371,10 @@ pub struct TranslateWitnessCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out: Option<PathBuf>,
+    /// Use plain TCP instead of TLS for the MPC network. The traffic is then not encrypted and the other parties are not authenticated, so only use this in a trusted, isolated network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub insecure_tcp: bool,
 }
 
 /// Config for `translate_witness`
@@ -381,6 +392,9 @@ pub struct TranslateWitnessConfig {
     pub out: PathBuf,
     /// Network config
     pub network: NetworkConfigFile,
+    /// Use plain TCP instead of TLS for the MPC network
+    #[serde(default)]
+    pub insecure_tcp: bool,
 }
 
 /// Cli arguments for `generate_proof`
@@ -423,6 +437,10 @@ pub struct GenerateProofCli {
     /// The threshold of tolerated colluding parties
     #[arg(short, long, default_value_t = 1)]
     pub threshold: usize,
+    /// Use plain TCP instead of TLS for the MPC network. The traffic is then not encrypted and the other parties are not authenticated, so only use this in a trusted, isolated network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub insecure_tcp: bool,
 }
 
 /// Config for `generate_proof`
@@ -448,6 +466,9 @@ pub struct GenerateProofConfig {
     pub threshold: usize,
     /// Network config
     pub network: NetworkConfigFile,
+    /// Use plain TCP instead of TLS for the MPC network
+    #[serde(default)]
+    pub insecure_tcp: bool,
 }
 
 /// Cli arguments for `verify`
@@ -871,7 +892,7 @@ where
     }
 
     // connect to network
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     // parse circuit file & put through our compiler
     let circuit = CoCircomCompiler::<P>::parse(circuit, config.compiler)
@@ -945,7 +966,7 @@ fn run_translate_witness<P: Pairing + CircomArkworksPairingBridge>(
         bincode::deserialize_from(witness_file)?;
 
     // connect to network
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     // Translate witness to shamir shares
     tracing::info!("Starting witness translation...");
@@ -998,7 +1019,7 @@ where
     tracing::info!("Starting proof generation...");
     let public_input = match proof_system {
         ProofSystem::Groth16 => {
-            let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+            let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
             let zkey = Groth16ZKey::<P>::from_reader(zkey_file, check).context("reading zkey")?;
             let (matrices, pkey) = zkey.into();
@@ -1063,7 +1084,7 @@ where
             public_input
         }
         ProofSystem::Plonk => {
-            let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+            let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
             let zkey = Arc::new(
                 PlonkZKey::<P>::from_reader(zkey_file, check).context("while parsing zkey")?,
             );

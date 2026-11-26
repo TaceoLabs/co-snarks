@@ -21,7 +21,6 @@ use figment::{
 use mpc_core::protocols::rep3::id::PartyID;
 use mpc_net::config::NetworkConfig;
 use mpc_net::config::NetworkConfigFile;
-use mpc_net::tcp::TcpNetwork;
 use noir_types::HonkProofType;
 use serde::{Deserialize, Serialize};
 use sha3::Keccak256;
@@ -33,6 +32,9 @@ use std::{
     time::Instant,
 };
 use tracing::instrument;
+
+mod network;
+use network::MpcNetwork;
 
 /// An enum representing the MPC protocol to use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ValueEnum)]
@@ -284,6 +286,10 @@ pub struct GenerateWitnessCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out: Option<PathBuf>,
+    /// Use plain TCP instead of TLS for the MPC network. The traffic is then not encrypted and the other parties are not authenticated, so only use this in a trusted, isolated network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub insecure_tcp: bool,
 }
 
 /// Config for `generate_witness`
@@ -299,6 +305,9 @@ pub struct GenerateWitnessConfig {
     pub out: PathBuf,
     /// Network config
     pub network: NetworkConfigFile,
+    /// Use plain TCP instead of TLS for the MPC network
+    #[serde(default)]
+    pub insecure_tcp: bool,
 }
 
 /// Cli arguments for `translate_witness`
@@ -411,6 +420,10 @@ pub struct BuildProvingKeyCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub crs: Option<PathBuf>,
+    /// Use plain TCP instead of TLS for the MPC network. The traffic is then not encrypted and the other parties are not authenticated, so only use this in a trusted, isolated network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub insecure_tcp: bool,
 }
 
 /// Config for `build_proving_key`
@@ -430,6 +443,9 @@ pub struct BuildProvingKeyConfig {
     pub network: NetworkConfigFile,
     /// The path to the prover crs file
     pub crs: PathBuf,
+    /// Use plain TCP instead of TLS for the MPC network
+    #[serde(default)]
+    pub insecure_tcp: bool,
 }
 
 /// Cli arguments for `generate_proof`
@@ -479,6 +495,10 @@ pub struct GenerateProofCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub vk: Option<PathBuf>,
+    /// Use plain TCP instead of TLS for the MPC network. The traffic is then not encrypted and the other parties are not authenticated, so only use this in a trusted, isolated network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub insecure_tcp: bool,
 }
 
 /// Config for `generate_proof`
@@ -506,6 +526,9 @@ pub struct GenerateProofConfig {
     pub fields_as_json: bool,
     /// The path to the verification key file
     pub vk: PathBuf,
+    /// Use plain TCP instead of TLS for the MPC network
+    #[serde(default)]
+    pub insecure_tcp: bool,
 }
 
 /// Cli arguments for `build_and_generate_proof`
@@ -556,6 +579,10 @@ pub struct BuildAndGenerateProofCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub vk: Option<PathBuf>,
+    /// Use plain TCP instead of TLS for the MPC network. The traffic is then not encrypted and the other parties are not authenticated, so only use this in a trusted, isolated network.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub insecure_tcp: bool,
 }
 
 /// Config for `build_and_generate_proof`
@@ -585,6 +612,9 @@ pub struct BuildAndGenerateProofConfig {
     pub fields_as_json: bool,
     /// The path to the verification key file
     pub vk: PathBuf,
+    /// Use plain TCP instead of TLS for the MPC network
+    #[serde(default)]
+    pub insecure_tcp: bool,
 }
 
 /// Cli arguments for `creating_vk`
@@ -1195,7 +1225,7 @@ fn run_generate_witness(config: GenerateWitnessConfig) -> color_eyre::Result<Exi
         bincode::deserialize_from(input_share_file).context("while deserializing input share")?;
 
     // connect to network
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     tracing::info!("Starting witness generation...");
     let start = Instant::now();
@@ -1305,7 +1335,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
         )?;
 
     // connect to network
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     tracing::info!("Starting proving key generation...");
     match protocol {
@@ -1374,7 +1404,7 @@ fn run_generate_proof(config: GenerateProofConfig) -> color_eyre::Result<ExitCod
     let network_config = NetworkConfig::try_from(config.network)?;
 
     // connect to network
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     // parse proving_key file
     let proving_key_file =
@@ -1576,7 +1606,7 @@ fn run_build_and_generate_proof(
         .context("while parsing constraint system")?;
 
     // connect to network
-    let net = TcpNetwork::new(network_config).context("while connecting to network")?;
+    let net = MpcNetwork::connect(network_config, config.insecure_tcp)?;
 
     let circuit_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system)?;
     let prover_crs =
