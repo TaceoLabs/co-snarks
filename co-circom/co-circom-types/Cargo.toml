@@ -25,3 +25,4 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+ark-bn254 = { workspace = true }
