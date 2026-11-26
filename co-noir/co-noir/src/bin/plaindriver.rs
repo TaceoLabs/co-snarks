@@ -4,7 +4,7 @@ use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
 use co_builder::keys::proving_key::{self};
-use co_builder::prelude::{HonkRecursion, UltraCircuitBuilder};
+use co_builder::prelude::{HonkRecursion, OpenRecursionData, UltraCircuitBuilder};
 use co_noir::Bn254G1;
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::keys::verification_key::VerifyingKey;
@@ -217,6 +217,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         0,
         witness,
         HonkRecursion::UltraHonk,
+        OpenRecursionData::No,
         &recursion_crs,
         &mut driver,
     )

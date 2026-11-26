@@ -1,4 +1,4 @@
-pub use crate::acir_format::{AcirFormat, HonkRecursion};
+pub use crate::acir_format::{AcirFormat, HonkRecursion, OpenRecursionData};
 pub use crate::constraint_system_from_reader;
 pub use crate::get_constraint_system_from_artifact;
 pub use crate::types::aes128::AES128_SBOX;

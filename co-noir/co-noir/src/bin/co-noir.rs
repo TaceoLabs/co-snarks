@@ -428,6 +428,10 @@ pub struct BuildProvingKeyCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::ops::Not::not")]
     pub insecure_tcp: bool,
+    /// Allow opening shared recursion data. If the circuit verifies a ZK proof, all shared values among the inner proof, its public inputs, the verification key, the key hash and the predicate are opened to all parties while building the proving key. Without this flag, building the proving key fails in this case.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub open_recursion_data: bool,
 }
 
 /// Config for `build_proving_key`
@@ -450,6 +454,9 @@ pub struct BuildProvingKeyConfig {
     /// Use plain TCP instead of TLS for the MPC network
     #[serde(default)]
     pub insecure_tcp: bool,
+    /// Allow opening shared recursion data to all parties
+    #[serde(default)]
+    pub open_recursion_data: bool,
 }
 
 /// Cli arguments for `generate_proof`
@@ -594,6 +601,10 @@ pub struct BuildAndGenerateProofCli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::ops::Not::not")]
     pub insecure_tcp: bool,
+    /// Allow opening shared recursion data. If the circuit verifies a ZK proof, all shared values among the inner proof, its public inputs, the verification key, the key hash and the predicate are opened to all parties while building the proving key. Without this flag, building the proving key fails in this case.
+    #[arg(long)]
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub open_recursion_data: bool,
 }
 
 /// Config for `build_and_generate_proof`
@@ -628,6 +639,9 @@ pub struct BuildAndGenerateProofConfig {
     /// Use plain TCP instead of TLS for the MPC network
     #[serde(default)]
     pub insecure_tcp: bool,
+    /// Allow opening shared recursion data to all parties
+    #[serde(default)]
+    pub open_recursion_data: bool,
 }
 
 /// Cli arguments for `creating_vk`
@@ -1369,6 +1383,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 witness_share,
                 &net,
                 &prover_crs,
+                config.open_recursion_data.into(),
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
@@ -1390,6 +1405,7 @@ fn run_build_proving_key(config: BuildProvingKeyConfig) -> color_eyre::Result<Ex
                 witness_share,
                 &net,
                 &prover_crs,
+                config.open_recursion_data.into(),
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
@@ -1668,6 +1684,7 @@ fn run_build_and_generate_proof(
                 witness_share,
                 &net,
                 &prover_crs,
+                config.open_recursion_data.into(),
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");
@@ -1714,6 +1731,7 @@ fn run_build_and_generate_proof(
                 witness_share,
                 &net,
                 &prover_crs,
+                config.open_recursion_data.into(),
             )?;
             let duration_ms = start.elapsed().as_micros() as f64 / 1000.;
             tracing::info!("Build proving key took {duration_ms} ms");

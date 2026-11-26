@@ -60,6 +60,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
                 witness,
                 &net,
                 &prover_crs,
+                co_noir::OpenRecursionData::No,
             )
             .unwrap();
             let (proof, public_inputs) = ShamirCoUltraHonk::<_, H>::prove(
