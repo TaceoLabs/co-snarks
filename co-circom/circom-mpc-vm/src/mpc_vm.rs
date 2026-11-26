@@ -555,7 +555,17 @@ impl<F: PrimeField, C: VmCircomWitnessExtension<F>> Component<F, C> {
                 }
                 op_codes::MpcOpCode::Assert(line) => {
                     let assertion = self.pop_field();
-                    if protocol.is_zero(assertion, true)? {
+                    let failed = if self.if_stack.is_shared() {
+                        // Both branches of a shared if are executed, so the assertion must only fail if its branch is actually taken. We therefore open whether the branch is taken and the assertion is false, and nothing about the assertion itself. Otherwise, an assertion in the branch that is not taken would reveal information and could abort an honest execution.
+                        let cond = self.if_stack.get_shared_condition();
+                        let zero = protocol.public_zero();
+                        let is_false = protocol.eq(assertion, zero)?;
+                        let failed = protocol.bool_and(cond, is_false)?;
+                        !protocol.is_zero(failed, true)?
+                    } else {
+                        protocol.is_zero(assertion, true)?
+                    };
+                    if failed {
                         bail!(
                             "Assertion failed during execution on line {line} in component {}",
                             self.symbol

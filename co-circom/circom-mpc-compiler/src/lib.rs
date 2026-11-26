@@ -80,7 +80,9 @@ pub struct CompilerConfig {
     /// Does an additional check over the constraints produced
     #[serde(default)]
     pub inspect: bool,
-    /// Adds additional opcodes for debugging.
+    /// Adds additional opcodes for debugging, i.e., the `assert` statements of the circuit are executed.
+    ///
+    /// During the MPC witness extension, every executed `assert` opens one bit to all parties: whether the assertion holds, or, inside an `if` with a secret-shared condition, whether its branch is taken and the assertion fails. A failing assertion aborts the execution, as it does in circom. If the value of an assertion inside such an `if` is public and false, this reveals whether the branch is taken. Set this to `false` to skip the assertions and open nothing.
     #[serde(default = "default_true")]
     pub debug: bool,
 }
