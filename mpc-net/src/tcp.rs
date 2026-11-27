@@ -1,4 +1,8 @@
 //! TCP MPC network
+//!
+//! # Security
+//!
+//! This transport is **not secure**: the traffic is not encrypted and the peers are not authenticated. Every host that can reach the port can take the place of a party, since a peer is identified by the party id it sends, and everyone who can observe the traffic learns all messages, which include the shares and the seeds of the correlated randomness of the MPC protocols. Only use it for tests and benchmarks, or in a trusted, isolated network. Use the TLS transport (`tls` features) otherwise.
 
 use std::{
     array,
@@ -19,6 +23,8 @@ use itertools::Itertools;
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 
 /// A MPC network using [TcpStream]s
+///
+/// **Not secure:** no encryption and no authentication of the peers, see the [module documentation](self).
 #[derive(Debug)]
 pub struct TcpNetwork {
     id: usize,
