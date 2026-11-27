@@ -7,9 +7,10 @@ use acir::{
     native_types::{Witness, WitnessMap},
 };
 
-use ark_ff::PrimeField;
+use ark_ff::{BigInteger, PrimeField};
 
 use mpc_core::gadgets::poseidon2::Poseidon2;
+use num_bigint::BigUint;
 
 /// The y-coordinate of the generator (1, y) of the embedded curve (Grumpkin)
 const GRUMPKIN_GENERATOR_Y: &str = "17631683881184975370165255887551781615748388533673675138860";
@@ -318,6 +319,39 @@ where
         Ok((xs, ys))
     }
 
+    /// Replaces the scalars with public limbs that the driver rejects by the scalar one, which is given by the limbs (1, 0).
+    ///
+    /// This is only for a shared predicate: A disabled operation must not depend on its inputs, so it must not fail due to such a scalar. The circuit replaces the scalar of a disabled operation in the same way before it constrains the limbs. If the operation is enabled, the circuit is not satisfied for such a scalar, so its result does not matter.
+    ///
+    /// A public limb is rejected if it does not fit into 128 bits. With `pedantic_solving`, two public limbs are also rejected if they give a scalar that is not smaller than the modulus of the scalar field of the embedded curve (Grumpkin). Shared limbs cannot be checked and are never rejected.
+    fn replace_invalid_public_scalars(
+        scalars_lo: &mut [T::AcvmType],
+        scalars_hi: &mut [T::AcvmType],
+        pedantic_solving: bool,
+    ) {
+        const LIMB_BITS: u32 = 128;
+        let modulus: BigUint = <ark_grumpkin::Fr as PrimeField>::MODULUS.into();
+        for (lo, hi) in scalars_lo.iter_mut().zip(scalars_hi.iter_mut()) {
+            let lo_public = T::get_public(lo).map(|limb| limb.into_bigint());
+            let hi_public = T::get_public(hi).map(|limb| limb.into_bigint());
+            let too_many_bits = [&lo_public, &hi_public]
+                .into_iter()
+                .flatten()
+                .any(|limb| limb.num_bits() > LIMB_BITS);
+            let too_large = match (lo_public, hi_public) {
+                (Some(lo), Some(hi)) if pedantic_solving && !too_many_bits => {
+                    let scalar: BigUint = (Into::<BigUint>::into(hi) << LIMB_BITS) + lo.into();
+                    scalar >= modulus
+                }
+                _ => false,
+            };
+            if too_many_bits || too_large {
+                *lo = T::AcvmType::from(F::one());
+                *hi = T::public_zero();
+            }
+        }
+    }
+
     pub(super) fn multi_scalar_mul(
         driver: &mut T,
         initial_witness: &mut WitnessMap<T::AcvmType>,
@@ -378,6 +412,13 @@ where
             } else {
                 scalars_hi.push(scalar);
             }
+        }
+        if matches!(predicate, CurveOpPredicate::Shared(_)) {
+            Self::replace_invalid_public_scalars(
+                &mut scalars_lo,
+                &mut scalars_hi,
+                pedantic_solving,
+            );
         }
         // Call the backend's multi-scalar multiplication function
         let (res_x, res_y, _) = driver.multi_scalar_mul(
@@ -744,6 +785,16 @@ mod tests {
 
     /// Executes the operation with three parties, where the inputs are witnesses 1 to 4 and the predicate is witness 5, and returns the opened result.
     fn run(op: Op, inputs: [Value; 4], predicate: Value) -> (Fr, Fr) {
+        try_run(op, inputs, predicate, false).expect("the operation failed")
+    }
+
+    /// As [`run`], but returns `None` if the operation fails for all parties.
+    fn try_run(
+        op: Op,
+        inputs: [Value; 4],
+        predicate: Value,
+        pedantic_solving: bool,
+    ) -> Option<(Fr, Fr)> {
         let mut rng = rand::thread_rng();
         let mut witnesses = [vec![], vec![], vec![]];
         for value in inputs.into_iter().chain([predicate]) {
@@ -787,20 +838,28 @@ mod tests {
                             &[input(3), input(4)],
                             input(5),
                             &outputs,
-                            false,
+                            pedantic_solving,
                         ),
                     };
-                    assert!(result.is_ok(), "the operation failed");
-                    [
-                        witness_map[&outputs.0].clone(),
-                        witness_map[&outputs.1].clone(),
-                    ]
+                    result.ok().map(|_| {
+                        [
+                            witness_map[&outputs.0].clone(),
+                            witness_map[&outputs.1].clone(),
+                        ]
+                    })
                 })
             })
             .collect::<Vec<_>>();
         let results = threads
             .into_iter()
             .map(|thread| thread.join().expect("a party panicked"))
+            .collect::<Vec<_>>();
+        if results.iter().all(Option::is_none) {
+            return None;
+        }
+        let results = results
+            .into_iter()
+            .map(|result| result.expect("only some of the parties failed"))
             .collect::<Vec<_>>();
 
         let open = |i: usize| match (&results[0][i], &results[1][i], &results[2][i]) {
@@ -813,7 +872,7 @@ mod tests {
             }
             _ => panic!("the parties have different types"),
         };
-        (open(0), open(1))
+        Some((open(0), open(1)))
     }
 
     fn coords(point: ark_grumpkin::Projective) -> (Fr, Fr) {
@@ -900,5 +959,51 @@ mod tests {
             Value::Shared(Fr::zero()),
         ];
         assert_eq!(run(Op::Msm, inputs, enabled), zero);
+    }
+
+    // The ACVM does not look at the scalars of a disabled operation, and the circuit does not constrain them. Public scalars that are rejected if the operation is enabled must thus not make it fail if the predicate is shared.
+    #[test]
+    fn multi_scalar_mul_with_invalid_public_scalar() {
+        let (g_x, g_y) = coords(generator());
+        let zero = (Fr::zero(), Fr::zero());
+        let enabled = Value::Shared(Fr::one());
+        let disabled = Value::Shared(Fr::zero());
+        // Does not fit into 128 bits
+        let big = Fr::from(u128::MAX) + Fr::one();
+        // Fits into 128 bits, but as high limb it gives a scalar larger than the modulus of the scalar field of Grumpkin
+        let big_hi = Fr::from(1u128 << 127);
+        let inputs = |lo, hi| [Value::Shared(g_x), Value::Shared(g_y), lo, hi];
+        let small = Fr::from(5u64);
+
+        for pedantic in [false, true] {
+            let big_lo = inputs(Value::Public(big), Value::Public(Fr::zero()));
+            assert_eq!(try_run(Op::Msm, big_lo, disabled, pedantic), Some(zero));
+            let big_lo = inputs(Value::Public(big), Value::Shared(small));
+            assert_eq!(try_run(Op::Msm, big_lo, disabled, pedantic), Some(zero));
+            let big_limb_hi = inputs(Value::Shared(small), Value::Public(big));
+            assert_eq!(
+                try_run(Op::Msm, big_limb_hi, disabled, pedantic),
+                Some(zero)
+            );
+
+            // With a public predicate the operation still fails
+            let big_lo = inputs(Value::Public(big), Value::Public(Fr::zero()));
+            let public = Value::Public(Fr::one());
+            assert_eq!(try_run(Op::Msm, big_lo, public, pedantic), None);
+        }
+
+        let too_large = inputs(Value::Public(Fr::zero()), Value::Public(big_hi));
+        assert_eq!(try_run(Op::Msm, too_large, disabled, true), Some(zero));
+        assert_eq!(
+            try_run(Op::Msm, too_large, Value::Public(Fr::one()), true),
+            None
+        );
+        // Without pedantic solving the scalar is reduced
+        let expected = coords(generator() * ark_grumpkin::Fr::from(BigUint::from(1u8) << 255));
+        assert_eq!(try_run(Op::Msm, too_large, enabled, false), Some(expected));
+
+        // An enabled operation with such a scalar has no valid proof. It is executed with the scalar one.
+        let big_lo = inputs(Value::Public(big), Value::Public(Fr::zero()));
+        assert_eq!(try_run(Op::Msm, big_lo, enabled, false), Some((g_x, g_y)));
     }
 }
