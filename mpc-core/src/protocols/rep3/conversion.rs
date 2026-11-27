@@ -56,7 +56,7 @@ pub fn a2b_selector_many<F: FieldUint, N: Network>(
     }
 }
 
-/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the binary-to-arithmetic conversion. The input must be a binary sharing of a valid field element (< p), see [b2a_selector_mod_p] otherwise.
+/// Depending on the `A2BType` of the state, this function selects the appropriate implementation for the binary-to-arithmetic conversion. The input must be a binary sharing of a valid field element (< p), see [b2a_selector_mod_p] otherwise. Calling it with a value >= p reveals information about the value to the parties and fails depending on the value.
 pub fn b2a_selector<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,
     net: &N,
@@ -172,7 +172,7 @@ pub fn a2b_many<F: FieldUint, N: Network>(
     )
 }
 
-/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation only works for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p; use [b2a_mod_p] for inputs that may be >= p.
+/// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementation only works for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p; use [b2a_mod_p] for inputs that may be >= p. Calling it with a value >= p reveals information about the value to the parties and fails depending on the value.
 pub fn b2a<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,
     net: &N,
@@ -262,7 +262,7 @@ pub fn b2a_many_mod_p<F: FieldUint, N: Network>(
     b2a_many(&x, net, state)
 }
 
-/// A variant of [b2a] that operates on vectors of shared values instead.
+/// A variant of [b2a] that operates on vectors of shared values instead. As for [b2a], all inputs must be binary sharings of valid field elements (< p); use [b2a_many_mod_p] for inputs that may be >= p. Calling it with a value >= p reveals information about the value to the parties and fails depending on the value.
 pub fn b2a_many<F: FieldUint, N: Network>(
     x: &[Rep3UintShare<F>],
     net: &N,
@@ -629,7 +629,7 @@ macro_rules! y2a_impl_p2 {
 
 /// Transforms the shared value x from a yao sharing to an arithmetic sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 + x_2 + x_3.
 ///
-/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element (< p), see [y2a_mod_p] otherwise.
+/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element (< p), see [y2a_mod_p] otherwise. Calling it with a value >= p reveals information about the value to the parties and fails depending on the value.
 pub fn y2a<F: FieldUint, N: Network>(
     x: BinaryBundle<WireMod2>,
     delta: Option<WireMod2>,
@@ -687,7 +687,7 @@ fn y2a_impl<F: FieldUint, N: Network>(
 
 /// Transforms the shared value x from a yao sharing to an arithmetic sharing. I.e., the sharing such that the garbler have keys (k_0, delta) for each bit of x, while the evaluator has k_x = k_0 xor delta * x gets transformed into x = x_1 + x_2 + x_3. Uses the Streaming Garbler/Evaluator.
 ///
-/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
+/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element (< p). Calling it with a value >= p reveals information about the value to the parties and fails depending on the value.
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end. These adaptions need to be encoded into a garbled circuit.
 pub fn y2a_streaming<F: FieldUint, N: Network>(
     x: BinaryBundle<WireMod2>,
@@ -872,7 +872,7 @@ pub fn a2y2b_many<F: FieldUint, N: Network>(
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementations goes through the yao protocol and currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p.
 ///
-/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element (< p), see [b2y2a_mod_p] otherwise.
+/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element (< p), see [b2y2a_mod_p] otherwise. Calling it with a value >= p reveals information about the value to the parties and fails depending on the value.
 pub fn b2y2a<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,
     net: &N,
@@ -896,7 +896,7 @@ pub fn b2y2a_mod_p<F: FieldUint, N: Network>(
 
 /// Transforms the replicated shared value x from a binary sharing to an arithmetic sharing. I.e., x = x_1 xor x_2 xor x_3 gets transformed into x = x'_1 + x'_2 + x'_3. This implementations goes through the yao protocol and currently works only for a binary sharing of a valid field element, i.e., x = x_1 xor x_2 xor x_3 < p. Uses the Streaming Garbler/Evaluator.
 ///
-/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element
+/// Keep in mind: Only works if the input is actually a binary sharing of a valid field element (< p). Calling it with a value >= p reveals information about the value to the parties and fails depending on the value.
 /// If the input has the correct number of bits, but is >= P, then either x can be reduced with self.low_depth_sub_p_cmux(x) first, or self.low_depth_binary_add_2_mod_p(x, y) is extended to subtract 2P in parallel as well. The second solution requires another multiplexer in the end.
 pub fn b2y2a_streaming<F: FieldUint, N: Network>(
     x: &Rep3UintShare<F>,
