@@ -142,6 +142,19 @@ where
         eyre::bail!("Invalid number of shares translated");
     };
 
+    // The shared read/write types of the memory records are part of the witness as well
+    let (memory_record_gates, memory_record_shares): (Vec<_>, Vec<_>) =
+        proving_key.memory_records_shared.into_iter().unzip();
+    let memory_record_shares =
+        ShamirState::translate_primefield_repshare_vec(memory_record_shares, id);
+    if memory_record_shares.len() != memory_record_gates.len() {
+        eyre::bail!("Invalid number of memory record shares translated");
+    }
+    let memory_records_shared = memory_record_gates
+        .into_iter()
+        .zip(memory_record_shares)
+        .collect();
+
     let mut chunks = translated_shares.chunks_exact(proving_key.circuit_size as usize);
     let translated_shares = array::from_fn(|_| {
         Polynomial::new(chunks.next().expect("Length already checked").to_vec())
@@ -162,7 +175,7 @@ where
         memory_read_records: proving_key.memory_read_records,
         memory_write_records: proving_key.memory_write_records,
         rom_logup_records: proving_key.rom_logup_records,
-        memory_records_shared: BTreeMap::new(),
+        memory_records_shared,
         final_active_wire_idx: proving_key.final_active_wire_idx,
         phantom: std::marker::PhantomData,
         active_region_data: proving_key.active_region_data,

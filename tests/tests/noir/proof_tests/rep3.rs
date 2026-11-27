@@ -10,10 +10,10 @@ use co_noir_common::{
     types::ZeroKnowledge,
 };
 use co_noir_types::Rep3Type;
-use co_ultrahonk::prelude::{Rep3CoUltraHonk, UltraHonk};
+use co_ultrahonk::prelude::{Rep3CoUltraHonk, ShamirCoUltraHonk, UltraHonk};
 use itertools::izip;
-use mpc_core::protocols::rep3::share_field_element;
-use mpc_net::local::LocalNetwork;
+use mpc_core::protocols::rep3::{id::PartyID, share_field_element};
+use mpc_net::{local::LocalNetwork, Network};
 use sha3::Keccak256;
 use std::{fs::File, sync::Arc};
 
@@ -280,6 +280,61 @@ fn blackbox_xor_witness_and_proof_test_poseidon2sponge() {
     witness_and_proof_test::<Poseidon2Sponge>("blackbox_xor", ZeroKnowledge::Yes, "");
 }
 
+/// Builds the proving key with REP3, translates it to Shamir shares and proves with Shamir.
+fn translated_proving_key_proof_test(name: &str) {
+    type H = Poseidon2Sponge;
+    let has_zk = ZeroKnowledge::Yes;
+    let (program_artifact, witnesses) = load_shared_witness(name);
+    let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
+    let crs_size = co_noir::compute_circuit_size::<Bn254G1>(&constraint_system).unwrap();
+    let prover_crs =
+        Arc::new(CrsParser::<Bn254G1>::get_crs_g1(CRS_PATH_G1, crs_size, has_zk).unwrap());
+    let verifier_crs = CrsParser::<Bn254G1>::get_crs_g2::<Bn254>(CRS_PATH_G2).unwrap();
+    let vk = co_noir::generate_vk::<Bn254>(&constraint_system, prover_crs.clone(), verifier_crs)
+        .unwrap();
+
+    let mut threads = Vec::with_capacity(3);
+    for (net, witness) in izip!(LocalNetwork::new_3_parties(), witnesses) {
+        let prover_crs = prover_crs.clone();
+        let vk = vk.clone();
+        let constraint_system = co_noir::get_constraint_system_from_artifact(&program_artifact);
+        threads.push(std::thread::spawn(move || {
+            let pk = co_noir::generate_proving_key_rep3(
+                &constraint_system,
+                witness,
+                &net,
+                &prover_crs,
+                OpenRecursionData::No,
+            )
+            .unwrap();
+            let id = PartyID::try_from(net.id()).unwrap();
+            let pk = co_noir::translate_proving_key(pk, id).unwrap();
+            let (proof, public_input) =
+                ShamirCoUltraHonk::<_, H>::prove(&net, 3, 1, pk, &prover_crs, has_zk, &vk.inner_vk)
+                    .unwrap();
+            (proof, public_input)
+        }));
+    }
+    let mut results: Vec<_> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+    let (proof, public_input) = results.pop().unwrap();
+    for (other_proof, other_public_input) in results {
+        assert_eq!(proof, other_proof);
+        assert_eq!(public_input, other_public_input);
+    }
+    assert!(UltraHonk::<_, H>::verify(proof, &public_input, &vk, has_zk).unwrap());
+}
+
+#[test]
+fn poseidon_translated_proving_key_proof_test() {
+    translated_proving_key_proof_test("poseidon");
+}
+
+// A ROM that is read at a shared index
+#[test]
+fn random_access_translated_proving_key_proof_test() {
+    translated_proving_key_proof_test("random_access");
+}
+
 #[test]
 fn rom_shared_witness_and_proof_test_poseidon2sponge() {
     witness_and_proof_test::<Poseidon2Sponge>("rom_shared", ZeroKnowledge::Yes, "");
@@ -350,4 +405,57 @@ fn zk_recursion_witness_and_proof_test_poseidon2sponge() {
 fn zk_recursion_proof_test_poseidon2sponge() {
     proof_test::<Poseidon2Sponge>("recursion_zk", ZeroKnowledge::No, "");
     proof_test::<Poseidon2Sponge>("recursion_zk", ZeroKnowledge::Yes, "");
+}
+
+// The proving key of a circuit with a RAM that is accessed at a shared index contains the shared read/write types of the memory records. No test vector has such a RAM, so the translation is tested with a handmade key.
+#[test]
+fn translate_proving_key_keeps_shared_memory_records() {
+    use co_noir_common::keys::proving_key::Rep3ProvingKey;
+    use co_noir_common::polynomials::entities::Polynomials;
+    use mpc_core::protocols::shamir;
+
+    let mut rng = rand::thread_rng();
+    let circuit_size = 4;
+    let witness_value = Fr::from(42u64);
+    let records = [
+        (5u32, Fr::from(1u64)),
+        (9, Fr::from(0u64)),
+        (12, Fr::from(1u64)),
+    ];
+
+    let witness_shares = share_field_element(witness_value, &mut rng);
+    let record_shares = records.map(|(_, value)| share_field_element(value, &mut rng));
+
+    let translated = [PartyID::ID0, PartyID::ID1, PartyID::ID2].map(|id| {
+        let i = usize::from(id);
+        let mut pk = Rep3ProvingKey::<Bn254G1> {
+            polynomials: Polynomials::new(circuit_size),
+            circuit_size: circuit_size as u32,
+            ..Default::default()
+        };
+        pk.polynomials.witness.elements[0][1] = witness_shares[i];
+        for ((gate, _), shares) in records.iter().zip(record_shares.iter()) {
+            pk.memory_records_shared.insert(*gate, shares[i]);
+        }
+        co_noir::translate_proving_key(pk, id).unwrap()
+    });
+
+    let open = |shares: [_; 3]| shamir::combine_field_element(&shares, &[1, 2, 3], 1).unwrap();
+    assert_eq!(
+        open(
+            translated
+                .each_ref()
+                .map(|pk| pk.polynomials.witness.elements[0][1])
+        ),
+        witness_value
+    );
+    for (gate, value) in records {
+        for pk in &translated {
+            assert_eq!(pk.memory_records_shared.len(), records.len());
+        }
+        let shares = translated
+            .each_ref()
+            .map(|pk| pk.memory_records_shared[&gate]);
+        assert_eq!(open(shares), value);
+    }
 }
