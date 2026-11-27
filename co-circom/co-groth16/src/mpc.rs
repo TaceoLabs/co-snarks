@@ -121,6 +121,8 @@ pub trait CircomGroth16Prover<P: Pairing>: Send + Sized {
 
     /// Reconstructs two shared points (potentially on different curves) in a single
     /// communication round: (A, B) = (Open(\[A\]), Open(\[B\])).
+    ///
+    /// Implementations may send the half shares as they are (REP3 does). The caller therefore has to ensure that the half shares of the parties are a fresh random sharing of the opened points, which holds for the elements of a proof because of the random scalars r and s.
     fn open_two_half_points<N: Network, C1, C2>(
         a: Self::PointHalfShare<C1>,
         b: Self::PointHalfShare<C2>,

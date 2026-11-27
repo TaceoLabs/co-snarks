@@ -151,13 +151,17 @@ pub fn open_point<C: CurveGroup, N: Network>(a: &PointShare<C>, net: &N) -> eyre
     Ok(a.a + a.b + c)
 }
 
-/// Open the shared point
+/// Open the point that is shared additively among the parties.
+///
+/// The input is the additive share of this party, which is sent to the other parties as it is. In contrast to the Shamir variant, it is not randomized by this function. The additive shares of the parties therefore have to be a fresh random sharing of the opened point, i.e., every share has to be masked by the share of a fresh random value, as it is the case for the elements of a Groth16 proof, which contain a multiple of the random scalars r and s. Otherwise the individual shares reveal more than the opened point.
 pub fn open_half_point<C: CurveGroup, N: Network>(a: C, net: &N) -> eyre::Result<C> {
     let (b, c) = net.broadcast(a)?;
     Ok(a + b + c)
 }
 
-/// Open two shared points (potentially on different curves) in a single communication round
+/// Open two additively shared points (potentially on different curves) in a single communication round.
+///
+/// The input is the additive share of this party, which is sent to the other parties as it is. In contrast to the Shamir variant, it is not randomized by this function. The additive shares of the parties therefore have to be a fresh random sharing of the opened point, i.e., every share has to be masked by the share of a fresh random value, as it is the case for the elements of a Groth16 proof, which contain a multiple of the random scalars r and s. Otherwise the individual shares reveal more than the opened point.
 pub fn open_two_half_points<C1: CurveGroup, C2: CurveGroup, N: Network>(
     a: C1,
     b: C2,
