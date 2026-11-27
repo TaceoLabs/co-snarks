@@ -129,7 +129,7 @@ fn kogge_stone_inner<F: FieldUint, N: Network>(
     Ok(g)
 }
 
-fn low_depth_sub_p_cmux_many<F: FieldUint, N: Network>(
+pub(super) fn low_depth_sub_p_cmux_many<F: FieldUint, N: Network>(
     x: &[Rep3UintShare<F>],
     net: &N,
     state: &mut Rep3State,

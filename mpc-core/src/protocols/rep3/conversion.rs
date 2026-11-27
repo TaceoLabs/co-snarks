@@ -251,6 +251,17 @@ pub fn b2a_mod_p<F: FieldUint, N: Network>(
     b2a(&x, net, state)
 }
 
+/// A variant of [b2a_mod_p] that operates on vectors of shared values instead.
+pub fn b2a_many_mod_p<F: FieldUint, N: Network>(
+    x: &[Rep3UintShare<F>],
+    net: &N,
+    state: &mut Rep3State,
+) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
+    let x =
+        detail::low_depth_sub_p_cmux_many::<F, N>(x, net, state, F::MODULUS_BIT_SIZE as usize + 1)?;
+    b2a_many(&x, net, state)
+}
+
 /// A variant of [b2a] that operates on vectors of shared values instead.
 pub fn b2a_many<F: FieldUint, N: Network>(
     x: &[Rep3UintShare<F>],

@@ -24,6 +24,7 @@ mod ring_share {
     use mpc_core::protocols::rep3_ring::ring::int_ring::U512;
     use mpc_core::protocols::rep3_ring::ring::ring_impl::RingElement;
     use mpc_core::protocols::rep3_ring::yao;
+    use mpc_core::protocols::rep3_ring::Rep3RingShare;
     use mpc_core::uint::{FieldUint, UintBackend, U256};
     use mpc_core::MpcState;
     use mpc_net::local::LocalNetwork;
@@ -1434,6 +1435,80 @@ mod ring_share {
     #[test]
     fn rep3_ring_to_field_cast_a2b_big_ring() {
         apply_to_all!(rep3_ring_to_field_cast_a2b_big_ring_t, [U512]);
+    }
+
+    // The truncated ring element is larger than the modulus, so it has to be reduced
+    #[test]
+    fn rep3_ring_to_field_cast_a2b_big_ring_reduces() {
+        type F = ark_bn254::Fr;
+        let bits = F::MODULUS_BIT_SIZE as usize;
+        // 2^bits - 1 mod p
+        let mut bytes = vec![0xffu8; bits.div_ceil(8)];
+        *bytes.last_mut().unwrap() >>= (8 - bits % 8) % 8;
+        let should_result = F::from_le_bytes_mod_order(&bytes);
+        assert_ne!(should_result.to_uint(), U256::mask(bits));
+
+        // all bits of the modulus size are set, all bits of the ring are set
+        let truncated = RingElement(U512::cast_from_uint(&U256::mask(bits)));
+        for x in [truncated, !RingElement::<U512>::zero()] {
+            let mut rng = thread_rng();
+            let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+            let threads = izip!(LocalNetwork::new_3_parties(), x_shares)
+                .map(|(net, x)| {
+                    std::thread::spawn(move || {
+                        let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                        let single =
+                            casts::ring_to_field_a2b_big_ring::<_, F, _>(x, &net, &mut state)
+                                .unwrap();
+                        let many = casts::ring_to_field_a2b_big_ring_many::<_, F, _>(
+                            &[x, x],
+                            &net,
+                            &mut state,
+                        )
+                        .unwrap();
+                        (single, many)
+                    })
+                })
+                .collect_vec();
+            let results = threads
+                .into_iter()
+                .map(|thread| thread.join().unwrap())
+                .collect_vec();
+            let single = rep3::combine_field_element(results[0].0, results[1].0, results[2].0);
+            assert_eq!(single, should_result);
+            let many = rep3::combine_field_elements(&results[0].1, &results[1].1, &results[2].1);
+            assert_eq!(many, vec![should_result; 2]);
+        }
+    }
+
+    // A ring with more bits than the field has elements that are no valid field elements
+    #[test]
+    fn rep3_ring_to_field_casts_reject_big_rings() {
+        type F = ark_bn254::Fr;
+        let mut rng = thread_rng();
+        let x = rng.gen::<RingElement<U512>>();
+        let x_shares = rep3_ring::share_ring_element(x, &mut rng);
+        let threads = izip!(LocalNetwork::new_3_parties(), x_shares)
+            .map(|(net, x)| {
+                std::thread::spawn(move || {
+                    let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    assert!(casts::ring_to_field_a2b::<_, F, _>(x, &net, &mut state).is_err());
+                    assert!(
+                        casts::ring_to_field_a2b_many::<_, F, _>(&[x], &net, &mut state).is_err()
+                    );
+                    assert!(yao::ring_to_field_many::<_, F, _>(&[x], &net, &mut state).is_err());
+                    // and the other way round
+                    let narrow = Rep3RingShare::<u64>::default();
+                    assert!(
+                        casts::ring_to_field_a2b_big_ring::<_, F, _>(narrow, &net, &mut state)
+                            .is_err()
+                    );
+                })
+            })
+            .collect_vec();
+        for thread in threads {
+            thread.join().unwrap();
+        }
     }
 
     fn rep3_field_to_ring_cast_gc_t<T: IntRing2k>()

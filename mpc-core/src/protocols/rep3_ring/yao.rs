@@ -356,7 +356,7 @@ pub fn joint_input_binary_xored_many<T: IntRing2k, N: Network>(
     Ok([x01, x2])
 }
 
-/// A cast of a vector of Rep3RingShare to a vector of Rep3PrimeFieldShare
+/// A cast of a vector of Rep3RingShare to a vector of Rep3PrimeFieldShare. Returns an error if the ring has more bits than fit into the field.
 pub fn ring_to_field_many<T: IntRing2k, F: FieldUint, N: Network>(
     inputs: &[Rep3RingShare<T>],
     net: &N,
@@ -382,6 +382,7 @@ where
 
         return rep3::conversion::bit_inject_many(&uint_shares, net, state);
     }
+    super::casts::ensure_ring_fits_into_field::<T, F>()?;
 
     // The actual garbled circuit implementation
     let num_inputs = inputs.len();
