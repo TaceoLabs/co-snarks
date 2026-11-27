@@ -163,12 +163,22 @@ impl TlsConfig {
 
     /// Check that the certificate presented by the peer of `conn` is the one of `party_id`.
     pub fn verify_peer(&self, conn: &CommonState, party_id: usize) -> eyre::Result<()> {
+        self.verify_peer_certificates(conn.peer_certificates(), party_id)
+    }
+
+    /// Check that the first of the certificates presented by a peer is the one of `party_id`.
+    ///
+    /// Use this for transports that do not expose the [`CommonState`] of the connection.
+    pub fn verify_peer_certificates(
+        &self,
+        peer_certificates: Option<&[CertificateDer<'_>]>,
+        party_id: usize,
+    ) -> eyre::Result<()> {
         let expected = self
             .certs
             .get(party_id)
             .ok_or_else(|| eyre::eyre!("missing certificate for party {party_id}"))?;
-        let peer = conn
-            .peer_certificates()
+        let peer = peer_certificates
             .and_then(|certs| certs.first())
             .ok_or_else(|| eyre::eyre!("peer did not present a certificate"))?;
         eyre::ensure!(

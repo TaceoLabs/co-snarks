@@ -1,28 +1,38 @@
 //! QUIC MPC network
 
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     net::{SocketAddr, ToSocketAddrs},
     sync::Arc,
     time::Duration,
 };
 
 use crate::{
-    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network, async_net::AsyncChannels,
-    config::NetworkConfig,
+    ConnectionStats, DEFAULT_MAX_FRAME_LENGTH, Network,
+    async_net::AsyncChannels,
+    config::{NetworkConfig, TlsConfig},
 };
 use bytes::Bytes;
 use eyre::Context as _;
 use quinn::{Connection, Endpoint, TransportConfig, VarInt};
 use quinn::{
-    crypto::rustls::QuicClientConfig,
-    rustls::{RootCertStore, pki_types::CertificateDer},
+    crypto::rustls::{QuicClientConfig, QuicServerConfig},
+    rustls::pki_types::CertificateDer,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     runtime::Runtime,
 };
 use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
+
+/// Checks that the certificate presented by the peer of `conn` is the one of `party_id`.
+fn verify_peer(tls: &TlsConfig, conn: &Connection, party_id: usize) -> eyre::Result<()> {
+    let identity = conn.peer_identity();
+    let certs = identity
+        .as_ref()
+        .and_then(|identity| identity.downcast_ref::<Vec<CertificateDer<'static>>>());
+    tls.verify_peer_certificates(certs.map(Vec::as_slice), party_id)
+}
 
 #[derive(Debug)]
 struct QuicConnectionHandler {
@@ -62,33 +72,25 @@ impl QuicConnectionHandler {
         let tls_config = config
             .tls
             .ok_or_else(|| eyre::eyre!("TLS config is required for QuicNetwork"))?;
-        let certs: HashMap<usize, CertificateDer> =
-            tls_config.certs.into_iter().enumerate().collect();
+        let num_parties = config.parties.len();
         let connect_timeout = config.connect_timeout;
 
-        let mut root_store = RootCertStore::empty();
-        for (id, cert) in &certs {
-            root_store
-                .add(cert.clone())
-                .with_context(|| format!("adding certificate for party {id} to root store"))?;
-        }
-        let crypto = quinn::rustls::ClientConfig::builder()
-            .with_root_certificates(root_store)
-            .with_no_client_auth();
+        // Mutual TLS: both sides present their certificate and only accept the certificates of the parties. After the handshake, we additionally check that the certificate of the peer is the one of the party it claims to be.
+        let (client_crypto, server_crypto) = tls_config.into_rustls_configs(id)?;
 
         let client_config = {
             let mut transport_config = TransportConfig::default();
             // atm clients send keepalive packets
             transport_config.keep_alive_interval(Some(Duration::from_secs(1)));
             let mut client_config =
-                quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(crypto)?));
+                quinn::ClientConfig::new(Arc::new(QuicClientConfig::try_from(client_crypto)?));
             client_config.transport_config(Arc::new(transport_config));
             client_config
         };
 
-        let server_config =
-            quinn::ServerConfig::with_single_cert(vec![certs[&id].clone()], tls_config.key)
-                .context("creating our server config")?;
+        let server_config = quinn::ServerConfig::with_crypto(Arc::new(
+            QuicServerConfig::try_from(server_crypto).context("creating our server config")?,
+        ));
         let our_socket_addr = config.bind_addr;
         let server_endpoint = quinn::Endpoint::server(server_config.clone(), our_socket_addr)?;
 
@@ -135,6 +137,7 @@ impl QuicConnectionHandler {
                     connect_future.await
                 }
                 .with_context(|| format!("connecting as a client to party {}", party.id))?;
+                verify_peer(&tls_config, &conn, party.id)?;
                 let mut uni = conn.open_uni().await?;
                 uni.write_u32(u32::try_from(id).expect("party id fits into u32"))
                     .await?;
@@ -147,7 +150,11 @@ impl QuicConnectionHandler {
                     conn.remote_address(),
                 );
                 tracing::debug!("party {id} connected to {}", party.id);
-                assert!(connections.insert(party.id, conn).is_none());
+                eyre::ensure!(
+                    connections.insert(party.id, conn).is_none(),
+                    "party {} is listed more than once",
+                    party.id
+                );
                 endpoints.push(endpoint);
             } else {
                 // we are the server, accept a connection
@@ -171,15 +178,18 @@ impl QuicConnectionHandler {
                             conn.remote_address(),
                         );
                         let mut uni = conn.accept_uni().await?;
-                        let other_party_id = uni.read_u32().await?;
+                        let other_party_id =
+                            usize::try_from(uni.read_u32().await?).expect("u32 fits into usize");
                         tracing::debug!("party {id} got conn from {other_party_id}");
-                        assert!(
-                            connections
-                                .insert(
-                                    usize::try_from(other_party_id).expect("u32 fits into usize"),
-                                    conn
-                                )
-                                .is_none()
+                        // The party id is chosen by the peer, so check it before use
+                        eyre::ensure!(
+                            other_party_id > id && other_party_id < num_parties,
+                            "peer claimed the party id {other_party_id}, but only parties with an id above {id} and below {num_parties} connect to us"
+                        );
+                        verify_peer(&tls_config, &conn, other_party_id)?;
+                        eyre::ensure!(
+                            connections.insert(other_party_id, conn).is_none(),
+                            "party {other_party_id} connected more than once"
                         );
                     }
                     None => {
@@ -211,13 +221,19 @@ impl QuicConnectionHandler {
                     let (mut send_stream, mut recv_stream) = conn.open_bi().await?;
                     send_stream.write_u32(self.id as u32).await?;
                     let their_id = recv_stream.read_u32().await?;
-                    assert!(their_id == id as u32);
+                    eyre::ensure!(
+                        their_id == id as u32,
+                        "expected a stream of party {id}, but the peer claimed to be party {their_id}"
+                    );
                     eyre::Ok((send_stream, recv_stream))
                 } else {
                     // we are the server, so we are the sender
                     let (mut send_stream, mut recv_stream) = conn.accept_bi().await?;
                     let their_id = recv_stream.read_u32().await?;
-                    assert!(their_id == id as u32);
+                    eyre::ensure!(
+                        their_id == id as u32,
+                        "expected a stream of party {id}, but the peer claimed to be party {their_id}"
+                    );
                     send_stream.write_u32(self.id as u32).await?;
                     eyre::Ok((send_stream, recv_stream))
                 }
