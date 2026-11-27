@@ -2462,9 +2462,11 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
                 Rep3AcvmType::Public(lhs - rhs)
             }
-            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
-            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared)) => {
                 Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(public, shared, self.id))
+            }
+            (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_shared_by_public(shared, public, self.id))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
                 let result = arithmetic::sub(lhs, rhs);
@@ -2798,5 +2800,65 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         unimplemented!(
             "functionality madd_div_mod_many_acvm_limbs not implemented for Rep3 in the shared case"
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mpc_core::protocols::rep3;
+    use mpc_net::local::LocalNetwork;
+
+    type F = ark_bn254::Fr;
+    type C = ark_bn254::G1Projective;
+    type Base = ark_bn254::Fq;
+
+    // The order of the operands matters, also if only one of them is shared
+    #[test]
+    fn sub_other_acvm_types_respects_the_order() {
+        let mut rng = rand::thread_rng();
+        let (lhs, rhs) = (Base::from(10u64), Base::from(3u64));
+        let lhs_shares = rep3::share_field_element(lhs, &mut rng);
+        let rhs_shares = rep3::share_field_element(rhs, &mut rng);
+
+        let threads = LocalNetwork::new_3_parties()
+            .into_iter()
+            .enumerate()
+            .map(|(i, net)| {
+                std::thread::spawn(move || {
+                    let mut driver = Rep3AcvmSolver::<F, _>::new(&net, A2BType::default()).unwrap();
+                    let lhs_values = [
+                        Rep3AcvmType::Public(lhs),
+                        Rep3AcvmType::Shared(lhs_shares[i]),
+                    ];
+                    let rhs_values = [
+                        Rep3AcvmType::Public(rhs),
+                        Rep3AcvmType::Shared(rhs_shares[i]),
+                    ];
+                    let mut results = Vec::new();
+                    for lhs in &lhs_values {
+                        for rhs in &rhs_values {
+                            results
+                                .push(driver.sub_other_acvm_types::<C>(lhs.clone(), rhs.clone()));
+                        }
+                    }
+                    results
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        for i in 0..4 {
+            let opened = match (&results[0][i], &results[1][i], &results[2][i]) {
+                (Rep3AcvmType::Public(a), Rep3AcvmType::Public(_), Rep3AcvmType::Public(_)) => *a,
+                (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b), Rep3AcvmType::Shared(c)) => {
+                    rep3::combine_field_element(*a, *b, *c)
+                }
+                _ => unreachable!("the parties have different types"),
+            };
+            assert_eq!(opened, lhs - rhs, "combination {i}");
+        }
     }
 }
