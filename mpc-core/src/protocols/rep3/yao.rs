@@ -1033,6 +1033,13 @@ pub fn decompose_arithmetic_to_other_field_many<F: FieldUint, K: FieldUint, N: N
     total_bit_size_per_field: usize,
     decompose_bit_size: usize,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<K>>> {
+    // The circuit and the masks of the outputs assume the same number of bits for both fields
+    eyre::ensure!(
+        F::MODULUS_BIT_SIZE == K::MODULUS_BIT_SIZE,
+        "The moduli of the two fields need to have the same number of bits, but have {} and {}",
+        F::MODULUS_BIT_SIZE,
+        K::MODULUS_BIT_SIZE
+    );
     let num_inputs = inputs.len();
     let num_decomps_per_field = total_bit_size_per_field.div_ceil(decompose_bit_size);
     let total_output_elements = num_decomps_per_field * num_inputs;

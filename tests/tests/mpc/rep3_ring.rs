@@ -1503,6 +1503,21 @@ mod ring_share {
                         casts::ring_to_field_a2b_big_ring::<_, F, _>(narrow, &net, &mut state)
                             .is_err()
                     );
+                    // The casts via Yao from a field need all bits of the ring in the field
+                    let field_share = rep3::Rep3PrimeFieldShare::<F>::default();
+                    assert!(yao::field_to_ring_many::<F, U512, _>(
+                        &[field_share],
+                        &net,
+                        &mut state
+                    )
+                    .is_err());
+                    // The decomposition into another field needs fields of the same bit size
+                    assert!(rep3::yao::decompose_arithmetic_to_other_field_many::<
+                        F,
+                        ark_bls12_381::Fr,
+                        _,
+                    >(&[field_share], &net, &mut state, 8, 8)
+                    .is_err());
                 })
             })
             .collect_vec();

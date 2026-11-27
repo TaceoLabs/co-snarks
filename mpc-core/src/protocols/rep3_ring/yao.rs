@@ -475,6 +475,13 @@ pub fn field_to_ring_many<F: FieldUint, T: IntRing2k, N: Network>(
 where
     Standard: Distribution<T>,
 {
+    // The circuit takes the T::K least significant bits of the field element
+    eyre::ensure!(
+        T::K <= F::MODULUS_BIT_SIZE as usize,
+        "Cannot cast a field element with {} bits to a ring with {} bits",
+        F::MODULUS_BIT_SIZE,
+        T::K
+    );
     let num_inputs = inputs.len();
     let delta = state.rngs.generate_random_garbler_delta(state.id);
 

@@ -65,7 +65,10 @@ where
 {
     let bitlen = T::K;
     let d: u32 = bitlen.ilog2(); // T is a ring with 2^k elements
-    debug_assert!(bitlen.is_power_of_two());
+    eyre::ensure!(
+        bitlen.is_power_of_two(),
+        "The number of bits of the ring ({bitlen}) has to be a power of two"
+    );
 
     let s_ = p.to_owned();
 
@@ -118,7 +121,10 @@ where
 {
     let bitlen = T::K;
     let d: u32 = bitlen.ilog2(); // T is a ring with 2^k elements
-    debug_assert!(bitlen.is_power_of_two());
+    eyre::ensure!(
+        bitlen.is_power_of_two(),
+        "The number of bits of the ring ({bitlen}) has to be a power of two"
+    );
 
     for i in 0..d {
         let shift = 1 << i;
