@@ -177,6 +177,13 @@ impl<'a, F: PrimeField + FieldUint, N: Network> Rep3AcvmSolver<'a, F, N> {
     ) -> eyre::Result<Rep3AcvmPoint<C>> {
         let result = match (a, b) {
             (Rep3AcvmType::Public(a), Rep3AcvmPoint::Public(b)) => Rep3AcvmPoint::Public(b * a),
+            // If the public input is zero, the result is publicly known to be the point at infinity. We must not return it as a share in this case: all of its components would be the point at infinity, which the conversion to shares of the coordinates cannot handle.
+            (Rep3AcvmType::Public(a), Rep3AcvmPoint::Shared(_)) if a.is_zero() => {
+                Rep3AcvmPoint::Public(C::zero())
+            }
+            (Rep3AcvmType::Shared(_), Rep3AcvmPoint::Public(b)) if b.is_zero() => {
+                Rep3AcvmPoint::Public(C::zero())
+            }
             (Rep3AcvmType::Public(a), Rep3AcvmPoint::Shared(b)) => {
                 Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&b, a))
             }

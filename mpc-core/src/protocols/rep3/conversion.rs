@@ -912,9 +912,9 @@ pub(crate) fn point_share_to_fieldshares_pre<C: CurveGroup, N: Network>(
 where
     C::BaseField: FieldUint,
 {
-    assert!(
+    eyre::ensure!(
         !(x.a.is_zero() || x.b.is_zero()),
-        "This fails if one share is zero"
+        "Cannot convert a point share with a component that is the point at infinity"
     );
     let mut x01_x = Rep3PrimeFieldShare::zero_share();
     let mut x01_y = Rep3PrimeFieldShare::zero_share();
@@ -979,10 +979,10 @@ pub(crate) fn point_share_to_fieldshares_pre_many<C: CurveGroup, N: Network>(
 where
     C::BaseField: FieldUint,
 {
-    assert!(
+    eyre::ensure!(
         x.iter()
             .all(|share| !(share.a.is_zero() || share.b.is_zero())),
-        "This fails if one share is zero"
+        "Cannot convert a point share with a component that is the point at infinity"
     );
     let input_len = x.len();
     let mut x01_x = Vec::with_capacity(input_len);

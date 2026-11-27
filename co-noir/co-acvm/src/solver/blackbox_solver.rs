@@ -875,4 +875,30 @@ mod tests {
         assert_eq!(run(Op::Msm, invalid, Value::Shared(Fr::zero())), zero);
         assert_eq!(run(Op::Msm, invalid, Value::Public(Fr::zero())), zero);
     }
+
+    // The result is publicly known to be the point at infinity, which must not end up in a share
+    #[test]
+    fn multi_scalar_mul_with_public_zero() {
+        let (g_x, g_y) = coords(generator());
+        let enabled = Value::Public(Fr::one());
+        let zero = (Fr::zero(), Fr::zero());
+
+        // shared point, public scalar 0
+        let inputs = [
+            Value::Shared(g_x),
+            Value::Shared(g_y),
+            Value::Public(Fr::zero()),
+            Value::Public(Fr::zero()),
+        ];
+        assert_eq!(run(Op::Msm, inputs, enabled), zero);
+
+        // public point at infinity, shared scalar
+        let inputs = [
+            Value::Public(Fr::zero()),
+            Value::Public(Fr::zero()),
+            Value::Shared(Fr::from(5u64)),
+            Value::Shared(Fr::zero()),
+        ];
+        assert_eq!(run(Op::Msm, inputs, enabled), zero);
+    }
 }
