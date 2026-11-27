@@ -166,7 +166,15 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+    fn predicate_to_condition(
+        &mut self,
+        _predicate: Self::BrilligType,
+    ) -> eyre::Result<Option<Self::BrilligType>> {
+        // All values are public
+        Ok(None)
+    }
+
+    fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
         let mut rng = rand::thread_rng();
         match other {
             PlainBrilligType::Field(_) => PlainBrilligType::Field(F::rand(&mut rng)),

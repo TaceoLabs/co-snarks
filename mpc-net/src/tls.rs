@@ -170,15 +170,30 @@ impl TlsNetwork {
                             let other_id = stream.read_u64::<BigEndian>()? as usize;
                             let s_ = stream.read_u8()?;
                             verify_peer(&tls_config, &stream, other_id)?;
+                            // These values are chosen by the peer, so check them before use
+                            eyre::ensure!(i < N, "peer sent the invalid network index {i}");
+                            eyre::ensure!(
+                                other_id < id,
+                                "peer claimed the party id {other_id}, but only parties with an id below {id} connect to us"
+                            );
+                            eyre::ensure!(
+                                s_ == STREAM_0 || s_ == STREAM_1,
+                                "peer sent the invalid stream index {s_}"
+                            );
 
                             // As the accepting party, the peer's STREAM_0 is our receive
                             // direction and its STREAM_1 is our send direction.
                             let entry = pending[i].entry(other_id).or_insert((None, None));
-                            if s_ == STREAM_0 {
-                                entry.1 = Some(stream);
+                            let slot = if s_ == STREAM_0 {
+                                &mut entry.1
                             } else {
-                                entry.0 = Some(stream);
-                            }
+                                &mut entry.0
+                            };
+                            eyre::ensure!(
+                                slot.is_none(),
+                                "party {other_id} opened stream {s_} more than once for network {i}"
+                            );
+                            *slot = Some(stream);
                         }
                         Ordering::Equal => continue,
                     }

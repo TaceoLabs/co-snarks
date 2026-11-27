@@ -286,21 +286,20 @@ impl<
         // // 1 + polynomial degree of this relation
         // const LENGTH: usize = 5; // both subrelations are degree 4
 
-        let mut q_lookup_mul_read_tag = Vec::with_capacity(proving_key.circuit_size as usize);
+        // The relation requires I_i * read_i * write_i = inverse_exists_i, where inverse_exists_i = q_lookup_i + (1 - q_lookup_i) * lookup_read_tag_i is 1 if the row has a lookup gate or its table entry is read, and 0 otherwise.
+        // Since lookup_read_tag is shared we cannot skip the rows with inverse_exists_i = 0. Instead, we invert read_i * write_i in every row and multiply the result with the shared inverse_exists_i.
+        // The order is important: The inversion opens the randomized value, which reveals whether it is zero. read_i * write_i is non-zero except with negligible probability (it depends on the challenges), whereas the zeros of read_i * write_i * inverse_exists_i would reveal lookup_read_tag, i.e., which table entries are read.
+        let mut inverse_exists = Vec::with_capacity(proving_key.circuit_size as usize);
         for (i, (q_lookup, lookup_read_tag)) in izip!(
             proving_key.polynomials.precomputed.q_lookup().iter(),
             proving_key.polynomials.witness.lookup_read_tags().iter(),
         )
         .enumerate()
         {
-            // The following check cannot easily be done since lookup_read_tag is shared. We prepare q_lookup_mul_read_tag instead and multiply it later to self.memory.lookup_inverses.
-            // if !(q_lookup.is_one() || lookup_read_tag.is_one()) {
-            //     continue;
-            // }
             debug_assert!(q_lookup.is_one() || q_lookup.is_zero());
             let mul =
                 T::mul_with_public(C::ScalarField::one() - q_lookup, lookup_read_tag.to_owned());
-            q_lookup_mul_read_tag.push(T::add_with_public(
+            inverse_exists.push(T::add_with_public(
                 q_lookup.to_owned(),
                 mul,
                 self.state.id(),
@@ -311,20 +310,21 @@ impl<
             let write_term = self.compute_table_term(proving_key, i);
             self.memory.lookup_inverses[i] = T::mul_with_public(write_term, read_term);
         }
-        self.memory.lookup_inverses = Polynomial::new(T::mul_many(
-            self.memory.lookup_inverses.as_ref(),
-            &q_lookup_mul_read_tag,
-            self.net,
-            self.state,
-        )?);
 
-        // Compute inverse polynomial I in place by inverting the product at each row
-        // Note: zeroes are ignored as they are not used anyway
-        CoUtils::batch_invert_leaking_zeros::<T, C, N>(
+        // Invert the product at each row. This must happen before the multiplication with inverse_exists, see above.
+        CoUtils::batch_invert::<T, C, N>(
             self.memory.lookup_inverses.as_mut(),
             self.net,
             self.state,
         )?;
+
+        // Set the inverses to zero in the rows where they are not used
+        self.memory.lookup_inverses = Polynomial::new(T::mul_many(
+            self.memory.lookup_inverses.as_ref(),
+            &inverse_exists,
+            self.net,
+            self.state,
+        )?);
         Ok(())
     }
 

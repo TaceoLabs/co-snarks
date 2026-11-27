@@ -15,7 +15,7 @@ where
         inputs: &[ValueOrArray],
         input_value_type: &[HeapValueType],
     ) -> eyre::Result<()> {
-        if self.shared_ctx.is_some() {
+        if self.in_shared_if {
             eyre::bail!("Cannot store private shared state when in shared if");
         }
 

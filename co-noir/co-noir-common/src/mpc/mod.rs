@@ -339,16 +339,8 @@ pub trait NoirUltraHonkProver<P: CurveGroup>: Send + Sized + std::fmt::Debug {
     ) -> eyre::Result<Vec<Self::ArithmeticShare>>;
 
     /// Computes the inverse of many shared values: \[a\] = \[a\] ^ -1. Requires network communication.
-    /// This function ignores the case of one share to be zero and maps it to zero.
+    /// Returns an error if one of the values is zero. This reveals that a value is zero, so it must only be used for values that are non-zero except with negligible probability.
     fn inv_many_in_place<N: Network>(
-        a: &mut [Self::ArithmeticShare],
-        net: &N,
-        state: &mut Self::State,
-    ) -> eyre::Result<()>;
-
-    /// Computes the inverse of many shared values: \[a\] = \[a\] ^ -1. Requires network communication.
-    /// This function ignores the case of one share to be zero and maps it to zero.
-    fn inv_many_in_place_leaking_zeros<N: Network>(
         a: &mut [Self::ArithmeticShare],
         net: &N,
         state: &mut Self::State,

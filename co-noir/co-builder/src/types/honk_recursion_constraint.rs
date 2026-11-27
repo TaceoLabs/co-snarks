@@ -1,4 +1,4 @@
-use crate::acir_format::ProofType;
+use crate::acir_format::{OpenRecursionData, ProofType};
 use crate::honk_verifier::recursive_decider_verification_key::{
     RecursiveDeciderVerificationKey, VKAndHash,
 };
@@ -141,7 +141,7 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
             .collect();
         let predicate = input.predicate.to_field_ct().to_bool_ct(self, driver);
 
-        // MPC adaptation: if we have zk, open the recursion data.
+        // MPC adaptation: The verifier of a ZK proof is not implemented for shared values, so we open the shared recursion data. This reveals it to all parties, so it is only done if explicitly allowed.
         if has_zk == ZeroKnowledge::Yes {
             let mut to_open: (Vec<T::ArithmeticShare>, Vec<usize>) = (
                 Vec::with_capacity(proof_fields.len() + vk_fields.len() + 2),
@@ -164,6 +164,18 @@ impl<C: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<C::Scala
                     );
                     to_open.1.push(*idx as usize);
                 }
+            }
+            if !to_open.0.is_empty() {
+                if self.open_recursion_data != OpenRecursionData::Yes {
+                    eyre::bail!(
+                        "The recursion constraint for a ZK proof has {} shared witnesses (among the inner proof, its public inputs, the verification key, the key hash and the predicate), which would have to be opened to all parties. Provide them as public values or explicitly allow opening the recursion data",
+                        to_open.0.len()
+                    );
+                }
+                tracing::warn!(
+                    "Opening {} shared witnesses of a recursion constraint to all parties (inner proof, its public inputs, verification key, key hash and predicate)",
+                    to_open.0.len()
+                );
             }
             let opened_values = driver.open_many(&to_open.0)?;
             for (idx, value) in izip!(to_open.1.iter(), opened_values.iter()) {

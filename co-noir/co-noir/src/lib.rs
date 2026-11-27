@@ -36,6 +36,7 @@ pub use acir::FieldElement;
 pub use ark_bn254::Bn254;
 pub use ark_ec::pairing::Pairing;
 pub use co_acvm::{Rep3AcvmType, ShamirAcvmType};
+pub use co_builder::prelude::OpenRecursionData;
 pub use co_builder::prelude::constraint_system_from_reader;
 pub use co_builder::prelude::get_constraint_system_from_artifact;
 pub use co_noir_common::transcript::{Poseidon2Sponge, TranscriptHasher};
@@ -141,6 +142,19 @@ where
         eyre::bail!("Invalid number of shares translated");
     };
 
+    // The shared read/write types of the memory records are part of the witness as well
+    let (memory_record_gates, memory_record_shares): (Vec<_>, Vec<_>) =
+        proving_key.memory_records_shared.into_iter().unzip();
+    let memory_record_shares =
+        ShamirState::translate_primefield_repshare_vec(memory_record_shares, id);
+    if memory_record_shares.len() != memory_record_gates.len() {
+        eyre::bail!("Invalid number of memory record shares translated");
+    }
+    let memory_records_shared = memory_record_gates
+        .into_iter()
+        .zip(memory_record_shares)
+        .collect();
+
     let mut chunks = translated_shares.chunks_exact(proving_key.circuit_size as usize);
     let translated_shares = array::from_fn(|_| {
         Polynomial::new(chunks.next().expect("Length already checked").to_vec())
@@ -161,7 +175,7 @@ where
         memory_read_records: proving_key.memory_read_records,
         memory_write_records: proving_key.memory_write_records,
         rom_logup_records: proving_key.rom_logup_records,
-        memory_records_shared: BTreeMap::new(),
+        memory_records_shared,
         final_active_wire_idx: proving_key.final_active_wire_idx,
         phantom: std::marker::PhantomData,
         active_region_data: proving_key.active_region_data,
@@ -184,11 +198,14 @@ pub fn compute_circuit_size<P: HonkCurve<TranscriptFieldType>>(
 }
 
 /// Generate a REP3 shared proving key
+///
+/// If the circuit verifies a ZK proof whose recursion data (inner proof, its public inputs, verification key, key hash, predicate) is shared, this data has to be opened to all parties, see [`OpenRecursionData`]. This fails unless `open_recursion_data` allows it.
 pub fn generate_proving_key_rep3<N: Network>(
     constraint_system: &AcirFormat<ark_bn254::Fr>,
     witness_share: Rep3SharedWitness<ark_bn254::Fr>,
     net: &N,
     prover_crs: &ProverCrs<Bn254G1>,
+    open_recursion_data: OpenRecursionData,
 ) -> Result<Rep3ProvingKey<Bn254G1>> {
     let id = PartyID::try_from(net.id())?;
     let mut driver = Rep3AcvmSolver::new(net, A2BType::default())?;
@@ -204,6 +221,7 @@ pub fn generate_proving_key_rep3<N: Network>(
         0,
         witness_share,
         HonkRecursion::UltraHonk,
+        open_recursion_data,
         crs,
         &mut driver,
     )?;
@@ -216,6 +234,8 @@ pub fn generate_proving_key_rep3<N: Network>(
 }
 
 /// Generate a shamir shared proving key
+///
+/// If the circuit verifies a ZK proof whose recursion data (inner proof, its public inputs, verification key, key hash, predicate) is shared, this data has to be opened to all parties, see [`OpenRecursionData`]. This fails unless `open_recursion_data` allows it.
 pub fn generate_proving_key_shamir<N: Network>(
     num_parties: usize,
     threshold: usize,
@@ -223,6 +243,7 @@ pub fn generate_proving_key_shamir<N: Network>(
     witness_share: ShamirSharedWitness<ark_bn254::Fr>,
     net: &N,
     prover_crs: &ProverCrs<Bn254G1>,
+    open_recursion_data: OpenRecursionData,
 ) -> Result<ShamirProvingKey<Bn254G1>> {
     let id = net.id();
     // We have to handle precomputation on the fly, so amount is 0 initially
@@ -244,6 +265,7 @@ pub fn generate_proving_key_shamir<N: Network>(
         0,
         witness_share,
         HonkRecursion::UltraHonk,
+        open_recursion_data,
         crs,
         &mut driver,
     )?;
@@ -272,6 +294,7 @@ pub fn generate_proving_key_plain<P: HonkCurve<TranscriptFieldType>>(
         0,
         witness,
         HonkRecursion::UltraHonk,
+        OpenRecursionData::No,
         crs,
         &mut driver,
     )?;
@@ -294,6 +317,7 @@ where
         0,
         vec![],
         HonkRecursion::UltraHonk,
+        OpenRecursionData::No,
         &prover_crs,
         &mut driver,
     )?;
@@ -317,6 +341,7 @@ pub fn generate_vk_barretenberg<P: HonkCurve<TranscriptFieldType>>(
         0,
         vec![],
         HonkRecursion::UltraHonk,
+        OpenRecursionData::No,
         &prover_crs,
         &mut driver,
     )?;

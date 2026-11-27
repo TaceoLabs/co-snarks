@@ -23,7 +23,10 @@ where
 {
     pub(crate) memory: Memory<T, F>,
     pub(crate) driver: T,
+    /// The shared condition under which the current code is executed, if there is one: the condition of the branch of a shared if, the shared predicate of the call, or both combined. Operations that fail depending on their inputs (i.e., divisions) have to be guarded with it, since the code is executed even if the condition is false.
     pub(crate) shared_ctx: Option<T::BrilligType>,
+    /// Whether we are in a branch of a shared if
+    pub(crate) in_shared_if: bool,
     pub(crate) persistent_shared_state: HashMap<String, Vec<T::BrilligType>>,
     calldata: Vec<T::BrilligType>,
     unconstrained_functions: Vec<BrilligBytecode<GenericFieldElement<F>>>,
@@ -80,6 +83,21 @@ where
         self.calldata = calldata;
         self.ip = 0;
         self.run_inner(id)
+    }
+
+    /// Runs the unconstrained function identified by the provided id to completion, where the call has a predicate that is not known to be one.
+    ///
+    /// The function is executed in any case, since a shared predicate cannot be inspected. If the driver supports shared conditions, the predicate is used to guard the operations that fail depending on their inputs, such that a call with a false predicate does not fail because of, e.g., a division by zero. The caller still has to discard the results if the predicate is false.
+    pub fn run_with_predicate(
+        &mut self,
+        id: &BrilligFunctionId,
+        calldata: Vec<T::BrilligType>,
+        predicate: T::BrilligType,
+    ) -> eyre::Result<CoBrilligResult<T, F>> {
+        self.shared_ctx = self.driver.predicate_to_condition(predicate)?;
+        let result = self.run(id, calldata);
+        self.shared_ctx = None;
+        result
     }
 
     fn run_inner(&mut self, id: &BrilligFunctionId) -> eyre::Result<CoBrilligResult<T, F>> {
@@ -200,6 +218,7 @@ where
             memory: Memory::new(),
             ip: 0,
             shared_ctx: None,
+            in_shared_if: false,
         }
     }
 
@@ -278,7 +297,7 @@ where
                 if location <= self.ip {
                     eyre::bail!("can only jump forward with shared if");
                 }
-                if self.shared_ctx.is_some() {
+                if self.in_shared_if {
                     eyre::bail!("we can only support one shared if atm");
                 }
                 tracing::debug!("encountered shared if - fork the universe!");
@@ -307,16 +326,18 @@ where
                         if !truthy.generated_pss.is_empty() {
                             eyre::bail!("cannot have TACEO stores in shared if atm");
                         }
-                        tracing::debug!("falsy universe failed. We set its result to ranodm noise");
-                        let random_noise = truthy
+                        tracing::debug!(
+                            "falsy universe failed. We set its results to dummy values"
+                        );
+                        let dummy_values = truthy
                             .unconstrained_witnesses
                             .iter()
-                            .map(|x| self.driver.random(x))
+                            .map(|x| self.driver.dummy(x))
                             .collect();
                         (
                             truthy,
                             BrilligSuccess {
-                                unconstrained_witnesses: random_noise,
+                                unconstrained_witnesses: dummy_values,
                                 generated_pss: HashMap::new(),
                             },
                         )
@@ -326,16 +347,16 @@ where
                             eyre::bail!("cannot have TACEO stores in shared if atm");
                         }
                         tracing::debug!(
-                            "truthy universe failed. We set its result to ranodm noise"
+                            "truthy universe failed. We set its results to dummy values"
                         );
-                        let random_noise = falsy
+                        let dummy_values = falsy
                             .unconstrained_witnesses
                             .iter()
-                            .map(|x| self.driver.random(x))
+                            .map(|x| self.driver.dummy(x))
                             .collect();
                         (
                             BrilligSuccess {
-                                unconstrained_witnesses: random_noise,
+                                unconstrained_witnesses: dummy_values,
                                 generated_pss: HashMap::new(),
                             },
                             falsy,
@@ -475,6 +496,19 @@ where
     }
 
     fn fork_universe(&mut self, condition: T::BrilligType) -> eyre::Result<(Self, Self)> {
+        // The branches are executed if their condition holds and, if the call has a shared predicate, the predicate holds
+        let (truthy_ctx, falsy_ctx) = match self.shared_ctx.clone() {
+            Some(predicate) => {
+                // predicate AND NOT condition = predicate - (predicate AND condition), so one multiplication suffices
+                let truthy_ctx = self.driver.mul(predicate.clone(), condition)?;
+                let falsy_ctx = self.driver.sub(predicate, truthy_ctx.clone())?;
+                (truthy_ctx, falsy_ctx)
+            }
+            None => {
+                let not_condition = self.driver.not(condition.clone())?;
+                (condition, not_condition)
+            }
+        };
         let (driver1, driver2) = self.driver.fork()?;
         let (mem1, mem2) = self.memory.fork();
         let truthy_universe = Self {
@@ -485,7 +519,8 @@ where
             persistent_shared_state: self.persistent_shared_state.clone(),
             call_stack: self.call_stack.clone(),
             ip: self.ip,
-            shared_ctx: Some(condition.clone()),
+            shared_ctx: Some(truthy_ctx),
+            in_shared_if: true,
         };
 
         let falsy_universe = Self {
@@ -496,7 +531,8 @@ where
             call_stack: self.call_stack.clone(),
             persistent_shared_state: self.persistent_shared_state.clone(),
             ip: self.ip,
-            shared_ctx: Some(self.driver.not(condition)?),
+            shared_ctx: Some(falsy_ctx),
+            in_shared_if: true,
         };
         Ok((truthy_universe, falsy_universe))
     }
@@ -505,5 +541,180 @@ where
         // take memory - this also resets it for next run
         let memory = std::mem::take(&mut self.memory).into_inner();
         memory[offset..offset + size].to_vec()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mpc::{Rep3BrilligDriver, Rep3BrilligType, rep3::Shared};
+    use ark_bn254::Fr;
+    use brillig::{BinaryFieldOp, IntegerBitSize};
+    use mpc_core::protocols::rep3::{self, Rep3State, conversion::A2BType};
+    use mpc_net::local::LocalNetwork;
+
+    fn address(address: u32) -> MemoryAddress {
+        MemoryAddress::Direct(address)
+    }
+
+    fn constant(destination: u32, value: u32) -> BrilligOpcode<GenericFieldElement<Fr>> {
+        BrilligOpcode::Const {
+            destination: address(destination),
+            bit_size: BitSize::Integer(IntegerBitSize::U32),
+            value: GenericFieldElement::from(value),
+        }
+    }
+
+    fn field_op(
+        op: BinaryFieldOp,
+        lhs: u32,
+        rhs: u32,
+        destination: u32,
+    ) -> BrilligOpcode<GenericFieldElement<Fr>> {
+        BrilligOpcode::BinaryFieldOp {
+            destination: address(destination),
+            op,
+            lhs: address(lhs),
+            rhs: address(rhs),
+        }
+    }
+
+    /// Copies the `num_args` arguments to the addresses starting at 0, executes `body` and returns the value at the address `result`.
+    fn function(
+        num_args: u32,
+        body: Vec<BrilligOpcode<GenericFieldElement<Fr>>>,
+        result: u32,
+    ) -> BrilligBytecode<GenericFieldElement<Fr>> {
+        let mut bytecode = vec![
+            constant(100, num_args),
+            constant(101, 0),
+            BrilligOpcode::CalldataCopy {
+                destination_address: address(0),
+                size_address: address(100),
+                offset_address: address(101),
+            },
+        ];
+        bytecode.extend(body);
+        bytecode.extend([
+            constant(102, result),
+            constant(103, 1),
+            BrilligOpcode::Stop {
+                return_data: HeapVector {
+                    pointer: address(102),
+                    size: address(103),
+                },
+            },
+        ]);
+        BrilligBytecode {
+            function_name: "test".to_string(),
+            bytecode,
+        }
+    }
+
+    /// Returns the quotient of its two field arguments.
+    fn division() -> BrilligBytecode<GenericFieldElement<Fr>> {
+        function(2, vec![field_op(BinaryFieldOp::Div, 0, 1, 2)], 2)
+    }
+
+    /// `if a == b { a / b } else { a / c }` for the field arguments a, b and c, which is a shared if for shared arguments.
+    fn division_in_shared_if() -> BrilligBytecode<GenericFieldElement<Fr>> {
+        // The body starts at the opcode 3
+        let body = vec![
+            field_op(BinaryFieldOp::Equals, 0, 1, 3),
+            BrilligOpcode::JumpIf {
+                condition: address(3),
+                location: 7,
+            },
+            field_op(BinaryFieldOp::Div, 0, 2, 4),
+            BrilligOpcode::Jump { location: 8 },
+            field_op(BinaryFieldOp::Div, 0, 1, 4),
+        ];
+        function(3, body, 4)
+    }
+
+    /// Executes the function with the shared arguments with three parties, optionally with a shared predicate, and returns the opened result.
+    fn run(
+        function: BrilligBytecode<GenericFieldElement<Fr>>,
+        args: &[u64],
+        predicate: Option<u64>,
+    ) -> eyre::Result<Fr> {
+        let mut rng = rand::thread_rng();
+        let mut share = |value: u64| rep3::share_field_element(Fr::from(value), &mut rng);
+        let args = args.iter().map(|arg| share(*arg)).collect::<Vec<_>>();
+        let predicate = predicate.map(&mut share);
+
+        let threads = LocalNetwork::new_3_parties()
+            .into_iter()
+            .enumerate()
+            .map(|(i, net)| {
+                let function = function.clone();
+                let calldata = args
+                    .iter()
+                    .map(|arg| Rep3BrilligType::shared_field(arg[i]))
+                    .collect();
+                std::thread::spawn(move || {
+                    let state = Rep3State::new(&net, A2BType::default())?;
+                    let driver = Rep3BrilligDriver::<Fr, _>::new(&net, state);
+                    let mut vm = CoBrilligVM::init(driver, vec![function]);
+                    let id = BrilligFunctionId::default();
+                    let result = match predicate {
+                        Some(predicate) => vm.run_with_predicate(
+                            &id,
+                            calldata,
+                            Rep3BrilligType::shared_field(predicate[i]),
+                        )?,
+                        None => vm.run(&id, calldata)?,
+                    };
+                    let CoBrilligResult::Success(success) = result else {
+                        eyre::bail!("the function failed");
+                    };
+                    match success.unconstrained_witnesses.as_slice() {
+                        [Rep3BrilligType::Shared(Shared::Field(share))] => Ok(*share),
+                        _ => eyre::bail!("expected one shared field element"),
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        let shares = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rep3::combine_field_element(shares[0], shares[1], shares[2]))
+    }
+
+    fn divide(a: u64, b: u64, predicate: Option<u64>) -> eyre::Result<Fr> {
+        run(division(), &[a, b], predicate)
+    }
+
+    #[test]
+    fn division_with_shared_predicate() {
+        // Without a predicate, a division by zero fails
+        assert_eq!(divide(6, 3, None).unwrap(), Fr::from(2u64));
+        assert!(divide(6, 0, None).is_err());
+
+        // The function is executed even though the predicate is false, which must not fail
+        divide(6, 0, Some(0)).unwrap();
+        divide(6, 3, Some(0)).unwrap();
+        // With a true predicate the function behaves as without one
+        assert_eq!(divide(6, 3, Some(1)).unwrap(), Fr::from(2u64));
+        assert!(divide(6, 0, Some(1)).is_err());
+    }
+
+    // Inside a call with a shared predicate, the branches of a shared if are guarded by the predicate and their condition
+    #[test]
+    fn division_in_shared_if_with_shared_predicate() {
+        let f = division_in_shared_if;
+        for predicate in [None, Some(1)] {
+            // a == b: the result is a / b, the division by c in the other branch must not fail
+            assert_eq!(run(f(), &[6, 6, 0], predicate).unwrap(), Fr::from(1u64));
+            // a != b: the result is a / c, the division by b in the other branch must not fail
+            assert_eq!(run(f(), &[6, 0, 2], predicate).unwrap(), Fr::from(3u64));
+            // the division in the taken branch fails
+            assert!(run(f(), &[6, 3, 0], predicate).is_err());
+            assert!(run(f(), &[0, 0, 2], predicate).is_err());
+        }
+        // With a false predicate no division fails, not even the one in the taken branch
+        run(f(), &[6, 3, 0], Some(0)).unwrap();
+        run(f(), &[0, 0, 2], Some(0)).unwrap();
     }
 }

@@ -113,7 +113,6 @@ macro_rules! run_test {
                             .into_iter()
                             .map(|x| Rep3VmType::Arithmetic(x))
                             .collect(),
-                        0,
                     )
                     .unwrap()
                     .into_shared_witness()
@@ -287,10 +286,7 @@ fn bitwise_field() {
                         };
                         Rep3WitnessExtension::new(&net, &circuit, config)
                             .unwrap()
-                            .run_with_flat(
-                                input.into_iter().map(Rep3VmType::Arithmetic).collect(),
-                                0,
-                            )
+                            .run_with_flat(input.into_iter().map(Rep3VmType::Arithmetic).collect())
                             .unwrap()
                             .into_shared_witness()
                     })

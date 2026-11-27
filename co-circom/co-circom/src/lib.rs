@@ -135,6 +135,25 @@ pub fn translate_witness<F: PrimeField, N: Network>(
     Ok(shamir_witness_share)
 }
 
+/// Checks that none of the inputs provided as shares is a public input of the circuit.
+///
+/// The public inputs are opened after the witness generation, so a party that provides one of them as a share would have its secret value revealed. Note that the opposite is allowed: A private input of the circuit can be provided as a public value. It stays part of the shared witness and is not opened by the witness generation.
+fn check_public_inputs<'a, F: PrimeField>(
+    circuit: &CoCircomCompilerParsed<F>,
+    shared_inputs: impl Iterator<Item = &'a str>,
+) -> eyre::Result<()> {
+    for name in shared_inputs {
+        // array inputs have a trailing [\d+]
+        let orig_name = name.split('[').next().unwrap_or(name);
+        if circuit.public_inputs().iter().any(|p| p == orig_name) {
+            eyre::bail!(
+                "Input '{name}' is a public input of the circuit, but was provided as a share"
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Generate a REP3 shared witness
 pub fn generate_witness_rep3<F: PrimeField + FieldUint, N: Network>(
     circuit: &CoCircomCompilerParsed<F>,
@@ -146,10 +165,13 @@ pub fn generate_witness_rep3<F: PrimeField + FieldUint, N: Network>(
     let rep3_vm =
         Rep3WitnessExtension::new(net, circuit, config).context("while constructing MPC VM")?;
 
-    let num_public_inputs = input
-        .values()
-        .filter(|i| matches!(i, Rep3InputType::Public(_)))
-        .count();
+    check_public_inputs(
+        circuit,
+        input
+            .iter()
+            .filter(|(_, value)| matches!(value, Rep3InputType::Shared(_)))
+            .map(|(name, _)| name.as_str()),
+    )?;
     let input = input
         .into_iter()
         .map(|(name, vale)| (name, Rep3VmType::from(vale)))
@@ -157,7 +179,7 @@ pub fn generate_witness_rep3<F: PrimeField + FieldUint, N: Network>(
 
     // execute witness generation in MPC
     let witness_share = rep3_vm
-        .run(input, num_public_inputs)
+        .run(input)
         .context("while running witness generation")?;
 
     Ok(witness_share.into_shared_witness())
@@ -177,10 +199,13 @@ pub fn generate_witness_shamir<F: PrimeField + FieldUint, N: Network>(
     let shamir_vm = ShamirWitnessExtension::new(net, num_parties, threshold, 0, circuit, config)
         .context("while constructing MPC VM")?;
 
-    let num_public_inputs = input
-        .values()
-        .filter(|i| matches!(i, ShamirInputType::Public(_)))
-        .count();
+    check_public_inputs(
+        circuit,
+        input
+            .iter()
+            .filter(|(_, value)| matches!(value, ShamirInputType::Shared(_)))
+            .map(|(name, _)| name.as_str()),
+    )?;
     let input = input
         .into_iter()
         .map(|(name, vale)| (name, ShamirVmType::from(vale)))
@@ -188,7 +213,7 @@ pub fn generate_witness_shamir<F: PrimeField + FieldUint, N: Network>(
 
     // execute witness generation in MPC
     let witness_share = shamir_vm
-        .run(input, num_public_inputs)
+        .run(input)
         .context("while running witness generation")?;
 
     Ok(witness_share.into_shared_witness())

@@ -553,7 +553,8 @@ where
             .context("while parsing field element")?;
         let modulus = BigUint::try_from(F::MODULUS).expect("can convert mod to biguint");
         if big_int >= modulus {
-            tracing::warn!("val {} >= mod", big_int);
+            // The value may be secret, so it is not logged
+            tracing::warn!("an input value is >= the modulus of the field and gets reduced");
             // snarkjs also does this
             big_int %= modulus;
         }

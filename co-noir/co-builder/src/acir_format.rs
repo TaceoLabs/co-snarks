@@ -63,6 +63,24 @@ pub struct ProgramMetadata {
     // aggregation object when we're not using the honk RV.
     pub(crate) size_hint: usize,
 }
+/// Whether the builder is allowed to open shared data of a recursion constraint.
+///
+/// The verifier of a zero-knowledge Honk proof (proof type `HonkZk`) is not implemented for shared values. For such a recursion constraint, the builder therefore opens all shared witnesses among the inner proof, its public inputs, the verification key, the key hash and the predicate. All parties thereby learn these values, which includes the public inputs of the inner proof and which circuit it is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum OpenRecursionData {
+    /// Building the circuit fails if shared recursion data would have to be opened.
+    #[default]
+    No,
+    /// Shared recursion data is opened to all parties.
+    Yes,
+}
+
+impl From<bool> for OpenRecursionData {
+    fn from(value: bool) -> Self {
+        if value { Self::Yes } else { Self::No }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HonkRecursion {
     NotHonk,     // 0 means we are not proving with honk

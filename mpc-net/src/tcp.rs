@@ -1,8 +1,13 @@
 //! TCP MPC network
+//!
+//! # Security
+//!
+//! This transport is **not secure**: the traffic is not encrypted and the peers are not authenticated. Every host that can reach the port can take the place of a party, since a peer is identified by the party id it sends, and everyone who can observe the traffic learns all messages, which include the shares and the seeds of the correlated randomness of the MPC protocols. Only use it for tests and benchmarks, or in a trusted, isolated network. Use the TLS transport (`tls` features) otherwise.
 
 use std::{
     array,
     cmp::Ordering,
+    collections::HashSet,
     net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
     time::{Duration, Instant},
 };
@@ -18,6 +23,8 @@ use itertools::Itertools;
 use socket2::{Domain, Socket, TcpKeepalive, Type};
 
 /// A MPC network using [TcpStream]s
+///
+/// **Not secure:** no encryption and no authentication of the peers, see the [module documentation](self).
 #[derive(Debug)]
 pub struct TcpNetwork {
     id: usize,
@@ -76,6 +83,9 @@ impl TcpNetwork {
             channels: BlockingChannels::new(timeout, flush_timeout, max_frame_length),
         });
 
+        // The (network index, party id) pairs of the accepted connections
+        let mut accepted = HashSet::new();
+
         for i in 0..N {
             for (other_id, addr) in addrs.iter().enumerate() {
                 let addr = addr
@@ -120,6 +130,16 @@ impl TcpNetwork {
                         stream.set_nodelay(true)?;
                         let i = stream.read_u64::<BigEndian>()? as usize;
                         let other_id = stream.read_u64::<BigEndian>()? as usize;
+                        // Both values are chosen by the peer, so check them before use
+                        eyre::ensure!(i < N, "peer sent the invalid network index {i}");
+                        eyre::ensure!(
+                            other_id < id,
+                            "peer claimed the party id {other_id}, but only parties with an id below {id} connect to us"
+                        );
+                        eyre::ensure!(
+                            accepted.insert((i, other_id)),
+                            "party {other_id} connected more than once for network {i}"
+                        );
                         let write_stream = stream.try_clone().expect("can clone stream");
                         nets[i].channels.add_peer(other_id, write_stream, stream);
                     }

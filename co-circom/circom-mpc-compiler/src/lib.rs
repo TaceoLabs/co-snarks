@@ -65,9 +65,6 @@ pub struct CompilerConfig {
     /// The circom version
     #[serde(default = "default_version")]
     pub version: String,
-    /// Allow leaking of secret values in loops (not used atm)
-    #[serde(default)]
-    pub allow_leaky_loops: bool,
     /// The path to Circom library files
     #[serde(default)]
     pub link_library: Vec<PathBuf>,
@@ -80,7 +77,9 @@ pub struct CompilerConfig {
     /// Does an additional check over the constraints produced
     #[serde(default)]
     pub inspect: bool,
-    /// Adds additional opcodes for debugging.
+    /// Adds additional opcodes for debugging, i.e., the `assert` statements of the circuit are executed.
+    ///
+    /// During the MPC witness extension, every executed `assert` opens one bit to all parties: whether the assertion holds, or, inside an `if` with a secret-shared condition, whether its branch is taken and the assertion fails. A failing assertion aborts the execution, as it does in circom. If the value of an assertion inside such an `if` is public and false, this reveals whether the branch is taken. Set this to `false` to skip the assertions and open nothing.
     #[serde(default = "default_true")]
     pub debug: bool,
 }
@@ -98,7 +97,6 @@ impl Default for CompilerConfig {
         Self {
             version: default_version(),
             link_library: vec![],
-            allow_leaky_loops: false,
             simplification: SimplificationLevel::default(),
             verbose: false,
             inspect: false,
@@ -118,7 +116,6 @@ impl CompilerConfig {
     /// Create a new instance of the compiler config optimized for release.
     pub fn release() -> Self {
         Self {
-            allow_leaky_loops: false,
             simplification: SimplificationLevel::O2(usize::MAX),
             debug: false,
             ..Default::default()
@@ -874,13 +871,10 @@ mod tests {
 
         let plain_vm = parsed.to_plain_vm(VMConfig::default());
         let finalized_witness = plain_vm
-            .run_with_flat(
-                to_field_vec!(vec![
-                    "883", "521", "889", "768", "948", "35", "647", "221", "248", "427", "338",
-                    "189", "462", "748", "135", "159", "530", "787", "389", "594",
-                ]),
-                0,
-            )
+            .run_with_flat(to_field_vec!(vec![
+                "883", "521", "889", "768", "948", "35", "647", "221", "248", "427", "338", "189",
+                "462", "748", "135", "159", "530", "787", "389", "594",
+            ]))
             .unwrap();
 
         let out = finalized_witness.get_output("out").unwrap();

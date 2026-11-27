@@ -1,4 +1,4 @@
-use crate::acir_format::{HonkRecursion, ProgramMetadata};
+use crate::acir_format::{HonkRecursion, OpenRecursionData, ProgramMetadata};
 use crate::keys::plain_proving_key::create_prover_instance;
 use crate::transcript_ct::Poseidon2SpongeCT;
 use crate::types::aes128;
@@ -199,6 +199,8 @@ pub struct GenericUltraCircuitBuilder<
     // Stores gate index where Read/Write type is shared
     pub memory_records_shared: BTreeMap<u32, T::AcvmType>, // order does not matter
     pub is_write_vk_mode: bool,
+    /// Whether shared data of a recursion constraint may be opened, see [`OpenRecursionData`]
+    pub open_recursion_data: OpenRecursionData,
 }
 
 // This workaround is required due to mutability issues
@@ -4215,6 +4217,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             memory_records_shared: BTreeMap::new(),
             current_tag: 0,
             is_write_vk_mode: true,
+            open_recursion_data: OpenRecursionData::No,
         }
     }
 
@@ -4230,6 +4233,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
         size_hint: usize,
         mut witness: Vec<T::AcvmType>,
         honk_recursion: HonkRecursion, // 1 for ultrahonk
+        open_recursion_data: OpenRecursionData,
         crs: &ProverCrs<P>, // We need the CRS because in recursive verification, we need to generate a placeholder proof
         driver: &mut T,
     ) -> eyre::Result<Self> {
@@ -4258,6 +4262,7 @@ impl<P: HonkCurve<TranscriptFieldType>, T: NoirWitnessExtensionProtocol<P::Scala
             constraint_system.public_inputs.to_owned(),
             is_write_vk_mode,
         );
+        builder.open_recursion_data = open_recursion_data;
         let metadata = ProgramMetadata {
             honk_recursion,
             size_hint,

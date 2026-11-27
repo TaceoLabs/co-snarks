@@ -42,6 +42,8 @@ impl<'a, N: Network> StreamingRep3Garbler<'a, N> {
     }
 
     /// Create a new garbler with existing delta.
+    ///
+    /// The gate and output counters of a garbler, which determine the tweaks of its hash function, start at zero. The delta therefore has to be fresh, i.e., it must not be used by another garbler. With a reused delta, different garblers hash wire labels with the same offset and the same tweaks, which the security of the garbling scheme does not allow. It may only be shared with the inputs of this garbler, which have to be encoded with the same delta.
     pub fn new_with_delta(net: &'a N, state: &mut Rep3State, delta: WireMod2) -> Self {
         let id = state.id;
         let seed = state.rngs.generate_garbler_randomness(id);

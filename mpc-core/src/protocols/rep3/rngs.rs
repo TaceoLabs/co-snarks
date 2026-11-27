@@ -18,15 +18,29 @@ pub struct Rep3CorrelatedRng {
     pub rand: Rep3Rand,
     pub(crate) bitcomp1: Rep3RandBitComp,
     pub(crate) bitcomp2: Rep3RandBitComp,
+    /// Rng for values that are equal on all three parties
+    common: RngType,
 }
 
 impl Rep3CorrelatedRng {
-    /// Construct a new [`Rep3CorrelatedRng`]
-    pub fn new(rand: Rep3Rand, bitcomp1: Rep3RandBitComp, bitcomp2: Rep3RandBitComp) -> Self {
+    /// Construct a new [`Rep3CorrelatedRng`] for the party `id`
+    pub fn new(
+        rand: Rep3Rand,
+        mut bitcomp1: Rep3RandBitComp,
+        bitcomp2: Rep3RandBitComp,
+        id: PartyID,
+    ) -> Self {
+        // One of the keys of bitcomp1 is known to all three parties. We derive a dedicated rng for the common randomness from it, since its stream is also advanced by the 3-key methods of bitcomp1, which are only called by two of the parties. This has to happen before any other use of bitcomp1, such that all parties are at the same position of the stream.
+        let common_key = match id {
+            PartyID::ID0 | PartyID::ID1 => &mut bitcomp1.rng2,
+            PartyID::ID2 => &mut bitcomp1.rng1,
+        };
+        let common = RngType::from_seed(common_key.r#gen());
         Self {
             rand,
             bitcomp1,
             bitcomp2,
+            common,
         }
     }
 
@@ -35,23 +49,23 @@ impl Rep3CorrelatedRng {
         let rand = self.rand.fork();
         let bitcomp1 = self.bitcomp1.fork();
         let bitcomp2 = self.bitcomp2.fork();
+        let common = RngType::from_seed(self.common.r#gen());
         Self {
             rand,
             bitcomp1,
             bitcomp2,
+            common,
         }
     }
 
-    /// Generate a value that is equal on all three parties
-    pub fn generate_shared<T>(&mut self, id: PartyID) -> T
+    /// Generate a value that is equal on all three parties.
+    ///
+    /// The parties obtain the same values as long as they call this method and [`Self::fork`] in the same order.
+    pub fn generate_shared<T>(&mut self) -> T
     where
         Standard: Distribution<T>,
     {
-        match id {
-            PartyID::ID0 => self.bitcomp1.rng2.r#gen(),
-            PartyID::ID1 => self.bitcomp1.rng2.r#gen(),
-            PartyID::ID2 => self.bitcomp1.rng1.r#gen(),
-        }
+        self.common.r#gen()
     }
 
     /// Generate a value that is equal on all two garbler parties
@@ -371,5 +385,54 @@ mod tests {
         let single_b: U256 = rand_single.random_uint_rng2(64);
         assert_eq!(pair_a, single_a);
         assert_eq!(pair_b, single_b);
+    }
+
+    // The common randomness has its own rng, as the stream of the key known to all parties is also advanced by conversions, in which only two of the parties use that key
+    #[test]
+    fn generate_shared_is_equal_on_all_parties() {
+        use crate::MpcState;
+        use crate::protocols::rep3::{
+            Rep3PrimeFieldShare, Rep3State,
+            conversion::{self, A2BType},
+        };
+        use mpc_net::local::LocalNetwork;
+
+        type Seed = [u8; crate::SEED_SIZE];
+
+        // A conversion that advances bitcomp1 on two of the three parties
+        fn convert(net: &LocalNetwork, state: &mut Rep3State) {
+            let x = Rep3PrimeFieldShare::<ark_bn254::Fr>::zero_share();
+            let bits = conversion::a2b_selector(x, net, state).unwrap();
+            conversion::b2a_selector(&bits, net, state).unwrap();
+        }
+
+        let threads = LocalNetwork::new_3_parties().map(|net| {
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let mut values = Vec::<Seed>::new();
+                // fresh
+                values.push(state.rngs.generate_shared());
+                // after a conversion
+                convert(&net, &mut state);
+                values.push(state.rngs.generate_shared());
+                // on a fork taken after a conversion, and after a conversion on the fork
+                let mut fork = state.fork(0).unwrap();
+                values.push(fork.rngs.generate_shared());
+                convert(&net, &mut fork);
+                values.push(fork.rngs.generate_shared());
+                // the original state after the fork
+                values.push(state.rngs.generate_shared());
+                values
+            })
+        });
+        let [values0, values1, values2] = threads.map(|thread| thread.join().unwrap());
+        assert_eq!(values0, values1);
+        assert_eq!(values0, values2);
+        // all values are distinct
+        for (i, a) in values0.iter().enumerate() {
+            for b in &values0[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
     }
 }

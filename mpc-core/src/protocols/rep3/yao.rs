@@ -14,7 +14,7 @@ use super::{Rep3PrimeFieldShare, Rep3State, Rep3UintShare, id::PartyID, network:
 use crate::uint::{FieldUint, UintBackend};
 use circuits::{GarbledCircuits, SHA256Table};
 use fancy::{BinaryBundle, Block, WireMod2};
-use itertools::{Itertools, izip};
+use itertools::izip;
 use mpc_net::Network;
 use num_traits::{WrappingAdd, Zero};
 use rand::{CryptoRng, Rng};
@@ -246,76 +246,6 @@ impl GCUtils {
         let bits = Self::field_to_bits_as_u16(field);
         Self::encode_bits(bits, rng, delta)
     }
-}
-
-/// Transforms an arithmetically shared input x = (x_1, x_2, x_3) into three yao shares x_1^Y, x_2^Y, x_3^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
-pub fn joint_input_arithmetic<F: FieldUint, N: Network>(
-    x: Rep3PrimeFieldShare<F>,
-    delta: Option<WireMod2>,
-    net: &N,
-    state: &mut Rep3State,
-) -> eyre::Result<[BinaryBundle<WireMod2>; 3]> {
-    let n_bits = F::MODULUS_BIT_SIZE as usize;
-
-    // x1 is known by both garblers, we can do a shortcut to share it without communication.
-    // See https://eprint.iacr.org/2019/1168.pdf, p18, last paragraph of "Joint Yao Input".
-    let mut x1 = (0..n_bits)
-        .map(|_| WireMod2::from_block(state.rngs.generate_shared::<Block>(state.id)))
-        .collect_vec();
-
-    let (x0, x2) = match state.id {
-        PartyID::ID0 => {
-            // Receive x0
-            let x0 = GCUtils::receive_bundle_from(n_bits, net, PartyID::ID1)?;
-
-            // Receive x2
-            let x2 = GCUtils::receive_bundle_from(n_bits, net, PartyID::ID2)?;
-            (x0, x2)
-        }
-        PartyID::ID1 => {
-            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
-
-            // Modify x1
-            let x1_bits = GCUtils::field_to_bits_as_u16(x.a);
-            x1.iter_mut().zip(x1_bits).for_each(|(x, bit)| {
-                *x ^= delta.cmul(bit);
-            });
-
-            // Input x0
-            let x0 = GCUtils::encode_field(x.b, &mut state.rng, delta);
-
-            // Send x0 to the other parties
-            GCUtils::send_inputs(&x0, net, PartyID::ID2)?;
-            let x0 = x0.garbler_wires;
-
-            // Receive x2
-            let x2 = GCUtils::receive_bundle_from(n_bits, net, PartyID::ID2)?;
-            (x0, x2)
-        }
-        PartyID::ID2 => {
-            let delta = delta.ok_or_else(|| eyre::eyre!("No delta provided"))?;
-
-            // Modify x1
-            let x1_bits = GCUtils::field_to_bits_as_u16(x.b);
-            x1.iter_mut().zip(x1_bits).for_each(|(x, bit)| {
-                *x ^= delta.cmul(bit);
-            });
-
-            // Input x2
-            let x2 = GCUtils::encode_field(x.a, &mut state.rng, delta);
-
-            // Send x2 to the other parties
-            GCUtils::send_inputs(&x2, net, PartyID::ID1)?;
-            let x2 = x2.garbler_wires;
-
-            // Receive x0
-            let x0 = GCUtils::receive_bundle_from(n_bits, net, PartyID::ID1)?;
-            (x0, x2)
-        }
-    };
-    let x1 = BinaryBundle::new(x1);
-
-    Ok([x0, x1, x2])
 }
 
 /// Transforms an arithmetically shared input x = (x_1, x_2, x_3) into two yao shares x_1^Y, (x_2 + x_3)^Y. The used delta is an input to the function to allow for the same delta to be used for multiple conversions.
@@ -1103,6 +1033,13 @@ pub fn decompose_arithmetic_to_other_field_many<F: FieldUint, K: FieldUint, N: N
     total_bit_size_per_field: usize,
     decompose_bit_size: usize,
 ) -> eyre::Result<Vec<Rep3PrimeFieldShare<K>>> {
+    // The circuit and the masks of the outputs assume the same number of bits for both fields
+    eyre::ensure!(
+        F::MODULUS_BIT_SIZE == K::MODULUS_BIT_SIZE,
+        "The moduli of the two fields need to have the same number of bits, but have {} and {}",
+        F::MODULUS_BIT_SIZE,
+        K::MODULUS_BIT_SIZE
+    );
     let num_inputs = inputs.len();
     let num_decomps_per_field = total_bit_size_per_field.div_ceil(decompose_bit_size);
     let total_output_elements = num_decomps_per_field * num_inputs;

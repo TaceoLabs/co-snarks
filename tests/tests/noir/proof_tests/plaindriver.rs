@@ -7,7 +7,7 @@ use ark_ff::PrimeField;
 use co_acvm::{solver::PlainCoSolver, PlainAcvmSolver};
 use co_builder::{
     keys::proving_key,
-    prelude::{HonkRecursion, UltraCircuitBuilder},
+    prelude::{HonkRecursion, OpenRecursionData, UltraCircuitBuilder},
 };
 use co_noir::{Bn254G1, HonkProof};
 use co_noir_common::{
@@ -73,6 +73,7 @@ fn proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         0,
         witness,
         HonkRecursion::UltraHonk,
+        OpenRecursionData::No,
         &recursion_crs,
         &mut driver,
     )
@@ -146,6 +147,7 @@ fn witness_and_proof_test<H: TranscriptHasher<TranscriptFieldType>>(
         0,
         witness,
         HonkRecursion::UltraHonk,
+        OpenRecursionData::No,
         &recursion_crs,
         &mut driver,
     )

@@ -77,14 +77,24 @@ impl<F: FieldUint> Rep3FieldLookupTable<F> {
         net: &N,
         state: &mut Rep3State,
     ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
-        let len = luts.iter().map(|l| l.len()).max().unwrap();
+        let len = luts.iter().map(|l| l.len()).max().unwrap_or_default();
         tracing::debug!("doing read on LUT-map of size {}", len);
+        eyre::ensure!(len > 0, "cannot read from an empty LUT");
+        if len == 1 {
+            // There is only one entry, so there is nothing to select. Shorter LUTs are padded with 0.
+            return Ok(luts
+                .iter()
+                .map(|lut| {
+                    let value = lut.first().copied().unwrap_or_default();
+                    arithmetic::promote_to_trivial_share(state.id, value)
+                })
+                .collect());
+        }
         let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2() as usize;
 
-        let result = if k == 1 {
-            Self::get_from_public_luts_internal::<Bit, _>(bits, luts, net, state)?
-        } else if k <= 8 {
+        // The public read rounds k up to an even number, so a single bit does not suffice for k = 1
+        let result = if k <= 8 {
             Self::get_from_public_luts_internal::<u8, _>(bits, luts, net, state)?
         } else if k <= 16 {
             Self::get_from_public_luts_internal::<u16, _>(bits, luts, net, state)?
@@ -234,6 +244,17 @@ impl<F: FieldUint> Rep3FieldLookupTable<F> {
         net: &N,
         state: &mut Rep3State,
     ) -> eyre::Result<Vec<Rep3PrimeFieldShare<F>>> {
+        eyre::ensure!(
+            len > 0,
+            "cannot create a one-hot-encoded vector of length 0"
+        );
+        if len == 1 {
+            // The only entry is always the selected one
+            return Ok(vec![arithmetic::promote_to_trivial_share(
+                state.id,
+                F::one(),
+            )]);
+        }
         let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2() as usize;
 
@@ -331,10 +352,21 @@ impl<F: FieldUint> LookupTableProvider<F> for Rep3FieldLookupTable<F> {
     ) -> eyre::Result<Self::SecretShare> {
         let len = lut.len();
         tracing::debug!("doing read on LUT-map of size {}", len);
+        eyre::ensure!(len > 0, "cannot read from an empty LUT");
+        if len == 1 {
+            // There is only one entry, so there is nothing to select
+            return Ok(match lut {
+                PublicPrivateLut::Public(vec) => {
+                    arithmetic::promote_to_trivial_share(state.id, vec[0])
+                }
+                PublicPrivateLut::Shared(vec) => vec[0],
+            });
+        }
         let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2() as usize;
 
-        let result = if k == 1 {
+        // The read of a public LUT rounds k up to an even number, so a single bit does not suffice for k = 1
+        let result = if k == 1 && !Self::is_public_lut(lut) {
             Self::get_from_lut_internal::<Bit, _>(bits, lut, net, state)?
         } else if k <= 8 {
             Self::get_from_lut_internal::<u8, _>(bits, lut, net, state)?
@@ -359,6 +391,12 @@ impl<F: FieldUint> LookupTableProvider<F> for Rep3FieldLookupTable<F> {
     ) -> eyre::Result<()> {
         let len = lut.len();
         tracing::debug!("doing write on LUT-map of size {}", len);
+        eyre::ensure!(len > 0, "cannot write to an empty LUT");
+        if len == 1 {
+            // There is only one entry, which is replaced
+            *lut = PublicPrivateLut::Shared(vec![value]);
+            return Ok(());
+        }
         let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2();
 

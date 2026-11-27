@@ -38,7 +38,7 @@ pub enum Rep3BrilligType<F: FieldUint> {
 }
 
 /// The potential shared values of the co-Brillig Rep3 driver.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Shared<F: FieldUint> {
     Field(Rep3PrimeFieldShare<F>),
     Ring128(Rep3RingShare<u128>),
@@ -47,6 +47,22 @@ pub enum Shared<F: FieldUint> {
     Ring16(Rep3RingShare<u16>),
     Ring8(Rep3RingShare<u8>),
     Ring1(Rep3BitShare),
+}
+
+// The shares are secret, so only the type is printed
+impl<F: FieldUint> std::fmt::Debug for Shared<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ty = match self {
+            Shared::Field(_) => "Field",
+            Shared::Ring128(_) => "U128",
+            Shared::Ring64(_) => "U64",
+            Shared::Ring32(_) => "U32",
+            Shared::Ring16(_) => "U16",
+            Shared::Ring8(_) => "U8",
+            Shared::Ring1(_) => "U1",
+        };
+        write!(f, "{ty}(<redacted>)")
+    }
 }
 
 impl<F: FieldUint> From<F> for Rep3BrilligType<F> {
@@ -374,11 +390,24 @@ impl<F: FieldUint, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> 
         Rep3BrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
     }
 
-    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+    fn predicate_to_condition(
+        &mut self,
+        predicate: Self::BrilligType,
+    ) -> eyre::Result<Option<Self::BrilligType>> {
+        match predicate {
+            Rep3BrilligType::Public(_) => Ok(None),
+            shared @ Rep3BrilligType::Shared(Shared::Ring1(_)) => Ok(Some(shared)),
+            // The predicate is 0 or 1, so its least significant bit is the condition
+            shared => Ok(Some(
+                self.cast(shared, BitSize::Integer(IntegerBitSize::U1))?,
+            )),
+        }
+    }
+
+    fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
         match other {
-            Rep3BrilligType::Public(other) => {
-                Rep3BrilligType::Public(self.plain_driver.random(other))
-            }
+            // A public value has to be equal for all parties, so it must not be sampled locally
+            Rep3BrilligType::Public(other) => Rep3BrilligType::Public(other.clone()),
             Rep3BrilligType::Shared(Shared::Field(_)) => {
                 let (a, b) = self.state.rngs.rand.random_fes();
                 Rep3BrilligType::shared_field(Rep3PrimeFieldShare::new(a, b))
@@ -1809,6 +1838,62 @@ impl<F: FieldUint, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> 
             Rep3BrilligType::Public(Public::Field(_))
             | Rep3BrilligType::Shared(Shared::Field(_)) => Ok(val),
             _ => eyre::bail!("expected field but got int"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mpc::PlainBrilligType;
+    use ark_bn254::Fr;
+    use brillig::IntegerBitSize;
+    use mpc_core::protocols::rep3::conversion::A2BType;
+    use mpc_net::local::LocalNetwork;
+
+    // Shares must not end up in logs or error messages
+    #[test]
+    fn shares_are_not_printed() {
+        let share = mpc_core::protocols::rep3::Rep3PrimeFieldShare::new(
+            Fr::from(1234u64),
+            Fr::from(5678u64),
+        );
+        let printed = format!("{:?}", Rep3BrilligType::shared_field(share));
+        assert_eq!(printed, "Shared(Field(<redacted>))");
+        let printed = format!("{:?}", Rep3BrilligType::public_field(Fr::from(1234u64)));
+        assert!(printed.contains("1234"), "{printed}");
+    }
+
+    // The dummy for a public value must be equal for all parties, as it is used together with shared values afterwards
+    #[test]
+    fn dummy_for_public_value_is_equal_for_all_parties() {
+        let publics = [
+            PlainBrilligType::Field(Fr::from(42u64)),
+            PlainBrilligType::Int(7, IntegerBitSize::U64),
+        ];
+        let threads = LocalNetwork::new_3_parties()
+            .into_iter()
+            .map(|net| {
+                let publics = publics.clone();
+                std::thread::spawn(move || {
+                    let state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let mut driver = Rep3BrilligDriver::<Fr, _>::new(&net, state);
+                    publics
+                        .iter()
+                        .map(|public| {
+                            match driver.dummy(&Rep3BrilligType::Public(public.clone())) {
+                                Rep3BrilligType::Public(dummy) => dummy,
+                                Rep3BrilligType::Shared(_) => {
+                                    unreachable!("the dummy must be public")
+                                }
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>();
+        for thread in threads {
+            assert_eq!(thread.join().unwrap(), publics);
         }
     }
 }

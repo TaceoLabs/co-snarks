@@ -1,6 +1,10 @@
 //! Ephemeral TCP MPC network (blocking)
 //!
 //! See [`SessionHandler`] for the session model.
+//!
+//! # Security
+//!
+//! This transport is **not secure**: the traffic is not encrypted and the peers are not authenticated. Every host that can reach the port can take the place of a party, since a peer is identified by the party id it sends, and everyone who can observe the traffic learns all messages, which include the shares and the seeds of the correlated randomness of the MPC protocols. Only use it for tests and benchmarks, or in a trusted, isolated network. Use the TLS transport (`tls` features) otherwise.
 
 use std::net::TcpStream;
 
@@ -14,7 +18,9 @@ pub use crate::session_config::{
     SessionConfig as NetworkConfig, SessionConfigFile as NetworkConfigFile,
 };
 
-/// Plain TCP transport (no encryption).
+/// Plain TCP transport (no encryption, no authentication of the peers).
+///
+/// **Not secure:** no encryption and no authentication of the peers, see the [module documentation](self).
 #[derive(Debug)]
 pub struct TcpTransport;
 
@@ -49,4 +55,6 @@ impl Transport for TcpTransport {
 }
 
 /// TCP session network handler.
+///
+/// **Not secure:** no encryption and no authentication of the peers, see the [module documentation](self).
 pub type TcpNetworkHandler = SessionHandler<TcpTransport>;

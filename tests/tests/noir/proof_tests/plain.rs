@@ -3,8 +3,8 @@ use crate::proof_tests::CRS_PATH_G2;
 use ark_bn254::Bn254;
 use co_acvm::PlainAcvmSolver;
 use co_builder::prelude::constraint_system_from_reader;
-use co_builder::prelude::HonkRecursion;
 use co_builder::prelude::UltraCircuitBuilder;
+use co_builder::prelude::{HonkRecursion, OpenRecursionData};
 use co_noir::UltraHonk;
 use co_noir_common::crs::parse::CrsParser;
 use co_noir_common::crs::ProverCrs;
@@ -38,6 +38,7 @@ fn plain_test<H: TranscriptHasher<TranscriptFieldType>>(
         0,
         witness,
         HonkRecursion::UltraHonk,
+        OpenRecursionData::No,
         &recursion_crs,
         &mut driver,
     )

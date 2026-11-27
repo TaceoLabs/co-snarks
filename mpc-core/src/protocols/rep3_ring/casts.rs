@@ -180,7 +180,20 @@ where
     conversion::b2a_many(&ring_shares, net, state)
 }
 
-/// A cast of a Rep3RingShare to a Rep3PrimeFieldShare
+/// Checks that every element of the ring is a valid field element, i.e., that the ring has less bits than the modulus of the field.
+///
+/// The conversions to arithmetic shares only work for values smaller than the modulus. For other values they reveal information about the value and fail depending on it.
+pub(crate) fn ensure_ring_fits_into_field<T: IntRing2k, F: FieldUint>() -> eyre::Result<()> {
+    eyre::ensure!(
+        T::K < F::MODULUS_BIT_SIZE as usize,
+        "A ring with {} bits does not fit into a field with a modulus of {} bits, use ring_to_field_a2b_big_ring instead",
+        T::K,
+        F::MODULUS_BIT_SIZE
+    );
+    Ok(())
+}
+
+/// A cast of a Rep3RingShare to a Rep3PrimeFieldShare. Returns an error if the ring has more bits than fit into the field, see [ring_to_field_a2b_big_ring] for such rings.
 pub fn ring_to_field_a2b<T: IntRing2k, F: FieldUint, N: Network>(
     share: Rep3RingShare<T>,
     net: &N,
@@ -200,13 +213,14 @@ where
 
         return rep3::conversion::bit_inject(&uint_share, net, state);
     }
+    ensure_ring_fits_into_field::<T, F>()?;
 
     let binary = conversion::a2b(share, net, state)?;
     let uint_share = Rep3UintShare::new(T::cast_to_uint(&binary.a.0), T::cast_to_uint(&binary.b.0));
     rep3::conversion::b2a(&uint_share, net, state)
 }
 
-/// A cast of a Rep3RingShare to a Rep3PrimeFieldShare
+/// A cast of a Rep3RingShare to a Rep3PrimeFieldShare. Returns an error if the ring has more bits than fit into the field, see [ring_to_field_a2b_big_ring_many] for such rings.
 pub fn ring_to_field_a2b_many<T: IntRing2k, F: FieldUint, N: Network>(
     shares: &[Rep3RingShare<T>],
     net: &N,
@@ -236,6 +250,7 @@ where
 
         return rep3::conversion::bit_inject_many(&uint_shares, net, state);
     }
+    ensure_ring_fits_into_field::<T, F>()?;
 
     let binary = conversion::a2b_many(shares, net, state)?;
     let uint_shares = binary
@@ -247,7 +262,7 @@ where
     rep3::conversion::b2a_many(&uint_shares, net, state)
 }
 
-/// A cast of a Rep3RingShare to a Rep3PrimeFieldShare. This is intended to be used for ring shares of bit size larger than the field size (so U512, U1024). Therefore the excess bits are truncated and one should be certain that the element actually fits into the field, otherwise the result will be incorrect.
+/// A cast of a Rep3RingShare to a Rep3PrimeFieldShare. This is intended to be used for ring shares of bit size larger than the field size (so U512, U1024). The value is truncated to the bit size of the modulus and reduced modulo the modulus, so the result is only equal to the ring element if that is smaller than the modulus.
 pub fn ring_to_field_a2b_big_ring<T: IntRing2k, F: FieldUint, N: Network>(
     share: Rep3RingShare<T>,
     net: &N,
@@ -257,17 +272,22 @@ where
     Standard: Distribution<T>,
 {
     let modulus = F::MODULUS_BIT_SIZE as usize;
-    debug_assert!(T::K > modulus);
+    eyre::ensure!(
+        T::K >= modulus,
+        "A ring with {} bits is not larger than the field, use ring_to_field_a2b instead",
+        T::K
+    );
 
     let mut binary = conversion::a2b(share, net, state)?;
     let mask = T::cast_from_uint(&F::Uint::mask(modulus));
     binary &= RingElement(mask);
 
     let uint_share = Rep3UintShare::new(T::cast_to_uint(&binary.a.0), T::cast_to_uint(&binary.b.0));
-    rep3::conversion::b2a(&uint_share, net, state)
+    // The truncated value can still be larger than the modulus
+    rep3::conversion::b2a_mod_p(&uint_share, net, state)
 }
 
-/// A cast of a Rep3RingShare to a Rep3PrimeFieldShare. This is intended to be used for ring shares of bit size larger than the field size (so U512, U1024). Therefore the excess bits are truncated and one should be certain that the element actually fits into the field, otherwise the result will be incorrect.
+/// A cast of a Rep3RingShare to a Rep3PrimeFieldShare. This is intended to be used for ring shares of bit size larger than the field size (so U512, U1024). The value is truncated to the bit size of the modulus and reduced modulo the modulus, so the result is only equal to the ring element if that is smaller than the modulus.
 pub fn ring_to_field_a2b_big_ring_many<T: IntRing2k, F: FieldUint, N: Network>(
     shares: &[Rep3RingShare<T>],
     net: &N,
@@ -277,7 +297,11 @@ where
     Standard: Distribution<T>,
 {
     let modulus = F::MODULUS_BIT_SIZE as usize;
-    debug_assert!(T::K > modulus);
+    eyre::ensure!(
+        T::K >= modulus,
+        "A ring with {} bits is not larger than the field, use ring_to_field_a2b instead",
+        T::K
+    );
 
     let binary = conversion::a2b_many(shares, net, state)?;
     let mask = T::cast_from_uint(&F::Uint::mask(modulus));
@@ -288,5 +312,6 @@ where
             Rep3UintShare::new(T::cast_to_uint(&binary.a.0), T::cast_to_uint(&binary.b.0))
         })
         .collect::<Vec<_>>();
-    rep3::conversion::b2a_many(&uint_shares, net, state)
+    // The truncated values can still be larger than the modulus
+    rep3::conversion::b2a_many_mod_p(&uint_shares, net, state)
 }

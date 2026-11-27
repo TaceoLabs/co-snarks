@@ -22,13 +22,23 @@ pub struct ShamirBrilligDriver<'a, F: PrimeField, N: Network> {
 /// The types for the coBrillig
 /// Shamir driver. The values
 /// can either be shared or public.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum ShamirBrilligType<F: PrimeField> {
     /// A public value
     Public(Public<F>),
     /// A shared value.
     /// TODO for now we only support prime fields
     Shared(ShamirPrimeFieldShare<F>),
+}
+
+// The shares are secret, so they are not printed
+impl<F: PrimeField> std::fmt::Debug for ShamirBrilligType<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(public) => f.debug_tuple("Public").field(public).finish(),
+            Self::Shared(_) => f.write_str("Shared(Field(<redacted>))"),
+        }
+    }
 }
 
 impl<F: PrimeField> From<F> for ShamirBrilligType<F> {
@@ -118,7 +128,7 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, 
 
     fn try_into_bool(val: Self::BrilligType) -> Result<bool, Self::BrilligType> {
         match val {
-            ShamirBrilligType::Public(Public::Int(val, IntegerBitSize::U1)) => Ok(val != 1),
+            ShamirBrilligType::Public(Public::Int(val, IntegerBitSize::U1)) => Ok(val != 0),
             x => Err(x),
         }
     }
@@ -127,11 +137,18 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, 
         ShamirBrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
     }
 
-    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+    fn predicate_to_condition(
+        &mut self,
+        _predicate: Self::BrilligType,
+    ) -> eyre::Result<Option<Self::BrilligType>> {
+        // Shamir has no shared boolean values
+        Ok(None)
+    }
+
+    fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
         match other {
-            ShamirBrilligType::Public(other) => {
-                ShamirBrilligType::Public(self.plain_driver.random(other))
-            }
+            // A public value has to be equal for all parties, so it must not be sampled locally
+            ShamirBrilligType::Public(other) => ShamirBrilligType::Public(other.clone()),
             ShamirBrilligType::Shared(_) => ShamirBrilligType::Shared(
                 self.state
                     .rand(self.net)
@@ -392,6 +409,62 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, 
         match &val {
             ShamirBrilligType::Public(Public::Field(_)) | ShamirBrilligType::Shared(_) => Ok(val),
             _ => eyre::bail!("expected field but got int"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mpc::PlainBrilligType;
+    use ark_bn254::Fr;
+    use brillig::IntegerBitSize;
+    use mpc_core::protocols::shamir::ShamirPreprocessing;
+    use mpc_net::local::LocalNetwork;
+
+    #[test]
+    fn try_into_bool_matches_the_plain_driver() {
+        type Driver<'a> = ShamirBrilligDriver<'a, Fr, LocalNetwork>;
+        for value in [0u128, 1] {
+            let public = PlainBrilligType::<Fr>::Int(value, IntegerBitSize::U1);
+            let expected = PlainBrilligDriver::<Fr>::try_into_bool(public.clone()).unwrap();
+            assert_eq!(expected, value == 1);
+            let converted = Driver::try_into_bool(ShamirBrilligType::Public(public)).unwrap();
+            assert_eq!(converted, expected);
+        }
+    }
+
+    // The dummy for a public value must be equal for all parties, as it is used together with shared values afterwards
+    #[test]
+    fn dummy_for_public_value_is_equal_for_all_parties() {
+        let publics = [
+            PlainBrilligType::Field(Fr::from(42u64)),
+            PlainBrilligType::Int(7, IntegerBitSize::U64),
+        ];
+        let threads = LocalNetwork::new(3)
+            .into_iter()
+            .map(|net| {
+                let publics = publics.clone();
+                std::thread::spawn(move || {
+                    let preprocessing = ShamirPreprocessing::new(3, 1, 0, &net).unwrap();
+                    let mut driver =
+                        ShamirBrilligDriver::<Fr, _>::new(&net, ShamirState::from(preprocessing));
+                    publics
+                        .iter()
+                        .map(|public| {
+                            match driver.dummy(&ShamirBrilligType::Public(public.clone())) {
+                                ShamirBrilligType::Public(dummy) => dummy,
+                                ShamirBrilligType::Shared(_) => {
+                                    unreachable!("the dummy must be public")
+                                }
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>();
+        for thread in threads {
+            assert_eq!(thread.join().unwrap(), publics);
         }
     }
 }

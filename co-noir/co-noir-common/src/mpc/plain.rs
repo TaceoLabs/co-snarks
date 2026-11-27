@@ -251,19 +251,6 @@ impl<P: HonkCurve<TranscriptFieldType>> NoirUltraHonkProver<P> for PlainUltraHon
         Ok(())
     }
 
-    fn inv_many_in_place_leaking_zeros<N: Network>(
-        a: &mut [Self::ArithmeticShare],
-        _net: &N,
-        _state: &mut Self::State,
-    ) -> eyre::Result<()> {
-        for a in a.iter_mut() {
-            if !a.is_zero() {
-                a.inverse_in_place().unwrap();
-            }
-        }
-        Ok(())
-    }
-
     fn msm_public_points(
         points: &[P::Affine],
         scalars: &[Self::ArithmeticShare],

@@ -25,7 +25,9 @@ pub use poseidon2_permutation::Poseidon2;
 pub use poseidon2_shamir_circom_accelerator::CircomTraceShamirHasher;
 
 /// A struct holding data required for preprocessing the Sbox of the Poseidon2 permutation.
-#[derive(Clone, Debug, Default)]
+///
+/// Each entry (a random value r and its powers) masks the input of exactly one Sbox, which is opened as x - r. An entry must never be used twice: opening two inputs with the same r reveals their difference. The permutations take the entries starting at the current offset and advance it. For the same reason this type does not implement `Clone`.
+#[derive(Debug, Default)]
 pub struct Poseidon2Precomputations<F> {
     pub(crate) r: Vec<F>,
     pub(crate) r2: Vec<F>,
@@ -58,7 +60,7 @@ impl<F> Poseidon2Precomputations<F> {
         self.offset
     }
 
-    /// Adds increment to the current offset.
+    /// Adds increment to the current offset, i.e., skips entries. The offset must never be decreased, see the documentation of the type.
     pub fn increment_offset(&mut self, increment: usize) {
         self.offset += increment;
     }

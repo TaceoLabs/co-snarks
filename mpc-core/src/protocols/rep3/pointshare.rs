@@ -125,7 +125,10 @@ pub fn scalar_mul_local<C: CurveGroup>(
 }
 
 /// Transforms a public value into a shared value: \[a\] = a.
-/// We do it this way since it otherwise causes problems in the point_share_to_fieldshares conversion. (TACEO TODO: fix that)
+///
+/// The components of the share are offset by the generator, such that none of them is the point at infinity, which the [`point_share_to_fieldshares`](conversion::point_share_to_fieldshares) conversion cannot handle.
+///
+/// The result is still not a randomized share and must not be passed directly to [`is_zero`], [`is_zero_many`] or the `point_share_to_fieldshares` conversions, which give wrong results for trivial shares of some points (e.g., `is_zero` is true for a trivial share of two times the generator). Use it in a protocol with resharing first, or keep track of public points separately.
 pub fn promote_to_trivial_share<C: CurveGroup>(id: PartyID, a: &C) -> PointShare<C> {
     if a.is_zero() {
         match id {
@@ -148,13 +151,17 @@ pub fn open_point<C: CurveGroup, N: Network>(a: &PointShare<C>, net: &N) -> eyre
     Ok(a.a + a.b + c)
 }
 
-/// Open the shared point
+/// Open the point that is shared additively among the parties.
+///
+/// The input is the additive share of this party, which is sent to the other parties as it is. In contrast to the Shamir variant, it is not randomized by this function. The additive shares of the parties therefore have to be a fresh random sharing of the opened point, i.e., every share has to be masked by the share of a fresh random value, as it is the case for the elements of a Groth16 proof, which contain a multiple of the random scalars r and s. Otherwise the individual shares reveal more than the opened point.
 pub fn open_half_point<C: CurveGroup, N: Network>(a: C, net: &N) -> eyre::Result<C> {
     let (b, c) = net.broadcast(a)?;
     Ok(a + b + c)
 }
 
-/// Open two shared points (potentially on different curves) in a single communication round
+/// Open two additively shared points (potentially on different curves) in a single communication round.
+///
+/// The input is the additive share of this party, which is sent to the other parties as it is. In contrast to the Shamir variant, it is not randomized by this function. The additive shares of the parties therefore have to be a fresh random sharing of the opened point, i.e., every share has to be masked by the share of a fresh random value, as it is the case for the elements of a Groth16 proof, which contain a multiple of the random scalars r and s. Otherwise the individual shares reveal more than the opened point.
 pub fn open_two_half_points<C1: CurveGroup, C2: CurveGroup, N: Network>(
     a: C1,
     b: C2,
@@ -233,6 +240,8 @@ where
 
 /// Checks whether the shared point is zero/infinity.
 /// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underlying value is not zero.
+///
+/// The input has to be a randomized share. In particular, the result can be wrong for a trivial share created by [`promote_to_trivial_share`].
 /// Returns a replicated boolean share in two separate parts.
 pub fn is_zero<C: CurveGroup, N: Network>(
     x: PointShare<C>,
@@ -251,6 +260,8 @@ where
 
 /// Checks whether the shared point is zero/infinity.
 /// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underlying value is not zero.
+///
+/// The input has to be a randomized share. In particular, the result can be wrong for a trivial share created by [`promote_to_trivial_share`].
 /// Returns a replicated boolean share in two separate parts.
 pub fn is_zero_many<C: CurveGroup, N: Network>(
     x: &[PointShare<C>],

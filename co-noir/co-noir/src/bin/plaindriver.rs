@@ -4,7 +4,7 @@ use ark_ff::PrimeField;
 use clap::{Parser, ValueEnum};
 use co_acvm::{PlainAcvmSolver, solver::PlainCoSolver};
 use co_builder::keys::proving_key::{self};
-use co_builder::prelude::{HonkRecursion, UltraCircuitBuilder};
+use co_builder::prelude::{HonkRecursion, OpenRecursionData, UltraCircuitBuilder};
 use co_noir::Bn254G1;
 use co_noir_common::crs::ProverCrs;
 use co_noir_common::keys::verification_key::VerifyingKey;
@@ -72,9 +72,10 @@ pub struct Cli {
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
     pub out_dir: Option<PathBuf>,
-    /// Prove with or without the zero knowledge property
+    /// Prove without the zero knowledge property. The proof and the messages exchanged while proving then reveal information about the witness to the other parties and to everyone who sees the proof, so only use this if the witness does not need to stay hidden.
     #[arg(long)]
-    pub zk: bool,
+    #[serde(skip_serializing_if = "::std::ops::Not::not")]
+    pub disable_zk: bool,
     /// The path to the witness share file
     #[arg(long)]
     #[serde(skip_serializing_if = "::std::option::Option::is_none")]
@@ -96,8 +97,9 @@ pub struct Config {
     pub hasher: TranscriptHash,
     /// The output file where the final witness share is written to
     pub out_dir: PathBuf,
-    /// Prove with or without the zero knowledge property
-    pub zk: bool,
+    /// Prove without the zero knowledge property
+    #[serde(default)]
+    pub disable_zk: bool,
     /// The path to the witness file, if not passed it will get computed with the plaindriver
     pub witness: Option<PathBuf>,
 }
@@ -179,7 +181,7 @@ fn main() -> color_eyre::Result<ExitCode> {
     let hasher = config.hasher;
     let out_dir = config.out_dir;
     let witness_file = config.witness;
-    let has_zk = ZeroKnowledge::from(config.zk);
+    let has_zk = ZeroKnowledge::from(!config.disable_zk);
 
     // Read circuit
     let program_artifact = co_noir::program_artifact_from_reader(File::open(&circuit_path)?)
@@ -215,6 +217,7 @@ fn main() -> color_eyre::Result<ExitCode> {
         0,
         witness,
         HonkRecursion::UltraHonk,
+        OpenRecursionData::No,
         &recursion_crs,
         &mut driver,
     )

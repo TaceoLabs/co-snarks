@@ -177,6 +177,13 @@ impl<'a, F: PrimeField + FieldUint, N: Network> Rep3AcvmSolver<'a, F, N> {
     ) -> eyre::Result<Rep3AcvmPoint<C>> {
         let result = match (a, b) {
             (Rep3AcvmType::Public(a), Rep3AcvmPoint::Public(b)) => Rep3AcvmPoint::Public(b * a),
+            // If the public input is zero, the result is publicly known to be the point at infinity. We must not return it as a share in this case: all of its components would be the point at infinity, which the conversion to shares of the coordinates cannot handle.
+            (Rep3AcvmType::Public(a), Rep3AcvmPoint::Shared(_)) if a.is_zero() => {
+                Rep3AcvmPoint::Public(C::zero())
+            }
+            (Rep3AcvmType::Shared(_), Rep3AcvmPoint::Public(b)) if b.is_zero() => {
+                Rep3AcvmPoint::Public(C::zero())
+            }
             (Rep3AcvmType::Public(a), Rep3AcvmPoint::Shared(b)) => {
                 Rep3AcvmPoint::Shared(pointshare::scalar_mul_public_scalar(&b, a))
             }
@@ -223,7 +230,8 @@ impl<C: CurveGroup> std::fmt::Debug for Rep3AcvmPoint<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(point) => f.debug_tuple("Public").field(point).finish(),
-            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared(<redacted>)"),
         }
     }
 }
@@ -232,10 +240,8 @@ impl<C: CurveGroup> std::fmt::Display for Rep3AcvmPoint<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(point) => f.write_str(&format!("Public ({point})")),
-            Self::Shared(arithmetic) => {
-                let (a, b) = arithmetic.to_owned().ab();
-                f.write_str(&format!("Arithmetic (a: {a}, b: {b})"))
-            }
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared (<redacted>)"),
         }
     }
 }
@@ -270,7 +276,8 @@ impl<F: PrimeField> std::fmt::Debug for Rep3AcvmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(field) => f.debug_tuple("Public").field(field).finish(),
-            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared(<redacted>)"),
         }
     }
 }
@@ -279,10 +286,8 @@ impl<F: PrimeField> std::fmt::Display for Rep3AcvmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(field) => f.write_str(&format!("Public ({field})")),
-            Self::Shared(arithmetic) => {
-                let (a, b) = arithmetic.ab();
-                f.write_str(&format!("Arithmetic (a: {a}, b: {b})"))
-            }
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared (<redacted>)"),
         }
     }
 }
@@ -879,7 +884,7 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
     }
 
     fn common_rng_seed(&mut self) -> eyre::Result<[u8; 32]> {
-        Ok(self.state.rngs.generate_shared(self.id))
+        Ok(self.state.rngs.generate_shared())
     }
 
     fn promote_to_trivial_share(&mut self, public_value: F) -> Self::ArithmeticShare {
@@ -1965,12 +1970,12 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         iv: Vec<Self::AcvmType>,
         key: Vec<Self::AcvmType>,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
+        // All of the inputs have to be checked: the plaintext can be longer than the IV and the key
         if scalars
             .iter()
-            .zip(iv.iter().zip(key.iter()))
-            .all(|(scalar, (iv_elem, key_elem))| {
-                !Self::is_shared(scalar) && !Self::is_shared(iv_elem) && !Self::is_shared(key_elem)
-            })
+            .chain(iv.iter())
+            .chain(key.iter())
+            .all(|input| !Self::is_shared(input))
         {
             let mut scalar_to_be_bytes = Vec::with_capacity(scalars.len());
             let mut iv_to_be_bytes = Vec::with_capacity(iv.len());
@@ -2455,9 +2460,11 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
             (Rep3AcvmType::Public(lhs), Rep3AcvmType::Public(rhs)) => {
                 Rep3AcvmType::Public(lhs - rhs)
             }
-            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared))
-            | (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+            (Rep3AcvmType::Public(public), Rep3AcvmType::Shared(shared)) => {
                 Rep3AcvmType::Shared(arithmetic::sub_public_by_shared(public, shared, self.id))
+            }
+            (Rep3AcvmType::Shared(shared), Rep3AcvmType::Public(public)) => {
+                Rep3AcvmType::Shared(arithmetic::sub_shared_by_public(shared, public, self.id))
             }
             (Rep3AcvmType::Shared(lhs), Rep3AcvmType::Shared(rhs)) => {
                 let result = arithmetic::sub(lhs, rhs);
@@ -2791,5 +2798,140 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         unimplemented!(
             "functionality madd_div_mod_many_acvm_limbs not implemented for Rep3 in the shared case"
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mpc_core::protocols::rep3;
+    use mpc_net::local::LocalNetwork;
+
+    type F = ark_bn254::Fr;
+    type C = ark_bn254::G1Projective;
+    type Base = ark_bn254::Fq;
+
+    // Shares must not end up in logs or error messages
+    #[test]
+    fn shares_are_not_printed() {
+        let mut rng = rand::thread_rng();
+        let [share, _, _] = rep3::share_field_element(F::from(1234u64), &mut rng);
+        let (a, b) = share.ab();
+        let value = Rep3AcvmType::Shared(share);
+        for printed in [format!("{value:?}"), format!("{value}")] {
+            assert!(printed.contains("redacted"), "{printed}");
+            assert!(!printed.contains(&a.to_string()) && !printed.contains(&b.to_string()));
+        }
+        let public = Rep3AcvmType::Public(F::from(1234u64));
+        assert!(format!("{public:?} {public}").contains("1234"));
+
+        let [share, _, _] = rep3::share_curve_point(
+            <ark_grumpkin::Projective as ark_ec::PrimeGroup>::generator(),
+            &mut rng,
+        );
+        let point = Rep3AcvmPoint::Shared(share);
+        for printed in [format!("{point:?}"), format!("{point}")] {
+            assert_eq!(printed.replace(' ', ""), "Shared(<redacted>)");
+        }
+    }
+
+    // The plaintext is longer than the IV and the key (16 bytes), and only a byte after the first 16 is shared
+    #[test]
+    fn aes128_encrypt_with_shared_byte_in_second_block() {
+        let mut rng = rand::thread_rng();
+        let plaintext: Vec<F> = (0..32u64).map(|i| F::from(i * 7 % 256)).collect();
+        let iv: Vec<F> = (0..16u64).map(|i| F::from(i + 100)).collect();
+        let key: Vec<F> = (0..16u64).map(|i| F::from(i + 200)).collect();
+        let shared_index = 20;
+        let shares = rep3::share_field_element(plaintext[shared_index], &mut rng);
+
+        let threads = LocalNetwork::new_3_parties()
+            .into_iter()
+            .enumerate()
+            .map(|(i, net)| {
+                let (plaintext, iv, key) = (plaintext.clone(), iv.clone(), key.clone());
+                std::thread::spawn(move || {
+                    let mut driver = Rep3AcvmSolver::<F, _>::new(&net, A2BType::default()).unwrap();
+                    let public = |values: &[F]| -> Vec<_> {
+                        values.iter().map(|v| Rep3AcvmType::Public(*v)).collect()
+                    };
+                    let expected = driver
+                        .aes128_encrypt(&public(&plaintext), public(&iv), public(&key))
+                        .unwrap();
+                    let mut scalars = public(&plaintext);
+                    scalars[shared_index] = Rep3AcvmType::Shared(shares[i]);
+                    let result = driver
+                        .aes128_encrypt(&scalars, public(&iv), public(&key))
+                        .unwrap();
+                    (expected, result)
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = threads
+            .into_iter()
+            .map(|thread| thread.join().expect("a party panicked"))
+            .collect::<Vec<_>>();
+        let expected = &results[0].0;
+        assert_eq!(expected.len(), results[0].1.len());
+        for (j, expected) in expected.iter().enumerate() {
+            let expected = Rep3AcvmSolver::<F, LocalNetwork>::get_public(expected).unwrap();
+            let opened = match (&results[0].1[j], &results[1].1[j], &results[2].1[j]) {
+                (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b), Rep3AcvmType::Shared(c)) => {
+                    rep3::combine_field_element(*a, *b, *c)
+                }
+                (Rep3AcvmType::Public(a), _, _) => *a,
+                _ => unreachable!("the parties have different types"),
+            };
+            assert_eq!(opened, expected, "byte {j}");
+        }
+    }
+
+    // The order of the operands matters, also if only one of them is shared
+    #[test]
+    fn sub_other_acvm_types_respects_the_order() {
+        let mut rng = rand::thread_rng();
+        let (lhs, rhs) = (Base::from(10u64), Base::from(3u64));
+        let lhs_shares = rep3::share_field_element(lhs, &mut rng);
+        let rhs_shares = rep3::share_field_element(rhs, &mut rng);
+
+        let threads = LocalNetwork::new_3_parties()
+            .into_iter()
+            .enumerate()
+            .map(|(i, net)| {
+                std::thread::spawn(move || {
+                    let mut driver = Rep3AcvmSolver::<F, _>::new(&net, A2BType::default()).unwrap();
+                    let lhs_values = [
+                        Rep3AcvmType::Public(lhs),
+                        Rep3AcvmType::Shared(lhs_shares[i]),
+                    ];
+                    let rhs_values = [
+                        Rep3AcvmType::Public(rhs),
+                        Rep3AcvmType::Shared(rhs_shares[i]),
+                    ];
+                    let mut results = Vec::new();
+                    for lhs in &lhs_values {
+                        for rhs in &rhs_values {
+                            results
+                                .push(driver.sub_other_acvm_types::<C>(lhs.clone(), rhs.clone()));
+                        }
+                    }
+                    results
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = threads
+            .into_iter()
+            .map(|thread| thread.join().unwrap())
+            .collect::<Vec<_>>();
+        for i in 0..4 {
+            let opened = match (&results[0][i], &results[1][i], &results[2][i]) {
+                (Rep3AcvmType::Public(a), Rep3AcvmType::Public(_), Rep3AcvmType::Public(_)) => *a,
+                (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b), Rep3AcvmType::Shared(c)) => {
+                    rep3::combine_field_element(*a, *b, *c)
+                }
+                _ => unreachable!("the parties have different types"),
+            };
+            assert_eq!(opened, lhs - rhs, "combination {i}");
+        }
     }
 }

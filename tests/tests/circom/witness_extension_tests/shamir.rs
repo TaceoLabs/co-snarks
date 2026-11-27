@@ -100,7 +100,6 @@ macro_rules! run_test {
                             .into_iter()
                             .map(|x| ShamirVmType::Arithmetic(x))
                             .collect(),
-                        0,
                     )
                     .unwrap()
                     .into_shared_witness()

@@ -106,14 +106,6 @@ impl CoUtils {
         T::inv_many_in_place(poly, net, state)
     }
 
-    pub fn batch_invert_leaking_zeros<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
-        poly: &mut [T::ArithmeticShare],
-        net: &N,
-        state: &mut T::State,
-    ) -> eyre::Result<()> {
-        T::inv_many_in_place_leaking_zeros(poly, net, state)
-    }
-
     // To reduce the number of communication rounds, we implement the array_prod_mul macro according to https://www.usenix.org/system/files/sec22-ozdemir.pdf, p11 first paragraph.
     pub fn array_prod_mul<T: NoirUltraHonkProver<P>, P: CurveGroup, N: Network>(
         net: &N,
