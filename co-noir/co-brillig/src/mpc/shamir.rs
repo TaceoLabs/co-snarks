@@ -128,7 +128,7 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, 
 
     fn try_into_bool(val: Self::BrilligType) -> Result<bool, Self::BrilligType> {
         match val {
-            ShamirBrilligType::Public(Public::Int(val, IntegerBitSize::U1)) => Ok(val != 1),
+            ShamirBrilligType::Public(Public::Int(val, IntegerBitSize::U1)) => Ok(val != 0),
             x => Err(x),
         }
     }
@@ -421,6 +421,18 @@ mod tests {
     use brillig::IntegerBitSize;
     use mpc_core::protocols::shamir::ShamirPreprocessing;
     use mpc_net::local::LocalNetwork;
+
+    #[test]
+    fn try_into_bool_matches_the_plain_driver() {
+        type Driver<'a> = ShamirBrilligDriver<'a, Fr, LocalNetwork>;
+        for value in [0u128, 1] {
+            let public = PlainBrilligType::<Fr>::Int(value, IntegerBitSize::U1);
+            let expected = PlainBrilligDriver::<Fr>::try_into_bool(public.clone()).unwrap();
+            assert_eq!(expected, value == 1);
+            let converted = Driver::try_into_bool(ShamirBrilligType::Public(public)).unwrap();
+            assert_eq!(converted, expected);
+        }
+    }
 
     // The dummy for a public value must be equal for all parties, as it is used together with shared values afterwards
     #[test]
