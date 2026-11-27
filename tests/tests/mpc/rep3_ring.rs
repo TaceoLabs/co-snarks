@@ -2414,3 +2414,154 @@ mod ring_share {
         apply_to_all!(rep3_write_curve_lut_test_t, [u8, u16]);
     }
 }
+
+/// The lookup table provider for tables with only a few entries, where the index has less than two bits.
+mod short_lookup_tables {
+    use ark_bn254::Fr;
+    use ark_ff::{One, Zero};
+    use ark_std::UniformRand;
+    use itertools::izip;
+    use mpc_core::lut::LookupTableProvider;
+    use mpc_core::protocols::rep3::{self, conversion::A2BType, Rep3PrimeFieldShare, Rep3State};
+    use mpc_core::protocols::rep3_ring::lut_field::{PublicPrivateLut, Rep3FieldLookupTable};
+    use mpc_net::local::LocalNetwork;
+    use rand::thread_rng;
+
+    type Share = Rep3PrimeFieldShare<Fr>;
+
+    /// What every party computes: the values read from the public LUT, the shared LUT and from two public LUTs at once, the one-hot-encoded vector of the index, and the public and the shared LUT after writing `value` to the index.
+    struct Output {
+        read_public: Share,
+        read_shared: Share,
+        read_public_many: Vec<Share>,
+        ohv: Vec<Share>,
+        written_public: Vec<Share>,
+        written_shared: Vec<Share>,
+    }
+
+    fn into_shared(lut: PublicPrivateLut<Fr>) -> Vec<Share> {
+        match lut {
+            PublicPrivateLut::Shared(shares) => shares,
+            PublicPrivateLut::Public(_) => panic!("the LUT must be shared after a write"),
+        }
+    }
+
+    fn run(lut: &[Fr], other_lut: &[Fr], index: usize, value: Fr) -> [Output; 3] {
+        let mut rng = thread_rng();
+        let index_shares = rep3::share_field_element(Fr::from(index as u64), &mut rng);
+        let value_shares = rep3::share_field_element(value, &mut rng);
+        let lut_shares = rep3::share_field_elements(lut, &mut rng);
+
+        let threads = izip!(
+            LocalNetwork::new_3_parties(),
+            index_shares,
+            value_shares,
+            lut_shares
+        )
+        .map(|(net, index, value, lut_share)| {
+            let (lut, other_lut) = (lut.to_vec(), other_lut.to_vec());
+            std::thread::spawn(move || {
+                let mut state = Rep3State::new(&net, A2BType::default()).unwrap();
+                let mut provider = Rep3FieldLookupTable::<Fr>::new();
+                let mut public = provider.init_public(lut.clone());
+                let mut shared = provider.init_private(lut_share);
+
+                let read_public = provider
+                    .get_from_lut(index, &public, &net, &mut state)
+                    .unwrap();
+                let read_shared = provider
+                    .get_from_lut(index, &shared, &net, &mut state)
+                    .unwrap();
+                let read_public_many = Rep3FieldLookupTable::get_from_public_luts(
+                    index,
+                    &[lut.clone(), other_lut],
+                    &net,
+                    &mut state,
+                )
+                .unwrap();
+                let ohv = Rep3FieldLookupTable::ohv_from_index(index, lut.len(), &net, &mut state)
+                    .unwrap();
+                provider
+                    .write_to_lut(index, value, &mut public, &net, &mut state)
+                    .unwrap();
+                provider
+                    .write_to_lut(index, value, &mut shared, &net, &mut state)
+                    .unwrap();
+                Output {
+                    read_public,
+                    read_shared,
+                    read_public_many,
+                    ohv,
+                    written_public: into_shared(public),
+                    written_shared: into_shared(shared),
+                }
+            })
+        })
+        .collect::<Vec<_>>();
+        let mut outputs = threads.into_iter().map(|thread| thread.join().unwrap());
+        std::array::from_fn(|_| outputs.next().unwrap())
+    }
+
+    fn check(len: usize) {
+        let mut rng = thread_rng();
+        for index in 0..len {
+            let lut = (0..len).map(|_| Fr::rand(&mut rng)).collect::<Vec<_>>();
+            let other_lut = (0..len).map(|_| Fr::rand(&mut rng)).collect::<Vec<_>>();
+            let value = Fr::rand(&mut rng);
+            let [o0, o1, o2] = run(&lut, &other_lut, index, value);
+
+            let open = |a: Share, b: Share, c: Share| rep3::combine_field_element(a, b, c);
+            let open_many =
+                |a: &[Share], b: &[Share], c: &[Share]| rep3::combine_field_elements(a, b, c);
+
+            assert_eq!(
+                open(o0.read_public, o1.read_public, o2.read_public),
+                lut[index]
+            );
+            assert_eq!(
+                open(o0.read_shared, o1.read_shared, o2.read_shared),
+                lut[index]
+            );
+            assert_eq!(
+                open_many(
+                    &o0.read_public_many,
+                    &o1.read_public_many,
+                    &o2.read_public_many
+                ),
+                vec![lut[index], other_lut[index]]
+            );
+
+            let mut expected_ohv = vec![Fr::zero(); len];
+            expected_ohv[index] = Fr::one();
+            let ohv = open_many(&o0.ohv, &o1.ohv, &o2.ohv);
+            assert_eq!(&ohv[..len], expected_ohv);
+            assert!(ohv[len..].iter().all(|e| e.is_zero()));
+
+            let mut expected_lut = lut.clone();
+            expected_lut[index] = value;
+            assert_eq!(
+                open_many(&o0.written_public, &o1.written_public, &o2.written_public),
+                expected_lut
+            );
+            assert_eq!(
+                open_many(&o0.written_shared, &o1.written_shared, &o2.written_shared),
+                expected_lut
+            );
+        }
+    }
+
+    #[test]
+    fn lut_with_one_entry() {
+        check(1);
+    }
+
+    #[test]
+    fn lut_with_two_entries() {
+        check(2);
+    }
+
+    #[test]
+    fn lut_with_three_entries() {
+        check(3);
+    }
+}

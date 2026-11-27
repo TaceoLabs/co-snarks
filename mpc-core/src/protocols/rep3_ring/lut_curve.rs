@@ -80,8 +80,19 @@ where
         net: &N,
         state: &mut Rep3State,
     ) -> eyre::Result<Vec<Rep3PointShare<C>>> {
-        let len = luts.iter().map(|l| l.len()).max().unwrap();
+        let len = luts.iter().map(|l| l.len()).max().unwrap_or_default();
         tracing::debug!("doing read on LUT-map of size {}", len);
+        eyre::ensure!(len > 0, "cannot read from an empty LUT");
+        if len == 1 {
+            // There is only one entry, so there is nothing to select. Shorter LUTs are padded with 0.
+            return Ok(luts
+                .iter()
+                .map(|lut| {
+                    let value = lut.first().copied().unwrap_or_default();
+                    pointshare::promote_to_trivial_share(state.id, &value)
+                })
+                .collect());
+        }
         let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2() as usize;
 
@@ -235,6 +246,16 @@ where
     ) -> eyre::Result<Self::SecretShare> {
         let len = lut.len();
         tracing::debug!("doing read on LUT-map of size {}", len);
+        eyre::ensure!(len > 0, "cannot read from an empty LUT");
+        if len == 1 {
+            // There is only one entry, so there is nothing to select
+            return Ok(match lut {
+                PublicPrivateLut::Public(vec) => {
+                    pointshare::promote_to_trivial_share(state.id, &vec[0])
+                }
+                PublicPrivateLut::Shared(vec) => vec[0],
+            });
+        }
         let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2() as usize;
 
@@ -263,6 +284,12 @@ where
     ) -> eyre::Result<()> {
         let len = lut.len();
         tracing::debug!("doing write on LUT-map of size {}", len);
+        eyre::ensure!(len > 0, "cannot write to an empty LUT");
+        if len == 1 {
+            // There is only one entry, which is replaced
+            *lut = PublicPrivateLut::Shared(vec![value]);
+            return Ok(());
+        }
         let bits = rep3::conversion::a2b_selector(index, net, state)?;
         let k = len.next_power_of_two().ilog2();
 
