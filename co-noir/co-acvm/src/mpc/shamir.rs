@@ -53,7 +53,8 @@ impl<C: CurveGroup> std::fmt::Debug for ShamirAcvmPoint<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(point) => f.debug_tuple("Public").field(point).finish(),
-            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared(<redacted>)"),
         }
     }
 }
@@ -62,9 +63,8 @@ impl<C: CurveGroup> std::fmt::Display for ShamirAcvmPoint<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(point) => f.write_str(&format!("Public ({point})")),
-            Self::Shared(arithmetic) => {
-                f.write_str(&format!("Arithmetic ({})", arithmetic.to_owned().inner()))
-            }
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared (<redacted>)"),
         }
     }
 }
@@ -97,7 +97,8 @@ impl<F: PrimeField> std::fmt::Debug for ShamirAcvmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(field) => f.debug_tuple("Public").field(field).finish(),
-            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared(<redacted>)"),
         }
     }
 }
@@ -106,9 +107,8 @@ impl<F: PrimeField> std::fmt::Display for ShamirAcvmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(field) => f.write_str(&format!("Public ({field})")),
-            Self::Shared(arithmetic) => {
-                f.write_str(&format!("Arithmetic ({})", arithmetic.inner()))
-            }
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared (<redacted>)"),
         }
     }
 }

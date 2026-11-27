@@ -38,7 +38,7 @@ pub enum Rep3BrilligType<F: FieldUint> {
 }
 
 /// The potential shared values of the co-Brillig Rep3 driver.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Shared<F: FieldUint> {
     Field(Rep3PrimeFieldShare<F>),
     Ring128(Rep3RingShare<u128>),
@@ -47,6 +47,22 @@ pub enum Shared<F: FieldUint> {
     Ring16(Rep3RingShare<u16>),
     Ring8(Rep3RingShare<u8>),
     Ring1(Rep3BitShare),
+}
+
+// The shares are secret, so only the type is printed
+impl<F: FieldUint> std::fmt::Debug for Shared<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ty = match self {
+            Shared::Field(_) => "Field",
+            Shared::Ring128(_) => "U128",
+            Shared::Ring64(_) => "U64",
+            Shared::Ring32(_) => "U32",
+            Shared::Ring16(_) => "U16",
+            Shared::Ring8(_) => "U8",
+            Shared::Ring1(_) => "U1",
+        };
+        write!(f, "{ty}(<redacted>)")
+    }
 }
 
 impl<F: FieldUint> From<F> for Rep3BrilligType<F> {
@@ -1834,6 +1850,19 @@ mod tests {
     use brillig::IntegerBitSize;
     use mpc_core::protocols::rep3::conversion::A2BType;
     use mpc_net::local::LocalNetwork;
+
+    // Shares must not end up in logs or error messages
+    #[test]
+    fn shares_are_not_printed() {
+        let share = mpc_core::protocols::rep3::Rep3PrimeFieldShare::new(
+            Fr::from(1234u64),
+            Fr::from(5678u64),
+        );
+        let printed = format!("{:?}", Rep3BrilligType::shared_field(share));
+        assert_eq!(printed, "Shared(Field(<redacted>))");
+        let printed = format!("{:?}", Rep3BrilligType::public_field(Fr::from(1234u64)));
+        assert!(printed.contains("1234"), "{printed}");
+    }
 
     // The dummy for a public value must be equal for all parties, as it is used together with shared values afterwards
     #[test]

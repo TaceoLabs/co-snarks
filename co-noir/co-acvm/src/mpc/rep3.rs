@@ -230,7 +230,8 @@ impl<C: CurveGroup> std::fmt::Debug for Rep3AcvmPoint<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(point) => f.debug_tuple("Public").field(point).finish(),
-            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared(<redacted>)"),
         }
     }
 }
@@ -239,10 +240,8 @@ impl<C: CurveGroup> std::fmt::Display for Rep3AcvmPoint<C> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(point) => f.write_str(&format!("Public ({point})")),
-            Self::Shared(arithmetic) => {
-                let (a, b) = arithmetic.to_owned().ab();
-                f.write_str(&format!("Arithmetic (a: {a}, b: {b})"))
-            }
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared (<redacted>)"),
         }
     }
 }
@@ -277,7 +276,8 @@ impl<F: PrimeField> std::fmt::Debug for Rep3AcvmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(field) => f.debug_tuple("Public").field(field).finish(),
-            Self::Shared(share) => f.debug_tuple("Arithmetic").field(share).finish(),
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared(<redacted>)"),
         }
     }
 }
@@ -286,10 +286,8 @@ impl<F: PrimeField> std::fmt::Display for Rep3AcvmType<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Public(field) => f.write_str(&format!("Public ({field})")),
-            Self::Shared(arithmetic) => {
-                let (a, b) = arithmetic.ab();
-                f.write_str(&format!("Arithmetic (a: {a}, b: {b})"))
-            }
+            // The shares are secret, so they are not printed
+            Self::Shared(_) => f.write_str("Shared (<redacted>)"),
         }
     }
 }
@@ -2812,6 +2810,30 @@ mod tests {
     type F = ark_bn254::Fr;
     type C = ark_bn254::G1Projective;
     type Base = ark_bn254::Fq;
+
+    // Shares must not end up in logs or error messages
+    #[test]
+    fn shares_are_not_printed() {
+        let mut rng = rand::thread_rng();
+        let [share, _, _] = rep3::share_field_element(F::from(1234u64), &mut rng);
+        let (a, b) = share.ab();
+        let value = Rep3AcvmType::Shared(share);
+        for printed in [format!("{value:?}"), format!("{value}")] {
+            assert!(printed.contains("redacted"), "{printed}");
+            assert!(!printed.contains(&a.to_string()) && !printed.contains(&b.to_string()));
+        }
+        let public = Rep3AcvmType::Public(F::from(1234u64));
+        assert!(format!("{public:?} {public}").contains("1234"));
+
+        let [share, _, _] = rep3::share_curve_point(
+            <ark_grumpkin::Projective as ark_ec::PrimeGroup>::generator(),
+            &mut rng,
+        );
+        let point = Rep3AcvmPoint::Shared(share);
+        for printed in [format!("{point:?}"), format!("{point}")] {
+            assert_eq!(printed.replace(' ', ""), "Shared(<redacted>)");
+        }
+    }
 
     // The order of the operands matters, also if only one of them is shared
     #[test]

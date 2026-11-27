@@ -22,13 +22,23 @@ pub struct ShamirBrilligDriver<'a, F: PrimeField, N: Network> {
 /// The types for the coBrillig
 /// Shamir driver. The values
 /// can either be shared or public.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum ShamirBrilligType<F: PrimeField> {
     /// A public value
     Public(Public<F>),
     /// A shared value.
     /// TODO for now we only support prime fields
     Shared(ShamirPrimeFieldShare<F>),
+}
+
+// The shares are secret, so they are not printed
+impl<F: PrimeField> std::fmt::Debug for ShamirBrilligType<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Public(public) => f.debug_tuple("Public").field(public).finish(),
+            Self::Shared(_) => f.write_str("Shared(Field(<redacted>))"),
+        }
+    }
 }
 
 impl<F: PrimeField> From<F> for ShamirBrilligType<F> {
