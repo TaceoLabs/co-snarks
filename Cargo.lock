@@ -1243,6 +1243,7 @@ version = "0.4.0"
 dependencies = [
  "acir",
  "acvm",
+ "ark-bn254",
  "ark-ff 0.6.0",
  "brillig",
  "eyre",

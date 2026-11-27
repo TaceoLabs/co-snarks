@@ -374,11 +374,10 @@ impl<F: FieldUint, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> 
         Rep3BrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
     }
 
-    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+    fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
         match other {
-            Rep3BrilligType::Public(other) => {
-                Rep3BrilligType::Public(self.plain_driver.random(other))
-            }
+            // A public value has to be equal for all parties, so it must not be sampled locally
+            Rep3BrilligType::Public(other) => Rep3BrilligType::Public(other.clone()),
             Rep3BrilligType::Shared(Shared::Field(_)) => {
                 let (a, b) = self.state.rngs.rand.random_fes();
                 Rep3BrilligType::shared_field(Rep3PrimeFieldShare::new(a, b))
@@ -1809,6 +1808,49 @@ impl<F: FieldUint, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> 
             Rep3BrilligType::Public(Public::Field(_))
             | Rep3BrilligType::Shared(Shared::Field(_)) => Ok(val),
             _ => eyre::bail!("expected field but got int"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mpc::PlainBrilligType;
+    use ark_bn254::Fr;
+    use brillig::IntegerBitSize;
+    use mpc_core::protocols::rep3::conversion::A2BType;
+    use mpc_net::local::LocalNetwork;
+
+    // The dummy for a public value must be equal for all parties, as it is used together with shared values afterwards
+    #[test]
+    fn dummy_for_public_value_is_equal_for_all_parties() {
+        let publics = [
+            PlainBrilligType::Field(Fr::from(42u64)),
+            PlainBrilligType::Int(7, IntegerBitSize::U64),
+        ];
+        let threads = LocalNetwork::new_3_parties()
+            .into_iter()
+            .map(|net| {
+                let publics = publics.clone();
+                std::thread::spawn(move || {
+                    let state = Rep3State::new(&net, A2BType::default()).unwrap();
+                    let mut driver = Rep3BrilligDriver::<Fr, _>::new(&net, state);
+                    publics
+                        .iter()
+                        .map(|public| {
+                            match driver.dummy(&Rep3BrilligType::Public(public.clone())) {
+                                Rep3BrilligType::Public(dummy) => dummy,
+                                Rep3BrilligType::Shared(_) => {
+                                    unreachable!("the dummy must be public")
+                                }
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>();
+        for thread in threads {
+            assert_eq!(thread.join().unwrap(), publics);
         }
     }
 }

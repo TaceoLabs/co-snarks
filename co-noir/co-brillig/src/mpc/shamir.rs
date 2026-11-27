@@ -127,11 +127,10 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, 
         ShamirBrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
     }
 
-    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+    fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
         match other {
-            ShamirBrilligType::Public(other) => {
-                ShamirBrilligType::Public(self.plain_driver.random(other))
-            }
+            // A public value has to be equal for all parties, so it must not be sampled locally
+            ShamirBrilligType::Public(other) => ShamirBrilligType::Public(other.clone()),
             ShamirBrilligType::Shared(_) => ShamirBrilligType::Shared(
                 self.state
                     .rand(self.net)
@@ -392,6 +391,50 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, 
         match &val {
             ShamirBrilligType::Public(Public::Field(_)) | ShamirBrilligType::Shared(_) => Ok(val),
             _ => eyre::bail!("expected field but got int"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mpc::PlainBrilligType;
+    use ark_bn254::Fr;
+    use brillig::IntegerBitSize;
+    use mpc_core::protocols::shamir::ShamirPreprocessing;
+    use mpc_net::local::LocalNetwork;
+
+    // The dummy for a public value must be equal for all parties, as it is used together with shared values afterwards
+    #[test]
+    fn dummy_for_public_value_is_equal_for_all_parties() {
+        let publics = [
+            PlainBrilligType::Field(Fr::from(42u64)),
+            PlainBrilligType::Int(7, IntegerBitSize::U64),
+        ];
+        let threads = LocalNetwork::new(3)
+            .into_iter()
+            .map(|net| {
+                let publics = publics.clone();
+                std::thread::spawn(move || {
+                    let preprocessing = ShamirPreprocessing::new(3, 1, 0, &net).unwrap();
+                    let mut driver =
+                        ShamirBrilligDriver::<Fr, _>::new(&net, ShamirState::from(preprocessing));
+                    publics
+                        .iter()
+                        .map(|public| {
+                            match driver.dummy(&ShamirBrilligType::Public(public.clone())) {
+                                ShamirBrilligType::Public(dummy) => dummy,
+                                ShamirBrilligType::Shared(_) => {
+                                    unreachable!("the dummy must be public")
+                                }
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect::<Vec<_>>();
+        for thread in threads {
+            assert_eq!(thread.join().unwrap(), publics);
         }
     }
 }

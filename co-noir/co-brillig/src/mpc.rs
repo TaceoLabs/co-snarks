@@ -95,8 +95,10 @@ pub trait BrilligDriver<F: PrimeField>: Sized {
         Self::public_value(F::zero(), BitSize::Integer(IntegerBitSize::U1))
     }
 
-    /// Creates a new random element with the same type other
-    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType;
+    /// Creates a dummy element with the same type as `other`. It replaces the results of a branch of a shared if that failed, which are not used if the other branch is taken.
+    ///
+    /// For a shared `other` this is a fresh random sharing. For a public `other` in an MPC driver it is `other` itself: a public value has to be equal for all parties, which is not the case for a locally sampled one, and using it together with shared values leads to inconsistent shares.
+    fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType;
 
     /// Returns `true` if the provided value is public. `False` otherwise.
     fn is_public(val: Self::BrilligType) -> bool;

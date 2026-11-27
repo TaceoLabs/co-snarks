@@ -166,7 +166,7 @@ impl<F: PrimeField> BrilligDriver<F> for PlainBrilligDriver<F> {
         }
     }
 
-    fn random(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
+    fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
         let mut rng = rand::thread_rng();
         match other {
             PlainBrilligType::Field(_) => PlainBrilligType::Field(F::rand(&mut rng)),

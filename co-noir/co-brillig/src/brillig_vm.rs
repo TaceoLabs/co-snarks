@@ -307,16 +307,18 @@ where
                         if !truthy.generated_pss.is_empty() {
                             eyre::bail!("cannot have TACEO stores in shared if atm");
                         }
-                        tracing::debug!("falsy universe failed. We set its result to ranodm noise");
-                        let random_noise = truthy
+                        tracing::debug!(
+                            "falsy universe failed. We set its results to dummy values"
+                        );
+                        let dummy_values = truthy
                             .unconstrained_witnesses
                             .iter()
-                            .map(|x| self.driver.random(x))
+                            .map(|x| self.driver.dummy(x))
                             .collect();
                         (
                             truthy,
                             BrilligSuccess {
-                                unconstrained_witnesses: random_noise,
+                                unconstrained_witnesses: dummy_values,
                                 generated_pss: HashMap::new(),
                             },
                         )
@@ -326,16 +328,16 @@ where
                             eyre::bail!("cannot have TACEO stores in shared if atm");
                         }
                         tracing::debug!(
-                            "truthy universe failed. We set its result to ranodm noise"
+                            "truthy universe failed. We set its results to dummy values"
                         );
-                        let random_noise = falsy
+                        let dummy_values = falsy
                             .unconstrained_witnesses
                             .iter()
-                            .map(|x| self.driver.random(x))
+                            .map(|x| self.driver.dummy(x))
                             .collect();
                         (
                             BrilligSuccess {
-                                unconstrained_witnesses: random_noise,
+                                unconstrained_witnesses: dummy_values,
                                 generated_pss: HashMap::new(),
                             },
                             falsy,
