@@ -374,6 +374,20 @@ impl<F: FieldUint, N: Network> BrilligDriver<F> for Rep3BrilligDriver<'_, F, N> 
         Rep3BrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
     }
 
+    fn predicate_to_condition(
+        &mut self,
+        predicate: Self::BrilligType,
+    ) -> eyre::Result<Option<Self::BrilligType>> {
+        match predicate {
+            Rep3BrilligType::Public(_) => Ok(None),
+            shared @ Rep3BrilligType::Shared(Shared::Ring1(_)) => Ok(Some(shared)),
+            // The predicate is 0 or 1, so its least significant bit is the condition
+            shared => Ok(Some(
+                self.cast(shared, BitSize::Integer(IntegerBitSize::U1))?,
+            )),
+        }
+    }
+
     fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
         match other {
             // A public value has to be equal for all parties, so it must not be sampled locally

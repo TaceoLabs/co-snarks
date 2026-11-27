@@ -107,7 +107,14 @@ where
                 BrilligInputs::MemoryArray(_) => todo!("memory array calldata TODO"),
             }
         }
-        let brillig_result = self.brillig.run(id, calldata)?;
+        let brillig_result = match &mask_predicate {
+            // The function is executed even if the shared predicate is false, so the VM has to guard the operations that can fail
+            Some(predicate) => {
+                self.brillig
+                    .run_with_predicate(id, calldata, predicate.clone().into())?
+            }
+            None => self.brillig.run(id, calldata)?,
+        };
         if let CoBrilligResult::Success(BrilligSuccess {
             unconstrained_witnesses,
             generated_pss,

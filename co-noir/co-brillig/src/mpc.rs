@@ -10,7 +10,7 @@ use std::fmt;
 use ark_ff::PrimeField;
 
 mod plain;
-mod rep3;
+pub(crate) mod rep3;
 mod shamir;
 use brillig::{BitSize, IntegerBitSize};
 pub use plain::PlainBrilligDriver;
@@ -94,6 +94,14 @@ pub trait BrilligDriver<F: PrimeField>: Sized {
     fn public_false() -> Self::BrilligType {
         Self::public_value(F::zero(), BitSize::Integer(IntegerBitSize::U1))
     }
+
+    /// Converts the predicate of a call into a shared condition for [`Self::cmux`], which is used to guard operations that fail depending on their inputs.
+    ///
+    /// Returns `None` if no guards are needed or possible: the predicate is public, or the driver does not support shared conditions.
+    fn predicate_to_condition(
+        &mut self,
+        predicate: Self::BrilligType,
+    ) -> eyre::Result<Option<Self::BrilligType>>;
 
     /// Creates a dummy element with the same type as `other`. It replaces the results of a branch of a shared if that failed, which are not used if the other branch is taken.
     ///

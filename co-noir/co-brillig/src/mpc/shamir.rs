@@ -127,6 +127,14 @@ impl<F: PrimeField, N: Network> BrilligDriver<F> for ShamirBrilligDriver<'_, F, 
         ShamirBrilligType::Public(PlainBrilligDriver::public_value(val, bit_size))
     }
 
+    fn predicate_to_condition(
+        &mut self,
+        _predicate: Self::BrilligType,
+    ) -> eyre::Result<Option<Self::BrilligType>> {
+        // Shamir has no shared boolean values
+        Ok(None)
+    }
+
     fn dummy(&mut self, other: &Self::BrilligType) -> Self::BrilligType {
         match other {
             // A public value has to be equal for all parties, so it must not be sampled locally
