@@ -1970,12 +1970,12 @@ impl<'a, F: PrimeField + FieldUint, N: Network> NoirWitnessExtensionProtocol<F>
         iv: Vec<Self::AcvmType>,
         key: Vec<Self::AcvmType>,
     ) -> eyre::Result<Vec<Self::AcvmType>> {
+        // All of the inputs have to be checked: the plaintext can be longer than the IV and the key
         if scalars
             .iter()
-            .zip(iv.iter().zip(key.iter()))
-            .all(|(scalar, (iv_elem, key_elem))| {
-                !Self::is_shared(scalar) && !Self::is_shared(iv_elem) && !Self::is_shared(key_elem)
-            })
+            .chain(iv.iter())
+            .chain(key.iter())
+            .all(|input| !Self::is_shared(input))
         {
             let mut scalar_to_be_bytes = Vec::with_capacity(scalars.len());
             let mut iv_to_be_bytes = Vec::with_capacity(iv.len());
@@ -2832,6 +2832,57 @@ mod tests {
         let point = Rep3AcvmPoint::Shared(share);
         for printed in [format!("{point:?}"), format!("{point}")] {
             assert_eq!(printed.replace(' ', ""), "Shared(<redacted>)");
+        }
+    }
+
+    // The plaintext is longer than the IV and the key (16 bytes), and only a byte after the first 16 is shared
+    #[test]
+    fn aes128_encrypt_with_shared_byte_in_second_block() {
+        let mut rng = rand::thread_rng();
+        let plaintext: Vec<F> = (0..32u64).map(|i| F::from(i * 7 % 256)).collect();
+        let iv: Vec<F> = (0..16u64).map(|i| F::from(i + 100)).collect();
+        let key: Vec<F> = (0..16u64).map(|i| F::from(i + 200)).collect();
+        let shared_index = 20;
+        let shares = rep3::share_field_element(plaintext[shared_index], &mut rng);
+
+        let threads = LocalNetwork::new_3_parties()
+            .into_iter()
+            .enumerate()
+            .map(|(i, net)| {
+                let (plaintext, iv, key) = (plaintext.clone(), iv.clone(), key.clone());
+                std::thread::spawn(move || {
+                    let mut driver = Rep3AcvmSolver::<F, _>::new(&net, A2BType::default()).unwrap();
+                    let public = |values: &[F]| -> Vec<_> {
+                        values.iter().map(|v| Rep3AcvmType::Public(*v)).collect()
+                    };
+                    let expected = driver
+                        .aes128_encrypt(&public(&plaintext), public(&iv), public(&key))
+                        .unwrap();
+                    let mut scalars = public(&plaintext);
+                    scalars[shared_index] = Rep3AcvmType::Shared(shares[i]);
+                    let result = driver
+                        .aes128_encrypt(&scalars, public(&iv), public(&key))
+                        .unwrap();
+                    (expected, result)
+                })
+            })
+            .collect::<Vec<_>>();
+        let results = threads
+            .into_iter()
+            .map(|thread| thread.join().expect("a party panicked"))
+            .collect::<Vec<_>>();
+        let expected = &results[0].0;
+        assert_eq!(expected.len(), results[0].1.len());
+        for (j, expected) in expected.iter().enumerate() {
+            let expected = Rep3AcvmSolver::<F, LocalNetwork>::get_public(expected).unwrap();
+            let opened = match (&results[0].1[j], &results[1].1[j], &results[2].1[j]) {
+                (Rep3AcvmType::Shared(a), Rep3AcvmType::Shared(b), Rep3AcvmType::Shared(c)) => {
+                    rep3::combine_field_element(*a, *b, *c)
+                }
+                (Rep3AcvmType::Public(a), _, _) => *a,
+                _ => unreachable!("the parties have different types"),
+            };
+            assert_eq!(opened, expected, "byte {j}");
         }
     }
 
