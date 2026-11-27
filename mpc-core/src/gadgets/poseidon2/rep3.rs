@@ -682,6 +682,8 @@ impl<F: PrimeField, const T: usize, const D: u64> Poseidon2<F, T, D> {
     }
 
     /// Computes the Poseidon2 permutation using the Rep3 MPC protocol while overwriting the input. Thereby, a preprocessing technique is used to reduce the depth of the computation. Furthermore, the whole state is processed as additive shares, i.e., less CPU at the cost of more network communication.
+    ///
+    /// The additive shares are the `a` components of the replicated shares of the state and of the precomputation. In every Sbox each party broadcasts its additive share of x - r. The next party knows the additive share of r, as it is the `b` component of its replicated share, and thus learns the additive share of x. This reveals nothing, because it knows this component of a replicated sharing of x anyway, and the new additive share only depends on the opened value and the shares of the powers of r. The precomputation therefore has to come from [`Self::precompute_rep3_additive`] and the state from replicated shares.
     pub fn rep3_permutation_additive_in_place_with_precomputation<N: Network>(
         &self,
         state_: &mut [Rep3PrimeFieldShare<F>; T],
