@@ -65,9 +65,6 @@ pub struct CompilerConfig {
     /// The circom version
     #[serde(default = "default_version")]
     pub version: String,
-    /// Allow leaking of secret values in loops (not used atm)
-    #[serde(default)]
-    pub allow_leaky_loops: bool,
     /// The path to Circom library files
     #[serde(default)]
     pub link_library: Vec<PathBuf>,
@@ -100,7 +97,6 @@ impl Default for CompilerConfig {
         Self {
             version: default_version(),
             link_library: vec![],
-            allow_leaky_loops: false,
             simplification: SimplificationLevel::default(),
             verbose: false,
             inspect: false,
@@ -120,7 +116,6 @@ impl CompilerConfig {
     /// Create a new instance of the compiler config optimized for release.
     pub fn release() -> Self {
         Self {
-            allow_leaky_loops: false,
             simplification: SimplificationLevel::O2(usize::MAX),
             debug: false,
             ..Default::default()
