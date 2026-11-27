@@ -1069,6 +1069,8 @@ where
 
 /// Transforms a replicated point share to shares of its coordinates.
 /// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
+///
+/// The input has to be a randomized share, e.g., the result of a protocol with resharing. The point is split into the sum of two points, which are added with the formula for two different points that are not the inverse of each other. For a random sharing this holds except with negligible probability. It does not hold for all trivial shares created by [`pointshare::promote_to_trivial_share`](super::pointshare::promote_to_trivial_share): For some public points the result is wrong, and a share with a component that is the point at infinity is rejected.
 #[expect(clippy::type_complexity)]
 pub fn point_share_to_fieldshares<C: CurveGroup, N: Network>(
     x: Rep3PointShare<C>,
@@ -1088,6 +1090,8 @@ where
 
 /// Transforms a vec of replicated point shares to shares of their coordinates.
 /// The output will be (x, y, is_infinity). Thereby no statement is made on x, y if is_infinity is true.
+///
+/// The input has to be a randomized share, e.g., the result of a protocol with resharing. The point is split into the sum of two points, which are added with the formula for two different points that are not the inverse of each other. For a random sharing this holds except with negligible probability. It does not hold for all trivial shares created by [`pointshare::promote_to_trivial_share`](super::pointshare::promote_to_trivial_share): For some public points the result is wrong, and a share with a component that is the point at infinity is rejected.
 #[expect(clippy::type_complexity)]
 pub fn point_share_to_fieldshares_many<C: CurveGroup, N: Network>(
     x: &[Rep3PointShare<C>],

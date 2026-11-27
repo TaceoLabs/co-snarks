@@ -125,7 +125,10 @@ pub fn scalar_mul_local<C: CurveGroup>(
 }
 
 /// Transforms a public value into a shared value: \[a\] = a.
-/// We do it this way since it otherwise causes problems in the point_share_to_fieldshares conversion. (TACEO TODO: fix that)
+///
+/// The components of the share are offset by the generator, such that none of them is the point at infinity, which the [`point_share_to_fieldshares`](conversion::point_share_to_fieldshares) conversion cannot handle.
+///
+/// The result is still not a randomized share and must not be passed directly to [`is_zero`], [`is_zero_many`] or the `point_share_to_fieldshares` conversions, which give wrong results for trivial shares of some points (e.g., `is_zero` is true for a trivial share of two times the generator). Use it in a protocol with resharing first, or keep track of public points separately.
 pub fn promote_to_trivial_share<C: CurveGroup>(id: PartyID, a: &C) -> PointShare<C> {
     if a.is_zero() {
         match id {
@@ -233,6 +236,8 @@ where
 
 /// Checks whether the shared point is zero/infinity.
 /// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underlying value is not zero.
+///
+/// The input has to be a randomized share. In particular, the result can be wrong for a trivial share created by [`promote_to_trivial_share`].
 /// Returns a replicated boolean share in two separate parts.
 pub fn is_zero<C: CurveGroup, N: Network>(
     x: PointShare<C>,
@@ -251,6 +256,8 @@ where
 
 /// Checks whether the shared point is zero/infinity.
 /// The strategy is that we split the point into two random shares (as for point_share_to_fieldshares) and check for equal x-coordinates. This works, since the two random shares, with overwhelming probability, will have different x-coordinates if the underlying value is not zero.
+///
+/// The input has to be a randomized share. In particular, the result can be wrong for a trivial share created by [`promote_to_trivial_share`].
 /// Returns a replicated boolean share in two separate parts.
 pub fn is_zero_many<C: CurveGroup, N: Network>(
     x: &[PointShare<C>],
